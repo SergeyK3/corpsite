@@ -2,7 +2,7 @@
 
 | Параметр | Значение |
 |---|---|
-| Статус | **WP-005G-A completed — report API and frontend expansion pending** |
+| Статус | **WP-005G-B completed — frontend expansion pending** |
 | Родительский контур | [WP-PPR-MIG-005](WP-PPR-MIG-005-migration-status-matrix-plan.md) |
 | Зависимости | [WP-005A — semantics](WP-PPR-MIG-005A-status-semantics.md), [WP-005B — projection](WP-PPR-MIG-005B-status-projection-read-model.md), [WP-005C — report API](WP-PPR-MIG-005C-report-api-and-authorization.md) |
 | Цель | Показать полный утверждённый набор миграционных разделов личной карточки в одной matrix, не выдавая неподключённые обработчики за выполненную миграцию. |
@@ -24,8 +24,10 @@
 для migration matrix. Они могут оставаться вкладками карточки, но не получают
 колонку migration status.
 
-WP-005G-A расширяет persisted projection/rebuild до всех десяти codes. Текущий
-report API и frontend намеренно остаются трёхсекционными до отдельного пакета.
+WP-005G-A расширил persisted projection/rebuild до всех десяти codes.
+[WP-005G-B](WP-PPR-MIG-005G-B-full-section-report-api.md) расширил read-only
+matrix и person-status API до тех же десяти persisted cells. Frontend намеренно
+остаётся трёхсекционным до отдельного пакета.
 
 ## 2. Утверждённый каталог из десяти колонок
 
@@ -118,7 +120,8 @@ D:\Temp\wp-ppr-mig-005g-full-section-matrix-mockup.png
    и initial persisted `NOT_STARTED` rows для полного каталога.
 2. Добавить policy evaluator для `NOT_APPLICABLE` и
    точечную invalidation contract для будущих section handlers.
-3. Расширить scoped report API, aggregation и filters до десяти cells без N+1.
+3. Завершено WP-005G-B: scoped report API, aggregation и filters используют
+   десять persisted cells без N+1.
 4. Расширить matrix UI: dynamic десять колонок, sticky employee column,
    horizontal scroll, accessible textual status/reason и указанный card mapping.
 5. Подключать stage/source processors по одному section, заменяя только его

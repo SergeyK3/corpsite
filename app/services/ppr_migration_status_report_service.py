@@ -5,9 +5,16 @@ from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
+from app.db.models.ppr_migration_status_projection import PPR_MIGRATION_SECTIONS
 
-SECTIONS = {"general", "education", "training"}
+SECTIONS = PPR_MIGRATION_SECTIONS
+SECTION_SET = frozenset(SECTIONS)
+SECTION_ORDER_SQL = "ARRAY[" + ",".join(repr(section) for section in SECTIONS) + "]::text[]"
 MAX_PAGE_SIZE = 100
+
+
+class ProjectionIntegrityError(RuntimeError):
+    """A visible person lacks one required persisted full-catalog cell."""
 STATUS_LABELS = {
     "NOT_STARTED": "Не начато", "PROCESSING": "Обрабатывается",
     "AUTO_READY": "Готово к согласованию", "REVIEW_REQUIRED": "Требуется ручная проверка",
@@ -23,6 +30,8 @@ REASON_LABELS = {
     "FINGERPRINT_SOURCE_CHANGED": "Изменились исходные сведения.",
     "FINGERPRINT_POLICY_CHANGED": "Изменились правила обработки.",
     "BINDING_EMPLOYEE_LINK_STALE": "Кадровая связь сотрудника изменилась.",
+    "SECTION_PROCESSING_NOT_CONNECTED": "Обработка раздела ещё не подключена.",
+    "POLICY_SECTION_NOT_APPLICABLE": "Раздел не применяется.",
 }
 
 
@@ -57,7 +66,7 @@ def list_universes(connection: Connection, scope: dict[str, Any]) -> list[dict[s
 def matrix(connection: Connection, *, universe_id: int, scope: dict[str, Any], page: int,
            page_size: int, section: str | None, status: str | None,
            reason: str | None, org_unit_id: int | None, q: str | None) -> dict[str, Any] | None:
-    if page < 1 or not 1 <= page_size <= MAX_PAGE_SIZE or (section and section not in SECTIONS):
+    if page < 1 or not 1 <= page_size <= MAX_PAGE_SIZE or (section and section not in SECTION_SET):
         raise ValueError("invalid report filter")
     params: dict[str, Any] = {"universe_id": universe_id, "limit": page_size, "offset": (page - 1) * page_size}
     base_where = "x.universe_id=:universe_id" + _scope(scope, params)
@@ -65,6 +74,16 @@ def matrix(connection: Connection, *, universe_id: int, scope: dict[str, Any], p
     # unknown and inaccessible universes indistinguishable.
     if connection.execute(text(f"SELECT 1 FROM ppr_migration_section_status_projection x WHERE {base_where} LIMIT 1"), params).scalar_one_or_none() is None:
         return None
+    broken_person = connection.execute(text(f"""
+        SELECT x.person_id
+        FROM ppr_migration_section_status_projection x
+        WHERE {base_where}
+        GROUP BY x.person_id
+        HAVING count(DISTINCT x.section_code) <> :expected_sections
+        LIMIT 1
+    """), {**params, "expected_sections": len(SECTIONS)}).scalar_one_or_none()
+    if broken_person is not None:
+        raise ProjectionIntegrityError("required persisted section cell is missing")
 
     filter_parts = ["true"]
     for name, value, column in (("section", section, "section_code"), ("status", status, "status_code"),
@@ -104,14 +123,19 @@ def matrix(connection: Connection, *, universe_id: int, scope: dict[str, Any], p
         return {**value, "status_label": STATUS_LABELS.get(value["status_code"], "Статус"),
                 "reason_label": REASON_LABELS.get(value["reason_code"], "Требуется проверка.")}
 
+    def ordered_cells(values: dict[str, Any]) -> dict[str, Any]:
+        if set(values) != SECTION_SET:
+            raise ProjectionIntegrityError("required persisted section cell is missing")
+        return {section_code: cell(values[section_code]) for section_code in SECTIONS}
+
     return {"universe_id": universe_id, "page": page, "page_size": page_size, "total": int(total),
             "items": [{"person_id": int(row["person_id"]), "employee_context_id": int(row["employee_context_id"]),
                        "org_unit_id": row["org_unit_id"], "full_name": row["full_name"],
-                       "cells": {key: cell(value) for key, value in dict(row["cells"]).items()}}
+                       "cells": ordered_cells(dict(row["cells"]))}
                       for row in rows],
             "counts": [{"section_code": row["section_code"], "status_code": row["status_code"],
                         "status_label": STATUS_LABELS.get(row["status_code"], "Статус"), "count": int(row["n"])}
-                       for row in counts]}
+                       for row in sorted(counts, key=lambda row: (SECTIONS.index(row["section_code"]), row["status_code"]))]}
 
 
 def person_cells(connection: Connection, *, universe_id: int, person_id: int, scope: dict[str, Any]) -> dict[str, Any] | None:
@@ -122,7 +146,7 @@ def person_cells(connection: Connection, *, universe_id: int, person_id: int, sc
         SELECT section_code,status_code,reason_code,calculated_at,stage_run_id,stage1_run_id,
                stage_participant_id,stage1_participant_id,pmf_run_id
         FROM ppr_migration_section_status_projection x WHERE {where}
-        ORDER BY section_code
+        ORDER BY array_position({SECTION_ORDER_SQL}, section_code)
     """), params).mappings().all()
     if not rows:
         return None
@@ -131,4 +155,7 @@ def person_cells(connection: Connection, *, universe_id: int, person_id: int, sc
                 "reason_code": row["reason_code"], "reason_label": REASON_LABELS.get(row["reason_code"], "Требуется проверка."),
                 "calculated_at": row["calculated_at"], "stage_run_id": row["stage_run_id"], "stage1_run_id": row["stage1_run_id"],
                 "stage_participant_id": row["stage_participant_id"], "stage1_participant_id": row["stage1_participant_id"], "pmf_run_id": row["pmf_run_id"]}
-    return {"universe_id": universe_id, "cells": {row["section_code"]: safe(row) for row in rows}}
+    raw = {row["section_code"]: row for row in rows}
+    if set(raw) != SECTION_SET:
+        raise ProjectionIntegrityError("required persisted section cell is missing")
+    return {"universe_id": universe_id, "cells": {section_code: safe(raw[section_code]) for section_code in SECTIONS}}

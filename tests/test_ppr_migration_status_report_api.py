@@ -7,6 +7,8 @@ from fastapi.testclient import TestClient
 from app.api import ppr_migration_status_router as status_router
 from app.auth import get_current_user
 from app.main import app
+from app.services.ppr_migration_status_projection_service import SECTIONS
+from app.services.ppr_migration_status_report_service import ProjectionIntegrityError
 
 
 @pytest.fixture
@@ -64,3 +66,24 @@ def test_response_contains_only_safe_status_reason_and_evidence_fields(client, m
     assert body["items"][0]["cells"]["general"]["status_label"]
     assert body["items"][0]["cells"]["general"]["reason_label"]
     assert not any(secret in serialized for secret in ("iin", "fingerprint", "raw_payload", "document", "traceback", "select "))
+
+
+def test_new_section_filter_person_endpoint_and_integrity_error_are_safe(client, monkeypatch):
+    _authorize(monkeypatch, 501, True)
+    safe_cell = {"status_code": "NOT_STARTED", "status_label": "Не начато",
+                 "reason_code": "SECTION_PROCESSING_NOT_CONNECTED",
+                 "reason_label": "Обработка раздела ещё не подключена.",
+                 "calculated_at": "2026-01-01T00:00:00Z", "stage_run_id": None,
+                 "stage1_run_id": None, "stage_participant_id": None,
+                 "stage1_participant_id": None, "pmf_run_id": None}
+    cells = {section: dict(safe_cell) for section in SECTIONS}
+    monkeypatch.setattr(status_router, "matrix", lambda *_a, **kwargs: {
+        "universe_id": kwargs["universe_id"], "page": 1, "page_size": 50, "total": 1,
+        "items": [], "counts": []})
+    monkeypatch.setattr(status_router, "person_cells", lambda *_a, **_k: {"universe_id": 7, "cells": cells})
+    assert client.get("/directory/personnel/migration-status", params={"universe_id": 7, "section": "awards"}).status_code == 200
+    person = client.get("/directory/personnel/migration-status/persons/8", params={"universe_id": 7})
+    assert person.status_code == 200
+    assert tuple(person.json()["cells"]) == SECTIONS
+    monkeypatch.setattr(status_router, "person_cells", lambda *_a, **_k: (_ for _ in ()).throw(ProjectionIntegrityError()))
+    assert client.get("/directory/personnel/migration-status/persons/8", params={"universe_id": 7}).status_code == 409
