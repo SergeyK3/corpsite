@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Any, Optional
@@ -16,7 +17,8 @@ from app.services.hr_import_analytics_service import (
     is_real_employee_row,
 )
 from app.services.hr_import_employee_binding_service import (
-    _digits_only,
+    BINDING_REASON_IIN_INVALID_FORMAT,
+    BINDING_REASON_IIN_MULTIPLE_MATCHES,
     _lookup_employees_by_iin,
     _norm_name,
     propagate_employee_id_to_normalized_records,
@@ -127,7 +129,7 @@ def _load_roster_rows(conn: Connection, batch_id: int) -> list[dict[str, Any]]:
             "source_sheet": str(db_row["source_sheet"] or ""),
             "source_row_number": int(db_row["source_row_number"]),
             "full_name": str(payload.get("full_name") or "").strip(),
-            "iin": _digits_only(str(payload.get("iin") or "")),
+            "iin": payload.get("iin"),
             "department": str(payload.get("department") or "").strip(),
             "position_raw": str(payload.get("position_raw") or "").strip(),
             "classification": str(metadata.get("classification") or ""),
@@ -236,7 +238,7 @@ def evaluate_roster_promotion(
 def _evaluate_single_row(conn: Connection, row: dict[str, Any]) -> RosterPromotionItem:
     row_id = int(row["row_id"])
     full_name = str(row.get("full_name") or "").strip()
-    iin = str(row.get("iin") or "").strip()
+    iin = row.get("iin")
     linked_employee_id = row.get("employee_id")
 
     base = RosterPromotionItem(
@@ -257,15 +259,15 @@ def _evaluate_single_row(conn: Connection, row: dict[str, Any]) -> RosterPromoti
         base.reason = "Не указано ФИО"
         return base
 
-    if len(iin) != 12:
-        base.reason = "ИИН отсутствует или не содержит 12 цифр"
+    if not isinstance(iin, str) or re.fullmatch(r"[0-9]{12}", iin) is None:
+        base.reason = BINDING_REASON_IIN_INVALID_FORMAT
         return base
 
     existing_ids = _lookup_employees_by_iin(conn, iin)
     if len(existing_ids) > 1:
         base.outcome = OUTCOME_CONFLICT
         base.candidate_employee_ids = existing_ids
-        base.reason = f"Найдено несколько сотрудников с ИИН {iin}"
+        base.reason = BINDING_REASON_IIN_MULTIPLE_MATCHES
         return base
 
     org_unit_id, org_unit_name = _resolve_org_unit(conn, str(row.get("department") or ""))

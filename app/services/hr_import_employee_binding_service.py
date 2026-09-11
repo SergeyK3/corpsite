@@ -25,9 +25,22 @@ BINDING_STATUS_UNBOUND = "unbound"
 BINDING_STATUS_CONFLICT = "conflict"
 
 BINDING_METHOD_IIN = "iin"
-BINDING_METHOD_FULL_NAME = "full_name"
 BINDING_METHOD_ROW_LINK = "row_link"
 BINDING_METHOD_MANUAL = "manual"
+
+BINDING_REASON_SOURCE_MISSING = "BINDING_SOURCE_MISSING"
+BINDING_REASON_IIN_MISSING = "IIN_MISSING"
+BINDING_REASON_IIN_INVALID_FORMAT = "IIN_INVALID_FORMAT"
+BINDING_REASON_IIN_NOT_FOUND = "IIN_NOT_FOUND"
+BINDING_REASON_IIN_MULTIPLE_MATCHES = "IIN_MULTIPLE_MATCHES"
+
+_SAFE_BINDING_REASONS = {
+    BINDING_REASON_SOURCE_MISSING,
+    BINDING_REASON_IIN_MISSING,
+    BINDING_REASON_IIN_INVALID_FORMAT,
+    BINDING_REASON_IIN_NOT_FOUND,
+    BINDING_REASON_IIN_MULTIPLE_MATCHES,
+}
 
 REBUILDABLE_REVIEW_STATUSES = ("pending", "approved", "rejected", "superseded")
 OPEN_EMPLOYEE_DEDUP_STATUSES = ("pending", "approved")
@@ -95,29 +108,17 @@ def _lookup_employees_by_iin(conn: Connection, iin_digits: str) -> list[int]:
     return [int(row[0]) for row in rows if row and row[0]]
 
 
-def _lookup_employees_by_full_name(conn: Connection, full_name: str) -> list[int]:
-    norm_name = _norm_name(full_name)
-    rows = conn.execute(
-        text(
-            """
-            SELECT employee_id
-            FROM public.employees
-            WHERE lower(replace(trim(full_name), 'ё', 'е')) = :norm_name
-            ORDER BY employee_id
-            """
-        ),
-        {"norm_name": norm_name},
-    ).fetchall()
-    return [int(row[0]) for row in rows if row and row[0]]
-
-
 def resolve_employee_binding(
     conn: Connection,
     *,
     row_employee_id: Optional[int] = None,
     payload: Optional[dict[str, Any]] = None,
 ) -> EmployeeBindingResult:
-    """Resolve directory employee from staging row link or import payload (IIN, then FIO)."""
+    """Resolve only an existing row link or a valid exact IIN.
+
+    Full name can be shown by a separately authorised candidate-search view, but
+    it is never a condition for an automatic import-row binding.
+    """
     if row_employee_id:
         return EmployeeBindingResult(
             employee_id=int(row_employee_id),
@@ -129,70 +130,43 @@ def resolve_employee_binding(
         return EmployeeBindingResult(
             employee_id=None,
             status=BINDING_STATUS_UNBOUND,
-            reason="Нет данных для сопоставления (ИИН/ФИО)",
+            reason=BINDING_REASON_SOURCE_MISSING,
         )
 
-    iin_digits = _digits_only(str(payload.get("iin", "") or ""))
-    if len(iin_digits) == 12:
-        employee_ids = _lookup_employees_by_iin(conn, iin_digits)
-        if len(employee_ids) > 1:
-            return EmployeeBindingResult(
-                employee_id=None,
-                status=BINDING_STATUS_CONFLICT,
-                method=BINDING_METHOD_IIN,
-                reason=f"ИИН {iin_digits}: найдено несколько сотрудников ({len(employee_ids)})",
-                candidate_employee_ids=employee_ids,
-            )
-        if len(employee_ids) == 1:
-            return EmployeeBindingResult(
-                employee_id=employee_ids[0],
-                status=BINDING_STATUS_BOUND,
-                method=BINDING_METHOD_IIN,
-            )
-
-    full_name = str(payload.get("full_name", "") or "").strip()
-    if not full_name:
-        if len(iin_digits) == 12:
-            return EmployeeBindingResult(
-                employee_id=None,
-                status=BINDING_STATUS_UNBOUND,
-                method=BINDING_METHOD_IIN,
-                reason="Сотрудник с указанным ИИН не найден в справочнике",
-            )
+    raw_iin = payload.get("iin")
+    if raw_iin is None or raw_iin == "":
         return EmployeeBindingResult(
             employee_id=None,
             status=BINDING_STATUS_UNBOUND,
-            reason="Не указаны ИИН и ФИО для сопоставления",
+            reason=BINDING_REASON_IIN_MISSING,
+        )
+    if not isinstance(raw_iin, str) or re.fullmatch(r"[0-9]{12}", raw_iin) is None:
+        return EmployeeBindingResult(
+            employee_id=None,
+            status=BINDING_STATUS_UNBOUND,
+            reason=BINDING_REASON_IIN_INVALID_FORMAT,
         )
 
-    employee_ids = _lookup_employees_by_full_name(conn, full_name)
+    employee_ids = _lookup_employees_by_iin(conn, raw_iin)
     if len(employee_ids) > 1:
         return EmployeeBindingResult(
             employee_id=None,
             status=BINDING_STATUS_CONFLICT,
-            method=BINDING_METHOD_FULL_NAME,
-            reason=f"ФИО «{full_name}»: найдено несколько сотрудников ({len(employee_ids)})",
+            method=BINDING_METHOD_IIN,
+            reason=BINDING_REASON_IIN_MULTIPLE_MATCHES,
             candidate_employee_ids=employee_ids,
         )
     if len(employee_ids) == 1:
         return EmployeeBindingResult(
             employee_id=employee_ids[0],
             status=BINDING_STATUS_BOUND,
-            method=BINDING_METHOD_FULL_NAME,
-        )
-
-    if len(iin_digits) == 12:
-        return EmployeeBindingResult(
-            employee_id=None,
-            status=BINDING_STATUS_UNBOUND,
             method=BINDING_METHOD_IIN,
-            reason="Сотрудник с указанным ИИН не найден в справочнике",
         )
     return EmployeeBindingResult(
         employee_id=None,
         status=BINDING_STATUS_UNBOUND,
-        method=BINDING_METHOD_FULL_NAME,
-        reason=f"Сотрудник «{full_name}» не найден в справочнике",
+        method=BINDING_METHOD_IIN,
+        reason=BINDING_REASON_IIN_NOT_FOUND,
     )
 
 
@@ -667,6 +641,10 @@ def binding_info_for_row(
         metadata = dict((payload or {}).get("metadata") or {})
         method = metadata.get("employee_binding_method") or BINDING_METHOD_ROW_LINK
         reason = metadata.get("employee_binding_reason")
+        if method not in {BINDING_METHOD_IIN, BINDING_METHOD_ROW_LINK, BINDING_METHOD_MANUAL}:
+            method = BINDING_METHOD_ROW_LINK
+        if reason not in _SAFE_BINDING_REASONS:
+            reason = None
         return {
             "status": BINDING_STATUS_BOUND,
             "method": method,
@@ -678,12 +656,18 @@ def binding_info_for_row(
 
     metadata = dict((payload or {}).get("metadata") or {})
     stored_status = str(metadata.get("employee_binding_status") or "").strip().lower()
-    if stored_status in {BINDING_STATUS_UNBOUND, BINDING_STATUS_CONFLICT}:
+    stored_method = metadata.get("employee_binding_method")
+    stored_reason = metadata.get("employee_binding_reason")
+    if (
+        stored_status in {BINDING_STATUS_UNBOUND, BINDING_STATUS_CONFLICT}
+        and stored_method == BINDING_METHOD_IIN
+        and stored_reason in _SAFE_BINDING_REASONS
+    ):
         candidates = metadata.get("employee_binding_candidate_ids") or []
         return {
             "status": stored_status,
-            "method": metadata.get("employee_binding_method"),
-            "reason": metadata.get("employee_binding_reason"),
+            "method": stored_method,
+            "reason": stored_reason,
             "employee_id": None,
             "directory_employee_name": directory_employee_name,
             "candidate_employee_ids": [int(x) for x in candidates if x is not None],

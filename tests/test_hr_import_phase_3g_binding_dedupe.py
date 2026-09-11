@@ -49,7 +49,7 @@ def _import_batch_with_records(
     full_name: str,
     iin: str,
 ) -> int:
-    source = tmp_path / f"binding_dedupe_{uuid4().hex[:8]}.xlsx"
+    source = tmp_path / "контрольный2606.xlsx"
     _build_doctors_sheet_with_column_m(
         source,
         "КазНМУ, 1982; ПК 144 ч",

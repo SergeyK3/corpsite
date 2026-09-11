@@ -12,7 +12,10 @@ from sqlalchemy import text
 from app.db.engine import engine
 from app.main import app
 from app.services.department_recoding_service import seed_department_recoding
-from app.services.hr_import_employee_binding_service import repair_batch_employee_bindings
+from app.services.hr_import_employee_binding_service import (
+    BINDING_REASON_IIN_INVALID_FORMAT,
+    repair_batch_employee_bindings,
+)
 from app.services.hr_import_diff_removal_decision_service import (
     DECISION_RESTORE,
     list_pending_diff_removals,
@@ -447,7 +450,7 @@ def test_roster_promotion_blocks_invalid_iin(seed, tmp_path: Path):
             )
             preview = evaluate_roster_promotion(conn, batch_id, row_ids=[row_id])
         assert preview["items"][0]["outcome"] == OUTCOME_BLOCKED
-        assert "ИИН" in (preview["items"][0].get("reason") or "")
+        assert preview["items"][0].get("reason") == BINDING_REASON_IIN_INVALID_FORMAT
     finally:
         with engine.begin() as conn:
             if batch_id:

@@ -12,12 +12,14 @@ from sqlalchemy import text
 from app.db.engine import engine
 from app.main import app
 from app.services.hr_import_employee_binding_service import (
-    BINDING_METHOD_FULL_NAME,
     BINDING_METHOD_IIN,
+    BINDING_REASON_IIN_INVALID_FORMAT,
+    BINDING_REASON_IIN_MISSING,
+    BINDING_REASON_IIN_NOT_FOUND,
     BINDING_STATUS_BOUND,
-    BINDING_STATUS_CONFLICT,
     BINDING_STATUS_UNBOUND,
     auto_bind_import_row,
+    binding_info_for_row,
     repair_batch_employee_bindings,
     resolve_employee_binding,
 )
@@ -26,6 +28,11 @@ from app.services.hr_import_normalized_record_service import (
     populate_normalized_records,
 )
 from app.services.hr_import_promotion_service import BLOCKER_EMPLOYEE_REQUIRED, promote_normalized_records
+from app.services.hr_import_roster_promotion_service import (
+    OUTCOME_BLOCKED,
+    _evaluate_single_row,
+    evaluate_roster_promotion,
+)
 from app.services.hr_import_service import import_control_list
 from tests.conftest import auth_headers, insert_returning_id, table_exists
 from tests.test_employee_documents_routes import _create_employee, _create_position, _phase_1a_available
@@ -280,7 +287,7 @@ def test_resolve_employee_binding_by_iin(seed, tmp_path: Path):
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
-def test_resolve_employee_binding_fallback_by_full_name(seed, tmp_path: Path):
+def test_unique_full_name_without_iin_does_not_auto_bind_and_reason_is_safe(seed, tmp_path: Path):
     _require_phase_3g()
     if not _phase_1a_available():
         pytest.skip("employees tables missing")
@@ -306,22 +313,40 @@ def test_resolve_employee_binding_fallback_by_full_name(seed, tmp_path: Path):
 
         with engine.begin() as conn:
             row_id = _first_row_id(conn, batch_id)
-            # Import populate may auto-bind by full_name when employee exists before import.
             conn.execute(
                 text(
                     """
                     UPDATE public.hr_import_rows
-                    SET employee_id = NULL, match_status = 'NO_MATCH'
+                    SET employee_id = NULL,
+                        match_status = 'NO_MATCH',
+                        normalized_payload = jsonb_set(
+                            normalized_payload,
+                            '{iin}',
+                            '""'::jsonb,
+                            true
+                        )
                     WHERE row_id = :row_id
                     """
                 ),
                 {"row_id": row_id},
             )
             binding = auto_bind_import_row(conn, row_id)
+            stored_employee_id = conn.execute(
+                text("SELECT employee_id FROM public.hr_import_rows WHERE row_id = :row_id"),
+                {"row_id": row_id},
+            ).scalar_one()
+            info = binding_info_for_row(
+                conn,
+                row_employee_id=None,
+                payload={"full_name": full_name, "iin": ""},
+            )
 
-        assert binding.status == BINDING_STATUS_BOUND
-        assert binding.method == BINDING_METHOD_FULL_NAME
-        assert binding.employee_id == emp_id
+        assert binding.status == BINDING_STATUS_UNBOUND
+        assert binding.employee_id is None
+        assert binding.reason == BINDING_REASON_IIN_MISSING
+        assert stored_employee_id is None
+        assert info["reason"] == BINDING_REASON_IIN_MISSING
+        assert full_name not in info["reason"]
     finally:
         with engine.begin() as conn:
             if batch_id:
@@ -349,7 +374,9 @@ def test_resolve_employee_binding_unbound_when_no_employee(seed, tmp_path: Path)
 
         assert binding.status == BINDING_STATUS_UNBOUND
         assert binding.employee_id is None
-        assert binding.reason
+        assert binding.reason == BINDING_REASON_IIN_NOT_FOUND
+        assert full_name not in binding.reason
+        assert iin not in binding.reason
         assert all(rec["employee_id"] is None for rec in records)
     finally:
         with engine.begin() as conn:
@@ -358,14 +385,14 @@ def test_resolve_employee_binding_unbound_when_no_employee(seed, tmp_path: Path)
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
-def test_resolve_employee_binding_conflict_on_duplicate_full_name(seed, tmp_path: Path):
+def test_duplicate_full_name_and_invalid_iin_do_not_auto_bind(seed, tmp_path: Path):
     _require_phase_3g()
     if not _phase_1a_available():
         pytest.skip("employees tables missing")
 
     suffix = uuid4().hex[:8]
     full_name = f"Conflict Name {suffix}"
-    import_iin = _test_iin(f"5{suffix}")
+    import_iin = "not-an-iin"
     batch_id = None
     emp_ids: list[int] = []
 
@@ -397,9 +424,10 @@ def test_resolve_employee_binding_conflict_on_duplicate_full_name(seed, tmp_path
                 {"row_id": row_id},
             ).scalar_one()
 
-        assert binding.status == BINDING_STATUS_CONFLICT
-        assert binding.method == BINDING_METHOD_FULL_NAME
-        assert len(binding.candidate_employee_ids) == 2
+        assert binding.status == BINDING_STATUS_UNBOUND
+        assert binding.method is None
+        assert binding.reason == BINDING_REASON_IIN_INVALID_FORMAT
+        assert binding.candidate_employee_ids == []
         assert row_employee_id is None
     finally:
         with engine.begin() as conn:
@@ -407,6 +435,35 @@ def test_resolve_employee_binding_conflict_on_duplicate_full_name(seed, tmp_path
                 _delete_batch(conn, batch_id)
             for emp_id in emp_ids:
                 conn.execute(text("DELETE FROM public.employees WHERE employee_id = :id"), {"id": emp_id})
+
+
+@pytest.mark.parametrize(
+    "invalid_iin",
+    [
+        " 123456789012",
+        "123456789012 ",
+        "1234567890",
+        "1234567890123",
+        "123-456-789-012",
+        "１２３４５６７８９０１２",
+    ],
+)
+def test_auto_binding_and_roster_reject_non_exact_raw_iin(invalid_iin: str):
+    binding = resolve_employee_binding(
+        None,  # type: ignore[arg-type]
+        payload={"full_name": "Safe Candidate", "iin": invalid_iin},
+    )
+    assert binding.status == BINDING_STATUS_UNBOUND
+    assert binding.employee_id is None
+    assert binding.reason == BINDING_REASON_IIN_INVALID_FORMAT
+
+    roster_item = _evaluate_single_row(
+        None,  # type: ignore[arg-type]
+        {"row_id": 1, "employee_id": None, "full_name": "Safe Candidate", "iin": invalid_iin},
+    )
+    assert roster_item.outcome == OUTCOME_BLOCKED
+    assert roster_item.target_employee_id is None
+    assert roster_item.reason == BINDING_REASON_IIN_INVALID_FORMAT
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
@@ -702,4 +759,83 @@ def test_repair_bindings_api_uses_full_iin(seed, tmp_path: Path, privileged_head
                 _delete_batch(conn, batch_id)
             if emp_id:
                 conn.execute(text("DELETE FROM public.employee_identities WHERE employee_id = :id"), {"id": emp_id})
+                conn.execute(text("DELETE FROM public.employees WHERE employee_id = :id"), {"id": emp_id})
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_repair_roster_and_normalized_promotion_do_not_bind_by_full_name(
+    seed, tmp_path: Path, privileged_headers
+):
+    _require_phase_3g()
+    if not _phase_1a_available():
+        pytest.skip("employees tables missing")
+
+    suffix = uuid4().hex[:8]
+    full_name = f"Name Only Repair {suffix}"
+    invalid_iin = "not-an-iin"
+    batch_id = None
+    emp_id = None
+
+    try:
+        with engine.begin() as conn:
+            position_id = _create_position(conn, name=f"pytest_name_only_{suffix}")
+            emp_id = _create_employee(
+                conn,
+                full_name=full_name,
+                org_unit_id=int(seed["unit_id"]),
+                position_id=position_id,
+                is_active=True,
+            )
+
+        batch_id = _import_batch(tmp_path, seed, full_name=full_name, iin=invalid_iin)
+        with engine.begin() as conn:
+            row_id = _first_row_id(conn, batch_id)
+            record_id = _ensure_approved_normalized_record(
+                conn,
+                batch_id,
+                reviewed_by=int(seed["initiator_user_id"]),
+            )
+            roster_preview = evaluate_roster_promotion(conn, batch_id, row_ids=[row_id])
+            normalized_preview = promote_normalized_records(
+                conn,
+                promoted_by=int(seed["initiator_user_id"]),
+                dry_run=True,
+                record_ids=[record_id],
+            )
+
+        assert roster_preview["items"][0]["outcome"] == OUTCOME_BLOCKED
+        assert roster_preview["items"][0]["target_employee_id"] is None
+        assert roster_preview["items"][0]["reason"] == BINDING_REASON_IIN_INVALID_FORMAT
+        assert full_name not in roster_preview["items"][0]["reason"]
+        assert invalid_iin not in roster_preview["items"][0]["reason"]
+        assert any(
+            blocker.get("code") == BLOCKER_EMPLOYEE_REQUIRED
+            for blocker in normalized_preview["items"][0].get("blockers") or []
+        )
+
+        client = TestClient(app)
+        repair_response = client.post(
+            f"/directory/personnel/import/batches/{batch_id}/employee-bindings/repair",
+            headers=privileged_headers,
+        )
+        assert repair_response.status_code == 200, repair_response.text
+        repair_item = next(item for item in repair_response.json()["items"] if item["row_id"] == row_id)
+        assert repair_item["status"] == BINDING_STATUS_UNBOUND
+        assert repair_item["employee_id"] is None
+        # The current parser normalizes an invalid source IIN to an empty staged
+        # value; IQ-1 must still keep the repair result safely unbound.
+        assert repair_item["reason"] == BINDING_REASON_IIN_MISSING
+        assert full_name not in repair_item["reason"]
+        assert invalid_iin not in repair_item["reason"]
+
+        with engine.begin() as conn:
+            assert conn.execute(
+                text("SELECT employee_id FROM public.hr_import_rows WHERE row_id = :row_id"),
+                {"row_id": row_id},
+            ).scalar_one() is None
+    finally:
+        with engine.begin() as conn:
+            if batch_id:
+                _delete_batch(conn, batch_id)
+            if emp_id:
                 conn.execute(text("DELETE FROM public.employees WHERE employee_id = :id"), {"id": emp_id})

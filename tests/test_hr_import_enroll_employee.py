@@ -411,6 +411,8 @@ def test_enroll_dry_run_iin_conflict(seed, tmp_path: Path):
         assert result.conflict is not None
         assert result.conflict["code"] == "IIN_ALREADY_EXISTS"
         assert result.conflict["existing_employee_id"] == emp_id
+        assert iin not in result.conflict["message"]
+        assert full_name not in result.conflict["message"]
         assert result.conflict.get("existing_org_unit_name") is not None or True
     finally:
         with engine.begin() as conn:

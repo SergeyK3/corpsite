@@ -326,7 +326,7 @@ def _check_iin_conflicts(conn: Connection, iin_digits: str) -> Optional[dict[str
             "code": CONFLICT_IIN_MULTIPLE_MATCH,
             "candidate_employee_ids": employee_ids,
             "candidates": profiles,
-            "message": f"Найдено несколько сотрудников с ИИН {iin_digits}",
+            "message": "Найдено несколько сотрудников с таким ИИН",
         }
     if len(employee_ids) == 1:
         profile = _employee_profile(conn, employee_ids[0])
@@ -337,7 +337,7 @@ def _check_iin_conflicts(conn: Connection, iin_digits: str) -> Optional[dict[str
             "existing_org_unit_name": profile.get("org_unit_name"),
             "existing_position_name": profile.get("position_name"),
             "candidates": [profile],
-            "message": f"Сотрудник с ИИН {iin_digits} уже существует",
+            "message": "Сотрудник с таким ИИН уже существует",
         }
     return None
 
