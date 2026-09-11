@@ -124,6 +124,38 @@ def _resolve_org_unit_id(conn: Connection, org_unit_name: str) -> Optional[int]:
     return int(row[0]) if row else None
 
 
+def _resolve_org_unit_by_code(conn: Connection, target_org_unit_code: str) -> Optional[tuple[int, str]]:
+    """Resolve a new seed target strictly by its stable, exact org-unit code.
+
+    Name-based lookup remains only for legacy seed entries which do not carry a
+    code.  In particular, code-targeted entries deliberately do not fall back
+    to a substring match: a typo must fail the seed transaction closed.
+    """
+    code = (target_org_unit_code or "").strip()
+    if not code:
+        return None
+    rows = conn.execute(
+        text(
+            """
+            SELECT unit_id, name
+            FROM public.org_units
+            WHERE code = :code
+              AND is_active = TRUE
+            ORDER BY unit_id
+            """
+        ),
+        {"code": code},
+    ).all()
+    if len(rows) > 1:
+        raise ValueError(
+            "Expected exactly one active org unit for "
+            f"target_org_unit_code={code!r}; found {len(rows)}"
+        )
+    if not rows:
+        return None
+    return int(rows[0][0]), str(rows[0][1] or "").strip()
+
+
 def seed_department_recoding(
     conn: Connection,
     *,
@@ -142,10 +174,12 @@ def seed_department_recoding(
     inserted = 0
     updated = 0
     skipped_duplicates = 0
+    skipped_unresolved_targets = 0
     seen_aliases: set[str] = set()
     for entry in entries:
         import_name = str(entry.get("import_department_name") or "").strip()
         org_unit_name = str(entry.get("org_unit_name") or "").strip()
+        target_org_unit_code = str(entry.get("target_org_unit_code") or "").strip()
         if not import_name:
             continue
         alias_key = _norm_name(import_name)
@@ -153,7 +187,22 @@ def seed_department_recoding(
             skipped_duplicates += 1
             continue
         seen_aliases.add(alias_key)
-        org_unit_id = _resolve_org_unit_id(conn, org_unit_name)
+        if target_org_unit_code:
+            resolved_target = _resolve_org_unit_by_code(
+                conn, target_org_unit_code
+            )
+            if resolved_target is None:
+                # The migration is fail-closed; a seed run against an older
+                # local schema stays backward compatible by not creating an
+                # unbound replacement and never falling back to a name match.
+                skipped_unresolved_targets += 1
+                continue
+            org_unit_id, resolved_org_unit_name = resolved_target
+            # The canonical name is read from the code-resolved unit, not
+            # trusted from a JSON display string.
+            org_unit_name = resolved_org_unit_name
+        else:
+            org_unit_id = _resolve_org_unit_id(conn, org_unit_name)
         group = infer_department_group(import_name=import_name, org_unit_name=org_unit_name)
         existing = conn.execute(
             text(
@@ -211,7 +260,12 @@ def seed_department_recoding(
                 },
             )
             inserted += 1
-    return {"inserted": inserted, "updated": updated, "skipped_duplicates": skipped_duplicates}
+    return {
+        "inserted": inserted,
+        "updated": updated,
+        "skipped_duplicates": skipped_duplicates,
+        "skipped_unresolved_targets": skipped_unresolved_targets,
+    }
 
 
 def _load_recoding_map(conn: Connection) -> dict[str, dict[str, Any]]:

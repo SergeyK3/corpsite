@@ -5,7 +5,8 @@
   },
   {
     "import_department_name": "КАБИНЕТ ТРАНСФУЗИОЛОГИИ",
-    "org_unit_name": "Трансфузиология"
+    "org_unit_name": "Трансфузиология",
+    "target_org_unit_code": "TRANSFUSE"
   },
   {
     "import_department_name": "ПРИЕМНЫЙ ПОКОЙ",
@@ -165,7 +166,8 @@
   },
   {
     "import_department_name": "АРХИВ",
-    "org_unit_name": "Архив"
+    "org_unit_name": "Архив",
+    "target_org_unit_code": "ARCHIVE"
   },
   {
     "import_department_name": "ОТДЕЛ УПРАВЛЕНИЯ ЧЕЛОВЕЧЕСКИМИ РЕСУРСАМИ",
@@ -193,7 +195,8 @@
   },
   {
     "import_department_name": "IT бөлімі",
-    "org_unit_name": "IT"
+    "org_unit_name": "IT",
+    "target_org_unit_code": "IT"
   },
   {
     "import_department_name": "СИТУАЦИОННЫЙ ЦЕНТР",
@@ -214,5 +217,25 @@
   {
     "import_department_name": "Отдел менеджмента и качества",
     "org_unit_name": "Отдел менеджмента и качества"
+  },
+  {
+    "import_department_name": "СКРИНИНГ ЦЕНТР",
+    "target_org_unit_code": "SCREENING CENTER"
+  },
+  {
+    "import_department_name": "ПИЩЕБЛОК",
+    "target_org_unit_code": "FOOD DEPARTMENT"
+  },
+  {
+    "import_department_name": "Отдел физико-технический",
+    "target_org_unit_code": "PHYSICAL AND TECHNICAL DEPARTMENT"
+  },
+  {
+    "import_department_name": "ОБЩЕБОЛЬНИЧНЫЙ",
+    "target_org_unit_code": "GENERAL"
+  },
+  {
+    "import_department_name": "ОАХ",
+    "target_org_unit_code": "Amb_chem"
   }
 ]
