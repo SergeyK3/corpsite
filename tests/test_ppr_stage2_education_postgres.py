@@ -1,6 +1,8 @@
 """PostgreSQL contracts for the Stage 2 thin envelope (corpsite_test only)."""
 from __future__ import annotations
 
+from uuid import uuid4
+
 from sqlalchemy import text
 
 from app.db.engine import engine
@@ -37,6 +39,51 @@ def _seed(conn):
     return actor, int(frozen["stage0_cohort_run_id"]), person
 
 
+def _stage2_cohort_for_employee(conn, *, actor: int, employee: int, fragments: list[dict[str, object]]) -> int:
+    """Create one isolated Stage-0 cohort with approved normalized fragments."""
+    token = uuid4().hex
+    batch = int(conn.execute(text("""INSERT INTO public.hr_import_batches(source_type,file_name,import_code,imported_by,status)
+        VALUES('HR_CONTROL_LIST',:file,:code,:actor,'APPLY_PENDING') RETURNING batch_id"""),
+        {"file": f"stage2-{token}.xlsx", "code": f"stage2-{token}", "actor": actor}).scalar_one())
+    row = int(conn.execute(text("""INSERT INTO public.hr_import_rows(batch_id,source_sheet,source_row_number,raw_payload,normalized_payload,employee_id)
+        VALUES(:batch,'Synthetic',1,'{}'::jsonb,'{}'::jsonb,:employee) RETURNING row_id"""),
+        {"batch": batch, "employee": employee}).scalar_one())
+    for index, fragment in enumerate(fragments):
+        conn.execute(text("""INSERT INTO public.hr_import_normalized_records(
+            batch_id,row_id,employee_id,fragment_index,source_field,source_text,source_record_key,
+            record_kind,title,specialty_text,document_number,end_date,parse_method,review_status)
+            VALUES(:batch,:row,:employee,:index,'education','',:source_key,:record_kind,
+                   :title,:specialty,:number,:end_date,'manual','approved')"""), {
+            "batch": batch, "row": row, "employee": employee, "index": index,
+            "source_key": str(fragment.get("source_key") or f"education-{index}"),
+            "record_kind": str(fragment.get("record_kind") or "education"),
+            "title": str(fragment.get("title") or "\u0414\u0438\u043f\u043b\u043e\u043c University"),
+            "specialty": fragment.get("specialty"), "number": fragment.get("number"),
+            "end_date": fragment.get("end_date"),
+        })
+    preview = preview_stage0_cohort(conn, source_batch_id=batch)
+    frozen = freeze_stage0_cohort(conn, source_batch_id=batch, preview_fingerprint=preview["preview_fingerprint"], actor_user_id=actor)
+    return int(frozen["stage0_cohort_run_id"])
+
+
+def _employee_for_cohort(conn, cohort: int) -> int:
+    return int(conn.execute(text("SELECT employee_id FROM public.ppr_stage0_cohort_participants WHERE stage0_cohort_run_id=:cohort"), {"cohort": cohort}).scalar_one())
+
+
+def _stage2_run(conn, *, actor: int, cohort: int) -> dict:
+    preview = compute_preview_stage2(conn, stage0_cohort_run_id=cohort)
+    return persist_preview_stage2(conn, stage0_cohort_run_id=cohort, actor_user_id=actor, expected_preview_fingerprint=preview["preview_fingerprint"])
+
+
+def _accept_ready_stage2(conn, *, actor: int, run: dict) -> None:
+    run_id = int(run["run"]["stage_run_id"])
+    approve_stage2(conn, run_id=run_id, actor_user_id=actor)
+    execute_next_stage2(conn, run_id=run_id, actor_user_id=actor)
+    completed = execute_next_stage2(conn, run_id=run_id, actor_user_id=actor)
+    summary = acceptance_summary(conn, run_id=int(completed["run"]["stage_run_id"]))
+    accept_stage2(conn, run_id=run_id, actor_user_id=actor, acceptance_fingerprint=summary["acceptance_fingerprint"])
+
+
 def test_stage2_preview_is_replayable_and_draft_only_on_corpsite_test():
     with engine.connect() as conn:
         tx = conn.begin()
@@ -70,6 +117,109 @@ def test_stage2_preview_is_replayable_and_draft_only_on_corpsite_test():
             replay = accept_stage2(conn, run_id=run["run"]["stage_run_id"], actor_user_id=actor, acceptance_fingerprint="0" * 64)
             assert replay["run"]["status"] == "ACCEPTED"
             assert conn.execute(text("SELECT count(*) FROM public.personnel_record_events WHERE domain_code='education' AND person_id=:person"), {"person": person}).scalar_one() == event_count
+        finally:
+            tx.rollback()
+
+
+def test_stage2_accepts_two_diplomas_with_same_kind_and_institution_when_numbers_differ():
+    with engine.connect() as conn:
+        tx = conn.begin()
+        try:
+            actor, initial_cohort, person = _seed(conn)
+            cohort = _stage2_cohort_for_employee(conn, actor=actor, employee=_employee_for_cohort(conn, initial_cohort), fragments=[
+                {"source_key": "same-school-1", "title": "\u0414\u0438\u043f\u043b\u043e\u043c University", "number": "AB 001", "specialty": "Cardiology"},
+                {"source_key": "same-school-2", "title": "\u0414\u0438\u043f\u043b\u043e\u043c University", "number": "AB 002", "specialty": "Cardiology"},
+            ])
+            run = _stage2_run(conn, actor=actor, cohort=cohort)
+            assert [item["outcome"] for item in run["participants"][0]["fragments"]] == ["READY_TO_ADD", "READY_TO_ADD"]
+            _accept_ready_stage2(conn, actor=actor, run=run)
+            numbers = conn.execute(text("SELECT diploma_number FROM public.person_education WHERE person_id=:person ORDER BY diploma_number"), {"person": person}).scalars().all()
+            assert numbers == ["AB 001", "AB 002"]
+        finally:
+            tx.rollback()
+
+
+def test_stage2_exact_diploma_reimport_in_new_batch_is_already_applied():
+    with engine.connect() as conn:
+        tx = conn.begin()
+        try:
+            actor, initial_cohort, person = _seed(conn)
+            employee = _employee_for_cohort(conn, initial_cohort)
+            first = _stage2_cohort_for_employee(conn, actor=actor, employee=employee, fragments=[
+                {"source_key": "first-diploma", "title": "\u0414\u0438\u043f\u043b\u043e\u043c University", "number": "AB 001", "specialty": "Cardiology", "end_date": "2020-06-30"},
+            ])
+            _accept_ready_stage2(conn, actor=actor, run=_stage2_run(conn, actor=actor, cohort=first))
+            second = _stage2_cohort_for_employee(conn, actor=actor, employee=employee, fragments=[
+                {"source_key": "second-batch-same-diploma", "title": "  \u0414\u0418\u041f\u041b\u041e\u041c   University ", "number": " ab 001 ", "specialty": " cardiology ", "end_date": "2020-06-30"},
+            ])
+            replay = _stage2_run(conn, actor=actor, cohort=second)
+            fragment = replay["participants"][0]["fragments"][0]
+            assert fragment["outcome"] == "ALREADY_APPLIED"
+            assert fragment["reason_code"] == "STAGE2_EXACT_CANONICAL_MATCH"
+            _accept_ready_stage2(conn, actor=actor, run=replay)
+            assert conn.execute(text("SELECT count(*) FROM public.person_education WHERE person_id=:person"), {"person": person}).scalar_one() == 1
+        finally:
+            tx.rollback()
+
+
+def test_stage2_blocks_same_normalized_diploma_number_when_requisites_change():
+    with engine.connect() as conn:
+        tx = conn.begin()
+        try:
+            actor, initial_cohort, _ = _seed(conn)
+            employee = _employee_for_cohort(conn, initial_cohort)
+            first = _stage2_cohort_for_employee(conn, actor=actor, employee=employee, fragments=[
+                {"source_key": "first", "title": "\u0414\u0438\u043f\u043b\u043e\u043c University", "number": "AB 001", "specialty": "Cardiology"},
+            ])
+            _accept_ready_stage2(conn, actor=actor, run=_stage2_run(conn, actor=actor, cohort=first))
+            second = _stage2_cohort_for_employee(conn, actor=actor, employee=employee, fragments=[
+                {"source_key": "changed", "title": "\u0414\u0438\u043f\u043b\u043e\u043c University", "number": " ab 001 ", "specialty": "Neurology"},
+            ])
+            conflict = _stage2_run(conn, actor=actor, cohort=second)
+            fragment = conflict["participants"][0]["fragments"][0]
+            assert fragment["outcome"] == "CANONICAL_CONFLICT"
+            assert fragment["reason_code"] == "STAGE2_CANONICAL_IDENTITY_AMBIGUOUS"
+            try:
+                approve_stage2(conn, run_id=int(conflict["run"]["stage_run_id"]), actor_user_id=actor)
+            except Stage2ConflictError as exc:
+                assert str(exc) == "STAGE2_APPROVAL_BLOCKED"
+            else:
+                raise AssertionError("same diploma number with changed requisites must block acceptance")
+        finally:
+            tx.rollback()
+
+
+def test_stage2_accepts_unnumbered_diplomas_when_specialty_or_date_proves_difference():
+    with engine.connect() as conn:
+        tx = conn.begin()
+        try:
+            actor, initial_cohort, person = _seed(conn)
+            cohort = _stage2_cohort_for_employee(conn, actor=actor, employee=_employee_for_cohort(conn, initial_cohort), fragments=[
+                {"source_key": "unnumbered-1", "title": "\u0414\u0438\u043f\u043b\u043e\u043c University", "specialty": "Cardiology", "end_date": "2020-06-30"},
+                {"source_key": "unnumbered-2", "title": "\u0414\u0438\u043f\u043b\u043e\u043c University", "specialty": "Neurology", "end_date": "2021-06-30"},
+            ])
+            run = _stage2_run(conn, actor=actor, cohort=cohort)
+            assert [item["outcome"] for item in run["participants"][0]["fragments"]] == ["READY_TO_ADD", "READY_TO_ADD"]
+            _accept_ready_stage2(conn, actor=actor, run=run)
+            assert conn.execute(text("SELECT count(*) FROM public.person_education WHERE person_id=:person"), {"person": person}).scalar_one() == 2
+        finally:
+            tx.rollback()
+
+
+def test_stage2_ignores_training_normalized_records():
+    with engine.connect() as conn:
+        tx = conn.begin()
+        try:
+            actor, initial_cohort, person = _seed(conn)
+            cohort = _stage2_cohort_for_employee(conn, actor=actor, employee=_employee_for_cohort(conn, initial_cohort), fragments=[
+                {"source_key": "education", "title": "\u0414\u0438\u043f\u043b\u043e\u043c University", "number": "AB 001"},
+                {"source_key": "training", "record_kind": "training", "title": "ACLS", "number": "T 001"},
+            ])
+            run = _stage2_run(conn, actor=actor, cohort=cohort)
+            assert len(run["participants"][0]["fragments"]) == 1
+            _accept_ready_stage2(conn, actor=actor, run=run)
+            assert conn.execute(text("SELECT count(*) FROM public.person_education WHERE person_id=:person"), {"person": person}).scalar_one() == 1
+            assert conn.execute(text("SELECT count(*) FROM public.person_training WHERE person_id=:person"), {"person": person}).scalar_one() == 0
         finally:
             tx.rollback()
 

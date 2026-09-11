@@ -14,6 +14,12 @@ from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
 from app.ppr_migration.education_kind_policy import POLICY_VERSION, REVIEW_REQUIRED, classify_education_kind
+from app.ppr.domain.education_identity import (
+    AMBIGUOUS,
+    EXACT,
+    SERIAL_CONFLICT,
+    compare_education_identity,
+)
 from app.ppr.application.config import ppr_pmf_bridge_enabled
 from app.services.personnel_migration_commit_service import add_draft_item, commit_run, create_draft_run
 
@@ -57,6 +63,29 @@ def _normalize(value: Any) -> str | None:
     return result or None
 
 
+def _education_fields(value: Any) -> tuple[str | None, str | None]:
+    """Split the normalized importer's explicit qualification segment.
+
+    The normalized-record schema stores education context in ``specialty_text``.
+    Its producer emits a semicolon-delimited ``\u043a\u0432\u0430\u043b\u0438\u0444\u0438\u043a\u0430\u0446\u0438\u044f:`` segment when it has a separate
+    qualification.  Keeping that value separate prevents it being lost from
+    the canonical identity while leaving unrecognised source wording intact.
+    """
+    normalized = _normalize(value)
+    if not normalized:
+        return None, None
+    marker = "\u043a\u0432\u0430\u043b\u0438\u0444\u0438\u043a\u0430\u0446\u0438\u044f:"
+    specialty_parts: list[str] = []
+    qualification: str | None = None
+    for part in normalized.split(";"):
+        clean = _normalize(part)
+        if clean and clean.casefold().startswith(marker):
+            qualification = _normalize(clean[len(marker):]) or qualification
+        elif clean:
+            specialty_parts.append(clean)
+    return _normalize("; ".join(specialty_parts)), qualification
+
+
 def _run(conn: Connection, run_id: int, *, lock: bool = False) -> dict[str, Any]:
     row = conn.execute(text(f"SELECT * FROM public.ppr_stage_runs WHERE stage_run_id=:id{' FOR UPDATE' if lock else ''}"), {"id": run_id}).mappings().one_or_none()
     if row is None:
@@ -98,14 +127,27 @@ def _canonical(conn: Connection, person_id: int, *, lock: bool = False) -> list[
     """), {"person": person_id}).mappings()]
 
 
+def _stage2_provenance_matches(canonical: dict[str, Any], fragment: dict[str, Any]) -> bool:
+    """Identify the original source record, independently of a stage-run key."""
+    stage2 = dict(canonical.get("metadata") or {}).get("stage2") or {}
+    return (
+        canonical.get("import_batch_id") == fragment.get("batch_id")
+        and canonical.get("import_row_id") == fragment.get("row_id")
+        and stage2.get("source_record_key") == str(fragment.get("source_record_key") or "")
+        and stage2.get("fragment_index") == int(fragment.get("fragment_index") or 0)
+        and stage2.get("policy_version") == POLICY_VERSION
+    )
+
+
 def _fragment_view(fragment: dict[str, Any], canon: list[dict[str, Any]], *, stage_run_id: int, participant_id: int, version: int) -> dict[str, Any]:
     title = _normalize(fragment.get("title")) or _normalize(fragment.get("source_text"))
     classification = classify_education_kind(title, fragment.get("source_text"), fragment.get("specialty_text"))
+    specialty, qualification = _education_fields(fragment.get("specialty_text"))
     proposal = {
         "education_kind": classification.kind,
         "institution_name": title,
-        "specialty": _normalize(fragment.get("specialty_text")),
-        "qualification": None,
+        "specialty": specialty,
+        "qualification": qualification,
         "completed_at": str(fragment["end_date"] or fragment["issue_date"] or "") or None,
         "diploma_number": _normalize(fragment.get("document_number")),
     }
@@ -114,21 +156,30 @@ def _fragment_view(fragment: dict[str, Any], canon: list[dict[str, Any]], *, sta
     source = {"source_row_number": fragment.get("source_row_number"), "fragment_index": int(fragment["fragment_index"]), "institution_name": title, "specialty": proposal["specialty"], "completed_at": proposal["completed_at"]}
     current: dict[str, Any] | None = None
     outcome, reason = classification.outcome, classification.reason_code
-    identity = (classification.kind, (title or "").casefold())
-    matches = [x for x in canon if (x["education_kind"], (_normalize(x["institution_name"]) or "").casefold()) == identity]
-    if classification.outcome != REVIEW_REQUIRED and fragment["review_status"] not in {"approved", "promoted"}:
-        outcome, reason = REVIEW_REQUIRED, "STAGE2_SOURCE_REVIEW_STATUS"
-    elif classification.outcome != REVIEW_REQUIRED and len(matches) > 1:
-        outcome, reason = "CANONICAL_CONFLICT", "STAGE2_AMBIGUOUS_CANONICAL_MATCH"
-    elif classification.outcome != REVIEW_REQUIRED and len(matches) == 1:
-        current = {k: matches[0].get(k) for k in ("education_kind","institution_name","specialty","qualification","completed_at","diploma_number")}
-        meta = dict(matches[0].get("metadata") or {}).get("stage2") or {}
-        same = all((_normalize(current.get(k)) or None) == (_normalize(proposal.get(k)) or None) for k in proposal)
-        provenance = (matches[0].get("import_batch_id") == fragment.get("batch_id") and matches[0].get("import_row_id") == fragment.get("row_id") and meta.get("source_record_key") == source_key and meta.get("fragment_index") == int(fragment["fragment_index"]) and meta.get("policy_version") == POLICY_VERSION and meta.get("item_key") == item_key)
-        if same and provenance:
+    provenance_matches = [x for x in canon if _stage2_provenance_matches(x, fragment)]
+    if provenance_matches:
+        if len(provenance_matches) != 1:
+            outcome, reason = "CANONICAL_CONFLICT", "STAGE2_AMBIGUOUS_PROVENANCE_MATCH"
+        elif compare_education_identity(provenance_matches[0], proposal) == EXACT:
+            current = {k: provenance_matches[0].get(k) for k in ("education_kind", "institution_name", "specialty", "qualification", "completed_at", "diploma_number")}
             outcome, reason = "ALREADY_APPLIED", "STAGE2_EXACT_PROVENANCE_MATCH"
         else:
-            outcome, reason = "CANONICAL_CONFLICT", "STAGE2_CANONICAL_VALUE_CONFLICT"
+            current = {k: provenance_matches[0].get(k) for k in ("education_kind", "institution_name", "specialty", "qualification", "completed_at", "diploma_number")}
+            outcome, reason = "CANONICAL_CONFLICT", "STAGE2_PROVENANCE_VALUE_CONFLICT"
+    comparisons = [compare_education_identity(x, proposal) for x in canon]
+    if classification.outcome != REVIEW_REQUIRED and fragment["review_status"] not in {"approved", "promoted"}:
+        outcome, reason = REVIEW_REQUIRED, "STAGE2_SOURCE_REVIEW_STATUS"
+    elif not provenance_matches and classification.outcome != REVIEW_REQUIRED:
+        exact = [x for x, relation in zip(canon, comparisons) if relation == EXACT]
+        conflicts = [x for x, relation in zip(canon, comparisons) if relation in {SERIAL_CONFLICT, AMBIGUOUS}]
+        if conflicts or len(exact) > 1:
+            selected = (conflicts or exact)[0]
+            current = {k: selected.get(k) for k in ("education_kind", "institution_name", "specialty", "qualification", "completed_at", "diploma_number")}
+            outcome, reason = "CANONICAL_CONFLICT", "STAGE2_CANONICAL_IDENTITY_AMBIGUOUS"
+        elif len(exact) == 1:
+            selected = exact[0]
+            current = {k: selected.get(k) for k in ("education_kind", "institution_name", "specialty", "qualification", "completed_at", "diploma_number")}
+            outcome, reason = "ALREADY_APPLIED", "STAGE2_EXACT_CANONICAL_MATCH"
     if fragment.get("promoted_document_id") and outcome != "ALREADY_APPLIED":
         outcome, reason = REVIEW_REQUIRED, "STAGE2_PROMOTED_MATCH_NOT_EXACT"
     return {"normalized_record_id": int(fragment["normalized_record_id"]), "import_batch_id": int(fragment["batch_id"]), "import_row_id": int(fragment["row_id"]), "source_record_key": source_key, "fragment_index": int(fragment["fragment_index"]), "source": source, "current": current or {}, "proposal": proposal, "outcome": outcome, "reason_code": reason, "item_key": item_key, "source_fingerprint": _hash({"id":fragment["normalized_record_id"],"updated":fragment["updated_at"],"outcome":outcome,"proposal":proposal})}

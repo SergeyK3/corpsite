@@ -117,9 +117,10 @@ superseded и voided person-owned records по Person. Существующие 
 
 PMF уже содержит `personnel_migration_runs`, `personnel_migration_items`,
 `personnel_record_events`, `EducationMigrationPlugin` и disabled education domain.
-Reconciliation plugin определяет identity `(education_kind, normalized institution)`
-и проверяет live canonical preconditions. Existing PPR duplicate guard также
-fail-closed для active `(education_kind, institution_name)`.
+Reconciliation plugin рассматривает `(education_kind, normalized institution)`
+только как scope сравнения и проверяет live canonical preconditions. PPR duplicate
+guard сопоставляет полный набор реквизитов диплома, поэтому не запрещает второй
+диплом того же вида из того же учреждения.
 
 ## 3. Подтверждённый source → canonical mapping
 
@@ -178,22 +179,33 @@ PREVIEW полностью read-only. Для HR_HEAD в разрешённом o
 ## 5. Match, dedup и conflicts
 
 Для каждого candidate надо загрузить active `person_education` этого Person и
-использовать существующий education reconciliation identity: `education_kind` +
-normalised `institution_name` (strip/casefold). Это согласовано с existing PPR
-duplicate guard.
+рассматривать `education_kind` + normalised `institution_name` (strip/casefold)
+только как scope сравнения, а не уникальный ключ: у одного Person допустимо `0..N`
+дипломов одного вида из одного учреждения. Идентификация выполняется отдельно от
+training и использует provenance либо канонический набор полей
+`education_kind`, `institution_name`, `specialty`, `qualification`,
+`completed_at`, `diploma_number` (whitespace-collapsed, casefolded).
 
 | Result | Правило | Preview / execution result |
 |---|---|---|
-| Нет identity match, данные add-ready | Создать один draft item на fragment. | `READY_TO_ADD` |
-| Ровно один semantic-equal match | Canonical запись не менять; сохранить provenance decision. | `ALREADY_APPLIED` / replay |
-| Ровно один identity match, но есть различия | Не перезаписывать; показать source/current field differences. | `CANONICAL_CONFLICT` — blocking |
-| Более одного identity match | Не выбирать запись эвристически. | `AMBIGUOUS_CANONICAL_MATCH` — blocking |
+| То же provenance и полный канонический match | Это повторная обработка той же исходной записи; canonical не менять. | `ALREADY_APPLIED` / replay |
+| Полный канонический match из нового batch | Это точный повтор диплома; canonical не менять. | `ALREADY_APPLIED` |
+| Оба номера диплома есть и после нормализации различаются | Это разные дипломы, даже при одном виде и учреждении. | `READY_TO_ADD` |
+| Один и тот же нормализованный номер, но различаются прочие canonical fields | Не выбирать замену и не supersede. | `CANONICAL_CONFLICT` — blocking |
+| Номера нет; specialty, qualification или completion date заполнены с обеих сторон и различаются | Это разные дипломы. | `READY_TO_ADD` |
+| Номера нет и данных недостаточно для доказательства различия (включая value-vs-blank) | Не выполнять эвристическую замену или merge. | `CANONICAL_CONFLICT` — manual review |
+| То же provenance, но payload изменился, либо provenance сопоставился более чем с одной записью | Не переписывать источник или canonical запись автоматически. | `CANONICAL_CONFLICT` — manual review |
 | Точные повторы fragments внутри одной source row | Не объединять и не удалять похожие fragments автоматически; сохранить все source fragment indices. | `DUPLICATE_SOURCE_FRAGMENT` — blocking review для HR |
 | Неполный/неразобранный fragment или shared ambiguous context | Не создавать canonical запись. | `REVIEW_REQUIRED` — blocking до решения/исправления |
 
 Stage 2 не выполняет auto-update, supersede или void existing education record в
 массовом прогоне. Они имеют отдельные reconciliation actions и не являются
 «заполнением пустого поля» Stage 1.
+
+`record_kind='education'` обрабатывается только Stage 2 и создаёт только
+education PMF items / `person_education`. `record_kind='training'` исключён из
+Stage 2 comparison и остаётся входом Stage 3 / `person_training`; общий ключ
+между этими разделами отсутствует.
 
 ## 6. Draft/run/acceptance модель
 

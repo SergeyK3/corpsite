@@ -73,6 +73,7 @@ from app.ppr.domain.section_record_validation import (
     validate_relative_record,
 )
 from app.ppr.domain.unit_of_work import UnitOfWork
+from app.ppr.domain.education_identity import DISTINCT, compare_education_identity
 
 
 def _require_positive_person_id(person_id: int) -> None:
@@ -83,10 +84,6 @@ def _require_positive_person_id(person_id: int) -> None:
 def _require_non_empty(value: str | None, field: str) -> None:
     if not value or not str(value).strip():
         raise SectionValidationError(f"{field} is required")
-
-
-def _education_fingerprint(record: EducationRecord) -> tuple[Any, ...]:
-    return (record.education_kind, record.institution_name or "")
 
 
 def _training_fingerprint(record: TrainingRecord) -> tuple[Any, ...]:
@@ -101,13 +98,12 @@ def _assert_no_duplicate_education(
     exclude_record_id: int | None = None,
 ) -> None:
     active = uow.sections.load_active_records(person_id, SECTION_CODE_PPR_EDUCATION)
-    fp = _education_fingerprint(candidate)
     for existing in active:
         if not isinstance(existing, EducationRecord):
             continue
         if exclude_record_id is not None and existing.record_id == exclude_record_id:
             continue
-        if _education_fingerprint(existing) == fp:
+        if compare_education_identity(existing, candidate) != DISTINCT:
             raise SectionDuplicateRecordError(
                 f"Duplicate active education record for person_id={person_id}: "
                 f"kind={candidate.education_kind!r}, institution={candidate.institution_name!r}"
