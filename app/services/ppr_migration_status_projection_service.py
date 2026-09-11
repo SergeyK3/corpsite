@@ -8,7 +8,19 @@ from typing import Any, Iterable
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
-SECTIONS = ("general", "education", "training")
+SECTIONS = (
+    "general",
+    "education",
+    "training",
+    "relatives",
+    "military",
+    "employment_biography",
+    "employment_history",
+    "foreign_languages",
+    "awards",
+    "academic_degrees_titles",
+)
+IMPLEMENTED_SECTIONS = ("general", "education", "training")
 
 def _hash(value: Any) -> str:
     return hashlib.sha256(json.dumps(value, sort_keys=True, default=str, separators=(",", ":")).encode()).hexdigest()
@@ -67,10 +79,15 @@ def _status(conn: Connection | None, f: dict[str, Any], section: str, candidate:
     binding=_hash({k:str(f.get(k)) for k in ("stage0_cohort_run_id","stage0_participant_id","person_id","employee_id","source_row_id","employee_person_id","is_active","operational_status","person_status","merged_into_person_id")})
     target=_hash({"person":f["person_id"],"person_updated":f["person_updated_at"]})
     blocked = (not f["is_active"] or f["operational_status"] != "active" or f["employee_person_id"] != f["person_id"] or f["person_status"] != "active" or f["merged_into_person_id"] is not None)
-    cand=candidate if candidate is not None else _candidate(conn,f,section)
     source=_hash({"row":f["source_row_id"],"payload":f.get("source_payload") or {},"section":section})
     base={"stage_run_id":None,"stage1_run_id":None,"stage_participant_id":None,"stage1_participant_id":None,"pmf_run_id":None,"evidence_kind":None,"policy_version":None}
     if blocked: return {**base,"status_code":"BLOCKED","reason_code":"BINDING_EMPLOYEE_LINK_STALE","source_fingerprint":source,"target_fingerprint":target,"binding_fingerprint":binding}
+    # The seven catalog-only sections deliberately have no source/run lookup
+    # until their individual migration processors are approved.  This preserves
+    # the full persisted matrix without fabricating evidence or adding N+1 reads.
+    if section not in IMPLEMENTED_SECTIONS:
+        return {**base,"status_code":"NOT_STARTED","reason_code":"SECTION_PROCESSING_NOT_CONNECTED","source_fingerprint":source,"target_fingerprint":target,"binding_fingerprint":binding}
+    cand=candidate if candidate is not None else _candidate(conn,f,section)
     if previous and previous["status_code"] in ("ACCEPTED","AUTO_READY","CORRECTED_BY_HR") and previous["source_fingerprint"] != source:
         return {**base,"status_code":"STALE","reason_code":"FINGERPRINT_SOURCE_CHANGED","source_fingerprint":source,"target_fingerprint":target,"binding_fingerprint":binding}
     if not cand: return {**base,"status_code":"NOT_STARTED","reason_code":"RUN_NO_SECTION_RESULT","source_fingerprint":source,"target_fingerprint":target,"binding_fingerprint":binding}

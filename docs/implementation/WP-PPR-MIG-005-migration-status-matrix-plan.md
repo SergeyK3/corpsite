@@ -436,4 +436,4 @@ Stage 0 использует snapshot контрольного списка и �
 4. **WP-PPR-MIG-005D — navigation:** PPR-safe card href helper, report route, matrix table и `return_to`; без execution actions.
 5. **WP-PPR-MIG-005E — card status display:** метка и reason внутри `general`/`education`/`training` section с доступным текстом.
 6. **WP-PPR-MIG-005F — corrections/invalidation:** аудируемый manual-correction event и targeted recalculation after approved review/binding/source changes.
-7. **WP-PPR-MIG-005G — pilot:** observability, approved limited cohort and acceptance criteria; production rollout only after results.
+7. **WP-PPR-MIG-005G — full section matrix:** утверждён каталог десяти migration sections; [WP-005G-A](WP-PPR-MIG-005G-A-full-section-projection.md) — **Completed — Ready for WP-PPR-MIG-005G-B**: persisted projection/rebuild для всех десяти codes выполнен, без расширения report API и frontend.

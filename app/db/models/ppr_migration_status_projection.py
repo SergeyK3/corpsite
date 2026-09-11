@@ -5,7 +5,18 @@ from sqlalchemy import BigInteger, DateTime, ForeignKey, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 from app.db.base import Base
 
-PPR_MIGRATION_SECTIONS = ("general", "education", "training")
+PPR_MIGRATION_SECTIONS = (
+    "general",
+    "education",
+    "training",
+    "relatives",
+    "military",
+    "employment_biography",
+    "employment_history",
+    "foreign_languages",
+    "awards",
+    "academic_degrees_titles",
+)
 PPR_MIGRATION_STATUS_CODES = ("NOT_STARTED", "PROCESSING", "AUTO_READY", "REVIEW_REQUIRED", "CORRECTED_BY_HR", "ACCEPTED", "NO_SOURCE_DATA", "NOT_APPLICABLE", "BLOCKED", "STALE", "ERROR")
 
 class PprMigrationStatusUniverse(Base):

@@ -1,9 +1,12 @@
 """WP-PPR-MIG-005B isolated PostgreSQL contracts (each test rolls back)."""
 from __future__ import annotations
 import json
+from importlib.util import module_from_spec, spec_from_file_location
+from pathlib import Path
 from uuid import uuid4
 import pytest
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from app.db.engine import engine
 from app.services.ppr_stage0_cohort_service import preview_stage0_cohort, freeze_stage0_cohort
 from app.services import ppr_migration_status_projection_service as projection
@@ -29,6 +32,13 @@ def _accepted_general(conn, actor, person, employee, row, cohort, *, policy='PPR
 def _tx():
     conn=engine.connect(); tx=conn.begin(); assert conn.execute(text("select current_database()")).scalar_one()=="corpsite_test"; return conn,tx
 
+def _g_a_migration_module():
+    path=Path("alembic/versions/ppr005gfull01_wp_ppr_mig_005g_full_section_projection.py")
+    spec=spec_from_file_location("wp005g_a_migration",path)
+    assert spec and spec.loader
+    module=module_from_spec(spec); spec.loader.exec_module(module)
+    return module
+
 def test_universe_identity_explicit_supplemental_and_idempotent():
     conn,tx=_tx()
     try:
@@ -43,12 +53,72 @@ def test_rebuild_membership_idempotency_scope_and_no_pii():
     conn,tx=_tx()
     try:
         actor,person,employee,row,base=_seed(conn); _,outside,_,_,_=_seed(conn)
-        u=projection.ensure_universe(conn,base_cohort_run_id=base); assert projection.rebuild_universe(conn,universe_id=u)==3; assert projection.rebuild_universe(conn,universe_id=u)==3
+        u=projection.ensure_universe(conn,base_cohort_run_id=base); assert projection.rebuild_universe(conn,universe_id=u)==10; assert projection.rebuild_universe(conn,universe_id=u)==10
         rows=projection.list_projection_for_scope(conn,universe_id=u,org_unit_ids=None)
         assert {(r['person_id'],r['section_code']) for r in rows} == {(person,s) for s in projection.SECTIONS}
         assert outside not in {r['person_id'] for r in rows}; assert projection.list_projection_for_scope(conn,universe_id=u,org_unit_ids=[])==[]
         cols=set(conn.execute(text("select column_name from information_schema.columns where table_name='ppr_migration_section_status_projection'")).scalars())
         assert not cols & {'full_name','iin','raw_payload','normalized_payload','source_text','document'}
+    finally: tx.rollback(); conn.close()
+
+def test_full_catalog_has_ten_rows_and_preserves_existing_section_statuses():
+    conn,tx=_tx()
+    try:
+        actor,person,employee,row,base=_seed(conn)
+        accepted_run=_accepted_general(conn,actor,person,employee,row,base)
+        u=projection.ensure_universe(conn,base_cohort_run_id=base)
+        assert projection.rebuild_universe(conn,universe_id=u) == 10
+        cells={section:(status,reason) for section,status,reason in conn.execute(text("""
+            select section_code,status_code,reason_code
+            from ppr_migration_section_status_projection
+            where universe_id=:u and person_id=:p
+        """),{"u":u,"p":person})}
+        assert len(cells) == 10
+        assert cells["general"] == ("ACCEPTED","RUN_PARTICIPANT_ACCEPTED")
+        for section in set(projection.SECTIONS) - {"general","education","training"}:
+            assert cells[section] == ("NOT_STARTED","SECTION_PROCESSING_NOT_CONNECTED")
+        assert conn.execute(text("""
+            select count(*) from ppr_migration_section_status_projection
+            where universe_id=:u and person_id=:p and section_code='general' and stage1_run_id=:run
+        """),{"u":u,"p":person,"run":accepted_run}).scalar_one() == 1
+        assert projection.rebuild_universe(conn,universe_id=u) == 10
+        assert conn.execute(text("""
+            select count(*) from ppr_migration_section_status_projection
+            where universe_id=:u and person_id=:p
+        """),{"u":u,"p":person}).scalar_one() == 10
+    finally: tx.rollback(); conn.close()
+
+def test_upgrade_backfill_adds_seven_catalog_rows_and_primary_key_remains_unique():
+    conn,tx=_tx()
+    try:
+        actor,person,employee,row,base=_seed(conn)
+        _accepted_general(conn,actor,person,employee,row,base)
+        u=projection.ensure_universe(conn,base_cohort_run_id=base)
+        projection.rebuild_universe(conn,universe_id=u)
+        conn.execute(text("""delete from ppr_migration_section_status_projection
+          where universe_id=:u and person_id=:p and section_code=any(:sections)"""),
+          {"u":u,"p":person,"sections":list(set(projection.SECTIONS)-{"general","education","training"})})
+        assert conn.execute(text("select count(*) from ppr_migration_section_status_projection where universe_id=:u and person_id=:p"),{"u":u,"p":person}).scalar_one()==3
+        migration=_g_a_migration_module()
+        migration.backfill_missing_section_rows(conn)
+        migration.backfill_missing_section_rows(conn)
+        rows=conn.execute(text("""select section_code,status_code,reason_code
+          from ppr_migration_section_status_projection where universe_id=:u and person_id=:p"""),{"u":u,"p":person}).mappings().all()
+        assert len(rows)==10
+        cells={r["section_code"]:(r["status_code"],r["reason_code"]) for r in rows}
+        assert cells["general"]==("ACCEPTED","RUN_PARTICIPANT_ACCEPTED")
+        for section in set(projection.SECTIONS)-{"general","education","training"}:
+            assert cells[section]==("NOT_STARTED","SECTION_PROCESSING_NOT_CONNECTED")
+        nested=conn.begin_nested()
+        with pytest.raises(IntegrityError):
+            conn.execute(text("""insert into ppr_migration_section_status_projection(
+              universe_id,person_id,employee_context_id,org_unit_id,section_code,status_code,reason_code,
+              source_cohort_run_id,source_row_id,source_fingerprint,target_fingerprint,binding_fingerprint)
+              select universe_id,person_id,employee_context_id,org_unit_id,section_code,status_code,reason_code,
+              source_cohort_run_id,source_row_id,source_fingerprint,target_fingerprint,binding_fingerprint
+              from ppr_migration_section_status_projection
+              where universe_id=:u and person_id=:p and section_code='relatives'"""),{"u":u,"p":person})
+        nested.rollback()
     finally: tx.rollback(); conn.close()
 
 def test_multiple_runs_cancelled_latest_and_fingerprint_invalidation():
