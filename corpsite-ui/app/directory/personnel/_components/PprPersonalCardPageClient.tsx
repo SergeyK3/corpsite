@@ -61,6 +61,8 @@ import EmployeeOperationalAssignmentSection from "./EmployeeOperationalAssignmen
 import EmployeeCardOrdersSection from "./EmployeeCardOrdersSection";
 import EmployeeOnboardingSection from "./EmployeeOnboardingSection";
 import { getEmployees } from "../../employees/_lib/api.client";
+import { getPersonMigrationStatus, listMigrationStatusUniverses, type MigrationCell, type MigrationSection, type MigrationUniverse } from "../_lib/migrationStatusApi.client";
+import MigrationStatusBlock from "./MigrationStatusBlock";
 
 type Props = {
   employeeId?: string;
@@ -87,6 +89,7 @@ function isMilitaryRecord(record: PprSectionRecordResponse): record is PprMilita
   return "source_type" in record && !("source_system" in record);
 }
 
+
 export default function PprPersonalCardPageClient({
   employeeId,
   personId,
@@ -111,6 +114,8 @@ export default function PprPersonalCardPageClient({
   const [intendedEmployment, setIntendedEmployment] = React.useState<PprIntendedEmploymentResponse | null>(null);
   const [activeApplication, setActiveApplication] = React.useState<PersonnelApplicationDetail | null>(null);
   const [fallbackEmployeeId, setFallbackEmployeeId] = React.useState<string | null>(null);
+  const [migrationCells, setMigrationCells] = React.useState<Partial<Record<MigrationSection, MigrationCell>>>({});
+  const [migrationUniverses, setMigrationUniverses] = React.useState<MigrationUniverse[]>([]);
   const scrolledSectionRef = React.useRef<PprCardSectionId | null>(null);
 
   const resolvedPersonId = ppr?.identity.resolved_person_id ?? (personId ? Number(personId) : null);
@@ -119,6 +124,8 @@ export default function PprPersonalCardPageClient({
       ? String(ppr.identity.employee_context_id)
       : employeeId ?? null;
   const resolvedEmployeeId = pprEmployeeId ?? fallbackEmployeeId;
+  const migrationUniverseId = Number(searchParams.get("migration_universe_id"));
+  const canReadMigration = currentUser?.has_ppr_migration_status_read === true;
 
   const loadCard = React.useCallback(
     async (signal?: AbortSignal) => {
@@ -148,6 +155,28 @@ export default function PprPersonalCardPageClient({
     void loadCard(controller.signal);
     return () => controller.abort();
   }, [loadCard]);
+
+  React.useEffect(() => {
+    if (!canReadMigration || !resolvedPersonId) { setMigrationCells({}); return; }
+    let active = true;
+    const load = async () => {
+      let universe = Number.isInteger(migrationUniverseId) && migrationUniverseId > 0 ? migrationUniverseId : 0;
+      if (!universe) {
+        const available = (await listMigrationStatusUniverses()).items; setMigrationUniverses(available);
+        if (available.length !== 1) return;
+        universe = available[0].universe_id;
+        const next = new URLSearchParams(searchParams.toString()); next.set("migration_universe_id", String(universe)); router.replace(`?${next.toString()}`);
+      }
+      const result = await getPersonMigrationStatus(resolvedPersonId, universe);
+      if (active) setMigrationCells(result.cells);
+    };
+    void load().catch(() => active && setMigrationCells({})); return () => { active = false; };
+  }, [canReadMigration, resolvedPersonId, migrationUniverseId, router, searchParams]);
+
+  function selectMigrationUniverse(value: string) {
+    const id = Number(value); if (!Number.isInteger(id) || id <= 0) return;
+    const next = new URLSearchParams(searchParams.toString()); next.set("migration_universe_id", String(id)); router.replace(`?${next.toString()}`);
+  }
 
   React.useEffect(() => {
     if (resolvedPersonId == null) {
@@ -398,12 +427,23 @@ export default function PprPersonalCardPageClient({
 
             <PprCardSectionNav sections={visibleCardSections} />
 
+            {canReadMigration && migrationUniverses.length > 1 ? (
+              <label className="block text-sm" data-testid="ppr-migration-universe-selector">
+                Набор миграции
+                <select aria-label="Набор миграции" className="ml-2 rounded border p-1" value={migrationUniverseId || ""} onChange={(event) => selectMigrationUniverse(event.target.value)}>
+                  <option value="">Выберите набор</option>
+                  {migrationUniverses.map((universe) => <option key={universe.universe_id} value={universe.universe_id}>BASE {universe.base_cohort_run_id}</option>)}
+                </select>
+              </label>
+            ) : null}
+
             <div className="space-y-5">
               <PprCardSection
                 id="general"
                 title="Общие сведения"
                 description="Основные персональные и кадровые сведения."
               >
+                <MigrationStatusBlock cell={migrationCells.general} />
                 <PprCardGeneralSection ppr={ppr} />
               </PprCardSection>
 
@@ -412,6 +452,7 @@ export default function PprPersonalCardPageClient({
                 title="Образование"
                 description="Сведения об образовании из личной карточки."
               >
+                <MigrationStatusBlock cell={migrationCells.education} />
                 <PprCardEducationSection
                   active={educationActive}
                   superseded={educationSuperseded}
@@ -424,6 +465,7 @@ export default function PprPersonalCardPageClient({
                 title="Обучение и повышение квалификации"
                 description="Сведения о профессиональном обучении."
               >
+                <MigrationStatusBlock cell={migrationCells.training} />
                 <PprCardTrainingSection
                   active={trainingActive}
                   superseded={trainingSuperseded}

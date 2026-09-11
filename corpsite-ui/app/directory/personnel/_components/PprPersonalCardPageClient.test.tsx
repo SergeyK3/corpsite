@@ -14,6 +14,7 @@ import {
 } from "../_lib/pprQueryTypes";
 import { PERSONAL_CARD_TITLE } from "@/lib/personnelCardTerminology";
 import { toApiError } from "@/lib/api";
+import { CurrentUserProvider } from "@/lib/currentUser";
 
 vi.mock("next/link", () => ({
   default: ({ children, href }: { children: React.ReactNode; href: string }) => (
@@ -22,9 +23,11 @@ vi.mock("next/link", () => ({
 }));
 
 const pushMock = vi.fn();
+const replaceMock = vi.fn();
+const routerMock = { push: pushMock, replace: replaceMock };
 let currentCardSearchParams = new URLSearchParams("");
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: pushMock, replace: vi.fn() }),
+  useRouter: () => routerMock,
   usePathname: () => "/directory/personnel/employees/42/card",
   useSearchParams: () => currentCardSearchParams,
 }));
@@ -32,10 +35,16 @@ vi.mock("next/navigation", () => ({
 const getPprByEmployeeIdMock = vi.fn();
 const getPprByPersonIdMock = vi.fn();
 const getPprPersonPhotoMock = vi.fn();
+const listMigrationUniversesMock = vi.fn();
+const getPersonMigrationStatusMock = vi.fn();
 vi.mock("../_lib/pprQueryApi.client", () => ({
   getPprByEmployeeId: (...args: unknown[]) => getPprByEmployeeIdMock(...args),
   getPprByPersonId: (...args: unknown[]) => getPprByPersonIdMock(...args),
   getPprPersonPhoto: (...args: unknown[]) => getPprPersonPhotoMock(...args),
+}));
+vi.mock("../_lib/migrationStatusApi.client", () => ({
+  listMigrationStatusUniverses: () => listMigrationUniversesMock(),
+  getPersonMigrationStatus: (...args: unknown[]) => getPersonMigrationStatusMock(...args),
 }));
 
 const getEmployeeImportCard2OptionalMock = vi.fn();
@@ -359,6 +368,9 @@ beforeEach(() => {
   getPprByEmployeeIdMock.mockReset();
   getPprByPersonIdMock.mockReset();
   getPprPersonPhotoMock.mockReset();
+  listMigrationUniversesMock.mockReset();
+  getPersonMigrationStatusMock.mockReset();
+  replaceMock.mockReset();
   getPprPersonPhotoMock.mockRejectedValue({ status: 404 });
   getEmployeeImportCard2OptionalMock.mockReset();
   pushMock.mockReset();
@@ -372,6 +384,33 @@ afterEach(() => {
 });
 
 describe("PprPersonalCardPageClient", () => {
+  it("does not load migration data without the exact read permission", async () => {
+    getPprByEmployeeIdMock.mockResolvedValue(buildMaterializedPpr());
+    render(<PprPersonalCardPageClient employeeId="42" />);
+    await waitFor(() => expect(getPprByEmployeeIdMock).toHaveBeenCalled());
+    expect(listMigrationUniversesMock).not.toHaveBeenCalled();
+    expect(getPersonMigrationStatusMock).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("ppr-migration-universe-selector")).toBeNull();
+    expect(screen.queryByTestId("ppr-migration-status-block")).toBeNull();
+  });
+
+  it("uses explicit universe and preserves card section and return_to", async () => {
+    currentCardSearchParams = new URLSearchParams("section=education&migration_universe_id=77&return_to=%2Fdirectory%2Fpersonnel%2Fmigration-status%3Funiverse_id%3D77");
+    getPprByEmployeeIdMock.mockResolvedValue(buildMaterializedPpr());
+    getPersonMigrationStatusMock.mockResolvedValue({ universe_id: 77, cells: Object.fromEntries(["general", "education", "training"].map((section) => [section, { status_code: "ACCEPTED", status_label: "Согласовано", reason_code: "SAFE", reason_label: "Причина", calculated_at: "2026-01-01T00:00:00Z" }])) });
+    render(<CurrentUserProvider value={{ has_ppr_migration_status_read: true }}><PprPersonalCardPageClient employeeId="42" /></CurrentUserProvider>);
+    await waitFor(() => expect(getPersonMigrationStatusMock).toHaveBeenCalledWith(MOCK_RESOLVED_PERSON_ID, 77));
+    expect(listMigrationUniversesMock).not.toHaveBeenCalled();
+    expect(screen.getAllByTestId("ppr-migration-status-block")).toHaveLength(3);
+  });
+
+  it("auto-selects exactly one universe, but requires selection for several", async () => {
+    getPprByEmployeeIdMock.mockResolvedValue(buildMaterializedPpr());
+    listMigrationUniversesMock.mockResolvedValue({ items: [{ universe_id: 11, base_cohort_run_id: 1, supplemental_cohort_run_ids: [], calculated_at: "2026-01-01" }] });
+    getPersonMigrationStatusMock.mockResolvedValue({ universe_id: 11, cells: {} });
+    render(<CurrentUserProvider value={{ has_ppr_migration_status_read: true }}><PprPersonalCardPageClient employeeId="42" /></CurrentUserProvider>);
+    await waitFor(() => expect(replaceMock).toHaveBeenCalledWith("?migration_universe_id=11"));
+  });
   it("loads card with a single PPR API request", async () => {
     getPprByEmployeeIdMock.mockResolvedValue(buildMaterializedPpr());
 

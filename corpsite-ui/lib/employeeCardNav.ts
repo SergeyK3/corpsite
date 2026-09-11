@@ -54,6 +54,24 @@ export function buildPersonCardHref(
 
 export type BuildPersonalCardHrefOptions = BuildEmployeeCardHrefOptions;
 
+/** PPR section identifiers are intentionally separate from legacy employee tabs. */
+export type PprMigrationCardSection = "general" | "education" | "training";
+
+export function buildPprMigrationCardHref(
+  personId: string | number,
+  section: PprMigrationCardSection,
+  returnTo?: string | null,
+  migrationUniverseId?: string | number | null,
+): string {
+  const base = `/directory/personnel/persons/${normalizeEmployeeId(personId)}/card`;
+  const params = new URLSearchParams({ section });
+  const safeReturnTo = normalizeReturnTo(returnTo);
+  const universe = normalizePositiveIntRouteId(migrationUniverseId == null ? null : String(migrationUniverseId));
+  if (universe) params.set("migration_universe_id", universe);
+  if (safeReturnTo) params.set(RETURN_TO_QUERY_PARAM, safeReturnTo);
+  return `${base}?${params.toString()}`;
+}
+
 function normalizePositiveIntRouteId(value: string | null | undefined): string | null {
   const trimmed = String(value ?? "").trim();
   if (!trimmed) return null;

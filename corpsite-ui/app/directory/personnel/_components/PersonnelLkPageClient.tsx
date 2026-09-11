@@ -2,10 +2,12 @@
 
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 
 import TaskOrgFiltersBar from "@/components/TaskOrgFiltersBar";
 import { useCurrentUser } from "@/lib/currentUser";
 import { canHardDeleteEmployee } from "@/lib/employeeHardDelete";
+import { canReadPprMigrationStatus } from "@/lib/pprMigrationStatusAccess";
 import {
   bulkDeleteEmployees,
   type EmployeeBulkDeleteResponse,
@@ -44,6 +46,7 @@ export default function PersonnelLkPageClient() {
   const searchParams = useSearchParams();
   const me = useCurrentUser();
   const showBulkSelect = canHardDeleteEmployee(me);
+  const canReadMigrationStatus = canReadPprMigrationStatus(me);
   const filters = React.useMemo(() => parsePersonnelLkRegistryState(searchParams), [searchParams]);
   const listLoadKey = React.useMemo(() => buildPersonnelLkListLoadKey(filters), [filters]);
   const registryReturnHref = React.useMemo(
@@ -264,6 +267,15 @@ export default function PersonnelLkPageClient() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {canReadMigrationStatus ? (
+            <Link
+              href="/directory/personnel/migration-status"
+              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700"
+              data-testid="personnel-lk-migration-status-link"
+            >
+              Сводка миграции личных карточек
+            </Link>
+          ) : null}
           <button
             type="button"
             onClick={() => {

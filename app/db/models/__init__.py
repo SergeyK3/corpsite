@@ -98,6 +98,23 @@ from app.db.models.ppr_stage0_cohort import (
     PprStage0CohortParticipant,
     PprStage0CohortRun,
 )
+from app.db.models.ppr_migration_status_projection import (
+    PPR_MIGRATION_SECTIONS,
+    PPR_MIGRATION_STATUS_CODES,
+    PprMigrationSectionStatusProjection,
+    PprMigrationStatusUniverse,
+)
+from app.db.models.ppr_manual_correction_events import (
+    PPR_CORRECTION_EVENT_TYPE,
+    PPR_CORRECTION_ORIGIN_REASON_CODES,
+    PPR_CORRECTION_ORIGIN_STATUSES,
+    PPR_CORRECTION_SECTIONS,
+    PPR_PROJECTION_OUTBOX_ERROR_CODES,
+    PPR_PROJECTION_OUTBOX_JOB_KINDS,
+    PPR_PROJECTION_OUTBOX_STATES,
+    PprMigrationProjectionOutbox,
+    PprSectionManualCorrectionEvent,
+)
 from app.db.models.personnel_migration import (
     DOMAIN_CODE_EDUCATION,
     EDUCATION_KINDS,

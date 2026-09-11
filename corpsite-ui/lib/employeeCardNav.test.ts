@@ -7,6 +7,7 @@ import {
   buildPersonCardHrefFromLegacySearchParams,
   buildPersonalCardHref,
   buildLegacyCardQueryStringFromPageSearchParams,
+  buildPprMigrationCardHref,
   parseEmployeeCardSection,
   parseRouteEmployeeId,
   parseRoutePersonId,
@@ -53,6 +54,15 @@ describe("employeeCardNav", () => {
     expect(buildPersonCardHref(5)).toBe("/directory/personnel/persons/5/card");
     expect(buildPersonCardHref(5, { section: "history" })).toBe(
       "/directory/personnel/persons/5/card?section=history",
+    );
+  });
+
+  it("builds a PPR-safe card href with encoded report return_to", () => {
+    expect(buildPprMigrationCardHref(5, "training", "/directory/personnel/migration-status?universe_id=7&page=2")).toBe(
+      "/directory/personnel/persons/5/card?section=training&return_to=%2Fdirectory%2Fpersonnel%2Fmigration-status%3Funiverse_id%3D7%26page%3D2",
+    );
+    expect(buildPprMigrationCardHref(5, "general", "https://invalid.example")).toBe(
+      "/directory/personnel/persons/5/card?section=general",
     );
   });
 

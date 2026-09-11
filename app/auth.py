@@ -283,6 +283,7 @@ def _enrich_user_context(user: Dict[str, Any]) -> Dict[str, Any]:
     from app.security.admin_permissions import (
         CONTROL_LIST_EXPORT_PERMISSION,
         HR_ENROLLMENT_MANAGER_CODE,
+        PPR_MIGRATION_STATUS_READ_PERMISSION,
         has_admin_permission,
         has_any_personnel_read_permission,
         has_hr_governance_permission,
@@ -301,6 +302,9 @@ def _enrich_user_context(user: Dict[str, Any]) -> Dict[str, Any]:
     out["has_hr_enrollment_manager"] = has_admin_permission(uid, HR_ENROLLMENT_MANAGER_CODE)
     out["has_control_list_export"] = has_admin_permission(
         uid, CONTROL_LIST_EXPORT_PERMISSION
+    )
+    out["has_ppr_migration_status_read"] = has_admin_permission(
+        uid, PPR_MIGRATION_STATUS_READ_PERMISSION
     )
     out["has_personnel_orders_archive"] = has_admin_permission(uid, "PERSONNEL_ORDERS_ARCHIVE")
     out["has_personnel_orders_restore"] = has_admin_permission(uid, "PERSONNEL_ORDERS_RESTORE")
