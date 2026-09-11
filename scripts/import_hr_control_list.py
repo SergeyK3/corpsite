@@ -737,15 +737,38 @@ def parse_sheet_generic(ws, *, sheet_type: str) -> list[ParsedRow]:
         return []
 
     parsed_rows: list[ParsedRow] = []
-    last_department = ""
+    # Legacy control-list sheets keep section labels in column B even when the
+    # header row has no "Отделение" caption.  Prefer a recognized header, but
+    # retain B as the documented legacy section column fallback.
+    section_col_idx = field_map.get("department", _col_idx("B"))
+    merged_lookup = build_merged_section_lookup(ws, section_col_idx)
+    current_department = ""
 
     for row_idx in range(header_row_idx + 1, ws.max_row + 1):
+        # Resolve section context before filtering a row.  A section-only row
+        # can carry no employee fields while still establishing the department
+        # for following employee rows.
+        section_department = resolve_section_department(
+            ws,
+            row_idx,
+            section_col_idx,
+            merged_lookup,
+            current_department,
+        )
+        direct_section = _normalize_department(
+            _to_text(ws.cell(row=row_idx, column=section_col_idx).value)
+        )
+        merged_section = merged_lookup.get(row_idx, "")
+        if direct_section or merged_section:
+            current_department = section_department
+
         if not _row_has_content(ws, row_idx, field_map):
             continue
 
         data = {name: "" for name in OUTPUT_FIELDS}
         data["source_sheet"] = ws.title
         data["source_row_number"] = str(row_idx)
+        data["department"] = current_department
 
         for field_name in OUTPUT_FIELDS:
             if field_name in ("source_sheet", "source_row_number", "department"):
@@ -755,11 +778,6 @@ def parse_sheet_generic(ws, *, sheet_type: str) -> list[ParsedRow]:
                 data[field_name] = parse_birth_date(raw)
             else:
                 data[field_name] = _to_text(raw)
-
-        if data["department"]:
-            last_department = data["department"]
-        elif last_department:
-            data["department"] = last_department
 
         if data.get("education_training_raw"):
             data["training_raw"] = data["education_training_raw"]

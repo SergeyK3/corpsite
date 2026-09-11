@@ -14,6 +14,7 @@ from scripts.import_hr_control_list import (
     get_layout_profile,
     mask_iin,
     parse_birth_date,
+    parse_sheet_generic,
     parse_sheet_with_profile,
     parse_workbook,
     resolve_section_department,
@@ -397,6 +398,55 @@ def test_section_value_same_row_as_employee(tmp_path: Path):
     assert first.full_name == "Иванов Иван Иванович"
     assert first.department == "АДМИНИСТРАТИВНЫЙ ПЕРСОНАЛ"
     assert first.full_name != first.department
+
+
+def _build_generic_legacy_department_sheet(ws) -> None:
+    """Generic layout: B is the legacy section column but has no header."""
+    ws.append(["№", "", "ФИО", "ИИН", "Должность"])
+    # Section-only context must be applied even though this row is not data.
+    ws.append(["", "ОТДЕЛ А", "", "", ""])
+    ws.append([1, "", "Тестов Один", "900101300123", "Специалист"])
+    # The next section is a merged B range spanning two employee rows.
+    ws.append([2, "ОТДЕЛ Б", "Тестов Два", "900102300124", "Специалист"])
+    ws.merge_cells("B4:B5")
+    ws.append([3, "", "Тестов Три", "900103300125", "Специалист"])
+
+
+def test_generic_legacy_b_department_carries_section_and_merged_context(tmp_path: Path):
+    path = tmp_path / "generic_legacy_department.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    _build_generic_legacy_department_sheet(ws)
+    wb.save(path)
+
+    wb = __import__("openpyxl").load_workbook(path, data_only=True)
+    rows = parse_sheet_generic(wb.active, sheet_type="part_time")
+    wb.close()
+
+    employees = [row for row in rows if row.is_employee_roster]
+    assert len(employees) == 3
+    assert [row.department for row in employees] == ["ОТДЕЛ А", "ОТДЕЛ Б", "ОТДЕЛ Б"]
+
+
+def test_generic_legacy_b_department_leaves_rows_before_first_section_empty(tmp_path: Path):
+    path = tmp_path / "generic_legacy_department_before_section.xlsx"
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["№", "", "ФИО", "ИИН", "Должность"])
+    ws.append([1, "", "Тестов До", "900101300123", "Специалист"])
+    ws.append(["", "ОТДЕЛ А", "", "", ""])
+    ws.append([2, "", "Тестов После", "900102300124", "Специалист"])
+    wb.save(path)
+
+    wb = __import__("openpyxl").load_workbook(path, data_only=True)
+    rows = parse_sheet_generic(wb.active, sheet_type="part_time")
+    wb.close()
+
+    employees = [row for row in rows if row.is_employee_roster]
+    # This also locks the employee-row count: department context must not
+    # alter the existing row-classification policy.
+    assert len(employees) == 2
+    assert [row.department for row in employees] == ["", "ОТДЕЛ А"]
 
 
 def test_parse_workbook(tmp_path: Path):
