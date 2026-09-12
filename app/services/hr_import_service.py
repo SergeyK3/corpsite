@@ -120,6 +120,7 @@ def _build_row_payloads(
             "sheet_type": row.sheet_type,
             "classification": classification,
             "iin_valid": row.iin_valid,
+            "iin_quality_issue": row.iin_quality_issue,
             "row_type": row.row_type,
             "declaration_group": row.declaration_group or None,
             "is_employee_roster": row.is_employee_roster,
@@ -294,6 +295,9 @@ def import_control_list(
         _persist_rows(conn, batch_id=batch_id, rows=parsed_rows)
         parse_and_persist_document_candidates(conn, batch_id)
         populate_normalized_records(conn, batch_id)
+        from app.services.hr_import_identity_quality_service import classify_import_identity_quality
+
+        classify_import_identity_quality(conn, batch_id=batch_id)
         from app.services.hr_import_monthly_diff_service import maybe_compute_batch_monthly_diff
 
         diff_result = maybe_compute_batch_monthly_diff(conn, batch_id)

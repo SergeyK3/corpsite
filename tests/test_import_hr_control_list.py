@@ -205,10 +205,10 @@ def test_resolve_sheet_type():
 
 
 def test_clean_iin_and_birth_date():
-    assert clean_iin("900 101 300 123")[0:2] == ("900101300123", True)
+    assert clean_iin("900 101 300 123")[0:2] == ("900 101 300 123", False)
     assert clean_iin("12345")[1] is False
-    assert clean_iin(580131300091.0) == ("580131300091", True, [])
-    assert clean_iin("580131300091.0") == ("580131300091", True, [])
+    assert clean_iin(580131300091.0)[1] is False
+    assert clean_iin("580131300091.0")[1] is False
     assert parse_birth_date(32874) == "1990-01-01"
     assert mask_iin("900101300123") == "9001****23"
 

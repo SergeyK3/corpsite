@@ -97,9 +97,11 @@ def _lookup_employees_by_iin(conn: Connection, iin_digits: str) -> list[int]:
             """
             SELECT DISTINCT ei.employee_id
             FROM public.employee_identities ei
+            JOIN public.employees e ON e.employee_id = ei.employee_id
             WHERE ei.identity_type = 'IIN'
               AND ei.valid_to IS NULL
-              AND regexp_replace(COALESCE(ei.identity_value, ''), '[^0-9]', '', 'g') = :iin
+              AND e.is_active IS TRUE
+              AND ei.identity_value = :iin
             ORDER BY ei.employee_id
             """
         ),

@@ -6,13 +6,16 @@ import argparse
 import csv
 import re
 import sys
+import zipfile
 from collections import Counter
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any, Iterable, Optional
+from xml.etree import ElementTree
 
 from openpyxl import load_workbook
+from openpyxl.styles.numbers import BUILTIN_FORMATS, is_date_format
 from openpyxl.utils import column_index_from_string
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -239,6 +242,9 @@ class ParsedRow:
     is_employee_roster: bool = True
     iin_valid: bool = False
     iin_digits: str = ""
+    # Formula cells are deliberately never treated as source IIN values, even
+    # when Excel stored a cached value in their OOXML <v> element.
+    iin_quality_issue: str | None = None
     errors: list[str] = field(default_factory=list)
 
     @property
@@ -580,44 +586,104 @@ def parse_birth_date(value: Any) -> str:
     return ""
 
 
-def _coerce_iin_text(value: Any) -> str:
-    """Normalize Excel/scalar IIN values to a digit-friendly string."""
-    if value is None or value == "":
-        return ""
-    if isinstance(value, bool):
-        return ""
-    if isinstance(value, int):
-        return str(value)
-    if isinstance(value, float):
-        if value.is_integer() or abs(value - round(value)) < 1e-6:
-            return str(int(round(value)))
-        return format(value, ".0f")
-    text = _to_text(value)
-    if re.fullmatch(r"\d+\.0+", text):
-        return text.split(".", 1)[0]
-    lowered = text.lower()
-    if "e" in lowered:
-        try:
-            as_float = float(text.replace(",", "."))
-            if as_float.is_integer() or abs(as_float - round(as_float)) < 1e-6:
-                return str(int(round(as_float)))
-        except ValueError:
-            pass
-    return text
-
-
 def clean_iin(value: Any) -> tuple[str, bool, list[str]]:
-    raw_text = _coerce_iin_text(value)
-    digits = re.sub(r"\D", "", raw_text)
-    if not digits:
+    """Accept only an original, literal 12-ASCII-digit IIN value.
+
+    IQ-3 intentionally performs no trimming, digit extraction, padding, float
+    conversion, or date conversion.  A date-formatted Excel cell can reach this
+    function only through the separately verified OOXML recovery below.
+    """
+    if value is None or value == "":
         return "", False, ["missing_iin"]
-    if len(digits) > 12 and digits.endswith("0") and re.search(r"\.0+\s*$", raw_text.replace(" ", "")):
-        digits = digits[:12]
-    if len(digits) == 11:
-        digits = f"0{digits}"
-    if len(digits) != 12:
-        return digits, False, [f"invalid_iin_length:{len(digits)}"]
-    return digits, True, []
+    raw_text = value if isinstance(value, str) else str(value)
+    if re.fullmatch(r"[0-9]{12}", raw_text):
+        return raw_text, True, []
+    return raw_text, False, ["invalid_iin_format"]
+
+
+_OOXML_MAIN = "{http://schemas.openxmlformats.org/spreadsheetml/2006/main}"
+_OOXML_DOC_REL = "{http://schemas.openxmlformats.org/officeDocument/2006/relationships}"
+_OOXML_PKG_REL = "{http://schemas.openxmlformats.org/package/2006/relationships}"
+
+
+def _date_style_formats(archive: zipfile.ZipFile) -> list[str | None]:
+    try:
+        styles = ElementTree.fromstring(archive.read("xl/styles.xml"))
+    except (KeyError, ElementTree.ParseError):
+        return []
+    custom_formats = {
+        int(node.attrib["numFmtId"]): node.attrib.get("formatCode", "")
+        for node in styles.findall(f"{_OOXML_MAIN}numFmts/{_OOXML_MAIN}numFmt")
+        if node.attrib.get("numFmtId", "").isdigit()
+    }
+    return [
+        custom_formats.get(int(xf.attrib.get("numFmtId", "0")), BUILTIN_FORMATS.get(int(xf.attrib.get("numFmtId", "0"))))
+        for xf in styles.findall(f"{_OOXML_MAIN}cellXfs/{_OOXML_MAIN}xf")
+    ]
+
+
+def _worksheet_xml_paths(archive: zipfile.ZipFile) -> dict[str, str]:
+    try:
+        workbook = ElementTree.fromstring(archive.read("xl/workbook.xml"))
+        relationships = ElementTree.fromstring(archive.read("xl/_rels/workbook.xml.rels"))
+    except (KeyError, ElementTree.ParseError):
+        return {}
+    targets = {
+        relation.attrib.get("Id"): relation.attrib.get("Target", "")
+        for relation in relationships.findall(f"{_OOXML_PKG_REL}Relationship")
+    }
+    paths: dict[str, str] = {}
+    for sheet in workbook.findall(f"{_OOXML_MAIN}sheets/{_OOXML_MAIN}sheet"):
+        target = targets.get(sheet.attrib.get(f"{_OOXML_DOC_REL}id"), "")
+        if not target:
+            continue
+        path = target.lstrip("/") if target.startswith("/") else f"xl/{target}"
+        if path.startswith("xl/worksheets/"):
+            paths[sheet.attrib.get("name", "")] = path
+    return paths
+
+
+def _recover_date_formatted_iins_from_ooxml(path: Path) -> dict[tuple[str, str], str]:
+    """Return only literal 12-digit `<v>` values from verified date-style cells."""
+    try:
+        with zipfile.ZipFile(path) as archive:
+            formats = _date_style_formats(archive)
+            recovered: dict[tuple[str, str], str] = {}
+            for sheet_name, sheet_path in _worksheet_xml_paths(archive).items():
+                root = ElementTree.fromstring(archive.read(sheet_path))
+                for cell in root.findall(f".//{_OOXML_MAIN}c"):
+                    style = cell.attrib.get("s")
+                    if not style or not style.isdigit() or int(style) >= len(formats):
+                        continue
+                    number_format = formats[int(style)]
+                    if not number_format or not is_date_format(number_format):
+                        continue
+                    if cell.attrib.get("t") not in (None, "n") or cell.find(f"{_OOXML_MAIN}f") is not None:
+                        continue
+                    values = cell.findall(f"{_OOXML_MAIN}v")
+                    literal = values[0].text if len(values) == 1 else None
+                    coordinate = cell.attrib.get("r")
+                    if coordinate and literal and re.fullmatch(r"[0-9]{12}", literal):
+                        recovered[(sheet_name, coordinate)] = literal
+            return recovered
+    except (OSError, zipfile.BadZipFile, KeyError, ElementTree.ParseError):
+        return {}
+
+
+def _formula_cells_from_ooxml(path: Path) -> set[tuple[str, str]]:
+    """Return formula coordinates from source OOXML, never cached formula values."""
+    try:
+        with zipfile.ZipFile(path) as archive:
+            formula_cells: set[tuple[str, str]] = set()
+            for sheet_name, sheet_path in _worksheet_xml_paths(archive).items():
+                root = ElementTree.fromstring(archive.read(sheet_path))
+                for cell in root.findall(f".//{_OOXML_MAIN}c"):
+                    coordinate = cell.attrib.get("r")
+                    if coordinate and cell.find(f"{_OOXML_MAIN}f") is not None:
+                        formula_cells.add((sheet_name, coordinate))
+            return formula_cells
+    except (OSError, zipfile.BadZipFile, KeyError, ElementTree.ParseError):
+        return set()
 
 
 def _row_has_content(ws, row_idx: int, field_map: dict[str, int]) -> bool:
@@ -632,8 +698,14 @@ def _build_parsed_row(
     data: dict[str, str],
     sheet_type: str,
     iin_raw: Any,
+    iin_is_formula: bool = False,
 ) -> ParsedRow:
-    iin_digits, iin_valid, iin_errors = clean_iin(iin_raw)
+    if iin_is_formula:
+        # Do not retain, normalize, or bind the cached formula value.
+        iin_digits, iin_valid, iin_quality_issue = "", False, "IIN_INVALID_FORMAT"
+    else:
+        iin_digits, iin_valid, _iin_errors = clean_iin(iin_raw)
+        iin_quality_issue = None
     data["iin"] = iin_digits
 
     row_type, is_employee_roster = infer_row_type(
@@ -647,7 +719,6 @@ def _build_parsed_row(
 
     errors: list[str] = []
     if is_employee_roster:
-        errors.extend(iin_errors)
         if not data["full_name"]:
             errors.append("missing_full_name")
         if not data["department"]:
@@ -661,11 +732,12 @@ def _build_parsed_row(
         is_employee_roster=is_employee_roster,
         iin_valid=iin_valid,
         iin_digits=iin_digits,
+        iin_quality_issue=iin_quality_issue,
         errors=errors,
     )
 
 
-def parse_sheet_with_profile(ws, *, sheet_type: str, profile: SheetLayoutProfile) -> list[ParsedRow]:
+def parse_sheet_with_profile(ws, *, sheet_type: str, profile: SheetLayoutProfile, ooxml_iins: dict[tuple[str, str], str] | None = None, formula_cells: set[tuple[str, str]] | None = None) -> list[ParsedRow]:
     header_row_idx, header_vals = find_header_row(ws)
     if not header_row_idx:
         return []
@@ -706,10 +778,14 @@ def parse_sheet_with_profile(ws, *, sheet_type: str, profile: SheetLayoutProfile
         data["department"] = current_department
 
         iin_raw = None
+        iin_is_formula = False
         for field_name in profile.columns:
             raw = _cell_for_field(ws, row_idx, field_name, profile, field_map)
             if field_name == "iin":
-                iin_raw = raw
+                iin_column = field_map.get("iin") or _col_idx(profile.columns["iin"])
+                iin_cell = ws.cell(row=row_idx, column=iin_column)
+                iin_is_formula = (ws.title, iin_cell.coordinate) in (formula_cells or set())
+                iin_raw = (ooxml_iins or {}).get((ws.title, iin_cell.coordinate), raw)
             if field_name == "birth_date":
                 data[field_name] = parse_birth_date(raw)
             else:
@@ -721,13 +797,18 @@ def parse_sheet_with_profile(ws, *, sheet_type: str, profile: SheetLayoutProfile
             data["education_training_raw"] = data["training_raw"]
 
         parsed_rows.append(
-            _build_parsed_row(data=data, sheet_type=sheet_type, iin_raw=iin_raw)
+            _build_parsed_row(
+                data=data,
+                sheet_type=sheet_type,
+                iin_raw=iin_raw,
+                iin_is_formula=iin_is_formula,
+            )
         )
 
     return parsed_rows
 
 
-def parse_sheet_generic(ws, *, sheet_type: str) -> list[ParsedRow]:
+def parse_sheet_generic(ws, *, sheet_type: str, ooxml_iins: dict[tuple[str, str], str] | None = None, formula_cells: set[tuple[str, str]] | None = None) -> list[ParsedRow]:
     header_row_idx, header_vals = find_header_row(ws)
     if not header_row_idx:
         return []
@@ -784,26 +865,30 @@ def parse_sheet_generic(ws, *, sheet_type: str) -> list[ParsedRow]:
         elif data.get("training_raw") and not data.get("education_training_raw"):
             data["education_training_raw"] = data["training_raw"]
 
+        iin_cell = ws.cell(row=row_idx, column=field_map["iin"]) if "iin" in field_map else None
         parsed_rows.append(
             _build_parsed_row(
                 data=data,
                 sheet_type=sheet_type,
-                iin_raw=_pick_cell(ws, row_idx, field_map, "iin"),
+                iin_raw=(ooxml_iins or {}).get((ws.title, iin_cell.coordinate), iin_cell.value) if iin_cell else None,
+                iin_is_formula=bool(iin_cell and (ws.title, iin_cell.coordinate) in (formula_cells or set())),
             )
         )
 
     return parsed_rows
 
 
-def parse_sheet(ws, *, sheet_type: str) -> list[ParsedRow]:
+def parse_sheet(ws, *, sheet_type: str, ooxml_iins: dict[tuple[str, str], str] | None = None, formula_cells: set[tuple[str, str]] | None = None) -> list[ParsedRow]:
     profile = get_layout_profile(sheet_type)
     if profile:
-        return parse_sheet_with_profile(ws, sheet_type=sheet_type, profile=profile)
-    return parse_sheet_generic(ws, sheet_type=sheet_type)
+        return parse_sheet_with_profile(ws, sheet_type=sheet_type, profile=profile, ooxml_iins=ooxml_iins, formula_cells=formula_cells)
+    return parse_sheet_generic(ws, sheet_type=sheet_type, ooxml_iins=ooxml_iins, formula_cells=formula_cells)
 
 
 def parse_workbook(path: Path) -> tuple[list[ParsedRow], list[str]]:
     wb = load_workbook(path, data_only=True, read_only=False)
+    ooxml_iins = _recover_date_formatted_iins_from_ooxml(path)
+    formula_cells = _formula_cells_from_ooxml(path)
     all_rows: list[ParsedRow] = []
     warnings: list[str] = []
 
@@ -813,7 +898,12 @@ def parse_workbook(path: Path) -> tuple[list[ParsedRow], list[str]]:
             warnings.append(f"skip_unknown_sheet:{sheet_name}")
             continue
         ws = wb[sheet_name]
-        rows = parse_sheet(ws, sheet_type=sheet_type)
+        rows = parse_sheet(
+            ws,
+            sheet_type=sheet_type,
+            ooxml_iins=ooxml_iins,
+            formula_cells=formula_cells,
+        )
         if not rows:
             warnings.append(f"no_data_rows:{sheet_name}")
         all_rows.extend(rows)
