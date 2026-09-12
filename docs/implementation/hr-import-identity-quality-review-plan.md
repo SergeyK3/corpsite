@@ -105,6 +105,27 @@ identity queue, а также trigger, отвергающий `UPDATE` и `DELET
 row, version, fingerprints или decision даёт безопасный conflict без PII.
 Current state — последнее валидное событие для текущего source-row fingerprint.
 
+### IQ-2 event matrix and state ordering
+
+| event type | actor type | resulting state / reason | person / employee | original IIN fingerprint | entered IIN fingerprint |
+|---|---|---|---|---|---|
+| `SYSTEM_IIN_MISSING` | `SYSTEM` (no user) | `UNRESOLVED` / `IIN_MISSING` | forbidden | forbidden | forbidden |
+| `SYSTEM_IIN_INVALID_FORMAT` | `SYSTEM` (no user) | `UNRESOLVED` / `IIN_INVALID_FORMAT` | forbidden | required | forbidden |
+| `SYSTEM_IIN_UNMATCHED` | `SYSTEM` (no user) | `UNRESOLVED` / `IIN_UNMATCHED` | forbidden | required | forbidden |
+| `IIN_CONFIRMED` | `HR` (real user required) | `UNRESOLVED` / `IIN_UNMATCHED` | forbidden | required | required |
+| `PERSON_EMPLOYEE_LINK_CONFIRMED` | `HR` (real user required) | `RESOLVED` / `IIN_CONFIRMED` | both required and canonical | required | required |
+| `DEFERRED` | `HR` (real user required) | `DEFERRED` / `IIN_DEFERRED` | forbidden | optional | forbidden |
+
+IQ-2 creates only this contract; IQ-3 is the first package allowed to emit system
+classification events. The effective state materializes `event_id`, batch/row,
+source fingerprint, resulting state, and reason code. The deterministic latest
+event order is `(occurred_at ASC, event_id ASC)`; equal timestamps are broken by
+the immutable identity value. Deferred triggers lock the stable
+`hr_import_rows(batch_id,row_id)` parent first, then the current-state row, and
+at `SET CONSTRAINTS ... IMMEDIATE` or commit require every event to have a state
+that selects that latest event. Future writers retain this parent-row-first
+`FOR UPDATE` order.
+
 ### Транзакционный контракт HR action
 
 Каждое action выполняется одной DB-транзакцией:
@@ -189,7 +210,7 @@ postconditions в транзакции.
 | Package | Scope | Совместимый результат |
 |---|---|---|
 | IQ-1 — Completed | Убрать ФИО auto-bind из полного allowlist путей; exact-IIN regressions | Закрывает небезопасную связь без изменения batch data. |
-| IQ-2 | Schema-only Alembic/ORM: append-only events, current state, guarded downgrade | Есть надёжное хранилище до изменения parser semantics. |
+| IQ-2 — Completed | Schema-only Alembic/ORM: append-only events, current state, guarded downgrade | Есть надёжное хранилище до изменения parser semantics. |
 | IQ-3 | Parser разделяет structural и identity quality; детерминированный raw XML; persist current identity state при import | Новые imports не создают identity `error_rows`, но имеют persistent queue. |
 | IQ-4 | Service/API queue и три HR action с transaction/RBAC/scope/idempotency contract | Проверяемые индивидуальные решения без auto-create. |
 | IQ-5 | Completion counters/UI, promotion exclusions, Stage 0 precedence/blockers | Сквозной fail-closed workflow. |
