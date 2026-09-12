@@ -159,6 +159,7 @@ export default function MigrationStatusMatrixPageClient() {
 
   const selectedUniverse = universes.find((value) => value.universe_id === universeId);
   const pageCount = Math.max(1, Math.ceil((matrix?.total ?? 0) / (matrix?.page_size ?? 50)));
+  const statusSummary = matrix?.status_summary;
   if (error === 403) return <main className="p-4" data-testid="migration-status-forbidden"><h1 className="text-xl font-semibold">Сводка личных карточек</h1><p className="mt-3">Недостаточно прав для просмотра сводки.</p></main>;
   return <main className="space-y-4 p-4" data-testid="migration-status-page">
     <div className="flex flex-wrap items-start justify-between gap-3"><div><h1 className="text-xl font-semibold">Сводка личных карточек</h1>{selectedUniverse ? <p className="text-sm text-zinc-500" data-testid="migration-status-calculated-at">Данные рассчитаны: {new Date(selectedUniverse.calculated_at).toLocaleString("ru-RU")}</p> : null}</div><div className="flex gap-2"><Link className="rounded-lg border px-3 py-2 text-sm" href="/directory/personnel/lk">Назад к личным карточкам</Link><button type="button" className="rounded-lg border px-3 py-2 text-sm" onClick={() => setReload((value) => value + 1)} data-testid="migration-status-refresh">Обновить данные отчёта</button></div></div>
@@ -176,14 +177,14 @@ export default function MigrationStatusMatrixPageClient() {
           <span>Пропущено как уже заполненное: {matrix.general_summary.skipped_already_filled}</span>
         </div>
       </section> : null}
-      {matrix?.status_summary ? <section aria-labelledby="migration-status-summary-heading" data-testid="migration-status-summary">
+      {statusSummary ? <section aria-labelledby="migration-status-summary-heading" data-testid="migration-status-summary">
         <h2 id="migration-status-summary-heading" className="text-lg font-semibold">Сводка по статусам личных карточек</h2>
         <div className="mt-2 w-full max-w-full overflow-x-auto" data-testid="migration-status-summary-scroll">
           <table className="min-w-max border-collapse text-sm" data-testid="migration-status-summary-table">
             <thead>
               <tr>
                 <th className="sticky left-0 z-10 min-w-64 border bg-white p-2 text-left dark:bg-zinc-950">Статус</th>
-                {matrix.status_summary.sections.map((item) => (
+                {statusSummary.sections.map((item) => (
                   <th key={item.code} className="min-w-28 border p-2 text-center font-semibold leading-snug whitespace-normal break-words">
                     {item.title}
                   </th>
@@ -191,10 +192,10 @@ export default function MigrationStatusMatrixPageClient() {
               </tr>
             </thead>
             <tbody>
-              {matrix.status_summary.statuses.map((statusItem) => (
+              {statusSummary.statuses.map((statusItem) => (
                 <tr key={statusItem.code}>
                   <th className="sticky left-0 z-10 min-w-64 border bg-white p-2 text-left font-medium dark:bg-zinc-950">{statusItem.title}</th>
-                  {matrix.status_summary.sections.map((sectionItem) => (
+                  {statusSummary.sections.map((sectionItem) => (
                     <td key={sectionItem.code} className="border p-2 text-center tabular-nums">
                       {summaryCount(matrix, sectionItem.code, statusItem.code)}
                     </td>
@@ -205,7 +206,7 @@ export default function MigrationStatusMatrixPageClient() {
             <tfoot>
               <tr className="border-t-2 border-zinc-700 font-semibold dark:border-zinc-300" data-testid="migration-status-summary-total">
                 <th scope="row" className="sticky left-0 z-10 min-w-64 border bg-white p-2 text-left dark:bg-zinc-950">Итого карточек</th>
-                {matrix.status_summary.sections.map((sectionItem) => (
+                {statusSummary.sections.map((sectionItem) => (
                   <td key={sectionItem.code} className="border p-2 text-center tabular-nums">
                     {summaryTotal(matrix, sectionItem.code)}
                   </td>
