@@ -136,6 +136,13 @@
 - `CORRECTED_BY_HR` не означает, что повторная проверка уже пройдена.
 - `ERROR` не должен скрывать бизнес-состояние предыдущего успешного snapshot; в деталях показываются обе даты.
 - `ACCEPTED` действительно только для зафиксированных версии правила, source fingerprint и relevant canonical fingerprint.
+- Для training `REVIEW_REQUIRED` отображается пользователю как «Требуется проверка».
+  `CORRECTED_BY_HR` означает исправление, но не отдельный факт проверки; проверенная
+  staging-запись должна иметь явный audit-факт кадровой проверки.
+- «Предложено сотрудником» не означает проверку кадровиком. Редактирование уже проверенной
+  training staging-записи возвращает её в повторную проверку и делает зависимый preview/proposal
+  `STALE`. Нормативный workflow определён в
+  [WP-PPR-MIG-004A](WP-PPR-MIG-004A-training-staging-review-and-validity.md).
 
 ## 6. Отображение состояния в личной карточке
 
@@ -184,7 +191,8 @@
 5. Трудовая биография;
 6. Родственники;
 7. Воинский учёт;
-8. Дополнительные сведения.
+8. Знание иностранных языков;
+9. Дополнительные сведения.
 
 Кадровые приказы, обращения, адаптация и история изменений не включаются в миграционную матрицу автоматически: для них требуется отдельное решение об источнике и назначении.
 
@@ -383,6 +391,9 @@ Stage 0 использует snapshot контрольного списка и �
 | Stage 2/3 run `CANCELLED` | `NOT_STARTED` (не является результатом раздела) |
 | Stage 2/3 run `ACCEPTED` и соответствующий PMF/PPR write подтверждён | `ACCEPTED` |
 | Сменился fingerprint источника, `persons.updated_at`, binding либо policy после результата | `STALE` |
+| Training staging review: «Требуется проверка» | `REVIEW_REQUIRED`; это не `ACCEPTED` и не canonical write |
+| Training staging review: «Проверено» с сохранённым reviewer/audit fact | отдельный факт кадровой проверки и вход следующего Stage 3 preview; сам по себе не назначает `ACCEPTED` |
+| Training staging review: «Предложено сотрудником» | `REVIEW_REQUIRED`; это не факт кадровой проверки |
 
 Это mapping первой версии, а не существующая persisted-проекция: правила приоритета между Stage 0 blocker, ручным override и несколькими runs ещё нужно утвердить.
 
@@ -391,6 +402,7 @@ Stage 0 использует snapshot контрольного списка и �
 | Действие | Существующий механизм | Эффект для матрицы |
 |---|---|---|
 | Review/изменение нормализованной записи | `update_normalized_record_review`, `update_normalized_record_review_override` | `general` или затронутый section → `STALE`, затем повторная проверка |
+| Controlled training staging review | [WP-PPR-MIG-004A](WP-PPR-MIG-004A-training-staging-review-and-validity.md) | correction/employee proposal не являются canonical acceptance; изменение проверенной записи → `STALE`, затем новый Stage 3 preview |
 | Привязка либо repair Employee–Person/source row | `persist_row_employee_binding`, `bind_normalized_record_to_employee`, `repair_batch_employee_bindings` | снимает/создаёт Stage-0 blocker; все зависящие разделы → `STALE` или `BLOCKED` |
 | Решение об удалении/ребиндинге строки | `hr_import_diff_removal_decision_service.py` | Stage 0 cohort становится недействительным для затронутого participant: `STALE`/`BLOCKED` |
 | Override: create/approve/reject/revoke/reconfirm/supersede | `hr_review_override_service.py`; `/admin/personnel/overrides/*` | approved override делает зависимый section `STALE`; pending/rejected override сам по себе не равен `CORRECTED_BY_HR` |
@@ -400,7 +412,7 @@ Stage 0 использует snapshot контрольного списка и �
 
 ### 17.4. Разделы первой версии и источники общих сведений
 
-Первая версия матрицы должна ограничиться разделами, для которых уже есть stage/SoT: `general`, `education`, `training`. `family`, `military`, `employment_biography` имеют PPR section codes (`PPR-FAMILY`, `PPR-MILITARY`, `PPR-EMPLOYMENT-BIOGRAPHY`) и read UI, но stage-run для них не найден; поэтому в v1 они не должны притворяться мигрированными. `additional`, `intended_employment`, `assignment`, `orders`, `applications`, `onboarding`, `changes` — UI sections, а не подтверждённые миграционные domains v1.
+Первая версия матрицы должна ограничиться разделами, для которых уже есть stage/SoT: `general`, `education`, `training`. `family`, `military`, `employment_biography` имеют PPR section codes (`PPR-FAMILY`, `PPR-MILITARY`, `PPR-EMPLOYMENT-BIOGRAPHY`) и read UI, но stage-run для них не найден; поэтому в v1 они не должны притворяться мигрированными. `foreign_languages` и `additional` — самостоятельные read-разделы: языки не смешиваются с прочими сведениями; `additional` отражает только структурированные, versioned факты из «Примечания» контрольного списка. `intended_employment`, `assignment`, `orders`, `applications`, `onboarding`, `changes` — UI sections, а не подтверждённые миграционные domains v1.
 
 | Поле общих сведений | Подтверждённый источник / чтение |
 |---|---|

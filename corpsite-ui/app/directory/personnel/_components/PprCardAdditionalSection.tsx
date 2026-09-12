@@ -24,6 +24,7 @@ import type {
 
 type Props = {
   additional: PprAdditionalProfileResponse;
+  mode?: "languages" | "notes" | "additional";
 };
 
 function NoneDeclaredMessage({ label }: { label: string }) {
@@ -217,15 +218,54 @@ function AcademicTitlesBlock({
   );
 }
 
-export default function PprCardAdditionalSection({ additional }: Props) {
+function StatusFactsBlock({ additional }: { additional: PprAdditionalProfileResponse }) {
+  if (additional.status_facts.length === 0) {
+    return <EmptyRecordsMessage label="Примечание" />;
+  }
+  return (
+    <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800" data-testid="ppr-status-facts-table">
+      <table className="min-w-full divide-y divide-zinc-200 dark:divide-zinc-800">
+        <thead className="bg-zinc-50 dark:bg-zinc-900/60">
+          <tr>
+            <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500">Статус</th>
+            <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500">Дата</th>
+            <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500">Группа инвалидности</th>
+            <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500">МКБ-10</th>
+            <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500">Статус проверки</th>
+          </tr>
+        </thead>
+        <tbody>
+          {additional.status_facts.map((fact) => (
+            <tr key={fact.status_fact_id} data-testid={`ppr-status-fact-${fact.status_fact_id}`}>
+              <td className="px-3 py-2 text-sm">{fact.fact_kind === "PENSION" ? "Пенсионный статус" : "Инвалидность"}</td>
+              <td className="whitespace-nowrap px-3 py-2 text-sm">{fact.effective_date || "Не указана"}</td>
+              <td className="px-3 py-2 text-sm">{fact.disability_group || "Не указана"}</td>
+              <td className="px-3 py-2 text-sm">{fact.icd10_code || "Не указан"}</td>
+              <td className="px-3 py-2 text-sm">{fact.review_status === "AUTO_READY" ? "Готово к согласованию" : "Требуется ручная проверка"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+export default function PprCardAdditionalSection({ additional, mode = "additional" }: Props) {
+  if (mode === "languages") {
+    return (
+      <div className="space-y-3" data-testid="ppr-foreign-languages-section">
+        <ForeignLanguagesBlock items={additional.foreign_languages} declaredEmpty={additional.foreign_languages_none} />
+      </div>
+    );
+  }
+  if (mode === "notes") {
+    return <StatusFactsBlock additional={additional} />;
+  }
   return (
     <div className="space-y-8" data-testid="ppr-additional-section">
-      <section className="space-y-3" data-testid="ppr-additional-languages-block">
-        <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Знание иностранных языков</h3>
-        <ForeignLanguagesBlock
-          items={additional.foreign_languages}
-          declaredEmpty={additional.foreign_languages_none}
-        />
+      <section className="space-y-3 print:hidden" data-testid="ppr-additional-status-facts-block">
+        <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Примечание</h3>
+        <StatusFactsBlock additional={additional} />
       </section>
 
       <section className="space-y-3" data-testid="ppr-additional-awards-block">

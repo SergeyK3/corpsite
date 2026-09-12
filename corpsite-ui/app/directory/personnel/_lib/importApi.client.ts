@@ -1082,6 +1082,9 @@ export type NormalizedRecord = {
   normalized_record_id: number;
   batch_id: number;
   row_id: number;
+  source_sheet: string;
+  source_row_number: number | null;
+  source_cell_text: string;
   employee_id: number | null;
   employee_binding?: EmployeeBindingInfo;
   full_name: string;
@@ -1126,6 +1129,82 @@ export type NormalizedRecord = {
   field_diffs?: Record<string, FieldDiffEntry> | null;
   diff_computed_at?: string | null;
 };
+
+export type TrainingReviewStatus =
+  | "REQUIRES_REVIEW"
+  | "CHECKED"
+  | "REJECTED"
+  | "EMPLOYEE_PROPOSED";
+
+export type TrainingReviewActor = {
+  user_id: number;
+  full_name: string;
+  login: string;
+};
+
+export type TrainingReviewDates = {
+  start_date: string | null;
+  end_date: string | null;
+  start_date_quality: "EXACT" | "CALCULATED" | "UNKNOWN";
+  end_date_quality: "EXACT" | "CALCULATED" | "UNKNOWN";
+};
+
+export type TrainingReviewAuditEntry = {
+  normalized_record_id?: number;
+  batch_id?: number;
+  row_id?: number;
+  version?: number;
+  action: string;
+  actor: TrainingReviewActor;
+  before: Record<string, unknown>;
+  after: Record<string, unknown>;
+  comment: string | null;
+  occurred_at: string;
+  review_before?: Record<string, unknown>;
+  review_after?: Record<string, unknown>;
+};
+
+export type TrainingReview = {
+  version: number;
+  status: TrainingReviewStatus;
+  dates: TrainingReviewDates;
+  reviewer: TrainingReviewActor | null;
+  reviewed_at: string | null;
+  proposal: {
+    status: "PENDING" | "ACCEPTED" | "REJECTED";
+    values: NormalizedRecordReviewOverride;
+    submitted_by?: TrainingReviewActor;
+    submitted_at?: string;
+    decided_by?: TrainingReviewActor;
+    decided_at?: string;
+  } | null;
+  split?: { parent_record_id?: number; parent_version?: number; split_group_id?: string; child_order?: number; state?: "ACTIVE" | "UNDONE" } | null;
+  history: TrainingReviewAuditEntry[];
+};
+
+export type TrainingReviewRecord = NormalizedRecord & {
+  training_review: TrainingReview;
+};
+
+export type TrainingReviewHoursSummary = {
+  as_of: string;
+  timezone: string;
+  confirmed_hours_last_5y: number;
+  preliminary_hours_last_5y: number;
+  required_hours: number;
+  hours_missing: number;
+  nearest_exclusion_date: string | null;
+  hours_after_nearest_exclusion: number;
+  norm_valid_through: string | null;
+};
+
+export type TrainingReviewListResponse = {
+  items: TrainingReviewRecord[];
+  total: number;
+  summary: TrainingReviewHoursSummary;
+};
+
+export type TrainingSplitPreview = { record_id: number; version: number; source_text: string; suggested_boundary: number; fragments: Array<{ raw_text: string; start_offset: number; end_offset: number; ordinal: number | null }> };
 
 export type MonthlyDiffRemoval = {
   removal_id?: number;
@@ -1455,6 +1534,49 @@ export async function listNormalizedRecords(
   hide_unchanged?: boolean;
 }> {
   return apiGetJson("/directory/personnel/import/normalized-records", buildQuery(params));
+}
+
+export type TrainingBatchReviewSummary = { batch_id: number; employees: Array<{ employee_id:number; course_count:number; exact_dates:number; calculated_dates:number; confirmed_hours_last_5y:number; preliminary_hours_last_5y:number; hours_missing:number; pending_count:number; rejected_count:number; manual_split_count:number; state:string; training_url:string }>; totals: Record<string, number> };
+export async function getTrainingBatchReviewSummary(batchId: number): Promise<TrainingBatchReviewSummary> {
+  return apiGetJson(`/directory/personnel/import/batches/${batchId}/training-review-summary`);
+}
+
+export async function listTrainingReviewRecords(employeeId: number): Promise<TrainingReviewListResponse> {
+  return apiGetJson(
+    "/directory/personnel/import/training-review",
+    buildQuery({ employee_id: employeeId }),
+  );
+}
+
+export async function patchTrainingReviewRecord(
+  recordId: number,
+  body: {
+    action: "edit" | "approve" | "reject" | "restore" | "accept_proposal" | "reject_proposal";
+    expected_version: number;
+    values?: NormalizedRecordReviewOverride;
+    comment?: string;
+  },
+): Promise<TrainingReviewRecord> {
+  return apiPatchJson(`/directory/personnel/import/training-review/${recordId}`, body);
+}
+
+export async function submitOwnTrainingReviewProposal(
+  recordId: number,
+  body: { expected_version: number; values: NormalizedRecordReviewOverride; comment?: string },
+): Promise<TrainingReviewRecord> {
+  return apiPostJson(`/directory/personnel/import/training-review/${recordId}/employee-proposal`, body);
+}
+
+export async function getTrainingSplitPreview(recordId: number): Promise<TrainingSplitPreview> {
+  return apiGetJson(`/directory/personnel/import/training-review/${recordId}/split-preview`);
+}
+
+export async function splitTrainingReviewRecord(recordId: number, body: { expected_version: number; boundary?: number; children?: NormalizedRecordReviewOverride[] }): Promise<{ child_ids: number[] }> {
+  return apiPostJson(`/directory/personnel/import/training-review/${recordId}/split`, body);
+}
+
+export async function undoTrainingReviewSplit(recordId: number, expected_version: number): Promise<unknown> {
+  return apiPostJson(`/directory/personnel/import/training-review/${recordId}/undo-split`, { expected_version });
 }
 
 export async function getNormalizedRecord(recordId: number): Promise<NormalizedRecord> {

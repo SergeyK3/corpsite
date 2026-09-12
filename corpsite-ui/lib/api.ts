@@ -103,10 +103,15 @@ function normalizeList<T>(body: any): T[] {
   return [];
 }
 
-export function handleAuthFailureIfNeeded(status: number): void {
-  if (status === 401) {
+export function handleAuthFailureIfNeeded(status: number, body?: unknown): boolean {
+  const detail = typeof body === "object" && body !== null && "detail" in body
+    ? String((body as { detail?: unknown }).detail ?? "")
+    : "";
+  if (status === 401 || (status === 403 && detail === "Account locked.")) {
     logout();
+    return true;
   }
+  return false;
 }
 
 /**
@@ -146,7 +151,7 @@ export async function apiFetchJson<T>(
   const body = await readJsonSafe(res);
 
   if (!res.ok) {
-    handleAuthFailureIfNeeded(res.status);
+    handleAuthFailureIfNeeded(res.status, body);
     throw toApiError(res.status, body, { method, url });
   }
 

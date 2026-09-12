@@ -4,10 +4,12 @@ import * as React from "react";
 
 import {
   getNormalizedRecordsSummary,
+  getTrainingBatchReviewSummary,
   mapImportApiError,
   NORMALIZED_RECORD_KINDS,
   NORMALIZED_RECORD_KIND_SUMMARY_LABELS,
   type NormalizedRecordSummary,
+  type TrainingBatchReviewSummary,
 } from "../_lib/importApi.client";
 
 function SummaryCard({
@@ -38,6 +40,7 @@ export default function NormalizedRecordsSummaryPanel({ batchId }: Props) {
   const [summaryLoading, setSummaryLoading] = React.useState(true);
   const [summary, setSummary] = React.useState<NormalizedRecordSummary | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const [training, setTraining] = React.useState<TrainingBatchReviewSummary | null>(null);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -56,6 +59,7 @@ export default function NormalizedRecordsSummaryPanel({ batchId }: Props) {
       .finally(() => {
         if (!cancelled) setSummaryLoading(false);
       });
+    void getTrainingBatchReviewSummary(batchId).then(setTraining).catch(() => setTraining(null));
 
     return () => {
       cancelled = true;
@@ -100,6 +104,11 @@ export default function NormalizedRecordsSummaryPanel({ batchId }: Props) {
           Таблица нормализованных записей недоступна — примените миграцию ADR-039 Phase 3B.
         </div>
       ) : null}
+      <section className="space-y-2 rounded-xl border border-amber-300 bg-amber-50/40 p-3 dark:border-amber-900 dark:bg-amber-950/20" data-testid="training-batch-summary">
+        <h3 className="font-semibold">Обучение и повышение квалификации</h3>
+        <p className="text-sm">Курсов: {training?.totals.courses ?? 0} · исходных ячеек: {training?.totals.source_cells ?? 0} · требуется ручное разделение: {training?.totals.manual_split ?? 0} · предварительно менее 144 часов: {training?.totals.below_144 ?? 0}</p>
+        <div className="overflow-x-auto"><table className="min-w-full text-sm"><thead><tr className="border-b text-left"><th className="p-2">Сотрудник</th><th className="p-2">Курсы</th><th className="p-2">Подтверждено</th><th className="p-2">Предварительно</th><th className="p-2">До 144</th><th className="p-2">Состояние</th><th className="p-2">Действие</th></tr></thead><tbody>{training?.employees.map(row=><tr key={row.employee_id} className="border-b"><td className="p-2">#{row.employee_id}</td><td className="p-2">{row.course_count}</td><td className="p-2">{row.confirmed_hours_last_5y}</td><td className="p-2">{row.preliminary_hours_last_5y}</td><td className="p-2">{row.hours_missing}</td><td className="p-2">{row.state}</td><td className="p-2"><a className="underline" href={row.training_url}>Открыть обучение</a></td></tr>)}</tbody></table></div>
+      </section>
     </section>
   );
 }

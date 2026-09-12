@@ -12,6 +12,7 @@ from typing import Any, Optional
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    CheckConstraint,
     Date,
     DateTime,
     ForeignKey,
@@ -225,6 +226,23 @@ EVENT_TYPE_EDUCATION_VERIFIED = "EDUCATION_VERIFIED"
 EVENT_TYPE_EDUCATION_SUPERSEDED = "EDUCATION_SUPERSEDED"
 EVENT_TYPE_EDUCATION_VOIDED = "EDUCATION_VOIDED"
 
+# Structured, append-only facts extracted from the ``Примечание`` column of a
+# control-list row.  They are deliberately separate from Person/Employee: an
+# import fact remains reviewable and must not silently change canonical data.
+PERSON_STATUS_FACT_KIND_DISABILITY = "DISABILITY"
+PERSON_STATUS_FACT_KIND_PENSION = "PENSION"
+PERSON_STATUS_FACT_KINDS = (
+    PERSON_STATUS_FACT_KIND_DISABILITY,
+    PERSON_STATUS_FACT_KIND_PENSION,
+)
+
+PERSON_STATUS_FACT_REVIEW_READY = "AUTO_READY"
+PERSON_STATUS_FACT_REVIEW_REQUIRED = "REVIEW_REQUIRED"
+PERSON_STATUS_FACT_REVIEW_STATUSES = (
+    PERSON_STATUS_FACT_REVIEW_READY,
+    PERSON_STATUS_FACT_REVIEW_REQUIRED,
+)
+
 
 class PersonnelMigrationDomain(Base):
     """Registry of PMF domain plugins."""
@@ -413,6 +431,83 @@ class PersonnelRecordEvent(Base):
         BigInteger,
         ForeignKey("personnel_migration_items.item_id", ondelete="SET NULL"),
         nullable=True,
+    )
+
+
+class PersonStatusFact(Base):
+    """Immutable version of a pension or disability fact from import staging.
+
+    A correction is another row referencing ``supersedes_fact_id``.  The
+    parent is never rewritten, which preserves the original imported fact and
+    its review provenance.
+    """
+
+    __tablename__ = "person_status_facts"
+    __table_args__ = (
+        CheckConstraint(
+            "fact_kind IN ('DISABILITY', 'PENSION')",
+            name="chk_person_status_facts_kind",
+        ),
+        CheckConstraint(
+            "review_status IN ('AUTO_READY', 'REVIEW_REQUIRED')",
+            name="chk_person_status_facts_review_status",
+        ),
+        CheckConstraint(
+            "disability_group IS NULL OR disability_group IN ('I', 'II', 'III')",
+            name="chk_person_status_facts_disability_group",
+        ),
+        CheckConstraint(
+            "icd10_code IS NULL OR icd10_code ~ '^[A-TV-Z][0-9]{2}(\\.[0-9A-Z]{1,4})?$'",
+            name="chk_person_status_facts_icd10",
+        ),
+        CheckConstraint(
+            "(fact_kind = 'DISABILITY') OR (disability_group IS NULL AND icd10_code IS NULL)",
+            name="chk_person_status_facts_pension_shape",
+        ),
+        Index("ix_person_status_facts_person_kind", "person_id", "fact_kind", "version"),
+        Index("ix_person_status_facts_source_row", "source_row_id"),
+        Index(
+            "uq_person_status_facts_source_kind_version",
+            "source_row_id",
+            "fact_kind",
+            "version",
+            unique=True,
+        ),
+    )
+
+    status_fact_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    person_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("persons.person_id", ondelete="RESTRICT"), nullable=False
+    )
+    employee_context_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("employees.employee_id", ondelete="SET NULL"), nullable=True
+    )
+    fact_kind: Mapped[str] = mapped_column(Text, nullable=False)
+    effective_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    disability_group: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    icd10_code: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    review_status: Mapped[str] = mapped_column(Text, nullable=False)
+    review_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    source_batch_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("hr_import_batches.batch_id", ondelete="RESTRICT"), nullable=False
+    )
+    source_row_id: Mapped[int] = mapped_column(
+        BigInteger, ForeignKey("hr_import_rows.row_id", ondelete="RESTRICT"), nullable=False
+    )
+    source_policy_version: Mapped[str] = mapped_column(Text, nullable=False)
+    source_fingerprint: Mapped[str] = mapped_column(Text, nullable=False)
+    supersedes_fact_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger,
+        ForeignKey("person_status_facts.status_fact_id", ondelete="RESTRICT"),
+        nullable=True,
+    )
+    version: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default=text("1"))
+    correction_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_by_user_id: Mapped[Optional[int]] = mapped_column(
+        BigInteger, ForeignKey("users.user_id", ondelete="RESTRICT"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
 

@@ -11,6 +11,8 @@ export type MeInfo = {
   position_name?: string;
   full_name?: string;
   login?: string;
+  /** Linked Employee used solely to display self-service actions; backend rechecks ownership. */
+  employee_id?: number | null;
   is_active?: boolean;
   unit_id?: number;
   telegram_bound?: boolean;

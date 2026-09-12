@@ -216,6 +216,18 @@ export type PprAdditionalAcademicTitleResponse = {
   degree_type?: string | null;
 };
 
+export type PprStatusFactResponse = {
+  status_fact_id: number;
+  fact_kind: "DISABILITY" | "PENSION";
+  effective_date: string | null;
+  disability_group: string | null;
+  icd10_code: string | null;
+  review_status: "AUTO_READY" | "REVIEW_REQUIRED";
+  review_reason: string | null;
+  version: number;
+  created_at: string;
+};
+
 export type PprAdditionalProfileResponse = {
   foreign_languages: PprAdditionalForeignLanguageResponse[];
   foreign_languages_none: boolean;
@@ -225,6 +237,7 @@ export type PprAdditionalProfileResponse = {
   academic_degrees_none: boolean;
   academic_titles: PprAdditionalAcademicTitleResponse[];
   academic_titles_none: boolean;
+  status_facts: PprStatusFactResponse[];
 };
 
 export type PprHireDefaultsResponse = PprIntendedEmploymentResponse & {

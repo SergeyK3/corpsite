@@ -10,13 +10,16 @@ from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Body, Depends, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import Response
+from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
 from app.auth import get_current_user
 from app.db.engine import engine
 from app.directory.rbac import (
+    compute_scope,
     require_hr_import_admin_or_403,
     require_personnel_admin_or_403,
+    require_personnel_visibility_or_403,
     require_privileged_or_403,
 )
 from app.services.hr_import_analytics_service import (
@@ -139,6 +142,20 @@ from app.services.hr_import_review_exception_detail_service import (
     resolve_review_removal_exception,
 )
 from app.services.hr_import_training_date_quality_service import list_training_date_quality_report
+from app.services.hr_import_training_review_service import (
+    TrainingReviewConflictError,
+    TrainingReviewNotFoundError,
+    TrainingReviewPermissionError,
+    TrainingReviewValidationError,
+    initialize_training_review_dates,
+    list_training_review_records,
+    split_training_review,
+    submit_employee_training_proposal,
+    training_split_preview,
+    training_batch_summary_projection,
+    undo_training_review_split,
+    update_training_review,
+)
 from app.services.hr_baseline_service import (
     BaselineDeleteError,
     BaselineNotFoundError,
@@ -170,6 +187,38 @@ router = APIRouter()
 def _with_conn(fn, **kwargs):
     with engine.begin() as conn:
         return fn(conn, **kwargs)
+
+
+def _training_review_scope(user: Dict[str, Any]) -> dict[str, Any]:
+    require_personnel_admin_or_403(user)
+    scope = compute_scope(int(user["user_id"]), user, include_inactive=False)
+    require_personnel_visibility_or_403(user, scope)
+    return scope
+
+
+def _require_training_review_employee_scope(conn, *, employee_id: int, scope: dict[str, Any]) -> None:
+    if scope.get("privileged") or scope.get("scope_unit_ids") is None:
+        return
+    unit_id = conn.execute(
+        text("SELECT org_unit_id FROM public.employees WHERE employee_id=:employee_id"),
+        {"employee_id": int(employee_id)},
+    ).scalar_one_or_none()
+    allowed = {int(value) for value in scope.get("scope_unit_ids") or []}
+    if unit_id is None or int(unit_id) not in allowed:
+        raise HTTPException(status_code=403, detail="Training review record is outside your organizational scope.")
+
+
+def _training_review_employee_id(conn, record_id: int) -> int:
+    employee_id = conn.execute(
+        text(
+            "SELECT employee_id FROM public.hr_import_normalized_records "
+            "WHERE normalized_record_id=:record_id AND record_kind='training'"
+        ),
+        {"record_id": int(record_id)},
+    ).scalar_one_or_none()
+    if employee_id is None:
+        raise HTTPException(status_code=404, detail="training record not found")
+    return int(employee_id)
 
 
 _import_card_dispatcher = PersonnelCardReadDispatcher()
@@ -1622,6 +1671,206 @@ def get_import_normalized_records(
         raise HTTPException(status_code=400, detail=str(e))
     except HTTPException:
         raise
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.get("/personnel/import/training-review")
+def get_import_training_review_records(
+    employee_id: int = Query(..., ge=1),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Staging-only review projection for the Training tab; canonical training is untouched."""
+    scope = _training_review_scope(user)
+    try:
+        def _list(conn):
+            _require_training_review_employee_scope(conn, employee_id=employee_id, scope=scope)
+            return list_training_review_records(conn, employee_id=employee_id)
+
+        return _with_conn(_list)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.get("/personnel/import/batches/{batch_id}/training-review-summary")
+def get_import_training_review_summary(batch_id: int, user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    """Read-only per-employee training section for the import summary."""
+    require_personnel_admin_or_403(user)
+    try:
+        return _with_conn(training_batch_summary_projection, batch_id=batch_id)
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.post("/personnel/import/training-review/batches/{batch_id}/initialize-dates")
+def post_import_training_review_initialize_dates(
+    batch_id: int,
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Persist date-quality metadata for a local/staging batch; safe to repeat."""
+    scope = _training_review_scope(user)
+    try:
+        def _initialize(conn):
+            employee_ids = conn.execute(
+                text(
+                    "SELECT DISTINCT employee_id FROM public.hr_import_normalized_records "
+                    "WHERE batch_id=:batch_id AND record_kind='training' AND employee_id IS NOT NULL"
+                ),
+                {"batch_id": batch_id},
+            ).scalars().all()
+            for employee_id in employee_ids:
+                _require_training_review_employee_scope(conn, employee_id=int(employee_id), scope=scope)
+            return initialize_training_review_dates(conn, batch_id=batch_id)
+
+        return {"updated": _with_conn(_initialize)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.patch("/personnel/import/training-review/{record_id}")
+def patch_import_training_review_record(
+    record_id: int,
+    body: Dict[str, Any] = Body(default={}),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    scope = _training_review_scope(user)
+    action = body.get("action")
+    expected_version = body.get("expected_version")
+    if not isinstance(action, str) or not isinstance(expected_version, int):
+        raise HTTPException(status_code=422, detail="action and expected_version are required")
+    values = body.get("values")
+    if values is not None and not isinstance(values, dict):
+        raise HTTPException(status_code=422, detail="values must be an object")
+    comment = body.get("comment")
+    if comment is not None and not isinstance(comment, str):
+        raise HTTPException(status_code=422, detail="comment must be a string")
+    try:
+        def _update(conn):
+            _require_training_review_employee_scope(
+                conn,
+                employee_id=_training_review_employee_id(conn, record_id),
+                scope=scope,
+            )
+            return update_training_review(
+                conn,
+                record_id=record_id,
+                expected_version=expected_version,
+                action=action,
+                actor_user_id=int(user["user_id"]),
+                values=values,
+                comment=comment,
+            )
+
+        return _with_conn(_update)
+    except TrainingReviewNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except TrainingReviewConflictError as e:
+        raise HTTPException(status_code=409, detail={"code": "TRAINING_REVIEW_VERSION_CONFLICT", "message": str(e)})
+    except TrainingReviewValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.get("/personnel/import/training-review/{record_id}/split-preview")
+def get_import_training_review_split_preview(record_id: int, user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    scope = _training_review_scope(user)
+    try:
+        def _preview(conn):
+            _require_training_review_employee_scope(conn, employee_id=_training_review_employee_id(conn, record_id), scope=scope)
+            return training_split_preview(conn, record_id=record_id)
+        return _with_conn(_preview)
+    except TrainingReviewNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except TrainingReviewValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.post("/personnel/import/training-review/{record_id}/split")
+def post_import_training_review_split(record_id: int, body: Dict[str, Any] = Body(default={}), user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    scope = _training_review_scope(user); expected_version = body.get("expected_version")
+    if not isinstance(expected_version, int):
+        raise HTTPException(status_code=422, detail="expected_version is required")
+    try:
+        def _split(conn):
+            _require_training_review_employee_scope(conn, employee_id=_training_review_employee_id(conn, record_id), scope=scope)
+            return split_training_review(conn, record_id=record_id, expected_version=expected_version, actor_user_id=int(user["user_id"]), boundary=body.get("boundary"), children=body.get("children"), correlation_id=body.get("correlation_id"))
+        return _with_conn(_split)
+    except TrainingReviewNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except TrainingReviewConflictError as e:
+        raise HTTPException(status_code=409, detail={"code":"TRAINING_REVIEW_VERSION_CONFLICT","message":str(e)})
+    except TrainingReviewValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.post("/personnel/import/training-review/{record_id}/undo-split")
+def post_import_training_review_undo_split(record_id: int, body: Dict[str, Any] = Body(default={}), user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    scope = _training_review_scope(user); expected_version = body.get("expected_version")
+    if not isinstance(expected_version, int):
+        raise HTTPException(status_code=422, detail="expected_version is required")
+    try:
+        def _undo(conn):
+            _require_training_review_employee_scope(conn, employee_id=_training_review_employee_id(conn, record_id), scope=scope)
+            return undo_training_review_split(conn, record_id=record_id, expected_version=expected_version, actor_user_id=int(user["user_id"]))
+        return _with_conn(_undo)
+    except TrainingReviewNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except TrainingReviewConflictError as e:
+        raise HTTPException(status_code=409, detail={"code":"TRAINING_REVIEW_VERSION_CONFLICT","message":str(e)})
+    except TrainingReviewValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise as_http500(e)
+
+
+@router.post("/personnel/import/training-review/{record_id}/employee-proposal")
+def post_import_training_review_employee_proposal(
+    record_id: int,
+    body: Dict[str, Any] = Body(default={}),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Self-service proposal endpoint; ownership is verified against users.employee_id."""
+    expected_version = body.get("expected_version")
+    values = body.get("values")
+    if not isinstance(expected_version, int) or not isinstance(values, dict):
+        raise HTTPException(status_code=422, detail="expected_version and values are required")
+    comment = body.get("comment")
+    if comment is not None and not isinstance(comment, str):
+        raise HTTPException(status_code=422, detail="comment must be a string")
+    try:
+        return _with_conn(
+            submit_employee_training_proposal,
+            record_id=record_id,
+            expected_version=expected_version,
+            actor_user_id=int(user["user_id"]),
+            values=values,
+            comment=comment,
+        )
+    except TrainingReviewNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except TrainingReviewPermissionError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    except TrainingReviewConflictError as e:
+        raise HTTPException(status_code=409, detail={"code": "TRAINING_REVIEW_VERSION_CONFLICT", "message": str(e)})
+    except TrainingReviewValidationError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:
         raise as_http500(e)
 

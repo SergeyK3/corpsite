@@ -1,6 +1,6 @@
 /** PPR Query API client — read-only, canonical `/api/ppr/*` path. */
 
-import { buildHeaders, readJsonSafe, toApiError } from "@/lib/api";
+import { buildHeaders, handleAuthFailureIfNeeded, readJsonSafe, toApiError } from "@/lib/api";
 import { resolveApiUrl } from "@/lib/apiBase";
 import type {
   PprCompositeReadResponse,
@@ -30,6 +30,11 @@ async function pprGetJson<T>(path: string, signal?: AbortSignal): Promise<T> {
   });
   const body = await readJsonSafe(res);
   if (!res.ok) {
+    const clearedLockedSession = handleAuthFailureIfNeeded(res.status, body);
+    if (clearedLockedSession && typeof window !== "undefined") {
+      const returnTo = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      window.location.assign(`/login?return_to=${encodeURIComponent(returnTo)}`);
+    }
     throw toApiError(res.status, body, { method: "GET", url: path });
   }
   return body as T;

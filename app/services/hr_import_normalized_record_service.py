@@ -527,6 +527,70 @@ def _lookup_candidate_enrichment(
     return index.get((row_id, source_field, fragment_index), {})
 
 
+def _training_normalized_key(row: dict[str, Any]) -> tuple[str, str, str, str, str]:
+    """Key for the review set of one parsed training fact, not its source text."""
+    def _date_key(value: Any) -> str:
+        return value.isoformat() if value is not None and hasattr(value, "isoformat") else ""
+
+    hours = row.get("hours")
+    return (
+        norm_title(str(row.get("title") or "")),
+        norm_title(str(row.get("provider") or "")),
+        _date_key(row.get("start_date")),
+        _date_key(row.get("end_date") or row.get("issue_date")),
+        str(hours) if hours is not None else "",
+    )
+
+
+def _training_quality(row: dict[str, Any]) -> tuple[int, float, int, int]:
+    """Prefer the most complete parse; use source position only as a stable tiebreaker."""
+    reliable = sum(
+        value not in (None, "")
+        for value in (
+            row.get("title"),
+            row.get("provider"),
+            row.get("hours"),
+            row.get("start_date"),
+            row.get("end_date"),
+            row.get("issue_date"),
+        )
+    )
+    source = norm_source_text(str(row.get("source_text") or ""))
+    recognized = " ".join(
+        str(value) for value in (row.get("title"), row.get("provider")) if value
+    )
+    unparsed = max(0, len(source) - len(norm_source_text(recognized)))
+    return (
+        reliable,
+        float(row.get("confidence") or 0),
+        -unparsed,
+        -int(row.get("fragment_index") or 0),
+    )
+
+
+def _dedupe_training_display_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Keep one best review card per equal normalized training result.
+
+    The source import row keeps the whole original cell and its provenance; this
+    only removes the weaker duplicate from the pending display set.
+    """
+    winners: dict[tuple[str, str, str, str, str], tuple[int, dict[str, Any]]] = {}
+    kept: list[dict[str, Any]] = []
+    for row in rows:
+        if row.get("record_kind") != RECORD_KIND_TRAINING:
+            kept.append(row)
+            continue
+        key = _training_normalized_key(row)
+        previous = winners.get(key)
+        if previous is None:
+            winners[key] = (len(kept), row)
+            kept.append(row)
+        elif _training_quality(row) > _training_quality(previous[1]):
+            kept[previous[0]] = row
+            winners[key] = (previous[0], row)
+    return kept
+
+
 def _build_staging_rows_for_profile(
     *,
     batch_id: int,
@@ -704,7 +768,7 @@ def _build_staging_rows_for_profile(
                     "review_status": REVIEW_STATUS_PENDING,
                 }
             )
-    return staging_rows
+    return _dedupe_training_display_rows(staging_rows)
 
 
 OPEN_EMPLOYEE_DEDUP_STATUSES = (REVIEW_STATUS_PENDING, REVIEW_STATUS_APPROVED)
@@ -1430,6 +1494,11 @@ def _serialize_normalized_record(row: dict[str, Any], *, conn: Optional[Connecti
         "normalized_record_id": int(row["normalized_record_id"]),
         "batch_id": int(row["batch_id"]),
         "row_id": int(row["row_id"]),
+        "source_sheet": str(row.get("source_sheet") or ""),
+        "source_row_number": int(row["source_row_number"])
+        if row.get("source_row_number") is not None
+        else None,
+        "source_cell_text": row.get("source_cell_text") or "",
         "employee_id": row_employee_id,
         "employee_binding": employee_binding,
         "full_name": full_name,
@@ -1588,6 +1657,13 @@ def _normalized_record_list_join_sql() -> str:
 
 def _normalized_record_identity_sql() -> str:
     return """
+        r.source_sheet AS source_sheet,
+        r.source_row_number AS source_row_number,
+        COALESCE(
+            r.normalized_payload->>'education_training_raw',
+            r.normalized_payload->>'training_raw',
+            ''
+        ) AS source_cell_text,
         trim(COALESCE(r.normalized_payload->>'full_name', '')) AS full_name,
         trim(COALESCE(r.normalized_payload->>'iin', '')) AS row_iin,
         r.normalized_payload->'metadata' AS row_metadata_json,

@@ -112,6 +112,29 @@ def test_parser_training_hours_from_144_hours():
     assert parsed.parsed_hours == Decimal("144")
 
 
+def test_parser_training_from_actual_hours_credits_notation():
+    """Regression: real column-N course text uses ``120/4`` for hours/credits."""
+    parsed = parse_education_training_raw("Клиническая практика BLS 120/4 2023г.")
+
+    training = [record for record in parsed if record.document_kind == "training"]
+    assert len(training) == 1
+    record = training[0]
+    assert record.document_kind == "training"
+    assert record.parsed_hours == Decimal("120")
+    assert record.parsed_issued_at is not None and record.parsed_issued_at.year == 2023
+    assert record.title == "Клиническая практика BLS"
+
+
+def test_parser_training_from_actual_bls_title_without_date_or_hours():
+    parsed = parse_education_training_raw("BLS Тактика оказания неотложной помощи")
+
+    assert len(parsed) == 1
+    assert parsed[0].document_kind == "training"
+    assert parsed[0].title == "BLS Тактика оказания неотложной помощи"
+    assert parsed[0].parsed_hours is None
+    assert parsed[0].parsed_issued_at is None
+
+
 def test_parser_mixed_cell_creates_two_candidates():
     parsed = parse_education_training_raw(
         "КазНМУ, 1982, Лечебное дело; повышение квалификации 144 ч"

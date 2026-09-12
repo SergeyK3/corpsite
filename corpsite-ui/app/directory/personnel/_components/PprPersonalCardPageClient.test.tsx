@@ -48,9 +48,11 @@ vi.mock("../_lib/migrationStatusApi.client", () => ({
 }));
 
 const getEmployeeImportCard2OptionalMock = vi.fn();
+const listTrainingReviewRecordsMock = vi.fn();
 vi.mock("../_lib/importApi.client", () => ({
   getEmployeeImportCard2Optional: (...args: unknown[]) => getEmployeeImportCard2OptionalMock(...args),
   getEmployeeImportCard2: vi.fn(),
+  listTrainingReviewRecords: (...args: unknown[]) => listTrainingReviewRecordsMock(...args),
 }));
 
 vi.mock("./EmployeeOperationalAssignmentSection", () => ({
@@ -348,6 +350,7 @@ function buildMaterializedPpr(overrides?: Partial<PprCompositeReadResponse>): Pp
       academic_degrees_none: false,
       academic_titles: [],
       academic_titles_none: false,
+      status_facts: [],
     },
     metadata: {
       read_mode: "composite",
@@ -373,6 +376,8 @@ beforeEach(() => {
   replaceMock.mockReset();
   getPprPersonPhotoMock.mockRejectedValue({ status: 404 });
   getEmployeeImportCard2OptionalMock.mockReset();
+  listTrainingReviewRecordsMock.mockReset();
+  listTrainingReviewRecordsMock.mockResolvedValue({ records: [], summary: null });
   pushMock.mockReset();
   currentCardSearchParams = new URLSearchParams("");
   Element.prototype.scrollIntoView = vi.fn();
@@ -490,10 +495,10 @@ describe("PprPersonalCardPageClient", () => {
     render(<PprPersonalCardPageClient employeeId="42" />);
 
     await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Назад к претендентам" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Назад к личным карточкам" })).toBeInTheDocument();
     });
 
-    fireEvent.click(screen.getByRole("button", { name: "Назад к претендентам" }));
+    fireEvent.click(screen.getByRole("button", { name: "Назад к личным карточкам" }));
     expect(pushMock).toHaveBeenCalledWith("/directory/personnel/lk?q=petrov&application_id=10");
   });
 

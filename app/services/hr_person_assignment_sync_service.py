@@ -34,6 +34,7 @@ from app.services.hr_effective_monthly_diff_service import (
     personnel_events_available,
 )
 from app.services.hr_import_roster_promotion_service import _get_or_create_position_id
+from app.services.hr_import_general_first_pass_service import run_general_first_pass
 
 logger = logging.getLogger(__name__)
 
@@ -1522,6 +1523,14 @@ def _apply_event(
 
     if link_touched:
         status = STATUS_ENROLLED
+
+    # A Person produced/adopted by the import-driven sync enters the same
+    # general-information first pass as an ADR-065 link.  Keep it scoped to
+    # this Employee and in the caller's transaction.
+    if not dry_run and outcome.get("person_id"):
+        linked_employee_id = _find_employee_for_person(conn, int(outcome["person_id"]))
+        if linked_employee_id is not None:
+            run_general_first_pass(conn, employee_ids=[linked_employee_id])
 
     sync_meta = {
         "personnel_event_id": int(event["personnel_event_id"]),

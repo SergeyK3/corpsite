@@ -1,10 +1,11 @@
 /** Personal-card fields shared by intake UI, PDF, and derived read-only values. */
 
 export function deriveIntakeSurnameAlphabet(lastName: string | null | undefined): string {
-  const trimmed = String(lastName ?? "").trim();
-  if (!trimmed) return "";
-  const [firstGrapheme] = [...trimmed];
-  return firstGrapheme ? firstGrapheme.toLocaleUpperCase("ru-RU") : "";
+  const trimmed = String(lastName ?? "").trimStart();
+  for (const character of trimmed) {
+    if (/\p{L}/u.test(character)) return character.toLocaleUpperCase("ru-RU");
+  }
+  return "";
 }
 
 export function normalizeIntakePersonnelNumber(value: string | null | undefined): string {

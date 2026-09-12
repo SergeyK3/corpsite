@@ -190,8 +190,10 @@ carry idempotency/correlation identifiers. Responses expose safe code/reference 
 * Build a protected migration workspace, not personal-card editor: dry-run preview with zero-write
   disclosure and separately enabled «Создать запуск» action bound to preview fingerprint; then
   participant queue, dedup/issue evidence, required skip reasons, stale banners and explicit
-  fingerprint-bound acceptance. Card stays unchanged before `ACCEPTED`; it reads accepted data only
-  through current `PPR-TRAINING` composite read.
+  fingerprint-bound acceptance. Before `ACCEPTED` the card may show the separate staging-review
+  block defined by [WP-PPR-MIG-004A](WP-PPR-MIG-004A-training-staging-review-and-validity.md); it
+  is not `person_training`, PMF acceptance or canonical adoption. The canonical card section reads
+  accepted data only through the current `PPR-TRAINING` composite read.
 
 ## 8. Audit and provenance
 
@@ -235,8 +237,11 @@ Required PostgreSQL integration tests:
 
 ## 10. Closed implementation decisions
 
-* Stage 3 v1 is 0..1 proposal per source fragment; no proposal editing, fuzzy matching or
-  decomposition. Correction happens in source/normalisation, then dry-run preview and create-run anew.
+* Stage 3 v1 is 0..1 proposal per source fragment; no PMF proposal editing, fuzzy matching or
+  decomposition. A кадровик may correct the normalized/staging record through the controlled review
+  workflow in [WP-PPR-MIG-004A](WP-PPR-MIG-004A-training-staging-review-and-validity.md), but may
+  not edit a PMF proposal directly. A checked staging record is the input to the next Stage 3 preview;
+  any later staging correction makes a dependent preview/proposal stale and requires a new preview.
 * Incomplete candidate is skipped with a mandatory reason. `VIEW_TRAINING_CERTIFICATE_DETAILS` is
   distinct and assigned to HR_HEAD; certificate remains absent without it.
 * Shared stage envelope is extended additively, with the cross-stage CHECK/UNIQUE regression set

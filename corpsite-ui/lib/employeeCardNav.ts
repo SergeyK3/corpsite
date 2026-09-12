@@ -64,6 +64,7 @@ export type PprMigrationCardSection =
   | "military"
   | "employment_biography"
   | "assignment"
+  | "languages"
   | "additional";
 
 export function buildPprMigrationCardHref(

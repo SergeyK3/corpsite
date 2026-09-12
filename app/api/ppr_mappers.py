@@ -23,6 +23,7 @@ from app.api.ppr_schemas import (
     PprMilitaryRecordResponse,
     PprReadMetadataResponse,
     PprRelativeRecordResponse,
+    PprStatusFactResponse,
     PprSectionResponse,
     PprTrainingRecordResponse,
 )
@@ -236,7 +237,9 @@ def _section_response(
     )
 
 
-def _additional_response(additional: PprAdditionalReadSlice) -> PprAdditionalProfileResponse:
+def _additional_response(
+    additional: PprAdditionalReadSlice, *, include_status_facts: bool
+) -> PprAdditionalProfileResponse:
     return PprAdditionalProfileResponse(
         foreign_languages=[
             PprForeignLanguageRecordResponse(
@@ -283,6 +286,20 @@ def _additional_response(additional: PprAdditionalReadSlice) -> PprAdditionalPro
             for item in additional.academic_titles
         ],
         academic_titles_none=additional.academic_titles_none,
+        status_facts=[
+            PprStatusFactResponse(
+                status_fact_id=int(item["status_fact_id"]),
+                fact_kind=str(item["fact_kind"]),
+                effective_date=item.get("effective_date"),
+                disability_group=item.get("disability_group"),
+                icd10_code=item.get("icd10_code"),
+                review_status=str(item["review_status"]),
+                review_reason=item.get("review_reason"),
+                version=int(item["version"]),
+                created_at=item["created_at"],
+            )
+            for item in additional.status_facts
+        ] if include_status_facts else [],
     )
 
 
@@ -293,6 +310,7 @@ def composite_to_response(
     source: str,
     include_sensitive_identity: bool,
     include_military_restricted: bool = False,
+    include_status_facts: bool = False,
     warnings: list[str] | None = None,
 ) -> PprCompositeReadResponse:
     resolution = composite.identity_resolution
@@ -375,7 +393,7 @@ def composite_to_response(
             else None
         ),
         intended_employment=intended_response,
-        additional=_additional_response(composite.additional),
+        additional=_additional_response(composite.additional, include_status_facts=include_status_facts),
         metadata=PprReadMetadataResponse(
             read_mode=read_mode,
             source=source,

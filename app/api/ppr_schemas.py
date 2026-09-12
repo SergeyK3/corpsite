@@ -81,6 +81,18 @@ class PprAcademicTitleRecordResponse(BaseModel):
     degree_type: str | None = None
 
 
+class PprStatusFactResponse(BaseModel):
+    status_fact_id: int
+    fact_kind: str
+    effective_date: date | None = None
+    disability_group: str | None = None
+    icd10_code: str | None = None
+    review_status: str
+    review_reason: str | None = None
+    version: int
+    created_at: datetime
+
+
 class PprAdditionalProfileResponse(BaseModel):
     foreign_languages: list[PprForeignLanguageRecordResponse] = Field(default_factory=list)
     foreign_languages_none: bool = False
@@ -90,6 +102,7 @@ class PprAdditionalProfileResponse(BaseModel):
     academic_degrees_none: bool = False
     academic_titles: list[PprAcademicTitleRecordResponse] = Field(default_factory=list)
     academic_titles_none: bool = False
+    status_facts: list[PprStatusFactResponse] = Field(default_factory=list)
 
 
 class PprHireDefaultsResponse(BaseModel):

@@ -129,6 +129,7 @@ function personCardResponse() {
       academic_degrees_none: true,
       academic_titles: [],
       academic_titles_none: true,
+      status_facts: [],
     },
     metadata: {
       read_mode: "composite",

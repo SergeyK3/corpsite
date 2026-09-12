@@ -438,6 +438,12 @@ export default function PprPersonalCardPageClient({
             ) : null}
 
             <div className="space-y-5">
+              {ppr.additional.status_facts.length > 0 ? (
+                <section className="hidden print:block" data-testid="ppr-print-note-section">
+                  <h2 className="mb-2 text-base font-semibold">Примечание</h2>
+                  <PprCardAdditionalSection additional={ppr.additional} mode="notes" />
+                </section>
+              ) : null}
               <PprCardSection
                 id="general"
                 title="Общие сведения"
@@ -470,6 +476,7 @@ export default function PprPersonalCardPageClient({
                   active={trainingActive}
                   superseded={trainingSuperseded}
                   voided={trainingVoided}
+                  employeeId={resolvedEmployeeId}
                 />
               </PprCardSection>
 
@@ -503,10 +510,20 @@ export default function PprPersonalCardPageClient({
               ) : null}
 
               <PprCardSection
+                id="languages"
+                title="Знание иностранных языков"
+                description="Сведения о владении иностранными языками."
+              >
+                <MigrationStatusBlock cell={migrationCells.foreign_languages} />
+                <PprCardAdditionalSection additional={ppr.additional} mode="languages" />
+              </PprCardSection>
+
+              <PprCardSection
                 id="additional"
                 title="Дополнительные сведения"
-                description="Иностранные языки, награды, учёные степени и звания."
+                description="Структурированные сведения из примечаний, награды, учёные степени и звания."
               >
+                <MigrationStatusBlock cell={migrationCells.additional} />
                 <PprCardAdditionalSection additional={ppr.additional} />
               </PprCardSection>
 

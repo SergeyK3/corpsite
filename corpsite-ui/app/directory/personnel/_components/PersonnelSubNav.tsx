@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 
 import { isPersonnelControlListPath } from "../_lib/personnelControlListNav";
 import { useCurrentUser } from "@/lib/currentUser";
+import { canReadPprMigrationStatus } from "@/lib/pprMigrationStatusAccess";
 import {
   canSeeTestPersonnelApprovals,
   TEST_PERSONNEL_APPROVALS_HREF,
@@ -18,17 +19,17 @@ const BASE_ITEMS = [
     title: "Личные карточки",
     prefixes: ["/directory/personnel/lk", "/directory/personnel/applicants"],
   },
+  {
+    href: "/directory/personnel/migration-status",
+    title: "Сводка",
+    prefixes: ["/directory/personnel/migration-status"],
+  },
   { href: "/directory/personnel/onboarding", title: "Адаптация", prefixes: ["/directory/personnel/onboarding"] },
   { href: "/directory/personnel/orders", title: "Приказы", prefixes: ["/directory/personnel/orders"] },
   {
     href: "/directory/personnel/documents",
     title: "Реестр документов",
     prefixes: ["/directory/personnel/documents"],
-  },
-  {
-    href: "/directory/personnel/employment-verification",
-    title: "Проверка биографии",
-    prefixes: ["/directory/personnel/employment-verification"],
   },
 ] as const;
 
@@ -56,6 +57,7 @@ export default function PersonnelSubNav() {
   return (
     <nav aria-label="Навигация кадровых процессов" className="flex flex-wrap gap-2">
       {BASE_ITEMS.map((item) => {
+        if (item.href === "/directory/personnel/migration-status" && !canReadPprMigrationStatus(me)) return null;
         const active = isBaseItemActive(pathname, item.prefixes, item.href);
         return (
           <Link
@@ -81,7 +83,7 @@ export default function PersonnelSubNav() {
           className={tabClassName(pathname === TEST_PERSONNEL_APPROVALS_HREF)}
           aria-current={pathname === TEST_PERSONNEL_APPROVALS_HREF ? "page" : undefined}
         >
-          Согласование удаления тестовых данных
+          Удаление тестовых данных
         </Link>
       ) : null}
     </nav>

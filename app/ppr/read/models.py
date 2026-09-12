@@ -103,6 +103,7 @@ class PprAdditionalReadSlice:
     academic_degrees_none: bool
     academic_titles: tuple[dict[str, Any], ...]
     academic_titles_none: bool
+    status_facts: tuple[dict[str, Any], ...] = ()
 
     @classmethod
     def empty(cls) -> PprAdditionalReadSlice:
@@ -115,6 +116,7 @@ class PprAdditionalReadSlice:
             academic_degrees_none=False,
             academic_titles=(),
             academic_titles_none=False,
+            status_facts=(),
         )
 
 

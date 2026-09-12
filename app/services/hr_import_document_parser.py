@@ -11,6 +11,10 @@ HOURS_RE = re.compile(
     r"(?P<hours>\d+(?:[.,]\d+)?)\s*(?:ч(?:ас(?:ов|а)?)?\.?|ч\.?)(?:\b|$)",
     re.IGNORECASE,
 )
+CREDITS_RE = re.compile(r"\b\d+(?:[.,]\d+)?\s*кредит\w*\b", re.IGNORECASE)
+# The actual control list uses the unambiguous ``academic-hours/credits``
+# notation (for example, ``120/4`` and ``240/8``) in column N.
+HOURS_CREDITS_RE = re.compile(r"\b(?P<hours>\d{2,4})\s*/\s*\d{1,2}\b")
 YEAR_RE = re.compile(
     r"\b((?:19|20)\d{2})(?:\s*г\.)?(?=[\s,;.)]|$)",
     re.IGNORECASE,
@@ -95,6 +99,13 @@ TRAINING_KEYWORDS_RE = re.compile(
     r"\b(?:повышени(?:е|я)\s+квалиф|сертификат|курс|обучени(?:е|я)|пк)\b",
     re.IGNORECASE,
 )
+TRAINING_SUBJECT_RE = re.compile(
+    r"\b(?:bls|acls|pals|phtls|медицин\w*|сестрин\w*|реанимац\w*|"
+    r"терапи\w*|туберкул[её]з\w*|рентгенолог\w*|диагностик\w*|"
+    r"врачебн\w*|документаци\w*)\b",
+    re.IGNORECASE,
+)
+EMERGENCY_TRAINING_ACRONYM_RE = re.compile(r"\b(?:bls|acls|pals|phtls)\b", re.IGNORECASE)
 ACAD_HOURS_RE = re.compile(r"акад\.?\s*час", re.IGNORECASE)
 
 EDUCATION_UNIVERSITY_YEAR_RE = re.compile(
@@ -183,9 +194,13 @@ def _extract_education_dates(text_val: str) -> tuple[Optional[date], Optional[da
 
 def _extract_hours(text_val: str) -> Optional[Decimal]:
     match = HOURS_RE.search(text_val)
-    if not match:
-        return None
-    raw = match.group("hours").replace(",", ".")
+    if match:
+        raw = match.group("hours").replace(",", ".")
+    else:
+        compact = HOURS_CREDITS_RE.search(text_val)
+        if not compact:
+            return None
+        raw = compact.group("hours")
     try:
         return Decimal(raw)
     except Exception:
@@ -202,6 +217,8 @@ def _match_keyword(text_val: str, patterns: tuple[tuple[str, str], ...]) -> Opti
 
 def _clean_title(text_val: str) -> str:
     cleaned = HOURS_RE.sub(" ", text_val)
+    cleaned = HOURS_CREDITS_RE.sub(" ", cleaned)
+    cleaned = CREDITS_RE.sub(" ", cleaned)
     cleaned = VALID_UNTIL_RE.sub(" ", cleaned)
     cleaned = DATE_DMY_RE.sub(" ", cleaned)
     cleaned = YEAR_RE.sub(" ", cleaned)
@@ -226,6 +243,77 @@ def split_raw_fragments(raw: str) -> list[str]:
             if sub:
                 expanded.append(sub)
     return expanded or [text_val]
+
+
+@dataclass(frozen=True)
+class TrainingSourceFragment:
+    """A lossless, numbered fragment of one training-cell value.
+
+    The generic splitter deliberately remains conservative for legacy fields.
+    Column N needs one additional rule: a genuine sequence can continue directly
+    after a year marker (``2024г.9.``).  Keeping offsets makes the split
+    auditable without treating arbitrary ``number.`` occurrences as courses.
+    """
+
+    raw_text: str
+    start_offset: int
+    end_offset: int
+    ordinal: int | None
+
+
+_TRAINING_ORDINAL_RE = re.compile(r"(?P<ordinal>\d{1,2})\.(?=\s*[\"«A-Za-zА-Яа-яЁё])")
+_YEAR_ORDINAL_PREFIX_RE = re.compile(r"(?:19|20)\d{2}\s*г\.\s*$", re.IGNORECASE)
+
+
+def split_numbered_training_fragments(raw: str) -> list[TrainingSourceFragment]:
+    """Split only a reliable consecutive course-number sequence.
+
+    A marker must be at the start, after whitespace/punctuation, or immediately
+    after a completed ``YYYYг.`` token.  At least two adjacent ordinal markers
+    are required; dates, hours, fractions and certificate numbers consequently
+    remain ordinary text.  On doubt the cell is intentionally left intact for
+    HR review.
+    """
+    source = raw or ""
+    if not source.strip():
+        return []
+    candidates: list[tuple[int, int, int]] = []
+    for match in _TRAINING_ORDINAL_RE.finditer(source):
+        start = match.start()
+        prefix = source[:start]
+        preceding = source[start - 1] if start else ""
+        allowed = (
+            start == 0
+            or preceding.isspace()
+            or preceding in ";|\n"
+            or bool(_YEAR_ORDINAL_PREFIX_RE.search(prefix))
+        )
+        if not allowed:
+            continue
+        # A title signal is already required by the lookahead.  Retain only
+        # sensible course ordinals; four-digit years cannot become markers.
+        ordinal = int(match.group("ordinal"))
+        if ordinal < 1 or ordinal > 99:
+            continue
+        candidates.append((start, match.end(), ordinal))
+    sequence: list[tuple[int, int, int]] = []
+    for candidate in candidates:
+        if not sequence:
+            sequence = [candidate]
+        elif candidate[2] == sequence[-1][2] + 1:
+            sequence.append(candidate)
+        else:
+            # A broken sequence is not safe to split automatically.
+            sequence = [candidate]
+    if len(sequence) < 2:
+        return [TrainingSourceFragment(source, 0, len(source), None)]
+    result: list[TrainingSourceFragment] = []
+    for index, (start, _end, ordinal) in enumerate(sequence):
+        end = sequence[index + 1][0] if index + 1 < len(sequence) else len(source)
+        # Preserve every byte in raw_text; presentation/parser may strip only
+        # outside provenance.
+        result.append(TrainingSourceFragment(source[start:end], start, end, ordinal))
+    return result
 
 
 def _looks_like_education(text_val: str) -> bool:
@@ -253,6 +341,15 @@ def _looks_like_training(text_val: str) -> bool:
     if ACAD_HOURS_RE.search(text_val):
         return True
     if TRAINING_KEYWORDS_RE.search(text_val):
+        return True
+    # Column N is the training column.  A real course title with a course
+    # subject signal and an explicit year belongs in staging even when it does
+    # not literally say "course" or "advanced training".
+    if YEAR_RE.search(text_val) and TRAINING_SUBJECT_RE.search(text_val):
+        return True
+    if EMERGENCY_TRAINING_ACRONYM_RE.search(text_val):
+        return True
+    if CREDITS_RE.search(text_val):
         return True
     return False
 
@@ -678,9 +775,13 @@ def parse_certification_fragment(fragment: str, *, fragment_index: int) -> Parse
 
 
 def parse_training_raw(raw: str) -> list[ParsedDocumentFragment]:
+    numbered = split_numbered_training_fragments(raw)
+    # Preserve the old delimiter behaviour when a trustworthy ordinal sequence
+    # is absent.  This protects all legacy layouts from an alias-like change.
+    pieces = [fragment.raw_text.strip() for fragment in numbered] if len(numbered) > 1 else split_raw_fragments(raw)
     return [
         parse_training_fragment(fragment, fragment_index=idx)
-        for idx, fragment in enumerate(split_raw_fragments(raw))
+        for idx, fragment in enumerate(pieces)
     ]
 
 

@@ -2,7 +2,7 @@
 from alembic import op
 
 revision = "ppr005fevent01"
-down_revision = "ppr005cread01"
+down_revision = "ppr005drepair01"
 branch_labels = None
 depends_on = None
 

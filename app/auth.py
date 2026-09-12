@@ -233,6 +233,7 @@ def _get_user_by_id(user_id: int) -> Optional[Dict[str, Any]]:
                     u.is_active,
                     u.full_name,
                     u.login,
+                    u.employee_id,
                     u.telegram_id,
                     u.telegram_username,
                     p.position_id,
@@ -264,6 +265,7 @@ def _get_user_by_id(user_id: int) -> Optional[Dict[str, Any]]:
         if row.get("full_name") is not None and str(row["full_name"]).strip()
         else None,
         "login": str(row["login"]) if row["login"] is not None else None,
+        "employee_id": int(row["employee_id"]) if row.get("employee_id") is not None else None,
         "telegram_bound": _telegram_bound_from_id(row.get("telegram_id")),
         "telegram_username": _normalize_telegram_username(row.get("telegram_username")),
         "position_id": int(row["position_id"]) if row.get("position_id") is not None else None,

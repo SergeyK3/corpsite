@@ -171,6 +171,7 @@ def get_ppr_composite_by_person(
             source="ppr_query_api",
             include_sensitive_identity=include_sensitive_identity_fields(user),
             include_military_restricted=include_military_restricted_fields(user),
+            include_status_facts=include_sensitive_identity_fields(user),
         )
     except HTTPException:
         raise
@@ -351,6 +352,7 @@ def get_ppr_composite_by_employee(
             source="ppr_query_api",
             include_sensitive_identity=include_sensitive_identity_fields(user),
             include_military_restricted=include_military_restricted_fields(user),
+            include_status_facts=include_sensitive_identity_fields(user),
         )
     except HTTPException:
         raise

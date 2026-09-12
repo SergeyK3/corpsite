@@ -361,6 +361,21 @@ Composition of section records keyed by `person_id`. Initial physical model opti
 
 **Recommendation:** Option C — typed tables for education, certificates, categories, documents; reuse `person_assignments` for employment; JSONB only for notes/legacy import fragments during migration.
 
+### Versioned status facts from control-list notes
+
+When a control-list note can be recognised without inference as a pension or
+disability fact, it is stored as a typed `person_status_facts` record rather
+than as a replacement for a Person field. The record carries import provenance,
+review state and version. It is append-only: a correction creates a successor
+linked by `supersedes_fact_id`; the prior fact and audit trail remain readable.
+
+The parser never invents a date, disability group or ICD-10 code. Incomplete
+facts are `REVIEW_REQUIRED`; maternity/decree mentions are deliberately outside
+the personal-card fact set. Read and printed-card exposure requires the same
+active HR sensitive-data access as the corresponding PPR fields. Raw note text
+stays in import staging/audit metadata and is not replicated into the fact or
+ordinary card view.
+
 ### Files
 
 ```sql

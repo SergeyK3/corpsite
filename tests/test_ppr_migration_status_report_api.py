@@ -8,7 +8,7 @@ from app.api import ppr_migration_status_router as status_router
 from app.auth import get_current_user
 from app.main import app
 from app.services.ppr_migration_status_projection_service import SECTIONS
-from app.services.ppr_migration_status_report_service import ProjectionIntegrityError
+from app.services.ppr_migration_status_report_service import ProjectionIntegrityError, build_presentation_status_summary
 
 
 @pytest.fixture
@@ -87,3 +87,73 @@ def test_new_section_filter_person_endpoint_and_integrity_error_are_safe(client,
     assert tuple(person.json()["cells"]) == SECTIONS
     monkeypatch.setattr(status_router, "person_cells", lambda *_a, **_k: (_ for _ in ()).throw(ProjectionIntegrityError()))
     assert client.get("/directory/personnel/migration-status/persons/8", params={"universe_id": 7}).status_code == 409
+
+
+def test_presentation_status_summary_counts_full_filtered_set_and_missing_cells() -> None:
+    items = [
+        {"person_id": 1, "cells": {"general": {"status_code": "AUTO_READY"}, "employment_biography": {"status_code": "NO_SOURCE_DATA"}, "employment_history": {"status_code": "NO_SOURCE_DATA"}}},
+        {"person_id": 2, "cells": {"general": {"status_code": "REVIEW_REQUIRED"}, "employment_biography": {"status_code": "NO_SOURCE_DATA"}, "employment_history": {"status_code": "NO_SOURCE_DATA"}}},
+    ]
+    summary = build_presentation_status_summary(items)
+    counts = {(item["section_code"], item["status_code"]): item["count"] for item in summary["counts"]}
+    assert counts[("general", "AUTO_READY")] == 1
+    assert counts[("general", "REVIEW_REQUIRED")] == 1
+    assert counts[("employment_biography", "NO_SOURCE_DATA")] == 2
+    assert counts[("employment_history", "NO_SOURCE_DATA")] == 2
+    assert sum(counts[("general", status["code"])] for status in summary["statuses"]) == len(items)
+    assert {section["code"] for section in summary["sections"]} >= {
+        "employment_biography", "employment_history", "personnel_orders", "personnel_appeals", "adaptation",
+        "foreign_languages", "additional", "awards", "academic_degrees_titles",
+    }
+
+
+def test_awards_and_academic_degrees_are_independent_summary_columns() -> None:
+    summary = build_presentation_status_summary([{
+        "person_id": 1,
+        "cells": {
+            "foreign_languages": {"status_code": "NO_SOURCE_DATA"},
+            "awards": {"status_code": "REVIEW_REQUIRED"},
+            "academic_degrees_titles": {"status_code": "AUTO_READY"},
+        },
+    }])
+    counts = {(item["section_code"], item["status_code"]): item["count"] for item in summary["counts"]}
+    assert counts[("foreign_languages", "NO_SOURCE_DATA")] == 1
+    assert counts[("additional", "NO_SOURCE_DATA")] == 1
+    assert counts[("awards", "REVIEW_REQUIRED")] == 1
+    assert counts[("academic_degrees_titles", "AUTO_READY")] == 1
+
+
+@pytest.mark.parametrize(
+    ("record_statuses", "expected"),
+    [
+        ({"pending"}, ("REVIEW_REQUIRED", "IMPORT_NORMALIZED_RECORDS_REVIEW_REQUIRED")),
+        ({"approved"}, ("ACCEPTED", "IMPORT_NORMALIZED_RECORDS_REVIEWED")),
+        ({"promoted"}, ("ACCEPTED", "IMPORT_NORMALIZED_RECORDS_REVIEWED")),
+        ({"rejected"}, ("REJECTED", "IMPORT_NORMALIZED_RECORDS_REJECTED")),
+        ({"approved", "pending"}, ("REVIEW_REQUIRED", "IMPORT_NORMALIZED_RECORDS_REVIEW_REQUIRED")),
+    ],
+)
+def test_normalized_section_status_keeps_multiple_records_and_prioritizes_review(record_statuses, expected) -> None:
+    assert status_router._section_status_from_review_statuses(record_statuses) == expected
+
+
+def test_normalized_section_aggregates_multiple_diplomas_without_treating_count_as_conflict(monkeypatch) -> None:
+    monkeypatch.setattr(
+        status_router,
+        "classify_education_kind",
+        lambda *_args: type("Classification", (), {"outcome": "AUTO_READY"})(),
+    )
+    diplomas = [
+        {"review_status": "pending", "title": "Диплом 1", "source_text": "", "specialty_text": "", "confidence": 0.9},
+        {"review_status": "pending", "title": "Диплом 2", "source_text": "", "specialty_text": "", "confidence": 0.8},
+    ]
+    assert status_router._aggregate_normalized_section(diplomas, record_kind="education") == (
+        "AUTO_READY", "IMPORT_NORMALIZED_RECORDS_AUTO_READY",
+    )
+
+
+def test_normalized_section_requires_review_for_incomplete_course() -> None:
+    course = [{"review_status": "pending", "title": "Курс", "confidence": 0.9, "hours": None, "end_date": None, "issue_date": None}]
+    assert status_router._aggregate_normalized_section(course, record_kind="training") == (
+        "REVIEW_REQUIRED", "IMPORT_NORMALIZED_RECORDS_REVIEW_REQUIRED",
+    )

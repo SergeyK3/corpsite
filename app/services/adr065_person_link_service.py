@@ -10,6 +10,7 @@ from typing import Any
 from sqlalchemy import bindparam, text
 from sqlalchemy.engine import Connection
 from app.services.iin_writer_protocol import lock_and_recheck_iin_tx
+from app.services.hr_import_general_first_pass_service import parse_full_name, run_general_first_pass
 
 
 class PersonLinkError(RuntimeError):
@@ -182,16 +183,23 @@ def link_person_tx(
         if confirm_name_correction and _name(p["full_name"]) != source_name:
             conn.execute(text("UPDATE public.persons SET full_name=:full_name, updated_at=now() WHERE person_id=:person_id"), {"full_name": source_name, "person_id": person_id})
     else:
-        last, first, middle = _parts(canonical_name)
+        parsed_name, _ = parse_full_name(canonical_name)
         person_id = int(conn.execute(text("INSERT INTO public.persons (iin, full_name, last_name, first_name, middle_name, match_key, person_status, source) "
             "VALUES (:iin,:full_name,:last_name,:first_name,:middle_name,:match_key,'active','enrollment') RETURNING person_id"), {
-                "iin": iin, "full_name": canonical_name, "last_name": last, "first_name": first, "middle_name": middle,
+                "iin": iin, "full_name": canonical_name,
+                "last_name": parsed_name.last_name if parsed_name else None,
+                "first_name": parsed_name.first_name if parsed_name else None,
+                "middle_name": parsed_name.middle_name if parsed_name else None,
                 "match_key": f"adr065:employee:{employee_id}:iin:{iin}",
             }).scalar_one())
         decision = "CREATE"
     conn.execute(text("UPDATE public.employees SET person_id=:person_id, full_name=:full_name WHERE employee_id=:employee_id AND person_id IS NULL"), {"person_id": person_id, "full_name": canonical_name, "employee_id": employee_id})
     if conn.execute(text("SELECT person_id FROM public.employees WHERE employee_id=:employee_id"), {"employee_id": employee_id}).scalar_one() != person_id:
         raise PersonLinkError("Employee link changed concurrently.", "CONCURRENT_MODIFICATION")
+    # The general-information first pass is part of the same transaction as
+    # creating/adopting the Person link.  It has its own PII-free idempotency
+    # key, so retrying this operation cannot generate duplicate audit events.
+    run_general_first_pass(conn, employee_ids=[employee_id])
     conn.execute(text("INSERT INTO public.personnel_identity_link_operations (request_id, request_fingerprint, actor_user_id, employee_id, person_id, decision, old_full_name, new_full_name, normalized_record_ids) "
         "VALUES (:request_id,:fingerprint,:actor,:employee,:person,:decision,:old_name,:new_name,:record_ids)"), {
             "request_id": request_id, "actor": actor_user_id, "employee": employee_id, "person": person_id,

@@ -136,6 +136,30 @@ def _load_import_additional_profile(conn: Connection, employee_id: int) -> dict[
     )
 
 
+def load_person_status_facts(conn: Connection, *, person_id: int) -> list[dict[str, Any]]:
+    """Current structured status versions only; raw note provenance stays internal."""
+    exists = conn.execute(text("SELECT to_regclass('public.person_status_facts') IS NOT NULL")).scalar_one()
+    if not exists:
+        return []
+    rows = conn.execute(
+        text(
+            """
+            SELECT f.status_fact_id, f.fact_kind, f.effective_date, f.disability_group,
+                   f.icd10_code, f.review_status, f.review_reason, f.version, f.created_at
+            FROM public.person_status_facts f
+            WHERE f.person_id=:person_id
+              AND NOT EXISTS (
+                SELECT 1 FROM public.person_status_facts newer
+                WHERE newer.supersedes_fact_id=f.status_fact_id
+              )
+            ORDER BY f.fact_kind, f.version DESC, f.status_fact_id DESC
+            """
+        ),
+        {"person_id": int(person_id)},
+    ).mappings().all()
+    return [dict(row) for row in rows]
+
+
 def load_person_additional_profile(
     conn: Connection,
     *,
