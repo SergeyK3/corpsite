@@ -212,7 +212,7 @@ postconditions в транзакции.
 | IQ-1 — Completed | Убрать ФИО auto-bind из полного allowlist путей; exact-IIN regressions | Закрывает небезопасную связь без изменения batch data. |
 | IQ-2 — Completed | Schema-only Alembic/ORM: append-only events, current state, guarded downgrade | Есть надёжное хранилище до изменения parser semantics. |
 | IQ-3 — Completed | Классифицирует `IIN_MISSING`, `IIN_INVALID_FORMAT`, `IIN_UNMATCHED`; formula/cached value не используется как ИИН; identity exceptions отделены от structural errors | Новые imports не создают identity `error_rows`, но имеют persistent queue; PostgreSQL suite: `9 passed` (ожидаемый warning `openpyxl` не является дефектом). |
-| IQ-4 | Service/API queue и три HR action с transaction/RBAC/scope/idempotency contract | Проверяемые индивидуальные решения без auto-create. |
+| IQ-4 — Completed | Lossless header-first parsing полного A:S кадрового layout | Строгий позиционный контракт 19 заголовков, legacy column-first fallback и раздельное сохранение должностной/квалификационной категорий; проверки: `40 passed`, 1 ожидаемый warning. |
 | IQ-5 | Completion counters/UI, promotion exclusions, Stage 0 precedence/blockers | Сквозной fail-closed workflow. |
 | IQ-6 | PostgreSQL/API/UI races, replay, security and controlled-release runbook | Доказательство атомарности, auditability и обратимости схемы. |
 

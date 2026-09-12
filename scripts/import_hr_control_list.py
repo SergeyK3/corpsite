@@ -25,13 +25,18 @@ OUTPUT_FIELDS = [
     "full_name",
     "iin",
     "birth_date",
+    "birth_year_raw",
     "sex",
     "nationality",
     "department",
     "position_raw",
+    "staff_position_raw",
+    "position_date_raw",
+    "job_category_raw",
     "education_raw",
     "diploma_specialty_raw",
     "qualification_raw",
+    "qualification_category_raw",
     "experience_raw",
     "training_raw",
     "education_training_raw",
@@ -127,6 +132,35 @@ HEADER_ALIASES: dict[str, list[str]] = {
     "note_raw": ["note_raw", "note", "примечание", "комментарий"],
     "phone_raw": ["phone_raw", "phone", "телефон", "контактный телефон"],
 }
+
+# The contemporary control list is accepted only as this complete positional
+# A:S contract.  Repeated-looking captions are deliberately kept at their
+# distinct positions: I/J are different positions and L/O are different
+# categories.  Partial or reordered headers must stay on the legacy path.
+CONTROL_LIST_A_TO_S_HEADERS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("Отделение", ("department",)),
+    ("ФИО", ("full_name",)),
+    ("Год рождения", ("birth_date", "birth_year_raw")),
+    ("ИИН", ("iin",)),
+    ("пол", ("sex",)),
+    ("Национальность", ("nationality",)),
+    ("ВУЗ, год окончания", ("education_raw",)),
+    ("Специальность по диплому", ("diploma_specialty_raw",)),
+    ("Занимаемая должность", ("position_raw",)),
+    ("Должность", ("staff_position_raw",)),
+    ("Дата", ("position_date_raw",)),
+    ("Категория должности", ("job_category_raw",)),
+    ("Стаж работы", ("experience_raw",)),
+    ("Повышение квалификации", ("education_training_raw", "training_raw")),
+    # qualification_raw is a legacy compatibility alias only.  In the modern
+    # layout it can mirror O, never L, so a job category cannot become a
+    # qualification-category record in the existing normalizer.
+    ("Квалификационная категория", ("certification_raw", "qualification_category_raw", "qualification_raw")),
+    ("Степень", ("degree_raw",)),
+    ("Награды", ("awards_raw",)),
+    ("Примечание (декрет, инвалид, пенсионер)", ("note_raw",)),
+    ("Телефоны", ("phone_raw",)),
+)
 
 SHEET_TYPE_RULES: list[tuple[str, tuple[str, ...]]] = [
     ("declaration", ("декларац",)),
@@ -460,16 +494,41 @@ def find_header_row(ws, *, scan_limit: int = 40) -> tuple[int, list[Any]]:
     return best_row, best_vals
 
 
+def _is_lossless_control_list_header(header_vals: list[Any]) -> bool:
+    """Recognize only the complete, ordered contemporary A:S header row."""
+    if len(header_vals) < len(CONTROL_LIST_A_TO_S_HEADERS):
+        return False
+    return all(
+        _norm_header_match(header_vals[index]) == _norm_header_match(expected_header)
+        for index, (expected_header, _fields) in enumerate(CONTROL_LIST_A_TO_S_HEADERS)
+    )
+
+
 def build_field_map(header_vals: list[Any]) -> dict[str, int]:
-    normalized_to_col: dict[str, int] = {}
+    normalized_headers: list[tuple[str, int]] = []
     for idx, header in enumerate(header_vals, start=1):
         normalized = _norm_header_match(header)
         if normalized:
-            normalized_to_col[normalized] = idx
+            normalized_headers.append((normalized, idx))
 
     field_map: dict[str, int] = {}
+    # The A:S fields are intentionally unavailable unless the full positional
+    # contract above is present.  Do not let common isolated captions such as
+    # "Дата" or "Должность" activate a contemporary-layout field.
+    if _is_lossless_control_list_header(header_vals):
+        for col_idx, (_header, field_names) in enumerate(CONTROL_LIST_A_TO_S_HEADERS, start=1):
+            for field_name in field_names:
+                field_map[field_name] = col_idx
+
+    # Legacy layouts retain the original column-first matching behaviour.  In
+    # particular, when more than one legacy caption matches a field, the
+    # leftmost source column wins; aliases must not reorder that precedence.
+    # Contemporary A:S fields above are already pinned to their positional
+    # contract and therefore cannot be affected by this fallback.
     for field_name, aliases in HEADER_ALIASES.items():
-        for normalized, col_idx in normalized_to_col.items():
+        if field_name in field_map:
+            continue
+        for normalized, col_idx in normalized_headers:
             if any(_header_matches(normalized, alias) for alias in aliases):
                 field_map[field_name] = col_idx
                 break
@@ -743,7 +802,12 @@ def parse_sheet_with_profile(ws, *, sheet_type: str, profile: SheetLayoutProfile
         return []
 
     field_map = build_field_map(header_vals)
-    section_col_idx = _col_idx(profile.section_col)
+    is_lossless_header = _is_lossless_control_list_header(header_vals)
+    section_col_idx = (
+        field_map["department"]
+        if is_lossless_header
+        else _col_idx(profile.section_col)
+    )
     merged_lookup = build_merged_section_lookup(ws, section_col_idx)
     current_department = ""
     parsed_rows: list[ParsedRow] = []
@@ -775,11 +839,21 @@ def parse_sheet_with_profile(ws, *, sheet_type: str, profile: SheetLayoutProfile
         data = {name: "" for name in OUTPUT_FIELDS}
         data["source_sheet"] = ws.title
         data["source_row_number"] = str(row_idx)
-        data["department"] = current_department
+        # In the A:S layout the department belongs to each employee row.  The
+        # legacy section-column walk remains the fallback for older sheets.
+        direct_department = (
+            _to_text(_pick_cell(ws, row_idx, field_map, "department"))
+            if is_lossless_header
+            else ""
+        )
+        data["department"] = direct_department or current_department
 
         iin_raw = None
         iin_is_formula = False
-        for field_name in profile.columns:
+        field_names = OUTPUT_FIELDS if is_lossless_header else profile.columns
+        for field_name in field_names:
+            if field_name in {"source_sheet", "source_row_number", "department"}:
+                continue
             raw = _cell_for_field(ws, row_idx, field_name, profile, field_map)
             if field_name == "iin":
                 iin_column = field_map.get("iin") or _col_idx(profile.columns["iin"])
@@ -787,7 +861,15 @@ def parse_sheet_with_profile(ws, *, sheet_type: str, profile: SheetLayoutProfile
                 iin_is_formula = (ws.title, iin_cell.coordinate) in (formula_cells or set())
                 iin_raw = (ooxml_iins or {}).get((ws.title, iin_cell.coordinate), raw)
             if field_name == "birth_date":
-                data[field_name] = parse_birth_date(raw)
+                # The contemporary file labels C as a year, not a full date.
+                # Do not reinterpret a four-digit year as an Excel serial;
+                # birth_year_raw retains it losslessly for later HR review.
+                raw_text = _to_text(raw)
+                data[field_name] = (
+                    ""
+                    if is_lossless_header and re.fullmatch(r"[0-9]{4}", raw_text)
+                    else parse_birth_date(raw)
+                )
             else:
                 data[field_name] = _to_text(raw)
 
@@ -818,10 +900,15 @@ def parse_sheet_generic(ws, *, sheet_type: str, ooxml_iins: dict[tuple[str, str]
         return []
 
     parsed_rows: list[ParsedRow] = []
+    is_lossless_header = _is_lossless_control_list_header(header_vals)
     # Legacy control-list sheets keep section labels in column B even when the
     # header row has no "Отделение" caption.  Prefer a recognized header, but
     # retain B as the documented legacy section column fallback.
-    section_col_idx = field_map.get("department", _col_idx("B"))
+    section_col_idx = (
+        field_map["department"]
+        if is_lossless_header
+        else field_map.get("department", _col_idx("B"))
+    )
     merged_lookup = build_merged_section_lookup(ws, section_col_idx)
     current_department = ""
 
@@ -849,14 +936,24 @@ def parse_sheet_generic(ws, *, sheet_type: str, ooxml_iins: dict[tuple[str, str]
         data = {name: "" for name in OUTPUT_FIELDS}
         data["source_sheet"] = ws.title
         data["source_row_number"] = str(row_idx)
-        data["department"] = current_department
+        direct_department = (
+            _to_text(_pick_cell(ws, row_idx, field_map, "department"))
+            if is_lossless_header
+            else ""
+        )
+        data["department"] = direct_department or current_department
 
         for field_name in OUTPUT_FIELDS:
             if field_name in ("source_sheet", "source_row_number", "department"):
                 continue
             raw = _pick_cell(ws, row_idx, field_map, field_name)
             if field_name == "birth_date":
-                data[field_name] = parse_birth_date(raw)
+                raw_text = _to_text(raw)
+                data[field_name] = (
+                    ""
+                    if is_lossless_header and re.fullmatch(r"[0-9]{4}", raw_text)
+                    else parse_birth_date(raw)
+                )
             else:
                 data[field_name] = _to_text(raw)
 

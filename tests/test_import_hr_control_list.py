@@ -6,7 +6,10 @@ from pathlib import Path
 
 from openpyxl import Workbook
 
+from app.services.hr_import_profile_service import build_import_profile
 from scripts.import_hr_control_list import (
+    _is_lossless_control_list_header,
+    build_field_map,
     build_audit,
     build_merged_section_lookup,
     clean_iin,
@@ -398,6 +401,234 @@ def test_section_value_same_row_as_employee(tmp_path: Path):
     assert first.full_name == "Иванов Иван Иванович"
     assert first.department == "АДМИНИСТРАТИВНЫЙ ПЕРСОНАЛ"
     assert first.full_name != first.department
+
+
+def _build_lossless_a_to_s_sheet(ws) -> None:
+    ws.append(
+        [
+            "Отделение",
+            "ФИО",
+            "Год рождения",
+            "ИИН",
+            "пол",
+            "Национальность",
+            "ВУЗ, год окончания",
+            "Специальность по диплому",
+            "Занимаемая должность",
+            "Должность",
+            "Дата",
+            "Категория должности",
+            "Стаж работы",
+            "Повышение квалификации",
+            "Квалификационная категория",
+            "Степень",
+            "Награды",
+            "Примечание (декрет, инвалид, пенсионер)",
+            "Телефоны",
+        ]
+    )
+    ws.append(
+        [
+            "Тестовое отделение",
+            "Тестовый Сотрудник",
+            1984,
+            "840101300123",
+            "муж",
+            "тестовая национальность",
+            "Тестовый ВУЗ, 2006",
+            "Тестовая специальность",
+            "Занимаемая должность",
+            "Штатная должность",
+            "2017-04-03",
+            "Должностная категория",
+            "15 лет",
+            "Тестовое повышение квалификации",
+            "Квалификационная категория",
+            "Тестовая степень",
+            "Тестовая награда",
+            "Тестовое примечание",
+            "70000000000",
+        ]
+    )
+
+
+def test_lossless_a_to_s_header_mapping_and_parser_idempotency(tmp_path: Path):
+    path = tmp_path / "контрольный2606.xlsx"
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "врачи"
+    _build_lossless_a_to_s_sheet(sheet)
+    workbook.save(path)
+    workbook.close()
+
+    first_rows, first_warnings = parse_workbook(path)
+    second_rows, second_warnings = parse_workbook(path)
+
+    assert first_warnings == second_warnings == []
+    assert [row.data for row in first_rows] == [row.data for row in second_rows]
+    assert len(first_rows) == 1
+    data = first_rows[0].data
+    assert data == {
+        "full_name": "Тестовый Сотрудник",
+        "iin": "840101300123",
+        "birth_date": "",
+        "birth_year_raw": "1984",
+        "sex": "муж",
+        "nationality": "тестовая национальность",
+        "department": "Тестовое отделение",
+        "position_raw": "Занимаемая должность",
+        "staff_position_raw": "Штатная должность",
+        "position_date_raw": "2017-04-03",
+        "job_category_raw": "Должностная категория",
+        "education_raw": "Тестовый ВУЗ, 2006",
+        "diploma_specialty_raw": "Тестовая специальность",
+        "qualification_raw": "Квалификационная категория",
+        "qualification_category_raw": "Квалификационная категория",
+        "experience_raw": "15 лет",
+        "training_raw": "Тестовое повышение квалификации",
+        "education_training_raw": "Тестовое повышение квалификации",
+        "certification_raw": "Квалификационная категория",
+        "degree_raw": "Тестовая степень",
+        "awards_raw": "Тестовая награда",
+        "note_raw": "Тестовое примечание",
+        "phone_raw": "70000000000",
+        "source_sheet": "врачи",
+        "source_row_number": "2",
+    }
+
+
+def test_lossless_a_to_s_fields_do_not_change_legacy_profile_fallback(tmp_path: Path):
+    path = tmp_path / "legacy_doctors.xlsx"
+    workbook = Workbook()
+    workbook.remove(workbook.active)
+    _build_doctors_sheet(workbook.create_sheet("врачи"))
+    workbook.save(path)
+    workbook.close()
+
+    rows, _ = parse_workbook(path)
+
+    assert rows[0].data["staff_position_raw"] == ""
+    assert rows[0].data["position_date_raw"] == ""
+    assert rows[0].data["job_category_raw"] == ""
+    assert rows[0].data["qualification_category_raw"] == ""
+    assert rows[0].data["position_raw"] == "Директор"
+    assert rows[0].training_raw == "2024 курс ПК"
+
+
+def test_lossless_a_to_s_recognition_requires_every_header_at_its_position():
+    headers = [
+        "Отделение", "ФИО", "Год рождения", "ИИН", "пол", "Национальность",
+        "ВУЗ, год окончания", "Специальность по диплому", "Занимаемая должность",
+        "Должность", "Дата", "Категория должности", "Стаж работы",
+        "Повышение квалификации", "Квалификационная категория", "Степень", "Награды",
+        "Примечание (декрет, инвалид, пенсионер)", "Телефоны",
+    ]
+    assert _is_lossless_control_list_header(headers) is True
+
+    partial = [
+        "Отделение", "ФИО", "ИИН", "Занимаемая должность", "Должность", "Дата",
+        "Категория должности", "Квалификационная категория",
+    ]
+    assert _is_lossless_control_list_header(partial) is False
+    partial_map = build_field_map(partial)
+    assert "staff_position_raw" not in partial_map
+    assert "position_date_raw" not in partial_map
+    assert "job_category_raw" not in partial_map
+    assert "qualification_category_raw" not in partial_map
+
+    swapped_positions = headers.copy()
+    swapped_positions[8], swapped_positions[9] = swapped_positions[9], swapped_positions[8]
+    assert _is_lossless_control_list_header(swapped_positions) is False
+    swapped_categories = headers.copy()
+    swapped_categories[11], swapped_categories[14] = swapped_categories[14], swapped_categories[11]
+    assert _is_lossless_control_list_header(swapped_categories) is False
+
+
+def test_legacy_coincident_captions_do_not_populate_iq4_fields(tmp_path: Path):
+    path = tmp_path / "legacy_coincident_headers.xlsx"
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append(["ФИО", "ИИН", "Дата", "Должность", "Категория должности"])
+    sheet.append(["Тестовый Сотрудник", "840101300123", "2020-01-01", "Тестовая должность", "Тестовая категория"])
+    workbook.save(path)
+    workbook.close()
+
+    workbook = __import__("openpyxl").load_workbook(path, data_only=True)
+    rows = parse_sheet_generic(workbook.active, sheet_type="part_time")
+    workbook.close()
+
+    assert len(rows) == 1
+    assert rows[0].data["staff_position_raw"] == ""
+    assert rows[0].data["position_date_raw"] == ""
+    assert rows[0].data["job_category_raw"] == ""
+    assert rows[0].data["qualification_category_raw"] == ""
+
+
+def test_legacy_position_aliases_keep_leftmost_source_column(tmp_path: Path):
+    path = tmp_path / "legacy_position_aliases.xlsx"
+    headers = ["ФИО", "ИИН", "Занимаемая должность", "Должность"]
+    assert build_field_map(headers)["position_raw"] == 3
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.append(headers)
+    sheet.append([
+        "Тестовый Сотрудник",
+        "840101300123",
+        "Занимаемая должность",
+        "Штатная должность",
+    ])
+    workbook.save(path)
+    workbook.close()
+
+    workbook = __import__("openpyxl").load_workbook(path, data_only=True)
+    rows = parse_sheet_generic(workbook.active, sheet_type="part_time")
+    workbook.close()
+
+    assert len(rows) == 1
+    assert rows[0].data["position_raw"] == "Занимаемая должность"
+    assert rows[0].data["staff_position_raw"] == ""
+    assert rows[0].data["position_date_raw"] == ""
+    assert rows[0].data["job_category_raw"] == ""
+    assert rows[0].data["qualification_category_raw"] == ""
+
+
+def test_modern_job_category_never_normalizes_as_qualification_category(tmp_path: Path):
+    path = tmp_path / "контрольный2606.xlsx"
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "врачи"
+    _build_lossless_a_to_s_sheet(sheet)
+    sheet.cell(2, 15).value = None  # O: qualification category is intentionally empty.
+    workbook.save(path)
+    workbook.close()
+
+    rows, _ = parse_workbook(path)
+    data = rows[0].data
+    profile = build_import_profile(data)
+
+    assert data["job_category_raw"] == "Должностная категория"
+    assert data["qualification_category_raw"] == ""
+    assert data["qualification_raw"] == ""
+    assert profile["category_records"] == []
+
+
+def test_modern_qualification_category_remains_in_profile_pipeline(tmp_path: Path):
+    path = tmp_path / "контрольный2606.xlsx"
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "врачи"
+    _build_lossless_a_to_s_sheet(sheet)
+    workbook.save(path)
+    workbook.close()
+
+    rows, _ = parse_workbook(path)
+    data = rows[0].data
+    profile = build_import_profile(data)
+
+    assert data["qualification_category_raw"] == "Квалификационная категория"
+    assert data["qualification_raw"] == data["qualification_category_raw"]
+    assert profile["category_records"]
 
 
 def _build_generic_legacy_department_sheet(ws) -> None:
