@@ -6,7 +6,7 @@ import * as React from "react";
 
 import { buildPprMigrationCardHref, type PprMigrationCardSection } from "@/lib/employeeCardNav";
 import type { APIError } from "@/lib/types";
-import { getMigrationStatusMatrix, listMigrationStatusUniverses, type MigrationMatrix, type MigrationSection, type MigrationUniverse } from "../_lib/migrationStatusApi.client";
+import { getMigrationStatusMatrix, listMigrationStatusUniverses, rebuildMigrationStatusUniverse, type MigrationMatrix, type MigrationSection, type MigrationUniverse } from "../_lib/migrationStatusApi.client";
 import { getOrgUnitsTree, type TreeNode } from "../../org-units/_lib/api.client";
 import { apiFetchJson } from "@/lib/api";
 
@@ -19,7 +19,6 @@ const COLUMNS: Array<{ section: MigrationSection; title: string; cardSection: Pp
   { section: "employment_biography", title: "Трудовая биография", cardSection: "employment_biography" },
   { section: "employment_history", title: "Трудовая деятельность / послужной список", cardSection: "assignment" },
   { section: "foreign_languages", title: "Знание иностранных языков", cardSection: "languages" },
-  { section: "additional", title: "Дополнительные сведения", cardSection: "additional" },
   { section: "awards", title: "Награды", cardSection: "additional" },
   { section: "academic_degrees_titles", title: "Учёные степени и звания", cardSection: "additional" },
 ];
@@ -33,6 +32,18 @@ const STATUS_FILTER_OPTIONS = [
 ] as const;
 
 const REASON_FILTER_OPTIONS = [
+  ["CANONICAL_REQUIRED_FIELDS_VALID", "Обязательные поля заполнены и валидны"],
+  ["GENERAL_MISSING_BIRTH_DATE", "Не указана дата рождения"],
+  ["GENERAL_MISSING_LAST_NAME", "Не указана фамилия"],
+  ["GENERAL_IIN_MISSING_OR_INVALID", "ИИН отсутствует или невалиден"],
+  ["CANONICAL_EDUCATION_ABSENT", "Нет записей об образовании"],
+  ["CANONICAL_TRAINING_ABSENT", "Нет записей об обучении"],
+  ["CANONICAL_RELATIVES_ABSENT", "Нет записей о родственниках"],
+  ["CANONICAL_MILITARY_ABSENT", "Нет военно-учётных сведений"],
+  ["CANONICAL_EMPLOYMENT_BIOGRAPHY_ABSENT", "Нет записей трудовой биографии"],
+  ["CANONICAL_FOREIGN_LANGUAGES_ABSENT", "Нет сведений об иностранных языках"],
+  ["CANONICAL_AWARDS_ABSENT", "Нет сведений о наградах"],
+  ["CANONICAL_ACADEMIC_DEGREES_TITLES_ABSENT", "Нет учёных степеней и званий"],
   ["RUN_NO_SECTION_RESULT", "Для раздела ещё нет результата обработки"],
   ["RUN_PREVIEW_READY", "Автоматический результат готов к согласованию"],
   ["RUN_PARTICIPANT_ACCEPTED", "Результат сотрудника подтверждён"],
@@ -79,6 +90,7 @@ export default function MigrationStatusMatrixPageClient() {
   const [matrix, setMatrix] = React.useState<MigrationMatrix | null>(null);
   const [loading, setLoading] = React.useState(true); const [error, setError] = React.useState<number | null>(null);
   const [reload, setReload] = React.useState(0);
+  const [rebuilding, setRebuilding] = React.useState(false);
   const [tree, setTree] = React.useState<TreeNode[]>([]);
   const [departmentGroups, setDepartmentGroups] = React.useState<Array<{group_id:number;group_name:string}>>([]);
   const [positions, setPositions] = React.useState<Array<{position_id:number;name:string}>>([]);
@@ -98,7 +110,10 @@ export default function MigrationStatusMatrixPageClient() {
     let active = true; setLoading(true); setError(null);
     void listMigrationStatusUniverses().then((response) => {
       if (!active) return; const items = Array.isArray(response.items) ? response.items : []; setUniverses(items);
-      if (!universeId && items.length === 1) replace({ universe_id: items[0].universe_id }, false);
+      // The API orders universes by the most recently calculated snapshot.
+      // Keep the parameter-less report URL useful even when historic import
+      // universes remain available for comparison.
+      if (!universeId && items.length > 0) replace({ universe_id: items[0].universe_id }, false);
     }).catch((e: APIError) => active && setError(e?.status ?? 500)).finally(() => active && setLoading(false));
     return () => { active = false; };
   }, [reload, universeId, replace]);
@@ -158,11 +173,19 @@ export default function MigrationStatusMatrixPageClient() {
   }, [matrix]);
 
   const selectedUniverse = universes.find((value) => value.universe_id === universeId);
+  const refreshProjection = React.useCallback(() => {
+    if (!universeId || rebuilding) return;
+    setRebuilding(true); setError(null);
+    void rebuildMigrationStatusUniverse(universeId)
+      .then(() => setReload((value) => value + 1))
+      .catch((e: APIError) => setError(e?.status ?? 500))
+      .finally(() => setRebuilding(false));
+  }, [universeId, rebuilding]);
   const pageCount = Math.max(1, Math.ceil((matrix?.total ?? 0) / (matrix?.page_size ?? 50)));
   const statusSummary = matrix?.status_summary;
   if (error === 403) return <main className="p-4" data-testid="migration-status-forbidden"><h1 className="text-xl font-semibold">Сводка личных карточек</h1><p className="mt-3">Недостаточно прав для просмотра сводки.</p></main>;
   return <main className="space-y-4 p-4" data-testid="migration-status-page">
-    <div className="flex flex-wrap items-start justify-between gap-3"><div><h1 className="text-xl font-semibold">Сводка личных карточек</h1>{selectedUniverse ? <p className="text-sm text-zinc-500" data-testid="migration-status-calculated-at">Данные рассчитаны: {new Date(selectedUniverse.calculated_at).toLocaleString("ru-RU")}</p> : null}</div><div className="flex gap-2"><Link className="rounded-lg border px-3 py-2 text-sm" href="/directory/personnel/lk">Назад к личным карточкам</Link><button type="button" className="rounded-lg border px-3 py-2 text-sm" onClick={() => setReload((value) => value + 1)} data-testid="migration-status-refresh">Обновить данные отчёта</button></div></div>
+    <div className="flex flex-wrap items-start justify-between gap-3"><div><h1 className="text-xl font-semibold">Сводка личных карточек</h1>{selectedUniverse ? <p className="text-sm text-zinc-500" data-testid="migration-status-calculated-at">Данные рассчитаны: {new Date(selectedUniverse.calculated_at).toLocaleString("ru-RU")}</p> : null}</div><div className="flex gap-2"><Link className="rounded-lg border px-3 py-2 text-sm" href="/directory/personnel/lk">Назад к личным карточкам</Link><button type="button" className="rounded-lg border px-3 py-2 text-sm" onClick={refreshProjection} disabled={!universeId || rebuilding} data-testid="migration-status-refresh">{rebuilding ? "Обновление…" : "Обновить данные отчёта"}</button></div></div>
     {universes.length > 1 ? <label className="block text-sm">Набор миграции<select aria-label="Набор миграции" className="ml-2 rounded border p-2" value={universeId ?? ""} onChange={(event) => replace({ universe_id: event.target.value })} data-testid="migration-status-universe"><option value="">Выберите набор</option>{universes.map((universe) => <option key={universe.universe_id} value={universe.universe_id}>BASE {universe.base_cohort_run_id}{universe.supplemental_cohort_run_ids.length ? `; supplemental: ${universe.supplemental_cohort_run_ids.join(", ")}` : ""}</option>)}</select></label> : null}
     {universes.length === 0 && !loading ? <p data-testid="migration-status-empty">Нет доступных данных отчёта.</p> : null}
     {error && error !== 403 ? <p role="alert" data-testid="migration-status-error">Не удалось загрузить сводку. Повторите попытку.</p> : null}

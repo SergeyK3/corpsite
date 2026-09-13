@@ -15,8 +15,8 @@ class PprStage0CohortRun(Base):
     __tablename__ = "ppr_stage0_cohort_runs"
     __table_args__ = (
         CheckConstraint("run_kind IN ('BASE', 'SUPPLEMENTAL')", name="chk_ppr_s0_run_kind"),
-        CheckConstraint("source_type = 'HR_CONTROL_LIST'", name="chk_ppr_s0_source_type"),
-        CheckConstraint("source_batch_status IN ('APPLY_PENDING','APPLIED','PARTIALLY_APPLIED')", name="chk_ppr_s0_batch_status"),
+        CheckConstraint("source_type IN ('HR_CONTROL_LIST','CANONICAL_HR')", name="chk_ppr_s0_source_type"),
+        CheckConstraint("(source_type='HR_CONTROL_LIST' AND source_batch_status IN ('APPLY_PENDING','APPLIED','PARTIALLY_APPLIED') AND source_batch_id IS NOT NULL) OR (source_type='CANONICAL_HR' AND source_batch_status='CANONICAL' AND source_batch_id IS NULL)", name="chk_ppr_s0_source_binding"),
         CheckConstraint("length(preview_fingerprint) = 64 AND preview_fingerprint ~ '^[0-9a-f]{64}$'", name="chk_ppr_s0_run_fingerprint"),
         Index("uq_ppr_s0_run_fingerprint", "preview_fingerprint", unique=True),
         Index("ix_ppr_s0_run_batch_frozen", "source_batch_id", "frozen_at"),
@@ -24,7 +24,7 @@ class PprStage0CohortRun(Base):
     stage0_cohort_run_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
     run_kind: Mapped[str] = mapped_column(Text, nullable=False)
     supplemental_of_run_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("ppr_stage0_cohort_runs.stage0_cohort_run_id", ondelete="RESTRICT"))
-    source_batch_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("hr_import_batches.batch_id", ondelete="RESTRICT"), nullable=False)
+    source_batch_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("hr_import_batches.batch_id", ondelete="RESTRICT"))
     source_type: Mapped[str] = mapped_column(Text, nullable=False)
     source_batch_status: Mapped[str] = mapped_column(Text, nullable=False)
     preview_fingerprint: Mapped[str] = mapped_column(Text, nullable=False)
@@ -49,8 +49,8 @@ class PprStage0CohortParticipant(Base):
     position: Mapped[int] = mapped_column(Integer, nullable=False)
     employee_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("employees.employee_id", ondelete="RESTRICT"), nullable=False)
     person_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("persons.person_id", ondelete="RESTRICT"), nullable=False)
-    source_batch_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("hr_import_batches.batch_id", ondelete="RESTRICT"), nullable=False)
-    source_row_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("hr_import_rows.row_id", ondelete="RESTRICT"), nullable=False)
+    source_batch_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("hr_import_batches.batch_id", ondelete="RESTRICT"))
+    source_row_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("hr_import_rows.row_id", ondelete="RESTRICT"))
     identity_provenance_record_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("hr_import_normalized_records.normalized_record_id", ondelete="RESTRICT"))
     participant_snapshot_version: Mapped[int] = mapped_column(Integer, nullable=False, server_default="1")
     safe_fingerprint: Mapped[str] = mapped_column(Text, nullable=False)

@@ -16,7 +16,7 @@ def test_person_cells_scope_universe_safe_and_bounded():
         conn.execute(text("update employees set org_unit_id=:u where employee_id=:e"),{"u":unit,"e":employee})
         universe=projection.ensure_universe(conn,base_cohort_run_id=cohort); projection.rebuild_universe(conn,universe_id=universe)
         statements.clear(); result=person_cells(conn,universe_id=universe,person_id=person,scope={"privileged":False,"scope_unit_ids":[unit]})
-        assert result and set(result["cells"])=={"general","education","training"}
+        assert result and set(result["cells"])==set(projection.SECTIONS)
         assert len(statements)==1 and not any(x in str(result).lower() for x in ("iin","fingerprint","payload","document"))
         assert person_cells(conn,universe_id=universe,person_id=person,scope={"privileged":False,"scope_unit_ids":[]}) is None
         assert person_cells(conn,universe_id=999999,person_id=person,scope={"privileged":True,"scope_unit_ids":None}) is None

@@ -49,7 +49,18 @@ def test_role_and_personal_grant_authorize_both_read_endpoints(client, monkeypat
 
 def test_matrix_contract_rejects_missing_or_oversized_page_and_hides_unknown_universe(client, monkeypatch):
     _authorize(monkeypatch, 301, True)
-    assert client.get("/directory/personnel/migration-status").status_code == 422
+    # The parameter-less route resolves the latest visible persisted universe.
+    monkeypatch.setattr(status_router, "list_universes", lambda *_a: [{
+        "universe_id": 7,
+        "base_cohort_run_id": 4,
+        "supplemental_cohort_run_ids": [],
+        "calculated_at": "2026-01-01T00:00:00Z",
+    }])
+    monkeypatch.setattr(status_router, "matrix", lambda *_a, **kwargs: {
+        "universe_id": kwargs["universe_id"], "page": 1, "page_size": 50,
+        "total": 0, "items": [], "counts": [],
+    })
+    assert client.get("/directory/personnel/migration-status").status_code == 200
     assert client.get("/directory/personnel/migration-status", params={"universe_id": 1, "page_size": 101}).status_code == 422
     monkeypatch.setattr(status_router, "matrix", lambda *_a, **_k: None)
     response = client.get("/directory/personnel/migration-status", params={"universe_id": 999})

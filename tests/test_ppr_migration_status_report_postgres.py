@@ -79,7 +79,9 @@ def test_report_query_count_is_bounded_for_rows_pagination_and_aggregation():
         universe, *_ = _fixture(conn)
         statements.clear()
         result = matrix(conn, universe_id=universe, scope={"privileged": True, "scope_unit_ids": None}, page=1, page_size=1, section=None, status=None, reason=None, org_unit_id=None, q=None)
-        assert result and len(statements) == 5
+        # Existence/integrity, page, counts and full-set presentation summary
+        # are bounded set queries; the latter is required for the ten-section UI.
+        assert result and len(statements) == 6
     finally:
         event.remove(conn, "before_cursor_execute", count); tx.rollback(); conn.close()
 

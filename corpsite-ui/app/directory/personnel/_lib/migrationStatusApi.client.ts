@@ -37,6 +37,10 @@ export function getMigrationStatusMatrix(params: MigrationMatrixParams): Promise
   return apiFetchJson(MIGRATION_STATUS_PATH, { query: params });
 }
 
+export function rebuildMigrationStatusUniverse(universeId: number): Promise<{ universe_id: number; projection_rows: number }> {
+  return apiFetchJson(`${MIGRATION_STATUS_PATH}/universes/${universeId}/rebuild`, { method: "POST" });
+}
+
 export function getPersonMigrationStatus(personId: number, universeId: number): Promise<{ universe_id: number; cells: Partial<Record<MigrationSection, MigrationCell>> }> {
   return apiFetchJson(`${MIGRATION_STATUS_PATH}/persons/${personId}`, { query: { universe_id: universeId } });
 }

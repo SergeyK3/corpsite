@@ -2,12 +2,12 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import MigrationStatusMatrixPageClient from "./MigrationStatusMatrixPageClient";
 
-const listMock = vi.fn(); const matrixMock = vi.fn(); const replaceMock = vi.fn(); const router = { replace: replaceMock };
+const listMock = vi.fn(); const matrixMock = vi.fn(); const rebuildMock = vi.fn(); const replaceMock = vi.fn(); const router = { replace: replaceMock };
 let search = new URLSearchParams();
 vi.mock("next/navigation", () => ({ useRouter: () => router, usePathname: () => "/directory/personnel/migration-status", useSearchParams: () => search }));
 vi.mock("../_lib/migrationStatusApi.client", async () => {
   const actual = await vi.importActual<object>("../_lib/migrationStatusApi.client");
-  return { ...actual, listMigrationStatusUniverses: () => listMock(), getMigrationStatusMatrix: (...args: unknown[]) => matrixMock(...args) };
+  return { ...actual, listMigrationStatusUniverses: () => listMock(), getMigrationStatusMatrix: (...args: unknown[]) => matrixMock(...args), rebuildMigrationStatusUniverse: (...args: unknown[]) => rebuildMock(...args) };
 });
 
 const universe = { universe_id: 7, base_cohort_run_id: 2, supplemental_cohort_run_ids: [], calculated_at: "2026-01-01T00:00:00Z" };
@@ -49,7 +49,7 @@ const report = {
 };
 
 describe("MigrationStatusMatrixPageClient", () => {
-  beforeEach(() => { search = new URLSearchParams("universe_id=7&page=2&q=иванов"); listMock.mockReset(); matrixMock.mockReset(); replaceMock.mockReset(); listMock.mockResolvedValue({ items: [universe] }); matrixMock.mockResolvedValue(report); });
+  beforeEach(() => { search = new URLSearchParams("universe_id=7&page=2&q=иванов"); listMock.mockReset(); matrixMock.mockReset(); rebuildMock.mockReset(); replaceMock.mockReset(); listMock.mockResolvedValue({ items: [universe] }); matrixMock.mockResolvedValue(report); rebuildMock.mockResolvedValue({ universe_id: 7, projection_rows: 20 }); });
   afterEach(() => { cleanup(); vi.restoreAllMocks(); });
 
   it("renders the separate language and additional-information columns in a horizontally scrolling table", async () => {
@@ -58,9 +58,9 @@ describe("MigrationStatusMatrixPageClient", () => {
     expect(screen.queryByText("Общие сведения: первый прогон")).not.toBeInTheDocument();
     const table = await screen.findByTestId("migration-status-matrix");
     expect(Array.from(table.querySelectorAll("thead th")).map((header) => header.textContent)).toEqual([
-      "Сотрудник", "Общие сведения", "Образование", "Обучение и повышение квалификации", "Родственники", "Воинский учёт", "Трудовая биография", "Трудовая деятельность / послужной список", "Знание иностранных языков", "Дополнительные сведения", "Награды", "Учёные степени и звания",
+      "Сотрудник", "Общие сведения", "Образование", "Обучение и повышение квалификации", "Родственники", "Воинский учёт", "Трудовая биография", "Трудовая деятельность / послужной список", "Знание иностранных языков", "Награды", "Учёные степени и звания",
     ]);
-    expect(table.querySelectorAll("tbody td")).toHaveLength(11);
+    expect(table.querySelectorAll("tbody td")).toHaveLength(10);
     expect(screen.getByTestId("migration-status-table-scroll").className).toContain("overflow-x-scroll");
     expect(screen.getByTestId("migration-status-table-scroll").className).toContain("w-full");
     expect(table.className).toContain("min-w-[2200px]");
@@ -154,7 +154,6 @@ describe("MigrationStatusMatrixPageClient", () => {
     expect(hrefFor("Воинский учёт")).toContain("section=military&migration_universe_id=7&return_to=");
     expect(hrefFor("Трудовая деятельность / послужной список")).toContain("section=assignment&migration_universe_id=7&return_to=");
     expect(hrefFor("Знание иностранных языков")).toContain("section=languages&migration_universe_id=7&return_to=");
-    expect(hrefFor("Дополнительные сведения")).toContain("section=additional&migration_universe_id=7&return_to=");
     expect(hrefFor("Награды")).toContain("section=additional&migration_universe_id=7&return_to=");
     expect(hrefFor("Учёные степени и звания")).toContain("section=additional&migration_universe_id=7&return_to=");
   });
@@ -166,12 +165,12 @@ describe("MigrationStatusMatrixPageClient", () => {
     expect(await screen.findByTestId("migration-status-scrollbar-control")).toHaveAttribute("max", "1786");
   });
 
-  it("keeps the filters, permission-gated universe selection and GET refresh behavior", async () => {
+  it("keeps filters and rebuilds the selected persisted universe on refresh", async () => {
     render(<MigrationStatusMatrixPageClient />); await screen.findByTestId("migration-status-matrix");
     expect(screen.getByLabelText("Раздел")).toHaveTextContent("Учёные степени и звания");
     fireEvent.change(screen.getByLabelText("Статус"), { target: { value: "ACCEPTED" } });
     expect(replaceMock).toHaveBeenCalledWith("/directory/personnel/migration-status?universe_id=7&q=%D0%B8%D0%B2%D0%B0%D0%BD%D0%BE%D0%B2&status=ACCEPTED");
-    const before = listMock.mock.calls.length; fireEvent.click(screen.getByTestId("migration-status-refresh")); await waitFor(() => expect(listMock.mock.calls.length).toBeGreaterThan(before));
+    const before = listMock.mock.calls.length; fireEvent.click(screen.getByTestId("migration-status-refresh")); await waitFor(() => expect(rebuildMock).toHaveBeenCalledWith(7)); await waitFor(() => expect(listMock.mock.calls.length).toBeGreaterThan(before));
   });
 
   it("auto-selects one accessible universe and requires a selection when several are accessible", async () => {

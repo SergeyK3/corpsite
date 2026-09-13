@@ -4,6 +4,7 @@ from app.db.engine import engine
 from app.directory.rbac import compute_scope,require_personnel_visibility_or_403
 from app.security.admin_permissions import PPR_MIGRATION_STATUS_READ_PERMISSION,has_admin_permission
 from app.services.ppr_migration_status_report_service import ProjectionIntegrityError,STATUS_LABELS,REASON_LABELS,build_presentation_status_summary,list_universes,matrix,person_cells
+from app.services.ppr_migration_status_projection_service import rebuild_universe
 from app.services.hr_import_training_review_service import training_batch_summary_projection
 from app.services.hr_import_general_first_pass_service import general_first_pass_run_summary,general_first_pass_statuses
 from app.ppr_migration.education_kind_policy import REVIEW_REQUIRED as EDUCATION_KIND_REVIEW_REQUIRED, classify_education_kind
@@ -19,6 +20,14 @@ from sqlalchemy import text
 from sqlalchemy.exc import ProgrammingError
 router=APIRouter(prefix='/directory/personnel/migration-status',tags=['ppr-migration-status'])
 _FALLBACK_UNIVERSE_ID = 1414
+
+
+def _resolve_universe_id(conn, scope: dict, requested: int | None) -> int | None:
+    """Use the newest visible persisted universe when the caller omits it."""
+    if requested is not None:
+        return requested
+    items = list_universes(conn, scope)
+    return int(items[0]["universe_id"]) if items else None
 
 
 def _section_status_from_review_statuses(statuses: set[str]) -> tuple[str, str]:
@@ -159,6 +168,17 @@ def universes(user:dict=Depends(get_current_user)):
         try:return {'items':list_universes(c,_scope(user))}
         except ProgrammingError:return {'items':[{'universe_id':_FALLBACK_UNIVERSE_ID,'base_cohort_run_id':_FALLBACK_UNIVERSE_ID,'supplemental_cohort_run_ids':[],'calculated_at':'2026-09-12T00:00:00+00:00'}]}
 
+
+@router.post('/universes/{universe_id}/rebuild')
+def rebuild(universe_id: int, user: dict = Depends(get_current_user)):
+    """Re-read canonical facts and atomically replace one persisted universe."""
+    with engine.begin() as c:
+        scope = _scope(user)
+        if matrix(c, universe_id=universe_id, scope=scope, page=1, page_size=1,
+                  section=None, status=None, reason=None, org_unit_id=None, q=None) is None:
+            raise HTTPException(404, detail={'code': 'MIGRATION_STATUS_UNIVERSE_NOT_FOUND'})
+        return {'universe_id': universe_id, 'projection_rows': rebuild_universe(c, universe_id=universe_id)}
+
 def _fallback_matrix(c, *, page:int, page_size:int, q:str|None, section:str|None=None, status:str|None=None, reason:str|None=None, org_group_id:int|None=None, org_unit_id:int|None=None, position_id:int|None=None):
     training={x['employee_id']:x for x in training_batch_summary_projection(c,batch_id=1414)['employees']}
     normalized_sections = _normalized_section_statuses(c, batch_id=1414)
@@ -272,9 +292,11 @@ def person_status(person_id:int,universe_id:int=Query(...,ge=1),user:dict=Depend
     if r is None:raise HTTPException(404,detail={'code':'MIGRATION_STATUS_PERSON_NOT_FOUND'})
     return r
 @router.get('')
-def report(universe_id:int=Query(...,ge=1),page:int=Query(1,ge=1),page_size:int=Query(50,ge=1,le=100),section:str|None=None,status:str|None=None,reason:str|None=None,org_unit_id:int|None=Query(None,ge=1),org_group_id:int|None=Query(None,ge=1),position_id:int|None=Query(None,ge=1),q:str|None=None,user:dict=Depends(get_current_user)):
+def report(universe_id:int|None=Query(None,ge=1),page:int=Query(1,ge=1),page_size:int=Query(50,ge=1,le=100),section:str|None=None,status:str|None=None,reason:str|None=None,org_unit_id:int|None=Query(None,ge=1),org_group_id:int|None=Query(None,ge=1),position_id:int|None=Query(None,ge=1),q:str|None=None,user:dict=Depends(get_current_user)):
     try:
-        with engine.connect() as c:r=matrix(c,universe_id=universe_id,scope=_scope(user),page=page,page_size=page_size,section=section,status=status,reason=reason,org_group_id=org_group_id,org_unit_id=org_unit_id,position_id=position_id,q=q)
+        with engine.connect() as c:
+            scope=_scope(user); resolved_universe_id=_resolve_universe_id(c,scope,universe_id)
+            r=None if resolved_universe_id is None else matrix(c,universe_id=resolved_universe_id,scope=scope,page=page,page_size=page_size,section=section,status=status,reason=reason,org_group_id=org_group_id,org_unit_id=org_unit_id,position_id=position_id,q=q)
     except ProgrammingError:
         with engine.connect() as c:r=_fallback_matrix(c,page=page,page_size=page_size,q=q,section=section,status=status,reason=reason,org_group_id=org_group_id,org_unit_id=org_unit_id,position_id=position_id)
     except ValueError:raise HTTPException(422,detail={'code':'INVALID_MIGRATION_STATUS_FILTER'})

@@ -2,6 +2,7 @@
 from __future__ import annotations
 from datetime import datetime
 from sqlalchemy import BigInteger, DateTime, ForeignKey, Text, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from app.db.base import Base
 
@@ -36,6 +37,11 @@ class PprMigrationSectionStatusProjection(Base):
     status_code: Mapped[str] = mapped_column(Text, nullable=False)
     reason_code: Mapped[str] = mapped_column(Text, nullable=False)
     source_cohort_run_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    # For a canonical-HR cohort, a section may be evaluated against the same
+    # import-profile source used by the dossier without making that source a
+    # cohort member.  This is safe provenance only, never a copy of HR data.
+    source_batch_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("hr_import_batches.batch_id", ondelete="RESTRICT"))
+    import_profile_provenance: Mapped[dict | None] = mapped_column(JSONB)
     source_fingerprint: Mapped[str] = mapped_column(Text, nullable=False)
     target_fingerprint: Mapped[str] = mapped_column(Text, nullable=False)
     binding_fingerprint: Mapped[str] = mapped_column(Text, nullable=False)
