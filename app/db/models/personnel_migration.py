@@ -464,6 +464,10 @@ class PersonStatusFact(Base):
             "(fact_kind = 'DISABILITY') OR (disability_group IS NULL AND icd10_code IS NULL)",
             name="chk_person_status_facts_pension_shape",
         ),
+        CheckConstraint(
+            "pension_kind IS NULL OR pension_kind IN ('AGE', 'SERVICE')",
+            name="chk_person_status_facts_pension_kind",
+        ),
         Index("ix_person_status_facts_person_kind", "person_id", "fact_kind", "version"),
         Index("ix_person_status_facts_source_row", "source_row_id"),
         Index(
@@ -471,6 +475,7 @@ class PersonStatusFact(Base):
             "source_row_id",
             "fact_kind",
             "version",
+            "source_fingerprint",
             unique=True,
         ),
     )
@@ -486,6 +491,7 @@ class PersonStatusFact(Base):
     effective_date: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     disability_group: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     icd10_code: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    pension_kind: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     review_status: Mapped[str] = mapped_column(Text, nullable=False)
     review_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     source_batch_id: Mapped[int] = mapped_column(
@@ -502,6 +508,7 @@ class PersonStatusFact(Base):
         nullable=True,
     )
     version: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default=text("1"))
+    is_deleted: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))
     correction_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_by_user_id: Mapped[Optional[int]] = mapped_column(
         BigInteger, ForeignKey("users.user_id", ondelete="RESTRICT"), nullable=True

@@ -3,6 +3,7 @@
 It reads source systems only.  The public API deliberately exposes no HTTP route.
 """
 from __future__ import annotations
+from datetime import date
 import hashlib, json
 from typing import Any, Iterable
 from sqlalchemy import text
@@ -14,6 +15,7 @@ from app.db.models.personnel_migration import (
     MILITARY_LIFECYCLE_STATUSES, RELATIONSHIP_TYPES, SECTION_SOURCE_TYPES,
     TRAINING_KINDS, VERIFICATION_STATUSES,
 )
+from app.services.hr_import_additional_status_service import FACT_PENSION, parse_control_list_note
 
 SECTIONS = (
     "general",
@@ -32,6 +34,8 @@ SECTIONS = (
 IMPLEMENTED_SECTIONS = ("general", "education", "training")
 CANONICAL_COHORT_POLICY_VERSION = "PPR_STAGE0_CANONICAL_HR_V1"
 IMPORT_PROFILE_POLICY_VERSION = "PPR_MIGRATION_STATUS_IMPORT_PROFILE_V1"
+PENSION_AGE_REVIEW_REASON = "PENSION_AGE_REQUIRES_CONFIRMATION"
+IMPORT_NOTE_PENSION_REVIEW_REASON = "IMPORT_NOTE_PENSION_REQUIRES_CONFIRMATION"
 
 def _hash(value: Any) -> str:
     return hashlib.sha256(json.dumps(value, sort_keys=True, default=str, separators=(",", ":")).encode()).hexdigest()
@@ -187,13 +191,73 @@ def _canonical_section_evidence(conn: Connection, facts: list[dict[str, Any]]) -
         for row in conn.execute(text("""
           SELECT person_id,fact_kind,review_status,review_reason,source_batch_id,source_row_id,source_fingerprint
           FROM public.person_status_facts f WHERE person_id=ANY(:ids)
+            AND NOT f.is_deleted
             AND NOT EXISTS (SELECT 1 FROM public.person_status_facts newer WHERE newer.supersedes_fact_id=f.status_fact_id)
         """), {"ids": person_ids}).mappings():
             result[int(row["person_id"])]["additional"].append(dict(row))
     return result
 
 
-def _canonical_cell(f: dict[str, Any], section: str, records: list[dict[str, Any]]) -> dict[str, Any]:
+def _as_date(value: Any) -> date | None:
+    if isinstance(value, date):
+        return value
+    try:
+        return date.fromisoformat(str(value or ""))
+    except ValueError:
+        return None
+
+
+def _sex_from_iin(value: Any) -> str | None:
+    digits = "".join(character for character in str(value or "") if character.isdigit())
+    if len(digits) != 12:
+        return None
+    return {"1": "male", "3": "male", "5": "male", "2": "female", "4": "female", "6": "female"}.get(digits[6])
+
+
+def _normalized_sex(value: Any) -> str | None:
+    raw = str(value or "").strip().lower()
+    if raw in {"male", "m", "м", "муж", "мужской"}:
+        return "male"
+    if raw in {"female", "f", "ж", "жен", "женский"}:
+        return "female"
+    return None
+
+
+def _age_on(birth_date: date, report_date: date) -> int:
+    return report_date.year - birth_date.year - ((report_date.month, report_date.day) < (birth_date.month, birth_date.day))
+
+
+def _requires_pension_age_confirmation(*, general_record: dict[str, Any] | None, import_card: dict[str, Any] | None, report_date: date) -> bool:
+    """Use canonical identity first, then the already-selected import profile.
+
+    This is an assessment-only signal.  It neither creates nor infers a
+    pension fact, pension kind, or effective date.
+    """
+    basic = ((import_card or {}).get("profile") or {}).get("basic") or {}
+    general_record = general_record or {}
+    birth_date = _as_date(general_record.get("birth_date")) or _as_date(basic.get("birth_date"))
+    sex = (
+        _normalized_sex(basic.get("sex"))
+        or _sex_from_iin(general_record.get("iin"))
+        or _sex_from_iin(basic.get("iin"))
+    )
+    if birth_date is None or sex is None:
+        return False
+    threshold = 63 if sex == "male" else 61
+    return _age_on(birth_date, report_date) >= threshold
+
+
+def _selected_import_note_has_pension(import_card: dict[str, Any] | None) -> bool:
+    """Recognize only an explicit pension fact in the already-selected row."""
+    parsed = parse_control_list_note((import_card or {}).get("note_raw"))
+    return any(item.fact_kind == FACT_PENSION for item in parsed.facts)
+
+
+def _canonical_cell(
+    f: dict[str, Any], section: str, records: list[dict[str, Any]], *,
+    general_record: dict[str, Any] | None = None, import_card: dict[str, Any] | None = None,
+    report_date: date | None = None,
+) -> dict[str, Any]:
     """Classify one canonical card section; absence is a real result, never a placeholder."""
     source = _hash({"section": section, "source_type": "CANONICAL_HR", "records": records})
     target = _hash({"person": f["person_id"], "person_updated": f["person_updated_at"]})
@@ -202,6 +266,43 @@ def _canonical_cell(f: dict[str, Any], section: str, records: list[dict[str, Any
             "stage1_participant_id": None, "pmf_run_id": None, "evidence_kind": "CANONICAL_CARD",
             "policy_version": CANONICAL_COHORT_POLICY_VERSION, "source_fingerprint": source,
             "target_fingerprint": target, "binding_fingerprint": binding}
+    if section == "additional":
+        # Evaluate this before the generic no-records branch: an absent
+        # additional profile is exactly the condition that requires a pension
+        # age confirmation check.
+        facts = [record for record in records if record.get("fact_kind") in {"DISABILITY", "PENSION"}]
+        has_pension = any(record.get("fact_kind") == "PENSION" for record in facts)
+        if not has_pension and _selected_import_note_has_pension(import_card):
+            if import_card and import_card.get("batch_id") is not None and import_card.get("row_id") is not None:
+                base.update({
+                    "source_batch_id": int(import_card["batch_id"]),
+                    "source_row_id": int(import_card["row_id"]),
+                    "import_profile_provenance": {
+                        "batch_id": int(import_card["batch_id"]), "row_id": int(import_card["row_id"]),
+                        "override_origin": str(import_card.get("override_origin") or "none"),
+                    },
+                })
+            base["source_fingerprint"] = _hash({
+                "section": section, "records": records, "explicit_pension_note": True,
+                "batch_id": (import_card or {}).get("batch_id"), "row_id": (import_card or {}).get("row_id"),
+            })
+            return {**base, "status_code": "REVIEW_REQUIRED", "reason_code": IMPORT_NOTE_PENSION_REVIEW_REASON}
+        age_review = not has_pension and _requires_pension_age_confirmation(
+            general_record=general_record, import_card=import_card, report_date=report_date or date.today(),
+        )
+        if age_review:
+            # Include only the boolean assessment and report date in the safe
+            # fingerprint; no birth date, sex, IIN, or source text is stored.
+            base["source_fingerprint"] = _hash({"section": section, "records": records, "pension_age_review": True, "report_date": str(report_date or date.today())})
+            return {**base, "status_code": "REVIEW_REQUIRED", "reason_code": PENSION_AGE_REVIEW_REASON}
+        if not facts:
+            return {**base, "status_code": "NO_SOURCE_DATA", "reason_code": "CANONICAL_ADDITIONAL_ABSENT"}
+        source = next((record for record in facts if record.get("source_batch_id") is not None), None)
+        if source:
+            base.update({"source_batch_id": source["source_batch_id"], "source_row_id": source["source_row_id"], "import_profile_provenance": {"batch_id": source["source_batch_id"], "row_id": source["source_row_id"], "override_origin": "excel_verified_note"}})
+        if any(record.get("review_status") != "AUTO_READY" for record in facts):
+            return {**base, "status_code": "REVIEW_REQUIRED", "reason_code": "IMPORT_NORMALIZED_RECORDS_REVIEW_REQUIRED"}
+        return {**base, "status_code": "AUTO_READY", "reason_code": "IMPORT_NORMALIZED_RECORDS_AUTO_READY"}
     if not records:
         return {**base, "status_code": "NO_SOURCE_DATA", "reason_code": f"CANONICAL_{section.upper()}_ABSENT"}
     if section == "general":
@@ -236,16 +337,6 @@ def _canonical_cell(f: dict[str, Any], section: str, records: list[dict[str, Any
         if len(records) != 1: return {**base, "status_code": "REVIEW_REQUIRED", "reason_code": "EMPLOYMENT_HISTORY_PRIMARY_ASSIGNMENT_AMBIGUOUS"}
         missing = _missing(("org_unit_id", records[0].get("org_unit_id")), ("position_id", records[0].get("position_id")), ("start_date", records[0].get("start_date")))
         if missing: return {**base, "status_code": "REVIEW_REQUIRED", "reason_code": f"EMPLOYMENT_HISTORY_MISSING_{missing.upper()}"}
-    elif section == "additional":
-        facts = [record for record in records if record.get("fact_kind") in {"DISABILITY", "PENSION"}]
-        if not facts:
-            return {**base, "status_code": "NO_SOURCE_DATA", "reason_code": "CANONICAL_ADDITIONAL_ABSENT"}
-        source = next((record for record in facts if record.get("source_batch_id") is not None), None)
-        if source:
-            base.update({"source_batch_id": source["source_batch_id"], "source_row_id": source["source_row_id"], "import_profile_provenance": {"batch_id": source["source_batch_id"], "row_id": source["source_row_id"], "override_origin": "excel_verified_note"}})
-        if any(record.get("review_status") != "AUTO_READY" for record in facts):
-            return {**base, "status_code": "REVIEW_REQUIRED", "reason_code": "IMPORT_NORMALIZED_RECORDS_REVIEW_REQUIRED"}
-        return {**base, "status_code": "AUTO_READY", "reason_code": "IMPORT_NORMALIZED_RECORDS_AUTO_READY"}
     else:
         profile = records[0].get("profile") if records else {}
         if not isinstance(profile, dict): return {**base, "status_code": "REVIEW_REQUIRED", "reason_code": "ADDITIONAL_PROFILE_INVALID"}
@@ -530,7 +621,11 @@ def rebuild_universe(conn: Connection, *, universe_id: int) -> int:
             if fact.get("source_type") == "CANONICAL_HR":
                 status = (_import_profile_cell(conn, fact, section, import_card_cache)
                           if section in {"education", "training", "awards", "academic_degrees_titles"}
-                          else _canonical_cell(fact, section, canonical_evidence[int(fact["person_id"])][section]))
+                          else _canonical_cell(
+                              fact, section, canonical_evidence[int(fact["person_id"])][section],
+                              general_record=(canonical_evidence[int(fact["person_id"])]["general"] or [None])[0],
+                              import_card=import_card_cache.get(int(fact["employee_id"])),
+                          ))
             else:
                 candidate=candidates.get((int(fact["stage0_cohort_run_id"]),int(fact["person_id"]),section))
                 status = _status(conn,fact,section,candidate,previous.get((int(fact["person_id"]),section)))

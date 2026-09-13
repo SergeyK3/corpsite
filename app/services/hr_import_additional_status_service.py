@@ -228,7 +228,7 @@ def current_status_fact_rows(conn: Connection, *, employee_ids: Iterable[int] | 
                        f.review_status, f.review_reason, f.source_batch_id,
                        f.source_row_id, f.version, f.created_at
                 FROM public.person_status_facts f
-                WHERE NOT EXISTS (
+                WHERE NOT f.is_deleted AND NOT EXISTS (
                     SELECT 1 FROM public.person_status_facts newer
                     WHERE newer.supersedes_fact_id=f.status_fact_id
                 )

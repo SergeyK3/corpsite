@@ -106,6 +106,7 @@ class PprAdditionalReadSlice:
     academic_titles_none: bool
     qualification_categories_version: str = ""
     status_facts: tuple[dict[str, Any], ...] = ()
+    source_note_hint: str | None = None
 
     @classmethod
     def empty(cls) -> PprAdditionalReadSlice:
@@ -121,6 +122,7 @@ class PprAdditionalReadSlice:
             academic_titles=(),
             academic_titles_none=False,
             status_facts=(),
+            source_note_hint=None,
         )
 
 

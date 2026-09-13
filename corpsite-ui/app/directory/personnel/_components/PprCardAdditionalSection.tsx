@@ -22,10 +22,14 @@ import type {
   PprQualificationCategoryRecordResponse,
   PprAdditionalProfileResponse,
 } from "../_lib/pprQueryTypes";
+import PprAdditionalStatusFactsEditor from "./PprAdditionalStatusFactsEditor";
 
 type Props = {
   additional: PprAdditionalProfileResponse;
   mode?: "languages" | "category" | "notes" | "additional";
+  personId?: number;
+  editableStatusFacts?: boolean;
+  onStatusFactsSaved?: () => void;
 };
 
 function NoneDeclaredMessage({ label }: { label: string }) {
@@ -219,34 +223,48 @@ function AcademicTitlesBlock({
   );
 }
 
+function SourceNoteHint({ value }: { value?: string | null }) {
+  if (!value) return null;
+  return <aside className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100" data-testid="ppr-additional-source-note-hint">
+    <span className="font-medium">Исходный текст из импорта — подсказка кадровику:</span>{" "}{value}
+  </aside>;
+}
+
 function StatusFactsBlock({ additional }: { additional: PprAdditionalProfileResponse }) {
-  if (additional.status_facts.length === 0) {
-    return <EmptyRecordsMessage label="Примечание" />;
-  }
+  const pension = additional.status_facts.filter((fact) => fact.fact_kind === "PENSION");
+  const disability = additional.status_facts.filter((fact) => fact.fact_kind === "DISABILITY");
   return (
-    <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800" data-testid="ppr-status-facts-table">
-      <table className="min-w-full divide-y divide-zinc-200 dark:divide-zinc-800">
+    <div className="space-y-5" data-testid="ppr-status-facts-table">
+      <SourceNoteHint value={additional.source_note_hint} />
+      <div className="space-y-2"><h4 className="text-sm font-semibold">Пенсионный статус</h4><div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800"><table className="min-w-full divide-y divide-zinc-200 dark:divide-zinc-800">
         <thead className="bg-zinc-50 dark:bg-zinc-900/60">
           <tr>
-            <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500">Статус</th>
-            <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500">Дата</th>
-            <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500">Группа инвалидности</th>
-            <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500">МКБ-10</th>
+            <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500">Вид</th>
+            <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500">Дата установления</th>
             <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500">Статус проверки</th>
           </tr>
         </thead>
         <tbody>
-          {additional.status_facts.map((fact) => (
+          {pension.length === 0 ? <tr><td colSpan={3} className="px-3 py-2 text-sm text-zinc-500">Записей пока нет.</td></tr> : pension.map((fact) => (
             <tr key={fact.status_fact_id} data-testid={`ppr-status-fact-${fact.status_fact_id}`}>
-              <td className="px-3 py-2 text-sm">{fact.fact_kind === "PENSION" ? "Пенсионный статус" : "Инвалидность"}</td>
+              <td className="px-3 py-2 text-sm">{fact.pension_kind === "AGE" ? "По возрасту" : fact.pension_kind === "SERVICE" ? "За выслугу лет" : "Не указан"}</td>
               <td className="whitespace-nowrap px-3 py-2 text-sm">{fact.effective_date || "Не указана"}</td>
-              <td className="px-3 py-2 text-sm">{fact.disability_group || "Не указана"}</td>
-              <td className="px-3 py-2 text-sm">{fact.icd10_code || "Не указан"}</td>
               <td className="px-3 py-2 text-sm">{fact.review_status === "AUTO_READY" ? "Готово к согласованию" : "Требуется ручная проверка"}</td>
             </tr>
           ))}
         </tbody>
-      </table>
+      </table></div></div>
+      <div className="space-y-2"><h4 className="text-sm font-semibold">Инвалидность</h4><div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800"><table className="min-w-full divide-y divide-zinc-200 dark:divide-zinc-800">
+        <thead className="bg-zinc-50 dark:bg-zinc-900/60"><tr>
+          <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500">Группа</th>
+          <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500">Дата установления</th>
+          <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500">Код заболевания по МКБ-10</th>
+          <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500">Статус проверки</th>
+        </tr></thead>
+        <tbody>{disability.length === 0 ? <tr><td colSpan={4} className="px-3 py-2 text-sm text-zinc-500">Записей пока нет.</td></tr> : disability.map((fact) => <tr key={fact.status_fact_id} data-testid={`ppr-status-fact-${fact.status_fact_id}`}>
+          <td className="px-3 py-2 text-sm">{fact.disability_group || "Не указана"}</td><td className="px-3 py-2 text-sm">{fact.effective_date || "Не указана"}</td><td className="px-3 py-2 text-sm">{fact.icd10_code || "Не указан"}</td><td className="px-3 py-2 text-sm">{fact.review_status === "AUTO_READY" ? "Готово к согласованию" : "Требуется ручная проверка"}</td>
+        </tr>)}</tbody>
+      </table></div></div>
     </div>
   );
 }
@@ -277,7 +295,7 @@ function QualificationCategoriesBlock({ items }: { items: PprQualificationCatego
   );
 }
 
-export default function PprCardAdditionalSection({ additional, mode = "additional" }: Props) {
+export default function PprCardAdditionalSection({ additional, mode = "additional", personId, editableStatusFacts = false, onStatusFactsSaved }: Props) {
   if (mode === "languages") {
     return (
       <div className="space-y-3" data-testid="ppr-foreign-languages-section">
@@ -295,7 +313,7 @@ export default function PprCardAdditionalSection({ additional, mode = "additiona
     <div className="space-y-8" data-testid="ppr-additional-section">
       <section className="space-y-3 print:hidden" data-testid="ppr-additional-status-facts-block">
         <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Примечание</h3>
-        <StatusFactsBlock additional={additional} />
+        {editableStatusFacts && personId && onStatusFactsSaved ? <><SourceNoteHint value={additional.source_note_hint} /><PprAdditionalStatusFactsEditor personId={personId} facts={additional.status_facts} onSaved={onStatusFactsSaved} /></> : <StatusFactsBlock additional={additional} />}
       </section>
 
       <section className="space-y-3" data-testid="ppr-additional-awards-block">

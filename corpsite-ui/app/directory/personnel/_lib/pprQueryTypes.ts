@@ -232,6 +232,7 @@ export type PprStatusFactResponse = {
   effective_date: string | null;
   disability_group: string | null;
   icd10_code: string | null;
+  pension_kind: "AGE" | "SERVICE" | null;
   review_status: "AUTO_READY" | "REVIEW_REQUIRED";
   review_reason: string | null;
   version: number;
@@ -250,6 +251,7 @@ export type PprAdditionalProfileResponse = {
   academic_titles: PprAdditionalAcademicTitleResponse[];
   academic_titles_none: boolean;
   status_facts: PprStatusFactResponse[];
+  source_note_hint?: string | null;
 };
 
 export type PprHireDefaultsResponse = PprIntendedEmploymentResponse & {

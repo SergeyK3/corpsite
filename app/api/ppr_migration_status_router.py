@@ -3,6 +3,7 @@ from app.auth import get_current_user
 from app.db.engine import engine
 from app.directory.rbac import compute_scope,require_personnel_visibility_or_403,require_personnel_admin_or_403
 from app.services.ppr_qualification_category_service import save_categories,CategoryVersionConflict
+from app.services.ppr_additional_note_service import save_note_facts,NoteFactVersionConflict
 from app.security.admin_permissions import PPR_MIGRATION_STATUS_READ_PERMISSION,has_admin_permission
 from app.services.ppr_migration_status_report_service import ProjectionIntegrityError,STATUS_LABELS,REASON_LABELS,build_presentation_status_summary,list_universes,matrix,person_cells
 from app.services.ppr_migration_status_projection_service import rebuild_universe
@@ -35,6 +36,29 @@ def update_qualification_categories(person_id:int, body:dict=Body(default={}), u
             return save_categories(conn,person_id=person_id,employee_id=int(employee_id),expected_version=body.get('expected_version'),rows=rows,actor_id=int(user['user_id']))
         except CategoryVersionConflict: raise HTTPException(409,detail='qualification categories were changed; reload the card')
         except ValueError as exc: raise HTTPException(422,detail=str(exc))
+
+
+@router.put('/persons/{person_id}/additional-status-facts')
+def update_additional_status_facts(person_id:int, body:dict=Body(default={}), user:dict=Depends(get_current_user)):
+    """Save structured note tables through the ordinary personnel-admin gate."""
+    require_personnel_admin_or_403(user)
+    pension_rows=body.get('pension_rows')
+    disability_rows=body.get('disability_rows')
+    expected_fact_ids=body.get('expected_fact_ids')
+    if not isinstance(pension_rows,list) or not isinstance(disability_rows,list) or not isinstance(expected_fact_ids,list):
+        raise HTTPException(422,detail='pension_rows, disability_rows and expected_fact_ids arrays are required')
+    with engine.begin() as conn:
+        employee_id=conn.execute(text('SELECT employee_id FROM employees WHERE person_id=:p ORDER BY employee_id LIMIT 1'),{'p':person_id}).scalar_one_or_none()
+        if employee_id is None: raise HTTPException(404,detail='person employee context not found')
+        try:
+            return save_note_facts(
+                conn,person_id=person_id,employee_id=int(employee_id),pension_rows=pension_rows,
+                disability_rows=disability_rows,expected_fact_ids=expected_fact_ids,actor_id=int(user['user_id']),
+            )
+        except NoteFactVersionConflict:
+            raise HTTPException(409,detail='status facts were changed; reload the card')
+        except ValueError as exc:
+            raise HTTPException(422,detail=str(exc))
 
 
 def _resolve_universe_id(conn, scope: dict, requested: int | None) -> int | None:

@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 
 from app.ppr.domain.identity_models import IdentityResolution
 from app.ppr.domain.models import HR_RELATIONSHIP_CANDIDATE, PprEnvelope
-from app.ppr.read.additional_reader import load_person_additional_profile, load_person_status_facts
+from app.ppr.read.additional_reader import load_person_additional_profile, load_person_status_facts, load_person_status_note_hint
 from app.ppr.read.event_summary_reader import PprEventSummaryReader
 from app.ppr.read.models import (
     PprAdditionalReadSlice,
@@ -110,6 +110,9 @@ class PprCompositeReadOrchestrator:
             academic_titles=tuple(additional_raw.get("academic_titles") or []),
             academic_titles_none=bool(additional_raw.get("academic_titles_none")),
             status_facts=tuple(load_person_status_facts(uow.connection, person_id=resolved_person_id)),
+            source_note_hint=load_person_status_note_hint(
+                uow.connection, person_id=resolved_person_id, employee_id=identity_resolution.employee_id,
+            ),
         )
 
         return PprCompositeReadModel(

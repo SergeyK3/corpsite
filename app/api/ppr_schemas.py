@@ -87,6 +87,7 @@ class PprStatusFactResponse(BaseModel):
     effective_date: date | None = None
     disability_group: str | None = None
     icd10_code: str | None = None
+    pension_kind: str | None = None
     review_status: str
     review_reason: str | None = None
     version: int
@@ -114,6 +115,7 @@ class PprAdditionalProfileResponse(BaseModel):
     academic_titles: list[PprAcademicTitleRecordResponse] = Field(default_factory=list)
     academic_titles_none: bool = False
     status_facts: list[PprStatusFactResponse] = Field(default_factory=list)
+    source_note_hint: str | None = None
     qualification_categories_version: str = ""
 
 

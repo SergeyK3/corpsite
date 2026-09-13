@@ -25,6 +25,8 @@ STATUS_LABELS = {
     "REJECTED": "Отклонено",
 }
 REASON_LABELS = {
+    "IMPORT_NOTE_PENSION_REQUIRES_CONFIRMATION": "В исходном примечании указан пенсионный статус — требуется подтверждение",
+    "PENSION_AGE_REQUIRES_CONFIRMATION": "Достигнут пенсионный возраст — требуется подтверждение",
     "CANONICAL_REQUIRED_FIELDS_VALID": "Обязательные поля карточки заполнены и проходят действующие проверки.",
     "GENERAL_MISSING_BIRTH_DATE": "Не указана дата рождения.",
     "GENERAL_MISSING_LAST_NAME": "Не указана фамилия.",

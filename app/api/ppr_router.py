@@ -22,6 +22,7 @@ from app.api.ppr_schemas import (
 from app.auth import get_current_user
 from app.db.models.person_photos import MAX_PHOTO_BYTE_SIZE, MIME_TYPE_JPEG
 from app.directory.rbac import require_personnel_admin_or_403
+from app.security.personnel_admin_guard import evaluate_personnel_admin_access
 from app.directory.common import as_http500
 from app.person_photos.application.manual_upload_service import register_manual_person_photo
 from app.person_photos.domain.models import RegisterManualPersonPhotoRequest
@@ -47,6 +48,11 @@ from app.services.ppr_query_access_service import (
 router = APIRouter(prefix="/api/ppr", tags=["ppr"])
 
 _query_service = PprQueryApplicationService()
+
+
+def _include_additional_status_facts(user: dict[str, Any]) -> bool:
+    """The personnel-admin gate already authorizes note editing and its source hint."""
+    return include_sensitive_identity_fields(user) or evaluate_personnel_admin_access(user)
 
 
 @router.get("/persons/{person_id}/photo")
@@ -171,7 +177,7 @@ def get_ppr_composite_by_person(
             source="ppr_query_api",
             include_sensitive_identity=include_sensitive_identity_fields(user),
             include_military_restricted=include_military_restricted_fields(user),
-            include_status_facts=include_sensitive_identity_fields(user),
+            include_status_facts=_include_additional_status_facts(user),
         )
     except HTTPException:
         raise
@@ -352,7 +358,7 @@ def get_ppr_composite_by_employee(
             source="ppr_query_api",
             include_sensitive_identity=include_sensitive_identity_fields(user),
             include_military_restricted=include_military_restricted_fields(user),
-            include_status_facts=include_sensitive_identity_fields(user),
+            include_status_facts=_include_additional_status_facts(user),
         )
     except HTTPException:
         raise

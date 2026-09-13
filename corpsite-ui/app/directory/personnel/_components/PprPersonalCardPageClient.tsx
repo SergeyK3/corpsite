@@ -535,7 +535,12 @@ export default function PprPersonalCardPageClient({
                 description="Структурированные сведения об инвалидности и пенсионном статусе."
               >
                 <MigrationStatusBlock cell={migrationCells.additional} />
-                <PprCardAdditionalSection additional={ppr.additional} />
+                <PprCardAdditionalSection
+                  additional={ppr.additional}
+                  personId={resolvedPersonId ?? undefined}
+                  editableStatusFacts={Boolean(canEditPprSections && currentUser?.has_personnel_admin)}
+                  onStatusFactsSaved={() => { void loadCard(); }}
+                />
               </PprCardSection>
 
               {employmentBiographyRoute ? (

@@ -358,6 +358,9 @@ def get_employee_import_cards_for_projection(
             "row_id": int(row["row_id"]),
             "employee_id": employee_id,
             "profile": _resolve_merged_profile(payload, meta),
+            # Projection-only evidence.  It is intentionally not surfaced by
+            # the import-card response serializer or audit trail.
+            "note_raw": str(payload.get("note_raw", "") or ""),
             "override_origin": (
                 "employee_import_profile_overrides" if employee_override is not None
                 else "hr_import_rows.profile_override" if row_override else "none"

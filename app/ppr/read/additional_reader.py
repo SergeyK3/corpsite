@@ -137,7 +137,7 @@ def _load_import_additional_profile(conn: Connection, employee_id: int) -> dict[
 
 
 def load_person_status_facts(conn: Connection, *, person_id: int) -> list[dict[str, Any]]:
-    """Current structured status versions only; raw note provenance stays internal."""
+    """Current PPR status facts, with the original note available only to the card."""
     exists = conn.execute(text("SELECT to_regclass('public.person_status_facts') IS NOT NULL")).scalar_one()
     if not exists:
         return []
@@ -145,9 +145,12 @@ def load_person_status_facts(conn: Connection, *, person_id: int) -> list[dict[s
         text(
             """
             SELECT f.status_fact_id, f.fact_kind, f.effective_date, f.disability_group,
-                   f.icd10_code, f.review_status, f.review_reason, f.version, f.created_at
+                   f.icd10_code, f.pension_kind, f.review_status, f.review_reason,
+                   f.version, f.created_at, r.normalized_payload->>'note_raw' AS source_note_hint
             FROM public.person_status_facts f
+            LEFT JOIN public.hr_import_rows r ON r.row_id=f.source_row_id
             WHERE f.person_id=:person_id
+              AND NOT f.is_deleted
               AND NOT EXISTS (
                 SELECT 1 FROM public.person_status_facts newer
                 WHERE newer.supersedes_fact_id=f.status_fact_id
@@ -158,6 +161,62 @@ def load_person_status_facts(conn: Connection, *, person_id: int) -> list[dict[s
         {"person_id": int(person_id)},
     ).mappings().all()
     return [dict(row) for row in rows]
+
+
+def load_person_status_note_hint(conn: Connection, *, person_id: int, employee_id: int | None = None) -> str | None:
+    """Original imported note for the permitted PPR-card hint, never for audit/reporting."""
+    exists = conn.execute(text("SELECT to_regclass('public.person_status_facts') IS NOT NULL")).scalar_one()
+    if not exists:
+        return None
+    historical = conn.execute(
+        text(
+            """
+            SELECT r.normalized_payload->>'note_raw'
+            FROM public.person_status_facts f
+            JOIN public.hr_import_rows r ON r.row_id=f.source_row_id
+            WHERE f.person_id=:person_id
+              AND COALESCE(r.normalized_payload->>'note_raw', '') <> ''
+            ORDER BY f.created_at DESC, f.status_fact_id DESC
+            LIMIT 1
+            """
+        ),
+        {"person_id": int(person_id)},
+    ).scalar_one_or_none()
+    if historical:
+        return str(historical)
+    if employee_id is None:
+        # A PPR card opened by person_id has no employee context in the
+        # identity resolver.  Use only an unambiguous canonical relation —
+        # never a name-based import match — to retain the import-card path.
+        employee_ids = conn.execute(
+            text(
+                """
+                SELECT employee_id FROM public.employees
+                WHERE person_id=:person_id AND COALESCE(is_active, true) IS TRUE
+                ORDER BY employee_id
+                LIMIT 2
+                """
+            ),
+            {"person_id": int(person_id)},
+        ).scalars().all()
+        if len(employee_ids) != 1:
+            return None
+        employee_id = int(employee_ids[0])
+    # The card uses the same deterministic selection as import-card.  The raw
+    # note is returned only through this permitted PPR-card read path.
+    from app.services.hr_import_additional_status_service import FACT_PENSION, parse_control_list_note
+    from app.services.hr_import_employee_card_service import EmployeeImportCardNotFoundError, get_employee_import_card
+
+    try:
+        card = get_employee_import_card(conn, int(employee_id))
+    except EmployeeImportCardNotFoundError:
+        return None
+    note = conn.execute(
+        text("SELECT normalized_payload->>'note_raw' FROM public.hr_import_rows WHERE row_id=:row_id"),
+        {"row_id": int(card["row_id"])},
+    ).scalar_one_or_none()
+    parsed = parse_control_list_note(note)
+    return str(note) if any(item.fact_kind == FACT_PENSION for item in parsed.facts) else None
 
 
 def load_person_additional_profile(

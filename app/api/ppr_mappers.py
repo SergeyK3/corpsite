@@ -307,6 +307,7 @@ def _additional_response(
                 effective_date=item.get("effective_date"),
                 disability_group=item.get("disability_group"),
                 icd10_code=item.get("icd10_code"),
+                pension_kind=item.get("pension_kind"),
                 review_status=str(item["review_status"]),
                 review_reason=item.get("review_reason"),
                 version=int(item["version"]),
@@ -314,6 +315,10 @@ def _additional_response(
             )
             for item in additional.status_facts
         ] if include_status_facts else [],
+        # The source text is intentionally exposed only through the existing
+        # PPR-card visibility path; it is never included in the event journal
+        # or migration-status projection.
+        source_note_hint=additional.source_note_hint if include_status_facts else None,
     )
 
 
