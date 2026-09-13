@@ -112,9 +112,10 @@ def test_presentation_status_summary_counts_full_filtered_set_and_missing_cells(
     assert counts[("employment_biography", "NO_SOURCE_DATA")] == 2
     assert counts[("employment_history", "NO_SOURCE_DATA")] == 2
     assert sum(counts[("general", status["code"])] for status in summary["statuses"]) == len(items)
-    assert {section["code"] for section in summary["sections"]} >= {
-        "employment_biography", "employment_history", "personnel_orders", "personnel_appeals", "adaptation",
-        "foreign_languages", "additional", "awards", "academic_degrees_titles",
+    assert {section["code"] for section in summary["sections"]} == {
+        "general", "education", "training", "category", "relatives", "military",
+        "employment_biography", "employment_history", "foreign_languages",
+        "additional", "awards", "academic_degrees_titles",
     }
 
 

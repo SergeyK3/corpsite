@@ -82,12 +82,9 @@ def _icd10(value: str) -> str | None:
 
 
 def _reason_for_disability(*, effective_date: date | None, group: str | None, icd10: str | None) -> str | None:
-    if effective_date is None:
-        return REASON_DATE_MISSING
-    if group is None:
-        return REASON_DISABILITY_GROUP_MISSING
-    if icd10 is None:
-        return REASON_ICD10_MISSING
+    # A control-list note is a status marker, not a medical dossier.  An
+    # explicit disability statement is sufficient; missing clinical details
+    # must not be invented or made mandatory for this narrow source.
     return None
 
 
@@ -116,7 +113,7 @@ def parse_control_list_note(value: object) -> NoteParseResult:
             )
         )
     if has_pension:
-        reason = None if effective_date else REASON_DATE_MISSING
+        reason = None
         facts.append(
             ParsedStatusFact(
                 FACT_PENSION,

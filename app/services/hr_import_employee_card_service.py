@@ -248,6 +248,124 @@ def get_employee_import_card(conn: Connection, employee_id: int) -> dict[str, An
     return result
 
 
+def get_employee_import_cards_for_projection(
+    conn: Connection, employee_ids: list[int],
+) -> dict[int, dict[str, Any]]:
+    """Load the import-card evidence for a projection in bounded queries.
+
+    This uses precisely the selection precedence of
+    :func:`get_employee_import_card`: a directly-linked import row, then a
+    roster row with the active IIN, then a roster row with the normalized
+    employee name.  Unlike the HTTP-card endpoint it intentionally omits the
+    per-card ``latest import`` integrity diagnostic: it is not evidence used by
+    migration-status, and calculating it once per employee turned a universe
+    rebuild into an N+1 workload.
+
+    The result contains only the fields used by the projection.  Row- and
+    employee-level profile overrides are applied by the same
+    ``_resolve_merged_profile`` helper as the ordinary import-card endpoint.
+    """
+    requested = sorted({int(employee_id) for employee_id in employee_ids})
+    if not requested:
+        return {}
+
+    rows = conn.execute(
+        text(
+            f"""
+            WITH requested AS (
+                SELECT unnest(CAST(:employee_ids AS bigint[])) AS employee_id
+            ), identities AS (
+                SELECT DISTINCT ON (ei.employee_id)
+                       ei.employee_id,
+                       regexp_replace(COALESCE(ei.identity_value, ''), '[^0-9]', '', 'g') AS iin
+                FROM public.employee_identities ei
+                JOIN requested q ON q.employee_id=ei.employee_id
+                WHERE ei.identity_type='IIN' AND ei.valid_to IS NULL
+                ORDER BY ei.employee_id, ei.is_primary DESC, ei.identity_id
+            ), names AS (
+                SELECT e.employee_id,
+                       lower(replace(trim(COALESCE(e.full_name, '')), 'С‘', 'Рµ')) AS norm_name
+                FROM public.employees e
+                JOIN requested q ON q.employee_id=e.employee_id
+            ), candidates AS (
+                SELECT q.employee_id, 0 AS source_priority,
+                       r.row_id,r.batch_id,r.source_sheet,r.source_row_number,r.normalized_payload,
+                       r.profile_override,r.profile_status,r.profile_review_status,r.employee_id AS row_employee_id,
+                       b.imported_at
+                FROM requested q
+                JOIN public.hr_import_rows r ON r.employee_id=q.employee_id
+                JOIN public.hr_import_batches b ON b.batch_id=r.batch_id
+                UNION ALL
+                SELECT q.employee_id, 1 AS source_priority,
+                       r.row_id,r.batch_id,r.source_sheet,r.source_row_number,r.normalized_payload,
+                       r.profile_override,r.profile_status,r.profile_review_status,r.employee_id AS row_employee_id,
+                       b.imported_at
+                FROM requested q
+                JOIN identities i ON i.employee_id=q.employee_id AND length(i.iin)>0
+                JOIN public.hr_import_rows r
+                  ON regexp_replace(COALESCE(r.normalized_payload->>'iin', ''), '[^0-9]', '', 'g')=i.iin
+                JOIN public.hr_import_batches b ON b.batch_id=r.batch_id
+                WHERE {_roster_row_filters()}
+                UNION ALL
+                SELECT q.employee_id, 2 AS source_priority,
+                       r.row_id,r.batch_id,r.source_sheet,r.source_row_number,r.normalized_payload,
+                       r.profile_override,r.profile_status,r.profile_review_status,r.employee_id AS row_employee_id,
+                       b.imported_at
+                FROM requested q
+                JOIN names n ON n.employee_id=q.employee_id AND n.norm_name<>''
+                JOIN public.hr_import_rows r
+                  ON lower(replace(trim(COALESCE(r.normalized_payload->>'full_name', '')), 'С‘', 'Рµ'))=n.norm_name
+                JOIN public.hr_import_batches b ON b.batch_id=r.batch_id
+                WHERE {_roster_row_filters()}
+            ), chosen AS (
+                SELECT *, row_number() OVER (
+                    PARTITION BY employee_id
+                    ORDER BY source_priority,
+                             CASE WHEN length(regexp_replace(COALESCE(normalized_payload->>'iin', ''), '[^0-9]', '', 'g'))=12 THEN 0 ELSE 1 END,
+                             imported_at DESC NULLS LAST, row_id DESC
+                ) AS choice_rank
+                FROM candidates
+            )
+            SELECT c.*, o.profile_override AS employee_profile_override,
+                   o.profile_status AS employee_profile_status,
+                   o.profile_review_status AS employee_profile_review_status
+            FROM chosen c
+            LEFT JOIN public.employee_import_profile_overrides o ON o.employee_id=c.employee_id
+            WHERE c.choice_rank=1
+            """
+        ),
+        {"employee_ids": requested},
+    ).mappings()
+
+    cards: dict[int, dict[str, Any]] = {}
+    for row in rows:
+        payload = dict(row["normalized_payload"] or {})
+        payload.pop("metadata", None)
+        employee_override = row.get("employee_profile_override")
+        row_override = row.get("profile_override")
+        meta = {
+            "profile_override": employee_override if employee_override is not None else row_override,
+            "profile_status": (
+                row.get("employee_profile_status") if employee_override is not None else row.get("profile_status")
+            ) or PROFILE_STATUS_ACTIVE,
+            "profile_review_status": (
+                row.get("employee_profile_review_status") if employee_override is not None else row.get("profile_review_status")
+            ) or REVIEW_STATUS_PENDING,
+        }
+        employee_id = int(row["employee_id"])
+        cards[employee_id] = {
+            "batch_id": int(row["batch_id"]),
+            "row_id": int(row["row_id"]),
+            "employee_id": employee_id,
+            "profile": _resolve_merged_profile(payload, meta),
+            "override_origin": (
+                "employee_import_profile_overrides" if employee_override is not None
+                else "hr_import_rows.profile_override" if row_override else "none"
+            ),
+        }
+    return cards
+
+
 def save_employee_import_card(
     conn: Connection,
     employee_id: int,

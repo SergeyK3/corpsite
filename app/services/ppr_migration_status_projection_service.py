@@ -19,11 +19,13 @@ SECTIONS = (
     "general",
     "education",
     "training",
+    "category",
     "relatives",
     "military",
     "employment_biography",
     "employment_history",
     "foreign_languages",
+    "additional",
     "awards",
     "academic_degrees_titles",
 )
@@ -177,10 +179,17 @@ def _canonical_section_evidence(conn: Connection, facts: list[dict[str, Any]]) -
                 if isinstance(profile, str):
                     try: profile = json.loads(profile)
                     except json.JSONDecodeError: profile = {}
-                for target in ("foreign_languages", "awards", "academic_degrees_titles"):
+                for target in ("foreign_languages", "category", "awards", "academic_degrees_titles"):
                     result[person_id][target].append({"profile": profile, "updated_at": row.get("updated_at")})
             else:
                 result[person_id][section].append(dict(row))
+    if conn.execute(text("SELECT to_regclass('public.person_status_facts')")).scalar_one() is not None:
+        for row in conn.execute(text("""
+          SELECT person_id,fact_kind,review_status,review_reason,source_batch_id,source_row_id,source_fingerprint
+          FROM public.person_status_facts f WHERE person_id=ANY(:ids)
+            AND NOT EXISTS (SELECT 1 FROM public.person_status_facts newer WHERE newer.supersedes_fact_id=f.status_fact_id)
+        """), {"ids": person_ids}).mappings():
+            result[int(row["person_id"])]["additional"].append(dict(row))
     return result
 
 
@@ -227,12 +236,42 @@ def _canonical_cell(f: dict[str, Any], section: str, records: list[dict[str, Any
         if len(records) != 1: return {**base, "status_code": "REVIEW_REQUIRED", "reason_code": "EMPLOYMENT_HISTORY_PRIMARY_ASSIGNMENT_AMBIGUOUS"}
         missing = _missing(("org_unit_id", records[0].get("org_unit_id")), ("position_id", records[0].get("position_id")), ("start_date", records[0].get("start_date")))
         if missing: return {**base, "status_code": "REVIEW_REQUIRED", "reason_code": f"EMPLOYMENT_HISTORY_MISSING_{missing.upper()}"}
+    elif section == "additional":
+        facts = [record for record in records if record.get("fact_kind") in {"DISABILITY", "PENSION"}]
+        if not facts:
+            return {**base, "status_code": "NO_SOURCE_DATA", "reason_code": "CANONICAL_ADDITIONAL_ABSENT"}
+        source = next((record for record in facts if record.get("source_batch_id") is not None), None)
+        if source:
+            base.update({"source_batch_id": source["source_batch_id"], "source_row_id": source["source_row_id"], "import_profile_provenance": {"batch_id": source["source_batch_id"], "row_id": source["source_row_id"], "override_origin": "excel_verified_note"}})
+        if any(record.get("review_status") != "AUTO_READY" for record in facts):
+            return {**base, "status_code": "REVIEW_REQUIRED", "reason_code": "IMPORT_NORMALIZED_RECORDS_REVIEW_REQUIRED"}
+        return {**base, "status_code": "AUTO_READY", "reason_code": "IMPORT_NORMALIZED_RECORDS_AUTO_READY"}
     else:
         profile = records[0].get("profile") if records else {}
         if not isinstance(profile, dict): return {**base, "status_code": "REVIEW_REQUIRED", "reason_code": "ADDITIONAL_PROFILE_INVALID"}
         if section == "foreign_languages":
             entries, none = profile.get("foreign_languages") or [], profile.get("foreign_languages_none") is True
             invalid = any(not str(x.get("language") or "").strip() or not str(x.get("proficiency") or "").strip() for x in entries if isinstance(x, dict))
+        elif section == "category":
+            entries, none = profile.get("qualification_categories") or [], False
+            source_entry = next((x for x in entries if isinstance(x, dict) and isinstance(x.get("provenance"), dict)), None)
+            if source_entry:
+                provenance = source_entry["provenance"]
+                if provenance.get("source_batch_id") is not None:
+                    base.update({"source_batch_id": provenance.get("source_batch_id"), "source_row_id": provenance.get("source_row_id"), "import_profile_provenance": provenance})
+            if not entries:
+                return {**base, "status_code": "NO_SOURCE_DATA", "reason_code": "CANONICAL_CATEGORY_ABSENT"}
+            if any(not isinstance(x, dict) for x in entries):
+                return {**base, "status_code": "REVIEW_REQUIRED", "reason_code": "CATEGORY_RECORD_INVALID"}
+            review = next((x for x in entries if str(x.get("review_status") or "REVIEW_REQUIRED") != "AUTO_READY"), None)
+            if review:
+                return {**base, "status_code": "REVIEW_REQUIRED", "reason_code": str(review.get("review_reason") or "CATEGORY_REQUIRES_MANUAL_REVIEW")}
+            invalid = any(
+                not str(x.get("specialty") or "").strip()
+                or str(x.get("category") or "") not in {"highest", "first", "second"}
+                or not str(x.get("assigned_at") or "").strip()
+                for x in entries
+            )
         elif section == "awards":
             entries, none = profile.get("awards") or [], profile.get("awards_none") is True
             invalid = any(not (str(x.get("category") or "").strip() or str(x.get("name") or x.get("title") or "").strip()) for x in entries if isinstance(x, dict))
@@ -357,7 +396,9 @@ def _import_profile_cell(conn: Connection, f: dict[str, Any], section: str,
     records = (list(profile.get(profile_records_key) or []) if profile_records_key
                else list((profile.get("degrees") or {}).get("records") or []))
     row_id, batch_id = int(card["row_id"]), int(card["batch_id"])
-    origin = _import_override_origin(conn, employee_id, row_id)
+    # Projection preloads the exact same card selection in one bounded query.
+    # Keep the direct helper fallback for callers/tests that pass no preload.
+    origin = card.get("override_origin") or _import_override_origin(conn, employee_id, row_id)
     provenance = {"batch_id": batch_id, "row_id": row_id, "override_origin": origin}
     source = _hash({"section": section, "profile": profile, "provenance": provenance})
     common = {**base, "source_fingerprint": source,
@@ -467,6 +508,21 @@ def rebuild_universe(conn: Connection, *, universe_id: int) -> int:
     facts = _facts(conn, universe_id)
     rows=[]; candidates=_candidate_cache(conn,universe_id)
     import_card_cache: dict[int, dict[str, Any] | None] = {}
+    canonical_import_employee_ids = [
+        int(fact["employee_id"])
+        for fact in facts
+        if fact.get("source_type") == "CANONICAL_HR"
+    ]
+    if canonical_import_employee_ids:
+        # Reuse the import-card selection and profile merge rules, but fetch all
+        # cards needed by this universe in bounded set queries.  A missing card
+        # is cached too, so a no-source employee never triggers an N+1 fallback.
+        from app.services.hr_import_employee_card_service import get_employee_import_cards_for_projection
+        preloaded_cards = get_employee_import_cards_for_projection(conn, canonical_import_employee_ids)
+        import_card_cache = {
+            employee_id: preloaded_cards.get(employee_id)
+            for employee_id in set(canonical_import_employee_ids)
+        }
     canonical_evidence = _canonical_section_evidence(conn, facts) if any(f.get("source_type") == "CANONICAL_HR" for f in facts) else {}
     previous={(int(x["person_id"]),str(x["section_code"])):dict(x) for x in conn.execute(text("SELECT person_id,section_code,status_code,source_fingerprint,policy_version FROM ppr_migration_section_status_projection WHERE universe_id=:u FOR UPDATE"),{"u":universe_id}).mappings()}
     for fact in facts:

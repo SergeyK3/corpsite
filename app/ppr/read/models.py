@@ -97,12 +97,14 @@ class PprIntendedEmploymentReadSlice:
 class PprAdditionalReadSlice:
     foreign_languages: tuple[dict[str, str], ...]
     foreign_languages_none: bool
+    qualification_categories: tuple[dict[str, Any], ...]
     awards: tuple[dict[str, str], ...]
     awards_none: bool
     academic_degrees: tuple[dict[str, Any], ...]
     academic_degrees_none: bool
     academic_titles: tuple[dict[str, Any], ...]
     academic_titles_none: bool
+    qualification_categories_version: str = ""
     status_facts: tuple[dict[str, Any], ...] = ()
 
     @classmethod
@@ -110,6 +112,8 @@ class PprAdditionalReadSlice:
         return cls(
             foreign_languages=(),
             foreign_languages_none=False,
+            qualification_categories=(),
+            qualification_categories_version="",
             awards=(),
             awards_none=False,
             academic_degrees=(),

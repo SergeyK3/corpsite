@@ -10,11 +10,13 @@ PPR_MIGRATION_SECTIONS = (
     "general",
     "education",
     "training",
+    "category",
     "relatives",
     "military",
     "employment_biography",
     "employment_history",
     "foreign_languages",
+    "additional",
     "awards",
     "academic_degrees_titles",
 )

@@ -4,6 +4,7 @@ export type PprCardSectionId =
   | "general"
   | "education"
   | "training"
+  | "category"
   | "family"
   | "military"
   | "languages"
@@ -25,10 +26,11 @@ export const PPR_CARD_SECTIONS: PprCardSectionDef[] = [
   { id: "general", title: "Общие сведения" },
   { id: "education", title: "Образование" },
   { id: "training", title: "Обучение и повышение квалификации" },
+  { id: "category", title: "Категория" },
   { id: "family", title: "Родственники" },
   { id: "military", title: "Воинский учёт" },
   { id: "languages", title: "Знание иностранных языков" },
-  { id: "additional", title: "Дополнительные сведения" },
+  { id: "additional", title: "Примечание" },
   { id: "employment_biography", title: "Трудовая биография" },
   { id: "intended_employment", title: "Предполагаемое трудоустройство" },
   { id: "assignment", title: "Трудовая деятельность" },

@@ -40,6 +40,7 @@ def empty_additional_profile() -> dict[str, Any]:
     return {
         "foreign_languages": [],
         "foreign_languages_none": False,
+        "qualification_categories": [],
         "awards": [],
         "awards_none": False,
         "academic_degrees": [],
@@ -63,6 +64,23 @@ def normalize_foreign_language_entry(item: dict[str, Any]) -> dict[str, str]:
     return {
         "language": str(item.get("language") or "").strip(),
         "proficiency": str(item.get("proficiency") or "").strip(),
+    }
+
+
+def normalize_qualification_category_entry(item: dict[str, Any]) -> dict[str, Any]:
+    """Keep the import provenance, but never retain the source cell text."""
+    category = str(item.get("category") or "").strip().lower()
+    if category not in {"highest", "first", "second"}:
+        category = ""
+    provenance = item.get("provenance") if isinstance(item.get("provenance"), dict) else {}
+    return {
+        "specialty": str(item.get("specialty") or "").strip(),
+        "category": category,
+        "assigned_at": str(item.get("assigned_at") or "").strip(),
+        "assigned_at_calculated": bool(item.get("assigned_at_calculated")),
+        "review_status": str(item.get("review_status") or "REVIEW_REQUIRED").strip(),
+        "review_reason": str(item.get("review_reason") or "").strip() or None,
+        "provenance": deepcopy(provenance),
     }
 
 
@@ -202,6 +220,10 @@ def normalize_additional_profile(raw: dict[str, Any] | None) -> dict[str, Any]:
             normalize_foreign_language_entry(item) for item in _normalize_list(source.get("foreign_languages"))
         ],
         "foreign_languages_none": _normalize_bool(source.get("foreign_languages_none")),
+        "qualification_categories": [
+            normalize_qualification_category_entry(item)
+            for item in _normalize_list(source.get("qualification_categories"))
+        ],
         "awards": [normalize_award_entry(item) for item in _normalize_list(source.get("awards"))],
         "awards_none": _normalize_bool(source.get("awards_none")),
         "academic_degrees": academic_degrees,
@@ -215,6 +237,7 @@ def normalize_additional_profile(raw: dict[str, Any] | None) -> dict[str, Any]:
             not in {
                 "foreign_languages",
                 "foreign_languages_none",
+                "qualification_categories",
                 "awards",
                 "awards_none",
                 "academic_degrees",
@@ -237,6 +260,7 @@ def additional_profile_has_content(profile: dict[str, Any]) -> bool:
         return True
     return bool(
         normalized.get("foreign_languages")
+        or normalized.get("qualification_categories")
         or normalized.get("awards")
         or normalized.get("academic_degrees")
         or normalized.get("academic_titles")

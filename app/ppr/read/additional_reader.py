@@ -169,8 +169,10 @@ def load_person_additional_profile(
     metadata_profile = _load_metadata_additional_profile(conn, person_id)
     intake_profile = _load_intake_additional_profile(conn, person_id)
     import_profile = _load_import_additional_profile(conn, employee_id) if employee_id else None
-    merged = merge_additional_profiles(metadata_profile, intake_profile, import_profile)
-    return merged or empty_additional_profile()
+    merged = merge_additional_profiles(metadata_profile, intake_profile, import_profile) or empty_additional_profile()
+    version = conn.execute(text("SELECT updated_at FROM public.personnel_record_metadata WHERE person_id=:person_id"), {"person_id": int(person_id)}).scalar_one_or_none()
+    merged["qualification_categories_version"] = str(version or "")
+    return merged
 
 
 def save_person_additional_profile(conn: Connection, *, person_id: int, profile: dict[str, Any]) -> None:

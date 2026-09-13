@@ -53,6 +53,7 @@ import PprCardFamilySection from "./PprCardFamilySection";
 import PprCardMilitarySection from "./PprCardMilitarySection";
 import PprCardEmploymentBiographySection from "./PprCardEmploymentBiographySection";
 import PprCardAdditionalSection from "./PprCardAdditionalSection";
+import PprQualificationCategoryEditor from "./PprQualificationCategoryEditor";
 import PprCardEventHistorySection from "./PprCardEventHistorySection";
 import PprCardIntendedEmploymentSection from "./PprCardIntendedEmploymentSection";
 import PprCardApplicationsSection from "./PprCardApplicationsSection";
@@ -99,6 +100,7 @@ export default function PprPersonalCardPageClient({
   const currentUser = useCurrentUser();
   const searchParams = useSearchParams();
   const initialSection = parsePprCardSection(searchParams.get("section"));
+  const editCategory = initialSection === "category" && searchParams.get("edit") === "1";
   const returnToHref = React.useMemo(
     () => resolvePersonalCardBackHref(parseReturnToFromSearchParams(searchParams)),
     [searchParams],
@@ -481,6 +483,15 @@ export default function PprPersonalCardPageClient({
               </PprCardSection>
 
               <PprCardSection
+                id="category"
+                title="Категория"
+                description="Сведения о квалификационной категории."
+              >
+                <MigrationStatusBlock cell={migrationCells.category} />
+                {editCategory && currentUser?.has_personnel_admin && resolvedPersonId ? <PprQualificationCategoryEditor personId={resolvedPersonId} items={ppr.additional.qualification_categories ?? []} version={ppr.additional.qualification_categories_version ?? ""} onSaved={() => { void loadCard(); router.push(returnToHref); }} /> : <PprCardAdditionalSection additional={ppr.additional} mode="category" />}
+              </PprCardSection>
+
+              <PprCardSection
                 id="family"
                 title="Родственники"
                 description="Сведения о близких родственниках."
@@ -520,8 +531,8 @@ export default function PprPersonalCardPageClient({
 
               <PprCardSection
                 id="additional"
-                title="Дополнительные сведения"
-                description="Структурированные сведения из примечаний, награды, учёные степени и звания."
+                title="Примечание"
+                description="Структурированные сведения об инвалидности и пенсионном статусе."
               >
                 <MigrationStatusBlock cell={migrationCells.additional} />
                 <PprCardAdditionalSection additional={ppr.additional} />

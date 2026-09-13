@@ -216,6 +216,16 @@ export type PprAdditionalAcademicTitleResponse = {
   degree_type?: string | null;
 };
 
+export type PprQualificationCategoryRecordResponse = {
+  specialty: string;
+  category: "highest" | "first" | "second" | string;
+  assigned_at: string;
+  assigned_at_calculated: boolean;
+  review_status: "AUTO_READY" | "REVIEW_REQUIRED" | string;
+  review_reason: string | null;
+  source_fingerprint?: string | null;
+};
+
 export type PprStatusFactResponse = {
   status_fact_id: number;
   fact_kind: "DISABILITY" | "PENSION";
@@ -231,6 +241,8 @@ export type PprStatusFactResponse = {
 export type PprAdditionalProfileResponse = {
   foreign_languages: PprAdditionalForeignLanguageResponse[];
   foreign_languages_none: boolean;
+  qualification_categories?: PprQualificationCategoryRecordResponse[];
+  qualification_categories_version?: string;
   awards: PprAdditionalAwardResponse[];
   awards_none: boolean;
   academic_degrees: PprAdditionalAcademicDegreeResponse[];

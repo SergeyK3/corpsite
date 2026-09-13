@@ -1,7 +1,8 @@
-from fastapi import APIRouter,Depends,HTTPException,Query
+from fastapi import APIRouter,Depends,HTTPException,Query,Body
 from app.auth import get_current_user
 from app.db.engine import engine
-from app.directory.rbac import compute_scope,require_personnel_visibility_or_403
+from app.directory.rbac import compute_scope,require_personnel_visibility_or_403,require_personnel_admin_or_403
+from app.services.ppr_qualification_category_service import save_categories,CategoryVersionConflict
 from app.security.admin_permissions import PPR_MIGRATION_STATUS_READ_PERMISSION,has_admin_permission
 from app.services.ppr_migration_status_report_service import ProjectionIntegrityError,STATUS_LABELS,REASON_LABELS,build_presentation_status_summary,list_universes,matrix,person_cells
 from app.services.ppr_migration_status_projection_service import rebuild_universe
@@ -20,6 +21,20 @@ from sqlalchemy import text
 from sqlalchemy.exc import ProgrammingError
 router=APIRouter(prefix='/directory/personnel/migration-status',tags=['ppr-migration-status'])
 _FALLBACK_UNIVERSE_ID = 1414
+
+@router.put('/persons/{person_id}/qualification-categories')
+def update_qualification_categories(person_id:int, body:dict=Body(default={}), user:dict=Depends(get_current_user)):
+    """Canonical HR correction; authorization is the existing personnel-admin gate."""
+    require_personnel_admin_or_403(user)
+    rows=body.get('qualification_categories')
+    if not isinstance(rows,list): raise HTTPException(422,detail='qualification_categories array is required')
+    with engine.begin() as conn:
+        employee_id=conn.execute(text('SELECT employee_id FROM employees WHERE person_id=:p ORDER BY employee_id LIMIT 1'),{'p':person_id}).scalar_one_or_none()
+        if employee_id is None: raise HTTPException(404,detail='person employee context not found')
+        try:
+            return save_categories(conn,person_id=person_id,employee_id=int(employee_id),expected_version=body.get('expected_version'),rows=rows,actor_id=int(user['user_id']))
+        except CategoryVersionConflict: raise HTTPException(409,detail='qualification categories were changed; reload the card')
+        except ValueError as exc: raise HTTPException(422,detail=str(exc))
 
 
 def _resolve_universe_id(conn, scope: dict, requested: int | None) -> int | None:

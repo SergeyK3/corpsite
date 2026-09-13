@@ -21,17 +21,17 @@ def test_complete_disability_note_is_structured_without_retaining_source_text() 
     assert fact.review_status == REVIEW_READY
 
 
-def test_incomplete_disability_and_pension_require_review_without_inventing_fields() -> None:
+def test_unambiguous_disability_and_pension_are_ready_without_inventing_fields() -> None:
     disability = parse_control_list_note("инвалид III группы")
     assert disability.facts[0].fact_kind == FACT_DISABILITY
     assert disability.facts[0].effective_date is None
     assert disability.facts[0].icd10_code is None
-    assert disability.facts[0].review_status == REVIEW_REQUIRED
+    assert disability.facts[0].review_status == REVIEW_READY
 
     pension = parse_control_list_note("пенсионер")
     assert pension.facts[0].fact_kind == FACT_PENSION
     assert pension.facts[0].effective_date is None
-    assert pension.facts[0].review_status == REVIEW_REQUIRED
+    assert pension.facts[0].review_status == REVIEW_READY
 
 
 def test_maternity_note_is_ignored_and_other_note_is_review_only() -> None:

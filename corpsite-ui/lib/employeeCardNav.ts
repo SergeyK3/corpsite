@@ -60,6 +60,7 @@ export type PprMigrationCardSection =
   | "general"
   | "education"
   | "training"
+  | "category"
   | "family"
   | "military"
   | "employment_biography"

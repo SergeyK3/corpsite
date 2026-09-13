@@ -19,12 +19,13 @@ import type {
   PprAdditionalAcademicTitleResponse,
   PprAdditionalAwardResponse,
   PprAdditionalForeignLanguageResponse,
+  PprQualificationCategoryRecordResponse,
   PprAdditionalProfileResponse,
 } from "../_lib/pprQueryTypes";
 
 type Props = {
   additional: PprAdditionalProfileResponse;
-  mode?: "languages" | "notes" | "additional";
+  mode?: "languages" | "category" | "notes" | "additional";
 };
 
 function NoneDeclaredMessage({ label }: { label: string }) {
@@ -250,6 +251,32 @@ function StatusFactsBlock({ additional }: { additional: PprAdditionalProfileResp
   );
 }
 
+const CATEGORY_LABELS: Record<string, string> = {
+  highest: "Высшая",
+  first: "Первая",
+  second: "Вторая",
+};
+
+function QualificationCategoriesBlock({ items }: { items: PprQualificationCategoryRecordResponse[] }) {
+  if (items.length === 0) return <EmptyRecordsMessage label="Категория" />;
+  return (
+    <div className="overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
+      <table className="min-w-full divide-y divide-zinc-200 dark:divide-zinc-800" data-testid="ppr-qualification-categories-table">
+        <thead className="bg-zinc-50 dark:bg-zinc-900/60"><tr>
+          <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500">Специальность</th>
+          <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500">Категория</th>
+          <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500">Дата присвоения</th>
+        </tr></thead>
+        <tbody>{items.map((item, index) => <tr key={`ppr-category-${index}`} data-testid={`ppr-qualification-category-row-${index}`}>
+          <td className="px-3 py-2 text-sm">{intakeAdditionalCellValue(item.specialty)}</td>
+          <td className="px-3 py-2 text-sm">{CATEGORY_LABELS[item.category] ?? intakeAdditionalCellValue(item.category)}</td>
+          <td className="px-3 py-2 text-sm">{intakeAdditionalCellValue(item.assigned_at)}{item.assigned_at_calculated ? " (рассчитана)" : ""}</td>
+        </tr>)}</tbody>
+      </table>
+    </div>
+  );
+}
+
 export default function PprCardAdditionalSection({ additional, mode = "additional" }: Props) {
   if (mode === "languages") {
     return (
@@ -257,6 +284,9 @@ export default function PprCardAdditionalSection({ additional, mode = "additiona
         <ForeignLanguagesBlock items={additional.foreign_languages} declaredEmpty={additional.foreign_languages_none} />
       </div>
     );
+  }
+  if (mode === "category") {
+    return <QualificationCategoriesBlock items={additional.qualification_categories ?? []} />;
   }
   if (mode === "notes") {
     return <StatusFactsBlock additional={additional} />;

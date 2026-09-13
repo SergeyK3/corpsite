@@ -93,9 +93,20 @@ class PprStatusFactResponse(BaseModel):
     created_at: datetime
 
 
+class PprQualificationCategoryRecordResponse(BaseModel):
+    specialty: str = ""
+    category: str = ""
+    assigned_at: str = ""
+    assigned_at_calculated: bool = False
+    review_status: str = "REVIEW_REQUIRED"
+    review_reason: str | None = None
+    source_fingerprint: str | None = None
+
+
 class PprAdditionalProfileResponse(BaseModel):
     foreign_languages: list[PprForeignLanguageRecordResponse] = Field(default_factory=list)
     foreign_languages_none: bool = False
+    qualification_categories: list[PprQualificationCategoryRecordResponse] = Field(default_factory=list)
     awards: list[PprAwardRecordResponse] = Field(default_factory=list)
     awards_none: bool = False
     academic_degrees: list[PprAcademicDegreeRecordResponse] = Field(default_factory=list)
@@ -103,6 +114,7 @@ class PprAdditionalProfileResponse(BaseModel):
     academic_titles: list[PprAcademicTitleRecordResponse] = Field(default_factory=list)
     academic_titles_none: bool = False
     status_facts: list[PprStatusFactResponse] = Field(default_factory=list)
+    qualification_categories_version: str = ""
 
 
 class PprHireDefaultsResponse(BaseModel):

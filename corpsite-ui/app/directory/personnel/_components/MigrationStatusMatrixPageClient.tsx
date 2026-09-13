@@ -14,11 +14,13 @@ const COLUMNS: Array<{ section: MigrationSection; title: string; cardSection: Pp
   { section: "general", title: "Общие сведения", cardSection: "general" },
   { section: "education", title: "Образование", cardSection: "education" },
   { section: "training", title: "Обучение и повышение квалификации", cardSection: "training" },
+  { section: "category", title: "Категория", cardSection: "category" },
   { section: "relatives", title: "Родственники", cardSection: "family" },
   { section: "military", title: "Воинский учёт", cardSection: "military" },
   { section: "employment_biography", title: "Трудовая биография", cardSection: "employment_biography" },
   { section: "employment_history", title: "Трудовая деятельность / послужной список", cardSection: "assignment" },
   { section: "foreign_languages", title: "Знание иностранных языков", cardSection: "languages" },
+  { section: "additional", title: "Примечание", cardSection: "additional" },
   { section: "awards", title: "Награды", cardSection: "additional" },
   { section: "academic_degrees_titles", title: "Учёные степени и звания", cardSection: "additional" },
 ];
@@ -173,6 +175,13 @@ export default function MigrationStatusMatrixPageClient() {
   }, [matrix]);
 
   const selectedUniverse = universes.find((value) => value.universe_id === universeId);
+  const selectedColumn = COLUMNS.find((column) => column.section === params.get("section")) ?? COLUMNS[0];
+  const selectedCardHref = (personId: number, edit = false) => {
+    const href = buildPprMigrationCardHref(personId, selectedColumn.cardSection, returnTo, universeId);
+    if (!edit) return href;
+    const separator = href.includes("?") ? "&" : "?";
+    return `${href}${separator}edit=1`;
+  };
   const refreshProjection = React.useCallback(() => {
     if (!universeId || rebuilding) return;
     setRebuilding(true); setError(null);
@@ -190,7 +199,19 @@ export default function MigrationStatusMatrixPageClient() {
     {universes.length === 0 && !loading ? <p data-testid="migration-status-empty">Нет доступных данных отчёта.</p> : null}
     {error && error !== 403 ? <p role="alert" data-testid="migration-status-error">Не удалось загрузить сводку. Повторите попытку.</p> : null}
     {loading ? <p role="status" data-testid="migration-status-loading">Загрузка…</p> : null}
-    {universeId ? <><div className="flex flex-wrap gap-2"><select aria-label="Группа отделений" value={groupId} onChange={e=>replace({org_group_id:e.target.value,org_unit_id:undefined,position_id:undefined})} className="rounded border p-2 text-sm"><option value="">Все группы</option>{groups.map(g=><option key={g.group_id} value={g.group_id}>{g.group_name}</option>)}</select><select aria-label="Отделение" value={unitId} onChange={e=>replace({org_unit_id:e.target.value,position_id:undefined})} className="rounded border p-2 text-sm"><option value="">Все отделения</option>{units.map(u=><option key={u.id} value={u.id}>{u.name}</option>)}</select><select aria-label="Должность" value={params.get("position_id")??""} onChange={e=>replace({position_id:e.target.value})} className="rounded border p-2 text-sm" disabled={!unitId}><option value="">Все должности</option>{positions.map(p=><option key={p.position_id} value={p.position_id}>{p.name}</option>)}</select><input aria-label="Фамилия сотрудника" placeholder="Фамилия сотрудника" defaultValue={params.get("q") ?? ""} onBlur={(event) => replace({ q: event.target.value })} className="rounded border p-2 text-sm" data-testid="migration-status-search"/><select aria-label="Раздел" value={params.get("section") ?? ""} onChange={(event) => replace({ section: event.target.value })} className="rounded border p-2 text-sm"><option value="">Все разделы</option>{COLUMNS.map((column) => <option key={column.section} value={column.section}>{column.title}</option>)}</select><select aria-label="Статус" value={params.get("status") ?? ""} onChange={(event) => replace({ status: event.target.value })} className="rounded border p-2 text-sm"><option value="">Все статусы</option>{STATUS_FILTER_OPTIONS.map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select><select aria-label="Причина" value={params.get("reason") ?? ""} onChange={(event) => replace({ reason: event.target.value })} className="rounded border p-2 text-sm"><option value="">Все причины</option>{REASON_FILTER_OPTIONS.map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select></div>
+    {universeId ? <><div className="space-y-2">
+      <div className="flex flex-wrap gap-2" data-testid="migration-status-primary-filters">
+        <select aria-label="Группа отделений" value={groupId} onChange={e=>replace({org_group_id:e.target.value,org_unit_id:undefined,position_id:undefined})} className="max-w-full rounded border p-2 text-sm"><option value="">Все группы</option>{groups.map(g=><option key={g.group_id} value={g.group_id}>{g.group_name}</option>)}</select>
+        <select aria-label="Отделение" value={unitId} onChange={e=>replace({org_unit_id:e.target.value,position_id:undefined})} className="max-w-full rounded border p-2 text-sm"><option value="">Все отделения</option>{units.map(u=><option key={u.id} value={u.id}>{u.name}</option>)}</select>
+        <select aria-label="Должность" value={params.get("position_id")??""} onChange={e=>replace({position_id:e.target.value})} className="max-w-full rounded border p-2 text-sm" disabled={!unitId}><option value="">Все должности</option>{positions.map(p=><option key={p.position_id} value={p.position_id}>{p.name}</option>)}</select>
+        <input aria-label="Фамилия сотрудника" placeholder="Фамилия сотрудника" defaultValue={params.get("q") ?? ""} onBlur={(event) => replace({ q: event.target.value })} className="min-w-48 max-w-full rounded border p-2 text-sm" data-testid="migration-status-search"/>
+      </div>
+      <div className="flex flex-wrap gap-2" data-testid="migration-status-section-filters">
+        <select aria-label="Раздел" value={params.get("section") ?? ""} onChange={(event) => replace({ section: event.target.value })} className="max-w-full rounded border p-2 text-sm"><option value="">Все разделы</option>{COLUMNS.map((column) => <option key={column.section} value={column.section}>{column.title}</option>)}</select>
+        <select aria-label="Статус" value={params.get("status") ?? ""} onChange={(event) => replace({ status: event.target.value })} className="max-w-full rounded border p-2 text-sm"><option value="">Все статусы</option>{STATUS_FILTER_OPTIONS.map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select>
+        <select aria-label="Причина" value={params.get("reason") ?? ""} onChange={(event) => replace({ reason: event.target.value })} className="max-w-full rounded border p-2 text-sm"><option value="">Все причины</option>{REASON_FILTER_OPTIONS.map(([code, label]) => <option key={code} value={code}>{label}</option>)}</select>
+      </div>
+    </div>
       {matrix?.general_summary ? <section className="rounded-lg border p-3" aria-label="Краткие показатели" data-testid="migration-status-general-summary">
         <div className="flex flex-wrap gap-x-5 gap-y-1 text-sm">
           <span>Всего сотрудников: {matrix.general_summary.total_active_employees}</span>
@@ -242,7 +263,7 @@ export default function MigrationStatusMatrixPageClient() {
       {matrix && !loading ? matrix.items.length === 0 ? <p data-testid="migration-status-matrix-empty">По выбранным фильтрам данных нет.</p> : <>
         <h2 className="text-lg font-semibold">Подробная сводка по сотрудникам</h2>
         <div ref={tableScrollRef} className="w-full max-w-full overflow-x-scroll overflow-y-hidden pb-3" style={{ scrollbarGutter: "stable" }} data-testid="migration-status-table-scroll" onScroll={(event) => setTableScrollLeft(event.currentTarget.scrollLeft)}>
-          <table className="w-[2200px] min-w-[2200px] table-fixed border-collapse" data-testid="migration-status-matrix"><thead><tr><th className="sticky left-0 z-20 w-56 border bg-white p-2 text-left dark:bg-zinc-950" data-testid="migration-status-employee-header">Сотрудник</th>{COLUMNS.map((column) => <th key={column.section} className="w-48 border p-2 text-left">{column.title}</th>)}</tr></thead><tbody>{matrix.items.map((row) => <tr key={row.person_id}><th className="sticky left-0 z-10 w-56 border bg-white p-2 text-left font-medium dark:bg-zinc-950" data-testid="migration-status-employee-cell">{row.full_name}</th>{COLUMNS.map((column) => { const cell = row.cells[column.section]; return <td key={column.section} className="w-48 border p-2">{cell ? <Link href={buildPprMigrationCardHref(row.person_id, column.cardSection, returnTo, universeId)} aria-label={`${column.title}: ${cell.status_label}. ${cell.reason_label}`} title={`${cell.status_label}. ${cell.reason_label}`} className="block"><strong>{cell.status_label}</strong><span className="block text-sm">{cell.reason_label}</span></Link> : <span>Нет данных</span>}</td>; })}</tr>)}</tbody></table>
+          <table className="w-[2200px] min-w-[2200px] table-fixed border-collapse" data-testid="migration-status-matrix"><thead><tr><th className="sticky left-0 z-20 w-56 border bg-white p-2 text-left dark:bg-zinc-950" data-testid="migration-status-employee-header">Сотрудник</th>{COLUMNS.map((column) => <th key={column.section} className="w-48 border p-2 text-left">{column.title}</th>)}</tr></thead><tbody>{matrix.items.map((row) => <tr key={row.person_id}><th className="sticky left-0 z-10 w-56 border bg-white p-2 text-left font-medium dark:bg-zinc-950" data-testid="migration-status-employee-cell"><div>{row.full_name}</div><div className="mt-2 flex flex-wrap gap-2 font-normal"><Link href={selectedCardHref(row.person_id)} className="rounded border border-zinc-300 px-2 py-1 text-xs hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900" data-testid={`migration-status-open-card-${row.person_id}`}>Открыть карточку</Link><Link href={selectedCardHref(row.person_id, true)} className="rounded border border-zinc-300 px-2 py-1 text-xs hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900" data-testid={`migration-status-edit-card-${row.person_id}`}>Редактировать</Link></div></th>{COLUMNS.map((column) => { const cell = row.cells[column.section]; return <td key={column.section} className="w-48 border p-2">{cell ? <Link href={buildPprMigrationCardHref(row.person_id, column.cardSection, returnTo, universeId)} aria-label={`${column.title}: ${cell.status_label}. ${cell.reason_label}`} title={`${cell.status_label}. ${cell.reason_label}`} className="block"><strong>{cell.status_label}</strong><span className="block text-sm">{cell.reason_label}</span></Link> : <span>Нет данных</span>}</td>; })}</tr>)}</tbody></table>
         </div>
         {tableScrollMax > 0 ? <input aria-label="Горизонтальная прокрутка разделов" className="mb-3 block h-3 w-full cursor-ew-resize accent-zinc-400" data-testid="migration-status-scrollbar-control" type="range" min={0} max={tableScrollMax} value={tableScrollLeft} onChange={(event) => { const next = Number(event.target.value); const node = tableScrollRef.current; if (node) node.scrollLeft = next; setTableScrollLeft(next); }} /> : null}
       </> : null}

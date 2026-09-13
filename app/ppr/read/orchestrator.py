@@ -101,6 +101,8 @@ class PprCompositeReadOrchestrator:
         additional = PprAdditionalReadSlice(
             foreign_languages=tuple(additional_raw.get("foreign_languages") or []),
             foreign_languages_none=bool(additional_raw.get("foreign_languages_none")),
+            qualification_categories=tuple(additional_raw.get("qualification_categories") or []),
+            qualification_categories_version=str(additional_raw.get("qualification_categories_version") or ""),
             awards=tuple(additional_raw.get("awards") or []),
             awards_none=bool(additional_raw.get("awards_none")),
             academic_degrees=tuple(additional_raw.get("academic_degrees") or []),

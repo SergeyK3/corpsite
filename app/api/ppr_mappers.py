@@ -21,6 +21,7 @@ from app.api.ppr_schemas import (
     PprMaterializationResponse,
     PprMilitaryRecordDetailsResponse,
     PprMilitaryRecordResponse,
+    PprQualificationCategoryRecordResponse,
     PprReadMetadataResponse,
     PprRelativeRecordResponse,
     PprStatusFactResponse,
@@ -249,6 +250,19 @@ def _additional_response(
             for item in additional.foreign_languages
         ],
         foreign_languages_none=additional.foreign_languages_none,
+        qualification_categories=[
+            PprQualificationCategoryRecordResponse(
+                specialty=str(item.get("specialty") or ""),
+                category=str(item.get("category") or ""),
+                assigned_at=str(item.get("assigned_at") or ""),
+                assigned_at_calculated=bool(item.get("assigned_at_calculated")),
+                review_status=str(item.get("review_status") or "REVIEW_REQUIRED"),
+                review_reason=str(item.get("review_reason")) if item.get("review_reason") else None,
+                source_fingerprint=str((item.get("provenance") or {}).get("source_fingerprint")) or None,
+            )
+            for item in additional.qualification_categories
+        ],
+        qualification_categories_version=str(additional.qualification_categories_version),
         awards=[
             PprAwardRecordResponse(
                 category=str(item.get("category") or ""),

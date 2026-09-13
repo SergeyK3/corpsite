@@ -41,7 +41,7 @@ const report = {
   },
   items: [{ person_id: 9, employee_context_id: 1, org_unit_id: 2, full_name: "Иванов Иван", cells: {
     general: { ...cell("Согласовано", "Подтверждено"), status_code: "ACCEPTED" },
-    education: cell("Не начато", "Нет результата"), training: cell("Ошибка", "Нужна проверка"),
+    education: cell("Не начато", "Нет результата"), training: cell("Ошибка", "Нужна проверка"), category: cell("Не начато", "Нет результата"),
     relatives: cell("Не начато", "Обработка раздела ещё не подключена"), military: cell("Не применимо", "Раздел не применяется"),
     employment_biography: cell("Не начато", "Обработка раздела ещё не подключена"), employment_history: cell("Не начато", "Обработка раздела ещё не подключена"),
     foreign_languages: cell("Не начато", "Обработка раздела ещё не подключена"), additional: cell("Не начато", "Обработка раздела ещё не подключена"), awards: cell("Не начато", "Обработка раздела ещё не подключена"), academic_degrees_titles: cell("Не начато", "Обработка раздела ещё не подключена"),
@@ -58,9 +58,9 @@ describe("MigrationStatusMatrixPageClient", () => {
     expect(screen.queryByText("Общие сведения: первый прогон")).not.toBeInTheDocument();
     const table = await screen.findByTestId("migration-status-matrix");
     expect(Array.from(table.querySelectorAll("thead th")).map((header) => header.textContent)).toEqual([
-      "Сотрудник", "Общие сведения", "Образование", "Обучение и повышение квалификации", "Родственники", "Воинский учёт", "Трудовая биография", "Трудовая деятельность / послужной список", "Знание иностранных языков", "Награды", "Учёные степени и звания",
+      "Сотрудник", "Общие сведения", "Образование", "Обучение и повышение квалификации", "Категория", "Родственники", "Воинский учёт", "Трудовая биография", "Трудовая деятельность / послужной список", "Знание иностранных языков", "Примечание", "Награды", "Учёные степени и звания",
     ]);
-    expect(table.querySelectorAll("tbody td")).toHaveLength(10);
+    expect(table.querySelectorAll("tbody td")).toHaveLength(12);
     expect(screen.getByTestId("migration-status-table-scroll").className).toContain("overflow-x-scroll");
     expect(screen.getByTestId("migration-status-table-scroll").className).toContain("w-full");
     expect(table.className).toContain("min-w-[2200px]");
@@ -89,6 +89,19 @@ describe("MigrationStatusMatrixPageClient", () => {
     expect(page.compareDocumentPosition(group) & Node.DOCUMENT_POSITION_CONTAINED_BY).toBeTruthy();
     expect(group.compareDocumentPosition(compact) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(compact.compareDocumentPosition(aggregate) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("places section, status, and reason together in the responsive second filter row", async () => {
+    render(<MigrationStatusMatrixPageClient />);
+    await screen.findByTestId("migration-status-matrix");
+    const primary = screen.getByTestId("migration-status-primary-filters");
+    const sectionFilters = screen.getByTestId("migration-status-section-filters");
+    expect(primary).toHaveClass("flex", "flex-wrap");
+    expect(sectionFilters).toHaveClass("flex", "flex-wrap");
+    expect(primary).not.toContainElement(screen.getByLabelText("Раздел"));
+    expect(Array.from(sectionFilters.querySelectorAll("select")).map((node) => node.getAttribute("aria-label"))).toEqual([
+      "Раздел", "Статус", "Причина",
+    ]);
   });
 
   it("renders the server-side status summary independently of the page-sized detail rows", async () => {
@@ -163,6 +176,23 @@ describe("MigrationStatusMatrixPageClient", () => {
     vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(1359);
     render(<MigrationStatusMatrixPageClient />);
     expect(await screen.findByTestId("migration-status-scrollbar-control")).toHaveAttribute("max", "1786");
+  });
+
+  it("opens the filtered section and preserves every report filter when navigating to edit", async () => {
+    search = new URLSearchParams("universe_id=7&section=category&status=REVIEW_REQUIRED&reason=CATEGORY_MISSING_SPECIALTY&q=иванов");
+    render(<MigrationStatusMatrixPageClient />);
+    await screen.findByTestId("migration-status-matrix");
+    const open = screen.getByTestId("migration-status-open-card-9");
+    const edit = screen.getByTestId("migration-status-edit-card-9");
+    expect(open).toHaveTextContent("Открыть карточку");
+    expect(edit).toHaveTextContent("Редактировать");
+    const openUrl = new URL(open.getAttribute("href")!, "http://localhost");
+    const editUrl = new URL(edit.getAttribute("href")!, "http://localhost");
+    expect(openUrl.pathname).toBe("/directory/personnel/persons/9/card");
+    expect(openUrl.searchParams.get("section")).toBe("category");
+    expect(openUrl.searchParams.get("migration_universe_id")).toBe("7");
+    expect(openUrl.searchParams.get("return_to")).toBe("/directory/personnel/migration-status?universe_id=7&section=category&status=REVIEW_REQUIRED&reason=CATEGORY_MISSING_SPECIALTY&q=%D0%B8%D0%B2%D0%B0%D0%BD%D0%BE%D0%B2");
+    expect(editUrl.searchParams.get("edit")).toBe("1");
   });
 
   it("keeps filters and rebuilds the selected persisted universe on refresh", async () => {

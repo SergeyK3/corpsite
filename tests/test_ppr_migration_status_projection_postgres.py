@@ -53,7 +53,7 @@ def test_rebuild_membership_idempotency_scope_and_no_pii():
     conn,tx=_tx()
     try:
         actor,person,employee,row,base=_seed(conn); _,outside,_,_,_=_seed(conn)
-        u=projection.ensure_universe(conn,base_cohort_run_id=base); assert projection.rebuild_universe(conn,universe_id=u)==10; assert projection.rebuild_universe(conn,universe_id=u)==10
+        u=projection.ensure_universe(conn,base_cohort_run_id=base); assert projection.rebuild_universe(conn,universe_id=u)==len(projection.SECTIONS); assert projection.rebuild_universe(conn,universe_id=u)==len(projection.SECTIONS)
         rows=projection.list_projection_for_scope(conn,universe_id=u,org_unit_ids=None)
         assert {(r['person_id'],r['section_code']) for r in rows} == {(person,s) for s in projection.SECTIONS}
         assert outside not in {r['person_id'] for r in rows}; assert projection.list_projection_for_scope(conn,universe_id=u,org_unit_ids=[])==[]
@@ -61,19 +61,19 @@ def test_rebuild_membership_idempotency_scope_and_no_pii():
         assert not cols & {'full_name','iin','raw_payload','normalized_payload','source_text','document'}
     finally: tx.rollback(); conn.close()
 
-def test_full_catalog_has_ten_rows_and_preserves_existing_section_statuses():
+def test_full_catalog_has_eleven_rows_and_preserves_existing_section_statuses():
     conn,tx=_tx()
     try:
         actor,person,employee,row,base=_seed(conn)
         accepted_run=_accepted_general(conn,actor,person,employee,row,base)
         u=projection.ensure_universe(conn,base_cohort_run_id=base)
-        assert projection.rebuild_universe(conn,universe_id=u) == 10
+        assert projection.rebuild_universe(conn,universe_id=u) == len(projection.SECTIONS)
         cells={section:(status,reason) for section,status,reason in conn.execute(text("""
             select section_code,status_code,reason_code
             from ppr_migration_section_status_projection
             where universe_id=:u and person_id=:p
         """),{"u":u,"p":person})}
-        assert len(cells) == 10
+        assert len(cells) == len(projection.SECTIONS)
         assert cells["general"] == ("ACCEPTED","RUN_PARTICIPANT_ACCEPTED")
         for section in set(projection.SECTIONS) - {"general","education","training"}:
             assert cells[section] == ("NOT_STARTED","SECTION_PROCESSING_NOT_CONNECTED")
@@ -81,11 +81,11 @@ def test_full_catalog_has_ten_rows_and_preserves_existing_section_statuses():
             select count(*) from ppr_migration_section_status_projection
             where universe_id=:u and person_id=:p and section_code='general' and stage1_run_id=:run
         """),{"u":u,"p":person,"run":accepted_run}).scalar_one() == 1
-        assert projection.rebuild_universe(conn,universe_id=u) == 10
+        assert projection.rebuild_universe(conn,universe_id=u) == len(projection.SECTIONS)
         assert conn.execute(text("""
             select count(*) from ppr_migration_section_status_projection
             where universe_id=:u and person_id=:p
-        """),{"u":u,"p":person}).scalar_one() == 10
+        """),{"u":u,"p":person}).scalar_one() == len(projection.SECTIONS)
     finally: tx.rollback(); conn.close()
 
 def test_upgrade_backfill_adds_seven_catalog_rows_and_primary_key_remains_unique():
@@ -104,10 +104,13 @@ def test_upgrade_backfill_adds_seven_catalog_rows_and_primary_key_remains_unique
         migration.backfill_missing_section_rows(conn)
         rows=conn.execute(text("""select section_code,status_code,reason_code
           from ppr_migration_section_status_projection where universe_id=:u and person_id=:p"""),{"u":u,"p":person}).mappings().all()
+        # This test invokes the historical ppr005g migration directly; that
+        # migration predates the persisted Note section and only backfills its
+        # original ten-section catalogue.
         assert len(rows)==10
         cells={r["section_code"]:(r["status_code"],r["reason_code"]) for r in rows}
         assert cells["general"]==("ACCEPTED","RUN_PARTICIPANT_ACCEPTED")
-        for section in set(projection.SECTIONS)-{"general","education","training"}:
+        for section in set(projection.SECTIONS)-{"general","education","training","additional","category"}:
             assert cells[section]==("NOT_STARTED","SECTION_PROCESSING_NOT_CONNECTED")
         nested=conn.begin_nested()
         with pytest.raises(IntegrityError):

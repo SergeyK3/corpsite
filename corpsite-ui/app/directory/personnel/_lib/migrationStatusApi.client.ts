@@ -6,6 +6,7 @@ export type MigrationSection =
   | "general"
   | "education"
   | "training"
+  | "category"
   | "relatives"
   | "military"
   | "employment_biography"
