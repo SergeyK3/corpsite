@@ -230,7 +230,7 @@ export type PprStatusFactResponse = {
   status_fact_id: number;
   fact_kind: "DISABILITY" | "PENSION";
   effective_date: string | null;
-  disability_group: string | null;
+  disability_group: "I" | "II" | "III" | null;
   icd10_code: string | null;
   pension_kind: "AGE" | "SERVICE" | null;
   review_status: "AUTO_READY" | "REVIEW_REQUIRED";

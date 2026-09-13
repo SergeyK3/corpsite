@@ -7,6 +7,14 @@ import type { PprStatusFactResponse } from "../_lib/pprQueryTypes";
 type PensionRow = Pick<PprStatusFactResponse, "status_fact_id" | "version" | "effective_date" | "pension_kind">;
 type DisabilityRow = Pick<PprStatusFactResponse, "status_fact_id" | "version" | "effective_date" | "disability_group" | "icd10_code">;
 
+function pensionKindFromSelect(value: string): PensionRow["pension_kind"] {
+  return value === "AGE" || value === "SERVICE" ? value : null;
+}
+
+function disabilityGroupFromSelect(value: string): DisabilityRow["disability_group"] {
+  return value === "I" || value === "II" || value === "III" ? value : null;
+}
+
 function pensionRows(facts: PprStatusFactResponse[]): PensionRow[] {
   return facts.filter((fact) => fact.fact_kind === "PENSION").map((fact) => ({
     status_fact_id: fact.status_fact_id, version: fact.version, effective_date: fact.effective_date, pension_kind: fact.pension_kind,
@@ -54,7 +62,7 @@ export default function PprAdditionalStatusFactsEditor({ personId, facts, onSave
             <th className="px-3 py-2"><span className="sr-only">Действия</span></th>
           </tr></thead>
           <tbody>{pension.map((row, index) => <tr key={row.status_fact_id ?? `new-pension-${index}`}>
-            <td className="px-3 py-2"><select aria-label={`Вид пенсионного статуса ${index + 1}`} value={row.pension_kind ?? ""} onChange={(event) => setPension(pension.map((item, i) => i === index ? {...item, pension_kind: event.target.value || null} : item))} className="w-full rounded border border-zinc-300 bg-white p-1.5 dark:border-zinc-700 dark:bg-zinc-950">
+            <td className="px-3 py-2"><select aria-label={`Вид пенсионного статуса ${index + 1}`} value={row.pension_kind ?? ""} onChange={(event) => setPension(pension.map((item, i) => i === index ? {...item, pension_kind: pensionKindFromSelect(event.target.value)} : item))} className="w-full rounded border border-zinc-300 bg-white p-1.5 dark:border-zinc-700 dark:bg-zinc-950">
               <option value="">Не указан</option><option value="AGE">По возрасту</option><option value="SERVICE">За выслугу лет</option>
             </select></td>
             <td className="px-3 py-2"><input aria-label={`Дата пенсионного статуса ${index + 1}`} type="date" value={row.effective_date ?? ""} onChange={(event) => setPension(pension.map((item, i) => i === index ? {...item, effective_date: event.target.value || null} : item))} className="w-full rounded border border-zinc-300 bg-white p-1.5 dark:border-zinc-700 dark:bg-zinc-950" /></td>
@@ -76,7 +84,7 @@ export default function PprAdditionalStatusFactsEditor({ personId, facts, onSave
             <th className="px-3 py-2"><span className="sr-only">Действия</span></th>
           </tr></thead>
           <tbody>{disability.map((row, index) => <tr key={row.status_fact_id ?? `new-disability-${index}`}>
-            <td className="px-3 py-2"><select aria-label={`Группа инвалидности ${index + 1}`} value={row.disability_group ?? ""} onChange={(event) => setDisability(disability.map((item, i) => i === index ? {...item, disability_group: event.target.value || null} : item))} className="w-full rounded border border-zinc-300 bg-white p-1.5 dark:border-zinc-700 dark:bg-zinc-950"><option value="">Не указана</option><option value="I">1</option><option value="II">2</option><option value="III">3</option></select></td>
+            <td className="px-3 py-2"><select aria-label={`Группа инвалидности ${index + 1}`} value={row.disability_group ?? ""} onChange={(event) => setDisability(disability.map((item, i) => i === index ? {...item, disability_group: disabilityGroupFromSelect(event.target.value)} : item))} className="w-full rounded border border-zinc-300 bg-white p-1.5 dark:border-zinc-700 dark:bg-zinc-950"><option value="">Не указана</option><option value="I">1</option><option value="II">2</option><option value="III">3</option></select></td>
             <td className="px-3 py-2"><input aria-label={`Дата инвалидности ${index + 1}`} type="date" value={row.effective_date ?? ""} onChange={(event) => setDisability(disability.map((item, i) => i === index ? {...item, effective_date: event.target.value || null} : item))} className="w-full rounded border border-zinc-300 bg-white p-1.5 dark:border-zinc-700 dark:bg-zinc-950" /></td>
             <td className="px-3 py-2"><input aria-label={`Код МКБ-10 ${index + 1}`} value={row.icd10_code ?? ""} onChange={(event) => setDisability(disability.map((item, i) => i === index ? {...item, icd10_code: event.target.value.toUpperCase() || null} : item))} className="w-full rounded border border-zinc-300 bg-white p-1.5 dark:border-zinc-700 dark:bg-zinc-950" /></td>
             <td className="px-3 py-2"><button type="button" onClick={() => setDisability(disability.filter((_, i) => i !== index))} className="text-sm text-red-700 underline">Удалить</button></td>
