@@ -1,12 +1,21 @@
 import { readJsonSafe, toApiError } from "@/lib/api";
 import { formatThrownError } from "@/lib/i18n";
 import { resolveApiUrl } from "@/lib/apiBase";
+import { normalizeIntakeRecordId } from "./intakeRecordId";
 
 export type IntakeEducationType = "basic" | "internship" | "residency" | "masters" | "phd";
 
 export type IntakeEducationDocumentType = "diploma" | "certificate";
 
 export type IntakeEducation = {
+  record_id: string;
+  /** Canonical v2 names retained alongside controlled-form legacy aliases. */
+  start_date: string;
+  end_date: string;
+  institution_original: string;
+  specialty_original: string;
+  qualification_original: string;
+  document_number: string;
   education_type: IntakeEducationType;
   institution: string;
   year_from: string;
@@ -28,6 +37,11 @@ export const INTAKE_EDUCATION_DOCUMENT_TYPE_OPTIONS: ReadonlyArray<{
 export type IntakeTrainingDocumentType = "certificate" | "witness";
 
 export type IntakeTraining = {
+  record_id: string;
+  start_date: string;
+  end_date: string;
+  institution_original: string;
+  course_name_original: string;
   institution: string;
   course_name: string;
   year_from: string;
@@ -38,6 +52,18 @@ export type IntakeTraining = {
   hours_is_manual: boolean;
   /** Legacy single end-date field kept for backward-compatible reads. */
   year?: string;
+};
+
+export type IntakeRelative = {
+  record_id: string;
+  relationship: string;
+  relationship_other: string;
+  full_name: string;
+  birth_date: string;
+  workplace: string;
+  /** Legacy controlled-form aliases. */
+  birth_year: string;
+  work_place: string;
 };
 
 export const INTAKE_TRAINING_DOCUMENT_TYPE_OPTIONS: ReadonlyArray<{
@@ -139,12 +165,7 @@ export type IntakeDraftPayload = {
   };
   education: IntakeEducation[];
   training: IntakeTraining[];
-  relatives: Array<{
-    relationship: string;
-    full_name: string;
-    birth_year: string;
-    work_place: string;
-  }>;
+  relatives: IntakeRelative[];
   employment_biography: Array<{
     record_id: string;
     start_date: string | null;
@@ -397,15 +418,21 @@ function normalizeIntakeResponsePayload<T extends { payload: IntakeDraftPayload 
     : [];
   const legacyRows = (key: string) => Array.isArray(source[key]) ? source[key] as Record<string, unknown>[] : [];
   const education = legacyRows("education").map((item) => ({ ...item,
+    record_id: normalizeIntakeRecordId(item.record_id), start_date: formText(item.start_date ?? item.year_from), end_date: formText(item.end_date ?? item.year_to),
+    institution_original: formText(item.institution_original ?? item.institution), specialty_original: formText(item.specialty_original ?? item.specialty), qualification_original: formText(item.qualification_original ?? item.qualification), document_number: formText(item.document_number ?? item.diploma_number),
     institution: item.institution ?? item.institution_original ?? "", specialty: item.specialty ?? item.specialty_original ?? "",
     qualification: item.qualification ?? item.qualification_original ?? "", year_from: item.year_from ?? item.start_date ?? "",
     year_to: item.year_to ?? item.end_date ?? "", diploma_number: item.diploma_number ?? item.document_number ?? "",
   }));
   const training = legacyRows("training").map((item) => ({ ...item,
+    record_id: normalizeIntakeRecordId(item.record_id), start_date: formText(item.start_date ?? item.year_from), end_date: formText(item.end_date ?? item.year_to ?? item.year),
+    institution_original: formText(item.institution_original ?? item.institution), course_name_original: formText(item.course_name_original ?? item.course_name),
     institution: item.institution ?? item.institution_original ?? "", course_name: item.course_name ?? item.course_name_original ?? "",
     year_from: item.year_from ?? item.start_date ?? "", year_to: item.year_to || item.end_date || item.year || "",
   }));
   const relatives = legacyRows("relatives").map((item) => ({ ...item,
+    record_id: normalizeIntakeRecordId(item.record_id), relationship_other: formText(item.relationship_other),
+    birth_date: formText(item.birth_date ?? item.birth_year), workplace: formText(item.workplace ?? item.work_place),
     birth_year: formText(item.birth_year ?? item.birth_date), work_place: formText(item.work_place ?? item.workplace),
   }));
   const personal = {
@@ -461,8 +488,8 @@ export function toCanonicalIntakeV2(payload: IntakeDraftPayload): Record<string,
     ...payload, schema_version: 2,
     personal: { ...payload.personal, personnel_number: undefined, photo_file_id: nullable(payload.personal.photo_file_id) },
     contacts: { email: nullable(payload.contacts.email), mobile_phone: nullable(payload.contacts.mobile_phone), residence_address: nullable(payload.contacts.residence_address), registration_address: nullable(payload.contacts.registration_address) },
-    education: payload.education.map((item, index) => ({ record_id: item.record_id ?? `legacy-education-${index}`, start_date: item.start_date ?? item.year_from ?? null, end_date: item.end_date ?? item.year_to ?? null, institution_original: item.institution_original ?? item.institution ?? null, education_type: item.education_type, document_type: item.document_type, document_number: item.document_number ?? item.diploma_number ?? null, specialty_original: item.specialty_original ?? item.specialty ?? null, qualification_original: item.qualification_original ?? item.qualification ?? null })),
-    training: payload.training.map((item, index) => ({ record_id: item.record_id ?? `legacy-training-${index}`, start_date: item.start_date ?? item.year_from ?? null, end_date: item.end_date ?? item.year_to ?? item.year ?? null, course_name_original: item.course_name_original ?? item.course_name ?? null, institution_original: item.institution_original ?? item.institution ?? null, document_type: item.document_type, document_number: item.document_number ?? null, hours: item.hours === "" ? null : Number(item.hours), hours_is_manual: item.hours_is_manual })),
-    relatives: payload.relatives.map((item, index) => ({ record_id: item.record_id ?? `legacy-relative-${index}`, relationship: item.relationship, relationship_other: item.relationship_other ?? null, full_name: nullable(item.full_name), birth_date: nullable(item.birth_year ?? item.birth_date), workplace: nullable(item.work_place ?? item.workplace) })),
+    education: payload.education.map((item) => ({ record_id: item.record_id, start_date: nullable(item.start_date || item.year_from), end_date: nullable(item.end_date || item.year_to), institution_original: nullable(item.institution_original || item.institution), education_type: item.education_type, document_type: item.document_type, document_number: nullable(item.document_number || item.diploma_number), specialty_original: nullable(item.specialty_original || item.specialty), qualification_original: nullable(item.qualification_original || item.qualification) })),
+    training: payload.training.map((item) => ({ record_id: item.record_id, start_date: nullable(item.start_date || item.year_from), end_date: nullable(item.end_date || item.year_to || item.year), course_name_original: nullable(item.course_name_original || item.course_name), institution_original: nullable(item.institution_original || item.institution), document_type: item.document_type, document_number: nullable(item.document_number), hours: item.hours === "" ? null : Number(item.hours), hours_is_manual: item.hours_is_manual })),
+    relatives: payload.relatives.map((item) => ({ record_id: item.record_id, relationship: item.relationship, relationship_other: nullable(item.relationship_other), full_name: nullable(item.full_name), birth_date: nullable(item.birth_date || item.birth_year), workplace: nullable(item.workplace || item.work_place) })),
   };
 }

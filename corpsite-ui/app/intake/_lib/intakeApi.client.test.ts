@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import { emptyIntakeDraftPayload, mapIntakeApiError, toCanonicalIntakeV2, toIntakeFormPayload, type IntakeDraftPayload } from "./intakeApi.client";
+import { emptyIntakeEducationEntry, normalizeIntakeEducationEntry } from "./intakeEducation";
+import { isIntakeRecordId } from "./intakeRecordId";
+import { emptyIntakeRelativeEntry } from "./intakeRelatives";
+import { emptyIntakeTrainingEntry, normalizeIntakeTrainingEntry } from "./intakeTraining";
 
 function tokenError(code: string) {
   return { status: 403, details: { detail: { code, message: "internal detail" } } };
@@ -58,5 +62,69 @@ describe("canonical payload form adapter", () => {
     expect(canonical.relatives[0]).toMatchObject({ record_id: "a0ed72da-6ccf-4ef2-8d4a-3bb2c9097c08", birth_date: "1996-11-21", workplace: "домохозяйка" });
     expect(canonical.relatives[0]).not.toHaveProperty("birth_year");
     expect(canonical.relatives[0]).not.toHaveProperty("work_place");
+  });
+
+  it("upgrades legacy repeated rows once, preserves their values, and keeps generated ids stable", () => {
+    const source = {
+      ...emptyIntakeDraftPayload(),
+      education: [{
+        education_type: "basic" as const,
+        institution: "Медицинский университет",
+        year_from: "2013-09-01",
+        year_to: "2020-06-30",
+        specialty: "Общая медицина",
+        qualification: "Врач",
+        document_type: "diploma" as const,
+        diploma_number: "Д-1",
+      }],
+      training: [{
+        institution: "Академия",
+        course_name: "Онкология",
+        year_from: "2024-01-10",
+        year_to: "2024-01-20",
+        document_type: "certificate" as const,
+        document_number: "ПК-1",
+        hours: "72",
+        hours_is_manual: true,
+      }],
+      relatives: [{ relationship: "другое", full_name: "Тестовый родственник", birth_year: "1990-02-03", work_place: "Клиника" }],
+    } as unknown as IntakeDraftPayload;
+
+    const form = toIntakeFormPayload(source);
+    const canonical = toCanonicalIntakeV2(form) as {
+      education: Array<Record<string, unknown>>;
+      training: Array<Record<string, unknown>>;
+      relatives: Array<Record<string, unknown>>;
+    };
+
+    expect(isIntakeRecordId(form.education[0].record_id)).toBe(true);
+    expect(isIntakeRecordId(form.training[0].record_id)).toBe(true);
+    expect(isIntakeRecordId(form.relatives[0].record_id)).toBe(true);
+    expect(toIntakeFormPayload(form).education[0].record_id).toBe(form.education[0].record_id);
+    expect(canonical.education[0]).toMatchObject({ institution_original: "Медицинский университет", start_date: "2013-09-01", end_date: "2020-06-30", document_number: "Д-1" });
+    expect(canonical.training[0]).toMatchObject({ course_name_original: "Онкология", hours: 72 });
+    expect(canonical.relatives[0]).toMatchObject({ birth_date: "1990-02-03", workplace: "Клиника" });
+  });
+
+  it("preserves valid canonical row ids and serializes empty optional fields as null", () => {
+    const education = emptyIntakeEducationEntry();
+    const training = emptyIntakeTrainingEntry();
+    const relative = emptyIntakeRelativeEntry();
+    const payload = {
+      ...emptyIntakeDraftPayload(),
+      education: [normalizeIntakeEducationEntry({ ...education, record_id: "a0ed72da-6ccf-4ef2-8d4a-3bb2c9097c08" })],
+      training: [normalizeIntakeTrainingEntry({ ...training, record_id: "b2c7e524-cf07-4a84-9a8d-7f52a88fb8f4" })],
+      relatives: [{ ...relative, record_id: "c3d8e635-df18-4f95-b9c9-8f63a99fc9f5", relationship_other: "крёстная мать" }],
+    };
+    const canonical = toCanonicalIntakeV2(payload) as {
+      education: Array<Record<string, unknown>>;
+      training: Array<Record<string, unknown>>;
+      relatives: Array<Record<string, unknown>>;
+    };
+
+    expect(canonical.education[0]).toMatchObject({ record_id: "a0ed72da-6ccf-4ef2-8d4a-3bb2c9097c08", start_date: null, document_number: null });
+    expect(canonical.education[0].record_id).toBe("a0ed72da-6ccf-4ef2-8d4a-3bb2c9097c08");
+    expect(canonical.training[0]).toMatchObject({ record_id: "b2c7e524-cf07-4a84-9a8d-7f52a88fb8f4", end_date: null, hours: null });
+    expect(canonical.relatives[0]).toMatchObject({ record_id: "c3d8e635-df18-4f95-b9c9-8f63a99fc9f5", relationship_other: "крёстная мать", birth_date: null, workplace: null });
   });
 });

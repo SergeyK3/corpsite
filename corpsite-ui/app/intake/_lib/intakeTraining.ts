@@ -3,6 +3,7 @@ import {
   type IntakeTraining,
   type IntakeTrainingDocumentType,
 } from "./intakeApi.client";
+import { normalizeIntakeRecordId } from "./intakeRecordId";
 import { isIncompleteIntakePeriodDate } from "./intakeDateValidation";
 import { formatIntakePeriodForDisplay, formatIntakePeriodRange } from "./intakePeriodFormat";
 import {
@@ -62,6 +63,11 @@ export function normalizeIntakeTrainingEntry(
 ): IntakeTrainingEntry {
   const yearTo = String(item.year_to ?? item.end_date ?? item.year ?? "");
   return {
+    record_id: normalizeIntakeRecordId(item.record_id),
+    start_date: String(item.start_date ?? item.year_from ?? ""),
+    end_date: yearTo,
+    institution_original: String(item.institution_original ?? item.institution ?? ""),
+    course_name_original: String(item.course_name_original ?? item.course_name ?? ""),
     institution: String(item.institution ?? item.institution_original ?? ""),
     course_name: String(item.course_name ?? item.course_name_original ?? ""),
     year_from: String(item.year_from ?? item.start_date ?? ""),

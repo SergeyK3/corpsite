@@ -5,7 +5,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import IntakeDraftFormEditor from "./IntakeDraftFormEditor";
 import IntakeEducationTable from "./IntakeEducationTable";
 import { emptyIntakeDraftPayload, INTAKE_STEPS } from "../_lib/intakeApi.client";
-import { emptyIntakeEducationEntry } from "../_lib/intakeEducation";
 
 const educationStepIndex = INTAKE_STEPS.findIndex((step) => step.id === "education");
 
@@ -62,7 +61,9 @@ describe("IntakeEducationTable", () => {
     render(<IntakeEducationTable items={[]} onChange={onChange} />);
 
     fireEvent.click(screen.getByTestId("intake-education-add-button"));
-    expect(onChange).toHaveBeenCalledWith([emptyIntakeEducationEntry()]);
+    expect(onChange).toHaveBeenCalledWith([
+      expect.objectContaining({ record_id: expect.stringMatching(/^[0-9a-f-]{36}$/i) }),
+    ]);
   });
 
   it("deletes a row after confirmation", () => {

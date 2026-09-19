@@ -5,7 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import IntakeDraftFormEditor from "./IntakeDraftFormEditor";
 import IntakeTrainingTable from "./IntakeTrainingTable";
 import { emptyIntakeDraftPayload, INTAKE_STEPS } from "../_lib/intakeApi.client";
-import { emptyIntakeTrainingEntry, normalizeIntakeTrainingEntry } from "../_lib/intakeTraining";
+import { normalizeIntakeTrainingEntry } from "../_lib/intakeTraining";
 
 const trainingStepIndex = INTAKE_STEPS.findIndex((step) => step.id === "training");
 
@@ -54,7 +54,9 @@ describe("IntakeTrainingTable", () => {
     render(<IntakeTrainingTable items={[]} onChange={onChange} />);
 
     fireEvent.click(screen.getByTestId("intake-training-add-button"));
-    expect(onChange).toHaveBeenCalledWith([emptyIntakeTrainingEntry()]);
+    expect(onChange).toHaveBeenCalledWith([
+      expect.objectContaining({ record_id: expect.stringMatching(/^[0-9a-f-]{36}$/i) }),
+    ]);
   });
 
   it("saves manual hours and document number through onChange", () => {

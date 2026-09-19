@@ -1,5 +1,6 @@
 import type { IntakeDraftPayload } from "./intakeApi.client";
 import { formatIntakePeriodForDisplay } from "./intakePeriodFormat";
+import { normalizeIntakeRecordId } from "./intakeRecordId";
 
 export type IntakeRelativeEntry = IntakeDraftPayload["relatives"][number];
 
@@ -10,8 +11,12 @@ export type IntakeRelativeRow = {
 
 export function emptyIntakeRelativeEntry(): IntakeRelativeEntry {
   return {
+    record_id: normalizeIntakeRecordId(undefined),
     relationship: "",
+    relationship_other: "",
     full_name: "",
+    birth_date: "",
+    workplace: "",
     birth_year: "",
     work_place: "",
   };

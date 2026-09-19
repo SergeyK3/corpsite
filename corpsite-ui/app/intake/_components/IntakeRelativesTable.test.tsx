@@ -4,7 +4,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import IntakeDraftFormEditor from "./IntakeDraftFormEditor";
 import IntakeRelativesTable from "./IntakeRelativesTable";
 import { emptyIntakeDraftPayload, INTAKE_STEPS } from "../_lib/intakeApi.client";
-import { emptyIntakeRelativeEntry } from "../_lib/intakeRelatives";
 
 const relativesStepIndex = INTAKE_STEPS.findIndex((step) => step.id === "relatives");
 
@@ -58,7 +57,9 @@ describe("IntakeRelativesTable", () => {
     render(<IntakeRelativesTable items={[]} onChange={onChange} />);
 
     fireEvent.click(screen.getByTestId("intake-relatives-add-button"));
-    expect(onChange).toHaveBeenCalledWith([emptyIntakeRelativeEntry()]);
+    expect(onChange).toHaveBeenCalledWith([
+      expect.objectContaining({ record_id: expect.stringMatching(/^[0-9a-f-]{36}$/i) }),
+    ]);
   });
 
   it("stores a selected relationship from the predefined list", () => {

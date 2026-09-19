@@ -4,6 +4,7 @@ import {
   type IntakeEducation,
   type IntakeEducationDocumentType,
 } from "./intakeApi.client";
+import { normalizeIntakeRecordId } from "./intakeRecordId";
 import { formatIntakePeriodForDisplay, formatIntakePeriodRange } from "./intakePeriodFormat";
 
 export type IntakeEducationRow = {
@@ -29,6 +30,13 @@ export function normalizeIntakeEducationEntry(
   item: Partial<IntakeEducation> & Record<string, unknown>,
 ): IntakeEducation {
   return {
+    record_id: normalizeIntakeRecordId(item.record_id),
+    start_date: String(item.start_date ?? item.year_from ?? ""),
+    end_date: String(item.end_date ?? item.year_to ?? ""),
+    institution_original: String(item.institution_original ?? item.institution ?? ""),
+    specialty_original: String(item.specialty_original ?? item.specialty ?? ""),
+    qualification_original: String(item.qualification_original ?? item.qualification ?? ""),
+    document_number: String(item.document_number ?? item.diploma_number ?? ""),
     education_type: (item.education_type as IntakeEducation["education_type"]) ?? "basic",
     institution: String(item.institution ?? ""),
     year_from: String(item.year_from ?? ""),

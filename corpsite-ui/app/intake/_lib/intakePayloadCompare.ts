@@ -53,6 +53,11 @@ function normalizeTrainingItems(
 ): CanonicalIntakeDraftPayload["training"] {
   if (!Array.isArray(items)) return [];
   return items.map((item) => ({
+    record_id: normalizeScalar(item.record_id),
+    start_date: normalizeScalar(item.start_date),
+    end_date: normalizeScalar(item.end_date),
+    institution_original: normalizeScalar(item.institution_original),
+    course_name_original: normalizeScalar(item.course_name_original),
     institution: normalizeScalar(item.institution),
     course_name: normalizeScalar(item.course_name),
     year_from: normalizeScalar(item.year_from),
@@ -93,20 +98,15 @@ function emptyIntakeAdditionalDefaults(): IntakeAdditionalPayload {
   };
 }
 
-function normalizeListItems<T extends Record<string, string>>(
-  items: T[] | undefined,
+function normalizeListItems<T extends object>(
+  items: readonly T[] | undefined,
 ): Array<StringRecord<T>> {
   if (!Array.isArray(items)) return [];
   return items
     .filter((item): item is T => typeof item === "object" && item != null)
-    .map((item) => {
-      const normalized: StringRecord<T> = { ...item };
-      for (const key in item) {
-        if (!Object.prototype.hasOwnProperty.call(item, key)) continue;
-        normalized[key] = normalizeScalar(item[key] ?? "");
-      }
-      return normalized;
-    });
+    .map((item) => Object.fromEntries(
+      Object.entries(item).map(([key, value]) => [key, normalizeScalar(value)]),
+    ) as StringRecord<T>);
 }
 
 export function canonicalizeIntakePayloadForCompare(
