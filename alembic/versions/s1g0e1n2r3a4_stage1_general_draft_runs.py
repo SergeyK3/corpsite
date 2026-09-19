@@ -52,4 +52,26 @@ def downgrade() -> None:
     op.execute("DELETE FROM public.access_roles WHERE code='PPR_STAGE1_GENERAL_MANAGE'")
     op.execute("DROP TABLE public.ppr_stage1_general_participants")
     op.execute("DROP TABLE public.ppr_stage1_general_runs")
+    # PMF-1 owns the domain registry and keeps its audit rows with RESTRICT
+    # foreign keys.  A general-information run can have PMF items; remove only
+    # that domain's items/runs before removing its registry entry.  At this
+    # point in an Alembic downgrade, later migrations that add further run
+    # dependants have already been downgraded.
+    op.execute("""
+    DELETE FROM public.personnel_migration_items
+    WHERE domain_code = 'general_information'
+       OR run_id IN (
+           SELECT run_id
+           FROM public.personnel_migration_runs
+           WHERE domain_code = 'general_information'
+       )
+    """)
+    op.execute("""
+    DELETE FROM public.personnel_migration_runs
+    WHERE domain_code = 'general_information'
+    """)
+    op.execute("""
+    DELETE FROM public.personnel_record_events
+    WHERE domain_code = 'general_information'
+    """)
     op.execute("DELETE FROM public.personnel_migration_domains WHERE domain_code='general_information'")

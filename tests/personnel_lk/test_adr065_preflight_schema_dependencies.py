@@ -1,8 +1,9 @@
 """Narrow migration/writer tests for ADR-065 preflight dependencies."""
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import date, timedelta
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 from sqlalchemy import text
@@ -15,6 +16,25 @@ from app.services.personnel_order_evidence_scope_service import (
     advance_personnel_order_evidence_scopes_tx,
     lock_personnel_order_evidence_scopes_tx,
 )
+
+
+@pytest.fixture
+def evidence_scope_order() -> int:
+    """Self-contained ADR-065 order/scope fixture; never relies on seed rows."""
+    with engine.begin() as conn:
+        user_id = conn.execute(text("SELECT user_id FROM public.users WHERE is_active IS TRUE ORDER BY user_id LIMIT 1")).scalar_one()
+        order_id = int(conn.execute(text("""
+            INSERT INTO public.personnel_orders(order_number, order_date, order_type_code, status, source_mode, created_by)
+            VALUES (:number, :date, 'HIRE', 'DRAFT', 'PAPER', :user_id)
+            RETURNING order_id
+        """), {"number": f"ADR065-PREFLIGHT-{uuid4().hex[:12]}", "date": date(2026, 7, 10), "user_id": user_id}).scalar_one())
+        conn.execute(text("INSERT INTO public.personnel_order_evidence_scopes(order_id) VALUES (:id)"), {"id": order_id})
+    try:
+        yield order_id
+    finally:
+        with engine.begin() as conn:
+            conn.execute(text("DELETE FROM public.personnel_order_evidence_scopes WHERE order_id=:id"), {"id": order_id})
+            conn.execute(text("DELETE FROM public.personnel_orders WHERE order_id=:id"), {"id": order_id})
 
 
 def test_revision_chain_is_linear() -> None:
@@ -56,13 +76,8 @@ def test_migrated_schema_and_deterministic_backfill() -> None:
         assert missing == 0
 
 
-def test_scope_generation_cas_and_rollback() -> None:
-    with engine.connect() as conn:
-        order_id = conn.execute(
-            text("SELECT order_id FROM public.personnel_orders ORDER BY order_id LIMIT 1")
-        ).scalar_one_or_none()
-    if order_id is None:
-        pytest.skip("no personnel order available")
+def test_scope_generation_cas_and_rollback(evidence_scope_order: int) -> None:
+    order_id = evidence_scope_order
     with engine.connect() as conn:
         tx = conn.begin()
         before = conn.execute(
@@ -83,11 +98,8 @@ def test_scope_generation_cas_and_rollback() -> None:
         assert after == before
 
 
-def test_scope_writer_lock_serializes_concurrent_generation() -> None:
-    with engine.connect() as probe:
-        order_id = probe.execute(text("SELECT order_id FROM public.personnel_orders ORDER BY order_id LIMIT 1")).scalar_one_or_none()
-    if order_id is None:
-        pytest.skip("no personnel order available")
+def test_scope_writer_lock_serializes_concurrent_generation(evidence_scope_order: int) -> None:
+    order_id = evidence_scope_order
     with engine.connect() as first, engine.connect() as second:
         first_tx = first.begin()
         second_tx = second.begin()
@@ -117,9 +129,12 @@ def test_c2_watermark_advance_duplicate_future_and_rollback() -> None:
             expected_generation=generation,
         )
         assert duplicate.code == "BOUNDARY_RUN_DUPLICATE"
+        business_date = conn.execute(
+            text("SELECT ((transaction_timestamp() AT TIME ZONE 'UTC') + INTERVAL '5 hours')::date")
+        ).scalar_one()
         future = assignment_boundary_activation_tx(
             conn,
-            target_effective_date=current + timedelta(days=1),
+            target_effective_date=business_date + timedelta(days=1),
             expected_effective_date=current,
             expected_generation=generation,
         )

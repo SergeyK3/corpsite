@@ -322,11 +322,64 @@ def test_migration_upgrade_downgrade_roundtrip() -> None:
     command.upgrade(cfg, REVISION_ID)
     with engine.begin() as conn:
         assert table_exists(conn, "personnel_applications")
-
     command.downgrade(cfg, PREVIOUS_REVISION)
     with engine.begin() as conn:
         assert not table_exists(conn, "personnel_applications")
-
     command.upgrade(cfg, "head")
     with engine.begin() as conn:
         assert table_exists(conn, "personnel_applications")
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_stage1_general_domain_downgrade_removes_only_its_pmf_records() -> None:
+    """Regression: Stage-1 domain rollback must clear its own PMF FK rows."""
+    stage1_revision = "s1g0e1n2r3a4"
+    previous_revision = "s0p0r0e0v0f0"
+    cfg = _alembic_config()
+    command.upgrade(cfg, stage1_revision)
+    general_run_id: int | None = None
+    other_domain = "education"
+    try:
+        with engine.begin() as conn:
+            assert conn.execute(
+                text("SELECT 1 FROM public.personnel_migration_domains WHERE domain_code='general_information'")
+            ).scalar_one_or_none() == 1
+            assert conn.execute(
+                text("SELECT 1 FROM public.personnel_migration_domains WHERE domain_code=:domain"),
+                {"domain": other_domain},
+            ).scalar_one_or_none() == 1
+            general_run_id = int(conn.execute(
+                text("""
+                INSERT INTO public.personnel_migration_runs(domain_code, run_status, metadata)
+                VALUES ('general_information', 'draft', jsonb_build_object('regression', true))
+                RETURNING run_id
+                """)
+            ).scalar_one())
+            conn.execute(text("""
+                INSERT INTO public.personnel_migration_items(run_id, domain_code, source_kind, item_status)
+                VALUES (:run_id, 'general_information', 'regression', 'draft')
+            """), {"run_id": general_run_id})
+            other_run_id = int(conn.execute(text("""
+                INSERT INTO public.personnel_migration_runs(domain_code, run_status, metadata)
+                VALUES (:domain, 'draft', jsonb_build_object('regression', true))
+                RETURNING run_id
+            """), {"domain": other_domain}).scalar_one())
+            conn.execute(text("""
+                INSERT INTO public.personnel_migration_items(run_id, domain_code, source_kind, item_status)
+                VALUES (:run_id, :domain, 'regression', 'draft')
+            """), {"run_id": other_run_id, "domain": other_domain})
+
+        command.downgrade(cfg, previous_revision)
+        with engine.begin() as conn:
+            assert conn.execute(text("SELECT 1 FROM public.personnel_migration_domains WHERE domain_code='general_information'")).scalar_one_or_none() is None
+            assert conn.execute(text("SELECT 1 FROM public.personnel_migration_runs WHERE domain_code='general_information'")).scalar_one_or_none() is None
+            assert conn.execute(text("SELECT 1 FROM public.personnel_migration_items WHERE domain_code='general_information'")).scalar_one_or_none() is None
+            assert conn.execute(text("SELECT 1 FROM public.personnel_migration_domains WHERE domain_code=:domain"), {"domain": other_domain}).scalar_one_or_none() == 1
+            assert conn.execute(text("SELECT 1 FROM public.personnel_migration_runs WHERE run_id=:run_id"), {"run_id": other_run_id}).scalar_one_or_none() == 1
+            assert conn.execute(text("SELECT 1 FROM public.personnel_migration_items WHERE run_id=:run_id"), {"run_id": other_run_id}).scalar_one_or_none() == 1
+    finally:
+        command.upgrade(cfg, "head")
+        with engine.begin() as conn:
+            assert conn.execute(text("SELECT 1 FROM public.personnel_migration_domains WHERE domain_code='general_information'")).scalar_one_or_none() == 1
+            conn.execute(text("DELETE FROM public.personnel_migration_items WHERE domain_code=:domain"), {"domain": other_domain})
+            conn.execute(text("DELETE FROM public.personnel_migration_runs WHERE domain_code=:domain"), {"domain": other_domain})
