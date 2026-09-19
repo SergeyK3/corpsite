@@ -195,8 +195,9 @@ describe("PositionsPageClient position scope", () => {
       expect(apiFetchJson).toHaveBeenCalled();
     });
 
+    expect(apiFetchJson.mock.calls.some((call) => call[1]?.query?.scope === "used")).toBe(true);
     expect(lastFetchQuery()?.org_unit_id).toBe(74);
-    expect(lastFetchQuery()?.scope).toBe("used");
+    expect(lastFetchQuery()?.scope).toBe("allowed");
     expect(screen.getByTestId("positions-scope-used")).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByText("Режим: Используемые")).toBeInTheDocument();
   });
@@ -263,7 +264,7 @@ describe("PositionsPageClient position scope", () => {
 
     const scopesAfterClick = fetchScopesAfterCallIndex(0);
     expect(scopesAfterClick).toContain("used");
-    expect(scopesAfterClick.filter((scope) => scope === "allowed")).toHaveLength(0);
+    expect(scopesAfterClick.filter((scope) => scope === "allowed")).toHaveLength(1);
     expect(lastFetchQuery()?.org_unit_id).toBe(74);
     expect(lastFetchQuery()).not.toHaveProperty("org_group_id");
     expect(callsBefore).toBeGreaterThan(0);
@@ -338,7 +339,7 @@ describe("PositionsPageClient position scope", () => {
 
     const scopesAfterClick = fetchScopesAfterCallIndex(0);
     expect(scopesAfterClick).toContain("used");
-    expect(scopesAfterClick.filter((scope) => scope === "allowed")).toHaveLength(0);
+    expect(scopesAfterClick.filter((scope) => scope === "allowed")).toHaveLength(1);
     expect(screen.getByTestId("positions-scope-used")).toHaveAttribute("aria-pressed", "true");
     expect(replace).toHaveBeenCalledWith(
       "/directory/positions?org_group_id=3&org_unit_id=73&position_scope=used",
@@ -517,6 +518,223 @@ describe("PositionsPageClient position scope", () => {
   });
 });
 
+describe("PositionsPageClient allowed-position additions", () => {
+  const INITIAL_ALLOWED = {
+    items: [{ position_id: 10, name: "Already allowed" }],
+    total: 1,
+    filter_org_unit_id: 74,
+    filter_org_unit_name: "HR department",
+  };
+  const CATALOG = {
+    items: [
+      { position_id: 10, name: "Already allowed" },
+      { position_id: 20, name: "Available position" },
+    ],
+    total: 2,
+  };
+
+  it("adds an existing catalog position successfully", async () => {
+    apiFetchJson
+      .mockResolvedValueOnce(INITIAL_ALLOWED)
+      .mockResolvedValueOnce(CATALOG)
+      .mockResolvedValueOnce({ link: { position_id: 20 }, transition: "created" })
+      .mockResolvedValueOnce({
+        ...INITIAL_ALLOWED,
+        items: [...INITIAL_ALLOWED.items, { position_id: 20, name: "Available position" }],
+        total: 2,
+      });
+
+    renderWithMe({ user_id: 1, role_id: 2, is_system_admin: true });
+    fireEvent.click(await screen.findByTestId("allow-existing-position-button"));
+    fireEvent.click(await screen.findByTestId("allow-catalog-position-20"));
+
+    await waitFor(() => {
+      expect(apiFetchJson).toHaveBeenCalledWith(
+        "/directory/org-units/74/allowed-positions/20",
+        { method: "PUT" },
+      );
+      expect(screen.getByRole("status")).toHaveTextContent("Available position");
+    });
+  });
+
+  it("does not offer a position that is already allowed", async () => {
+    apiFetchJson.mockResolvedValueOnce(INITIAL_ALLOWED).mockResolvedValueOnce(CATALOG);
+
+    renderWithMe({ user_id: 1, role_id: 2, is_system_admin: true });
+    fireEvent.click(await screen.findByTestId("allow-existing-position-button"));
+
+    expect(await screen.findByTestId("allow-catalog-position-20")).toBeInTheDocument();
+    expect(screen.queryByTestId("allow-catalog-position-10")).not.toBeInTheDocument();
+  });
+
+  it("shows the API error and leaves the selector open", async () => {
+    apiFetchJson
+      .mockResolvedValueOnce(INITIAL_ALLOWED)
+      .mockResolvedValueOnce(CATALOG)
+      .mockRejectedValueOnce({
+        status: 403,
+        message: "Forbidden.",
+        details: { detail: "Forbidden." },
+      });
+
+    renderWithMe({ user_id: 1, role_id: 2, is_system_admin: true });
+    fireEvent.click(await screen.findByTestId("allow-existing-position-button"));
+    fireEvent.click(await screen.findByTestId("allow-catalog-position-20"));
+
+    expect(await screen.findByRole("dialog", { name: "Разрешить должность" })).toBeInTheDocument();
+    expect(await screen.findByText("Недостаточно прав")).toBeInTheDocument();
+  });
+
+  it("reloads the allowed list after adding a position", async () => {
+    const reloaded = {
+      ...INITIAL_ALLOWED,
+      items: [...INITIAL_ALLOWED.items, { position_id: 20, name: "Available position" }],
+      total: 2,
+    };
+    let added = false;
+    apiFetchJson.mockImplementation((url: string, options?: { method?: string; query?: { org_unit_id?: number } }) => {
+      if (options?.method === "PUT") {
+        added = true;
+        return Promise.resolve({ link: { position_id: 20 }, transition: "created" });
+      }
+      if (options?.query?.org_unit_id === 74) {
+        return Promise.resolve(added ? reloaded : INITIAL_ALLOWED);
+      }
+      if (url === "/directory/positions") return Promise.resolve(CATALOG);
+      return Promise.resolve({ items: [], total: 0 });
+    });
+
+    renderWithMe({ user_id: 1, role_id: 2, is_system_admin: true });
+    fireEvent.click(await screen.findByTestId("allow-existing-position-button"));
+    fireEvent.click(await screen.findByTestId("allow-catalog-position-20"));
+
+    await waitFor(() => {
+      const putCallIndex = apiFetchJson.mock.calls.findIndex(
+        (call) => call[0] === "/directory/org-units/74/allowed-positions/20" && call[1]?.method === "PUT",
+      );
+      const scopedReload = apiFetchJson.mock.calls
+        .slice(putCallIndex + 1)
+        .find((call) => call[1]?.query?.org_unit_id === 74);
+      expect(putCallIndex).toBeGreaterThan(-1);
+      expect(scopedReload?.[1]?.query).toMatchObject({
+        org_unit_id: 74,
+        scope: "allowed",
+        limit: 50,
+        offset: 0,
+      });
+    });
+  });
+});
+
+describe("PositionsPageClient used-position admission permissions", () => {
+  const USED_POSITION = {
+    items: [{ position_id: 20, name: "Used position" }],
+    total: 1,
+    filter_org_unit_id: 74,
+    filter_org_unit_name: "HR department",
+  };
+  const NO_ALLOWED_POSITIONS = { items: [], total: 0 };
+  const ALLOWED_USED_POSITION = {
+    items: [{ position_id: 20, name: "Used position" }],
+    total: 1,
+  };
+
+  it("enables admission permission with the checkbox", async () => {
+    searchParams = new URLSearchParams("org_unit_id=74&position_scope=used");
+    apiFetchJson
+      .mockResolvedValueOnce(USED_POSITION)
+      .mockResolvedValueOnce(NO_ALLOWED_POSITIONS)
+      .mockResolvedValueOnce({ link: { position_id: 20 }, transition: "created" })
+      .mockResolvedValueOnce(USED_POSITION)
+      .mockResolvedValueOnce(ALLOWED_USED_POSITION);
+
+    renderWithMe({ user_id: 1, role_id: 2, is_system_admin: true });
+    const checkbox = await screen.findByTestId("used-position-allowed-20");
+    expect(checkbox).not.toBeChecked();
+    fireEvent.click(checkbox);
+
+    await waitFor(() => {
+      expect(apiFetchJson).toHaveBeenCalledWith(
+        "/directory/org-units/74/allowed-positions/20",
+        { method: "PUT" },
+      );
+      expect(screen.getByTestId("used-position-allowed-20")).toBeChecked();
+    });
+  });
+
+  it("removes admission permission with the checkbox", async () => {
+    searchParams = new URLSearchParams("org_unit_id=74&position_scope=used");
+    apiFetchJson
+      .mockResolvedValueOnce(USED_POSITION)
+      .mockResolvedValueOnce(ALLOWED_USED_POSITION)
+      .mockResolvedValueOnce({ position_id: 20, is_active: false })
+      .mockResolvedValueOnce(USED_POSITION)
+      .mockResolvedValueOnce(NO_ALLOWED_POSITIONS);
+
+    renderWithMe({ user_id: 1, role_id: 2, is_system_admin: true });
+    const checkbox = await screen.findByTestId("used-position-allowed-20");
+    expect(checkbox).toBeChecked();
+    fireEvent.click(checkbox);
+
+    await waitFor(() => {
+      expect(apiFetchJson).toHaveBeenCalledWith(
+        "/directory/org-units/74/allowed-positions/20",
+        { method: "DELETE" },
+      );
+      expect(screen.getByTestId("used-position-allowed-20")).not.toBeChecked();
+    });
+  });
+
+  it("restores the checkbox and shows an error when the API request fails", async () => {
+    searchParams = new URLSearchParams("org_unit_id=74&position_scope=used");
+    apiFetchJson
+      .mockResolvedValueOnce(USED_POSITION)
+      .mockResolvedValueOnce(ALLOWED_USED_POSITION)
+      .mockRejectedValueOnce({
+        status: 403,
+        message: "Forbidden.",
+        details: { detail: "Forbidden." },
+      });
+
+    renderWithMe({ user_id: 1, role_id: 2, is_system_admin: true });
+    const checkbox = await screen.findByTestId("used-position-allowed-20");
+    fireEvent.click(checkbox);
+
+    expect(await screen.findByText("Недостаточно прав")).toBeInTheDocument();
+    expect(screen.getByTestId("used-position-allowed-20")).toBeChecked();
+  });
+
+  it("reloads used and allowed lists after a checkbox change", async () => {
+    searchParams = new URLSearchParams("org_unit_id=74&position_scope=used");
+    let enabled = false;
+    apiFetchJson.mockImplementation((url: string, options?: { method?: string; query?: { scope?: string } }) => {
+      if (options?.method === "PUT") {
+        enabled = true;
+        return Promise.resolve({ link: { position_id: 20 }, transition: "created" });
+      }
+      if (url === "/directory/positions" && options?.query?.scope === "used") return Promise.resolve(USED_POSITION);
+      if (url === "/directory/positions" && options?.query?.scope === "allowed") {
+        return Promise.resolve(enabled ? ALLOWED_USED_POSITION : NO_ALLOWED_POSITIONS);
+      }
+      return Promise.resolve({ items: [], total: 0 });
+    });
+
+    renderWithMe({ user_id: 1, role_id: 2, is_system_admin: true });
+    fireEvent.click(await screen.findByTestId("used-position-allowed-20"));
+
+    await waitFor(() => {
+      const putIndex = apiFetchJson.mock.calls.findIndex(
+        (call) => call[0] === "/directory/org-units/74/allowed-positions/20" && call[1]?.method === "PUT",
+      );
+      const reloadScopes = apiFetchJson.mock.calls
+        .slice(putIndex + 1)
+        .map((call) => call[1]?.query?.scope);
+      expect(reloadScopes).toContain("used");
+      expect(reloadScopes).toContain("allowed");
+    });
+  });
+});
+
 describe("PositionsPageClient delete permissions", () => {
   it("hides delete buttons from the HR department head", async () => {
     apiFetchJson.mockResolvedValue({
@@ -573,9 +791,18 @@ describe("PositionsPageClient delete permissions", () => {
     renderWithMe({ user_id: 1, role_id: 2, is_system_admin: true });
 
     expect(await screen.findByTestId("position-delete-dependencies-100")).toHaveTextContent(
-      "Штатные позиции: 2",
+      "Используется в 2 связанных записях. Удаление недоступно.",
     );
+    const details = screen.getByTestId("position-delete-details-100");
+    expect(details).not.toHaveAttribute("open");
+    expect(screen.getByText("Подробнее")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("Подробнее"));
+    expect(details).toHaveAttribute("open");
+    expect(details).toHaveTextContent("Штатные позиции: 2");
     expect(screen.queryByRole("button", { name: "Удалить" })).not.toBeInTheDocument();
+
+    expect(screen.getByRole("button", { name: "Можно удалить" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Удаление недоступно" })).toBeInTheDocument();
 
     fireEvent.click(screen.getByTestId("positions-delete-status-blocked"));
     await waitFor(() => expect(lastFetchQuery()?.delete_status).toBe("blocked"));
@@ -587,10 +814,10 @@ describe("PositionsPageClient delete permissions", () => {
 
     renderWithMe({ user_id: 1, role_id: 2, is_system_admin: true });
 
+    fireEvent.click(await screen.findByText("Подробнее"));
     const detail = await screen.findByTestId("allowed-position-dependency-501");
-    expect(detail).toHaveTextContent("Отдел кадров (подразделение ID 74)");
-    expect(detail).toHaveTextContent("связь ID 501");
-    expect(detail).toHaveTextContent("Состояние: активна");
+    expect(detail).toHaveTextContent("Отдел кадров · связь активна");
+    expect(detail).not.toHaveClass("border-amber-300/70");
     expect(screen.queryByRole("link", { name: "Перейти к управлению" })).not.toBeInTheDocument();
   });
 
@@ -600,8 +827,9 @@ describe("PositionsPageClient delete permissions", () => {
 
     renderWithMe({ user_id: 1, role_id: 2, is_system_admin: true });
 
+    fireEvent.click(await screen.findByText("Подробнее"));
     expect(await screen.findByTestId("allowed-position-dependency-501")).toHaveTextContent(
-      "Отдел кадров (подразделение ID 74)",
+      "Отдел кадров · связь активна",
     );
     expect(screen.getByRole("link", { name: "Перейти к управлению" })).toHaveAttribute(
       "href",
@@ -615,8 +843,9 @@ describe("PositionsPageClient delete permissions", () => {
 
     renderWithMe({ user_id: 1, role_id: 2, is_system_admin: true });
 
+    fireEvent.click(await screen.findByText("Подробнее"));
     expect(await screen.findByTestId("allowed-position-dependency-501")).toHaveTextContent(
-      "Состояние: активна",
+      "Отдел кадров · связь активна",
     );
     expect(screen.getByRole("link", { name: "Перейти к управлению" })).toHaveAttribute(
       "href",
@@ -872,7 +1101,9 @@ describe("PositionsPageClient delete permissions", () => {
     renderWithMe({ user_id: 1, role_id: 2, is_system_admin: true });
     fireEvent.click(await screen.findByRole("button", { name: "Удалить" }));
 
-    expect(await screen.findAllByText(/Заявления кандидатов: 1/)).toHaveLength(2);
+    expect(await screen.findAllByText("Используется в 1 связанных записях. Удаление недоступно.")).toHaveLength(2);
+    fireEvent.click(screen.getByTestId("position-delete-details-102").querySelector("summary") as HTMLElement);
+    expect(screen.getByTestId("position-delete-details-102")).toHaveTextContent("Заявления кандидатов: 1");
     expect(screen.queryByRole("button", { name: "Удалить" })).not.toBeInTheDocument();
   });
 });

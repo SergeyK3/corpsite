@@ -60,6 +60,7 @@ type PositionsResponse =
 
 const API_BASE = "/directory/positions";
 const PAGE_SIZE = 50;
+const CATALOG_PAGE_SIZE = 1000;
 const POSITION_SCOPE_PARAM = "position_scope";
 
 type SearchParamsReader = Pick<URLSearchParams, "get">;
@@ -108,13 +109,8 @@ function allowedPositionManagementHref(link: AllowedPositionDependencyLink): str
   return `/directory/positions?${params.toString()}`;
 }
 
-function formatBlockedDeleteMessage(item: PositionItem, assessment: PositionDeleteAssessment): string {
-  const dependencyText = assessment.dependencies
-    .map((dependency) => `${dependency.label}: ${dependency.count}`)
-    .join("; ");
-  return `Удаление должности «${item.name}» заблокировано (${assessment.total_dependencies} связанных записей).${
-    dependencyText ? ` ${dependencyText}` : ""
-  }`;
+function formatBlockedDeleteMessage(assessment: PositionDeleteAssessment): string {
+  return `Используется в ${assessment.total_dependencies} связанных записях. Удаление недоступно.`;
 }
 
 function deleteAssessmentFromError(error: unknown): PositionDeleteAssessment | null {
@@ -294,6 +290,13 @@ export default function PositionsPageClient() {
   const [loading, setLoading] = React.useState(true);
   const [saving, setSaving] = React.useState(false);
   const [allowedPositionMutationId, setAllowedPositionMutationId] = React.useState<number | null>(null);
+  const [allowedPositionCatalogOpen, setAllowedPositionCatalogOpen] = React.useState(false);
+  const [allowedPositionCatalogLoading, setAllowedPositionCatalogLoading] = React.useState(false);
+  const [allowedPositionCatalog, setAllowedPositionCatalog] = React.useState<PositionItem[]>([]);
+  const [allowedPositionCatalogError, setAllowedPositionCatalogError] = React.useState<string | null>(null);
+  const [allowedPositionAddingId, setAllowedPositionAddingId] = React.useState<number | null>(null);
+  const [allowedPositionIds, setAllowedPositionIds] = React.useState<Set<number>>(new Set());
+  const [pageSuccess, setPageSuccess] = React.useState<string | null>(null);
 
   const [searchInput, setSearchInput] = React.useState("");
   const [search, setSearch] = React.useState("");
@@ -380,13 +383,36 @@ export default function PositionsPageClient() {
         }),
       });
 
+      const normalized = normalizeItems(payload);
+      let activeAllowedPositionIds = new Set<number>();
+      if (orgUnitId != null && positionScope === "used") {
+        try {
+          const allowedPayload = await apiFetchJson<PositionsResponse>(API_BASE, {
+            query: {
+              org_unit_id: orgUnitId,
+              scope: "allowed",
+              limit: CATALOG_PAGE_SIZE,
+              offset: 0,
+            },
+          });
+          activeAllowedPositionIds = new Set(
+            normalizeItems(allowedPayload).items.map(positionIdOf),
+          );
+        } catch {
+          // The used list remains usable if the supplementary status lookup fails.
+          activeAllowedPositionIds = new Set();
+        }
+      } else if (orgUnitId != null && positionScope === "allowed") {
+        activeAllowedPositionIds = new Set(normalized.items.map(positionIdOf));
+      }
+
       if (seq !== loadSeqRef.current) return;
 
-      const normalized = normalizeItems(payload);
       setItems(normalized.items);
       setTotal(normalized.total);
       setFilterOrgUnitId(normalized.filterOrgUnitId);
       setFilterOrgUnitName(normalized.filterOrgUnitName);
+      setAllowedPositionIds(activeAllowedPositionIds);
     } catch (error) {
       if (seq !== loadSeqRef.current) return;
       setPageError(extractErrorMessage(error));
@@ -394,6 +420,7 @@ export default function PositionsPageClient() {
       setTotal(0);
       setFilterOrgUnitId(null);
       setFilterOrgUnitName(null);
+      setAllowedPositionIds(new Set());
     } finally {
       if (seq === loadSeqRef.current) setLoading(false);
     }
@@ -443,6 +470,57 @@ export default function PositionsPageClient() {
     setDrawerOpen(false);
     setDrawerError(null);
     setSelectedItem(null);
+  }
+
+  async function openAllowedPositionCatalog() {
+    if (orgUnitId == null || positionScope !== "allowed" || !canDeletePositions) return;
+
+    setAllowedPositionCatalogOpen(true);
+    setAllowedPositionCatalogLoading(true);
+    setAllowedPositionCatalogError(null);
+    setPageError(null);
+    setPageSuccess(null);
+    try {
+      const payload = await apiFetchJson<PositionsResponse>(API_BASE, {
+        query: { limit: CATALOG_PAGE_SIZE, offset: 0 },
+      });
+      setAllowedPositionCatalog(normalizeItems(payload).items);
+    } catch (error) {
+      setAllowedPositionCatalog([]);
+      setAllowedPositionCatalogError(extractErrorMessage(error));
+    } finally {
+      setAllowedPositionCatalogLoading(false);
+    }
+  }
+
+  function closeAllowedPositionCatalog() {
+    if (allowedPositionAddingId != null) return;
+    setAllowedPositionCatalogOpen(false);
+    setAllowedPositionCatalogError(null);
+  }
+
+  async function handleAddAllowedPosition(item: PositionItem) {
+    if (orgUnitId == null || positionScope !== "allowed" || !canDeletePositions) return;
+    const positionId = positionIdOf(item);
+    if (items.some((allowed) => positionIdOf(allowed) === positionId)) return;
+
+    setAllowedPositionAddingId(positionId);
+    setAllowedPositionCatalogError(null);
+    setPageError(null);
+    setPageSuccess(null);
+    try {
+      await apiFetchJson(
+        `/directory/org-units/${orgUnitId}/allowed-positions/${positionId}`,
+        { method: "PUT" },
+      );
+      setAllowedPositionCatalogOpen(false);
+      setPageSuccess(`Должность «${item.name}» разрешена для выбранного подразделения.`);
+      await loadItems();
+    } catch (error) {
+      setAllowedPositionCatalogError(extractErrorMessage(error));
+    } finally {
+      setAllowedPositionAddingId(null);
+    }
   }
 
   async function handleSubmit(values: PositionFormValues) {
@@ -501,6 +579,7 @@ export default function PositionsPageClient() {
     const positionId = positionIdOf(item);
     setAllowedPositionMutationId(positionId);
     setPageError(null);
+    setPageSuccess(null);
     try {
       await apiFetchJson(
         `/directory/org-units/${orgUnitId}/allowed-positions/${positionId}`,
@@ -530,7 +609,7 @@ export default function PositionsPageClient() {
               : row,
           ),
         );
-        setPageError(formatBlockedDeleteMessage(item, assessment));
+        setPageError(formatBlockedDeleteMessage(assessment));
         return;
       }
 
@@ -549,10 +628,37 @@ export default function PositionsPageClient() {
               : row,
           ),
         );
-        setPageError(formatBlockedDeleteMessage(item, assessment));
+        setPageError(formatBlockedDeleteMessage(assessment));
       } else {
         setPageError(extractErrorMessage(error));
       }
+    }
+  }
+
+  async function handleUsedPositionAllowedChange(item: PositionItem, nextAllowed: boolean) {
+    if (orgUnitId == null || positionScope !== "used" || !canDeletePositions) return;
+    const positionId = positionIdOf(item);
+    const wasAllowed = allowedPositionIds.has(positionId);
+    if (wasAllowed === nextAllowed) return;
+
+    setAllowedPositionMutationId(positionId);
+    setPageError(null);
+    setPageSuccess(null);
+    try {
+      await apiFetchJson(
+        `/directory/org-units/${orgUnitId}/allowed-positions/${positionId}`,
+        { method: nextAllowed ? "PUT" : "DELETE" },
+      );
+      setPageSuccess(
+        nextAllowed
+          ? `Должность «${item.name}» разрешена для приёма.`
+          : `Разрешение на приём для должности «${item.name}» снято.`,
+      );
+      await loadItems();
+    } catch (error) {
+      setPageError(extractErrorMessage(error));
+    } finally {
+      setAllowedPositionMutationId(null);
     }
   }
 
@@ -560,6 +666,7 @@ export default function PositionsPageClient() {
   const pageTo = Math.min(total, page * PAGE_SIZE + items.length);
   const hasPrev = page > 0;
   const hasNext = (page + 1) * PAGE_SIZE < total;
+  const showUsedAllowedColumn = canDeletePositions && orgUnitId != null && positionScope === "used";
 
   const filterCaption =
     filterOrgUnitName ||
@@ -667,6 +774,17 @@ export default function PositionsPageClient() {
               >
                 Создать
               </button>
+
+              {canDeletePositions && orgUnitId != null && positionScope === "allowed" ? (
+                <button
+                  type="button"
+                  onClick={() => void openAllowedPositionCatalog()}
+                  className="h-8.5 rounded-lg bg-emerald-600 px-3.5 py-1 text-sm font-medium text-white transition hover:bg-emerald-500"
+                  data-testid="allow-existing-position-button"
+                >
+                  Разрешить должность
+                </button>
+              ) : null}
             </div>
 
             {canDeletePositions ? (
@@ -674,8 +792,8 @@ export default function PositionsPageClient() {
                 <span className="text-xs font-medium text-zinc-600 dark:text-zinc-400">Удаление:</span>
                 {([
                   { value: null, label: "Все" },
-                  { value: "deletable", label: "Разрешённые" },
-                  { value: "blocked", label: "Заблокированные" },
+                  { value: "deletable", label: "Можно удалить" },
+                  { value: "blocked", label: "Удаление недоступно" },
                 ] as const).map((option) => (
                   <button
                     key={option.value ?? "all"}
@@ -700,6 +818,11 @@ export default function PositionsPageClient() {
             {!!pageError && (
               <div className="mb-2 rounded-xl border border-red-200 dark:border-red-900/55 bg-red-50 dark:bg-red-950/35 px-4 py-2 text-sm text-red-800 dark:text-red-200">
                 {pageError}
+              </div>
+            )}
+            {!!pageSuccess && (
+              <div className="mb-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-sm text-emerald-800 dark:border-emerald-900/55 dark:bg-emerald-950/35 dark:text-emerald-200" role="status">
+                {pageSuccess}
               </div>
             )}
 
@@ -754,6 +877,11 @@ export default function PositionsPageClient() {
                       <th className="w-[190px] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
                         Категория
                       </th>
+                      {showUsedAllowedColumn ? (
+                        <th className="w-[150px] px-3 py-1 text-center text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
+                          Разрешена для приёма
+                        </th>
+                      ) : null}
                       <th className="w-[170px] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
                         Действия
                       </th>
@@ -763,13 +891,13 @@ export default function PositionsPageClient() {
                   <tbody>
                     {loading ? (
                       <tr>
-                        <td colSpan={4} className="px-3 py-2 text-[13px] text-zinc-600 dark:text-zinc-400">
+                        <td colSpan={showUsedAllowedColumn ? 5 : 4} className="px-3 py-2 text-[13px] text-zinc-600 dark:text-zinc-400">
                           Загрузка...
                         </td>
                       </tr>
                     ) : items.length === 0 ? (
                       <tr>
-                        <td colSpan={4} className="px-3 py-2 text-[13px] text-zinc-600 dark:text-zinc-400">
+                        <td colSpan={showUsedAllowedColumn ? 5 : 4} className="px-3 py-2 text-[13px] text-zinc-600 dark:text-zinc-400">
                           Записи не найдены.
                         </td>
                       </tr>
@@ -783,47 +911,66 @@ export default function PositionsPageClient() {
                             <div>{item.name}</div>
                             {canDeletePositions && item.delete_assessment?.can_delete === false ? (
                               <div
-                                className="mt-0.5 text-[11px] leading-4 text-amber-700 dark:text-amber-300"
+                                className="mt-0.5 text-[11px] leading-4 text-zinc-600 dark:text-zinc-400"
                                 data-testid={`position-delete-dependencies-${positionIdOf(item)}`}
                               >
                                 <div>
-                                  Заблокировано: {item.delete_assessment.total_dependencies} связанных записей
-                                {item.delete_assessment.dependencies.length > 0
-                                  ? ` — ${item.delete_assessment.dependencies
-                                      .map((dependency) => `${dependency.label}: ${dependency.count}`)
-                                      .join("; ")}`
-                                  : ""}
+                                  Используется в {item.delete_assessment.total_dependencies} связанных записях. Удаление недоступно.
                                 </div>
-                                {item.delete_assessment.dependencies.flatMap(
-                                  (dependency) => dependency.allowed_position_links ?? [],
-                                ).map((link) => (
-                                  <div
-                                    key={link.org_unit_allowed_position_id}
-                                    className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 rounded-md border border-amber-300/70 px-2 py-1 dark:border-amber-800"
-                                    data-testid={`allowed-position-dependency-${link.org_unit_allowed_position_id}`}
-                                  >
-                                    <span>
-                                      {link.org_unit_name} (подразделение ID {link.org_unit_id}) · связь ID {link.org_unit_allowed_position_id}
-                                    </span>
-                                    <span className="font-medium">
-                                      Состояние: {link.is_active ? "активна" : "неактивна"}
-                                    </span>
-                                    {orgUnitId === link.org_unit_id && positionScope === "allowed" ? null : (
-                                      <a
-                                        href={allowedPositionManagementHref(link)}
-                                        className="font-medium underline underline-offset-2 hover:no-underline"
-                                      >
-                                        Перейти к управлению
-                                      </a>
-                                    )}
-                                  </div>
-                                ))}
+                                {item.delete_assessment.dependencies.length > 0 ? (
+                                  <details className="mt-1" data-testid={`position-delete-details-${positionIdOf(item)}`}>
+                                    <summary className="cursor-pointer text-zinc-700 underline underline-offset-2 hover:no-underline dark:text-zinc-300">
+                                      Подробнее
+                                    </summary>
+                                    <div className="mt-1 space-y-1">
+                                      {item.delete_assessment.dependencies.map((dependency) => (
+                                        <div key={dependency.key}>{dependency.label}: {dependency.count}</div>
+                                      ))}
+                                      {item.delete_assessment.dependencies.flatMap(
+                                        (dependency) => dependency.allowed_position_links ?? [],
+                                      ).map((link) => (
+                                        <div
+                                          key={link.org_unit_allowed_position_id}
+                                          className="flex flex-wrap items-center gap-x-1 gap-y-0.5 rounded-md border border-zinc-200 px-2 py-1 dark:border-zinc-800"
+                                          data-testid={`allowed-position-dependency-${link.org_unit_allowed_position_id}`}
+                                        >
+                                          <span>
+                                            {link.org_unit_name} · связь {link.is_active ? "активна" : "неактивна"}
+                                          </span>
+                                          {orgUnitId === link.org_unit_id && positionScope === "allowed" ? null : (
+                                            <>
+                                              <span>·</span>
+                                              <a
+                                                href={allowedPositionManagementHref(link)}
+                                                className="font-medium underline underline-offset-2 hover:no-underline"
+                                              >
+                                                Перейти к управлению
+                                              </a>
+                                            </>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </details>
+                                ) : null}
                               </div>
                             ) : null}
                           </td>
                           <td className="px-3 py-1 text-[13px] leading-4 text-zinc-600 dark:text-zinc-400">
                             {getCategoryLabel(item)}
                           </td>
+                          {showUsedAllowedColumn ? (
+                            <td className="px-3 py-1 text-center">
+                              <input
+                                type="checkbox"
+                                checked={allowedPositionIds.has(positionIdOf(item))}
+                                disabled={allowedPositionMutationId === positionIdOf(item)}
+                                onChange={(event) => void handleUsedPositionAllowedChange(item, event.target.checked)}
+                                aria-label={`Разрешена для приёма: ${item.name}`}
+                                data-testid={`used-position-allowed-${positionIdOf(item)}`}
+                              />
+                            </td>
+                          ) : null}
                           <td className="px-3 py-1">
                             <div className="flex items-center gap-1">
                               <button
@@ -879,6 +1026,43 @@ export default function PositionsPageClient() {
         onClose={closeDrawer}
         onSubmit={handleSubmit}
       />
+
+      {allowedPositionCatalogOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4" role="dialog" aria-modal="true" aria-label="Разрешить должность">
+          <div className="max-h-[80vh] w-full max-w-lg overflow-hidden rounded-xl bg-white shadow-xl dark:bg-zinc-950">
+            <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
+              <div>
+                <h2 className="text-base font-semibold">Разрешить должность</h2>
+                <p className="text-sm text-zinc-600 dark:text-zinc-400">Выберите существующую должность из общего каталога.</p>
+              </div>
+              <button type="button" onClick={closeAllowedPositionCatalog} disabled={allowedPositionAddingId != null} className="rounded-md border px-2 py-1 text-sm disabled:opacity-50">
+                Закрыть
+              </button>
+            </div>
+            <div className="max-h-[62vh] overflow-y-auto p-4">
+              {allowedPositionCatalogLoading ? <p className="text-sm text-zinc-600">Загрузка каталога…</p> : null}
+              {allowedPositionCatalogError ? <p className="mb-3 text-sm text-red-700 dark:text-red-300">{allowedPositionCatalogError}</p> : null}
+              {!allowedPositionCatalogLoading && !allowedPositionCatalogError ? (
+                <div className="space-y-2">
+                  {allowedPositionCatalog.filter((candidate) => !items.some((allowed) => positionIdOf(allowed) === positionIdOf(candidate))).map((candidate) => {
+                    const candidateId = positionIdOf(candidate);
+                    const adding = allowedPositionAddingId === candidateId;
+                    return (
+                      <div key={candidateId} className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 px-3 py-2 dark:border-zinc-800">
+                        <span className="text-sm">{candidate.name}</span>
+                        <button type="button" onClick={() => void handleAddAllowedPosition(candidate)} disabled={allowedPositionAddingId != null} data-testid={`allow-catalog-position-${candidateId}`} className="rounded-md bg-emerald-600 px-2 py-1 text-xs font-medium text-white disabled:opacity-50">
+                          {adding ? "Добавляем…" : "Разрешить"}
+                        </button>
+                      </div>
+                    );
+                  })}
+                  {allowedPositionCatalog.length > 0 && allowedPositionCatalog.every((candidate) => items.some((allowed) => positionIdOf(allowed) === positionIdOf(candidate))) ? <p className="text-sm text-zinc-600">Все должности из каталога уже разрешены.</p> : null}
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
