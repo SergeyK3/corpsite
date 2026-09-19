@@ -16,6 +16,7 @@ export async function renderIntakePdfResponse(
   opts?: { format?: string | null },
 ): Promise<NextResponse> {
   const started = Date.now();
+  let stage = "load_model";
   try {
     const loaded = await loadModel();
     if (opts?.format === "html") {
@@ -29,6 +30,7 @@ export async function renderIntakePdfResponse(
       });
     }
 
+    stage = "render_pdf";
     const renderer = getIntakePdfRenderer();
     const pdf = await renderer.render(loaded.model);
 
@@ -51,13 +53,25 @@ export async function renderIntakePdfResponse(
     });
   } catch (err) {
     if (err instanceof IntakePdfDataError) {
+      console.warn("Intake PDF data request failed", {
+        status: err.status,
+        code: err.code,
+      });
       return jsonError(err.status, err.code, err.message);
     }
 
     const code =
       err && typeof err === "object" && "code" in err && String((err as { code?: unknown }).code) === "PDF_TIMEOUT"
         ? "PDF_TIMEOUT"
-        : "PDF_RENDER_ERROR";
+        : stage === "load_model"
+          ? "PDF_MODEL_ERROR"
+          : "PDF_RENDER_ERROR";
+    // Keep diagnostics in server logs without serializing a stack trace or request data to the browser.
+    console.error("Intake PDF rendering failed", {
+      code,
+      stage,
+      message: err instanceof Error ? err.message : "Unknown PDF renderer error",
+    });
     return jsonError(
       500,
       code,

@@ -1,5 +1,5 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi, beforeEach } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
 import PersonnelApplicationIntakeReviewDrawer from "./PersonnelApplicationIntakeReviewDrawer";
 import * as api from "../_lib/personnelApplicationsApi.client";
@@ -91,6 +91,10 @@ const reviewState: api.IntakeReviewState = {
 };
 
 describe("PersonnelApplicationIntakeReviewDrawer", () => {
+  afterEach(() => {
+    cleanup();
+  });
+
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.spyOn(api, "listIntakeReconciliationDecisions").mockResolvedValue({
@@ -168,4 +172,31 @@ describe("PersonnelApplicationIntakeReviewDrawer", () => {
     expect(within(drawer).queryByTestId("intake-transfer-button")).not.toBeInTheDocument();
   });
 
+  it("shows legacy empty military details as not provided while retaining skip and rework actions", async () => {
+    vi.spyOn(api, "getIntakeReviewState").mockResolvedValue({
+      ...reviewState,
+      sections: reviewState.sections.map((section) => section.section_code === "military"
+        ? { ...section, status: "pending", payload: { rank: "", category: "", commissariat: "" } }
+        : section),
+    });
+    render(<PersonnelApplicationIntakeReviewDrawer applicationId={42} open onClose={() => {}} />);
+    const military = await screen.findByTestId("intake-review-section-military");
+    expect(within(military).getByTestId("intake-review-military-not-provided")).toHaveTextContent("Сведения о воинском учёте не предоставлены");
+    expect(within(military).getByRole("button", { name: "Пропустить" })).toBeInTheDocument();
+    expect(within(military).getByRole("button", { name: "Вернуть на доработку" })).toBeInTheDocument();
+  });
+
+  it("renders provided military data using field labels instead of raw JSON", async () => {
+    vi.spyOn(api, "getIntakeReviewState").mockResolvedValue({
+      ...reviewState,
+      sections: reviewState.sections.map((section) => section.section_code === "military"
+        ? { ...section, is_empty: false, payload: { status: "registered", rank: "капитан", commissariat: "Астана" } }
+        : section),
+    });
+    render(<PersonnelApplicationIntakeReviewDrawer applicationId={42} open onClose={() => {}} />);
+    const military = await screen.findByTestId("intake-review-section-military");
+    expect(within(military).getByTestId("intake-review-military-details")).toHaveTextContent("Воинское звание");
+    expect(within(military).getByTestId("intake-review-military-details")).toHaveTextContent("капитан");
+    expect(within(military).queryByText(/\"rank\"/)).not.toBeInTheDocument();
+  });
 });

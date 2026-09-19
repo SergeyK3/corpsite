@@ -22,6 +22,48 @@ type IntakeDraftOut = {
   payload: IntakeDraftPayload;
 };
 
+type PersonnelApplicationIdentityOut = {
+  application_id: number;
+  iin?: string | null;
+};
+
+type PdfPipelineStage = "draft_fetch" | "view_model";
+
+function diagnosticErrorFields(err: unknown): Array<{ path: string; expected?: string; received?: string }> {
+  if (!err || typeof err !== "object" || !("errors" in err) || typeof (err as { errors?: unknown }).errors !== "function") {
+    return [];
+  }
+  try {
+    const entries = (err as { errors: () => unknown }).errors();
+    if (!Array.isArray(entries)) return [];
+    return entries.slice(0, 20).map((entry) => {
+      const source = entry && typeof entry === "object" ? entry as Record<string, unknown> : {};
+      return {
+        path: Array.isArray(source.path) ? source.path.map(String).join(".") : String(source.path ?? source.loc ?? ""),
+        expected: typeof source.expected === "string" ? source.expected : undefined,
+        received: typeof source.received === "string" ? source.received : typeof source.value,
+      };
+    });
+  } catch {
+    return [];
+  }
+}
+
+function toPipelineDataError(applicationId: number, stage: PdfPipelineStage, err: unknown): IntakePdfDataError {
+  console.warn("Intake PDF model pipeline failed", {
+    applicationId,
+    stage,
+    exceptionClass: err instanceof Error ? err.constructor.name : typeof err,
+    validationFields: diagnosticErrorFields(err),
+    message: err instanceof Error ? err.message : "Unknown pipeline error",
+  });
+  return new IntakePdfDataError(
+    422,
+    `PDF_${stage.toUpperCase()}_FAILED`,
+    "PDF временно невозможно сформировать из-за ошибки данных.",
+  );
+}
+
 function authHeaders(auth: PersonnelOrderPdfAuthContext): Record<string, string> {
   const headers: Record<string, string> = { Accept: "application/json" };
   if (auth.authorizationHeader) headers.Authorization = auth.authorizationHeader;
@@ -51,29 +93,6 @@ async function fetchJson<T>(
     throw new IntakePdfDataError(res.status, "UPSTREAM_ERROR", init.fallback);
   }
   return res.json() as Promise<T>;
-}
-
-async function fetchBinary(
-  pathName: string,
-  init: { headers?: Record<string, string>; fallback: string },
-): Promise<Buffer | null> {
-  const res = await fetch(resolveApiUrl(pathName, { serverSide: true }), {
-    method: "GET",
-    headers: init.headers,
-    cache: "no-store",
-  });
-  if (res.status === 404) return null;
-  if (!res.ok) {
-    if (res.status === 401) {
-      throw new IntakePdfDataError(401, "UNAUTHORIZED", "Требуется авторизация.");
-    }
-    if (res.status === 403) {
-      throw new IntakePdfDataError(403, "FORBIDDEN", "Недостаточно прав для доступа к анкете.");
-    }
-    throw new IntakePdfDataError(res.status, "UPSTREAM_ERROR", init.fallback);
-  }
-  const arrayBuffer = await res.arrayBuffer();
-  return Buffer.from(arrayBuffer);
 }
 
 /** Photo failures must never abort personal-card PDF generation. */
@@ -157,24 +176,43 @@ export async function loadIntakePdfModelByApplicationId(
     throw new IntakePdfDataError(422, "INVALID_APPLICATION_ID", "Некорректный идентификатор обращения.");
   }
 
-  const draft = await fetchJson<IntakeDraftOut>(
+  let draft: IntakeDraftOut;
+  let applicationIdentity: PersonnelApplicationIdentityOut;
+  try {
+  [draft, applicationIdentity] = await Promise.all([
+    fetchJson<IntakeDraftOut>(
     `/directory/personnel-applications/${applicationId}/intake/draft`,
     {
       headers: authHeaders(auth),
       fallback: "Не удалось загрузить черновик анкеты.",
     },
-  );
+    ),
+    fetchJson<PersonnelApplicationIdentityOut>(`/directory/personnel-applications/${applicationId}`, {
+      headers: authHeaders(auth),
+      fallback: "Не удалось загрузить сведения анкеты.",
+    }),
+  ]);
+  } catch (err) {
+    if (err instanceof IntakePdfDataError) throw err;
+    throw toPipelineDataError(applicationId, "draft_fetch", err);
+  }
 
   const generatedAt = new Date();
   const summaries = await buildIntakePdfCalculatedSummaries(draft.payload, generatedAt);
   const photoDataUrl = await loadIntakePhotoDataUrlByApplicationId(applicationId, auth);
-  const model = buildIntakePdfViewModel({
+  let model: IntakePdfViewModel;
+  try {
+  model = buildIntakePdfViewModel({
     applicationId: draft.application_id ?? applicationId,
     payload: draft.payload,
     generatedAt,
     summaries,
     photoDataUrl,
+    iin: applicationIdentity.iin ?? null,
   });
+  } catch (err) {
+    throw toPipelineDataError(applicationId, "view_model", err);
+  }
   return {
     model,
     filename: buildIntakePdfFilename(model.applicationId, model.fullName),

@@ -1,8 +1,10 @@
 "use client";
 
+import * as React from "react";
 import Link from "next/link";
 
 import { buildPersonalCardHref } from "@/lib/employeeCardNav";
+import { downloadIntakePdfByApplicationId } from "@/app/intake/_lib/intakePdfOpen.client";
 import type { PersonnelLkRegistryItem } from "../_lib/personnelLkApi.client";
 import {
   formatPersonnelLkRate,
@@ -38,7 +40,18 @@ export default function PersonnelLkTable({
   allPageEmployeesSelected = false,
   somePageEmployeesSelected = false,
 }: Props) {
+  const [pdfLoadingId, setPdfLoadingId] = React.useState<number | null>(null);
+  const [pdfError, setPdfError] = React.useState<{ applicationId: number; message: string } | null>(null);
   const colSpan = showBulkSelect ? 7 : 6;
+
+  async function downloadPdf(applicationId: number) {
+    if (pdfLoadingId != null) return;
+    setPdfLoadingId(applicationId);
+    setPdfError(null);
+    const result = await downloadIntakePdfByApplicationId(applicationId);
+    setPdfLoadingId(null);
+    if (!result.ok) setPdfError({ applicationId, message: result.error });
+  }
 
   return (
     <div
@@ -78,7 +91,7 @@ export default function PersonnelLkTable({
               <th className="min-w-[180px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
                 Статус
               </th>
-              <th className="w-[120px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
+              <th className="min-w-[180px] px-3 py-2 text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
                 Действие
               </th>
             </tr>
@@ -141,7 +154,17 @@ export default function PersonnelLkTable({
                         >
                           Открыть
                         </Link>
-                      ) : item.active_application_id != null ? (
+                      ) : item.record_kind === "applicant" && item.active_application_id != null ? (
+                        <div className="flex flex-wrap items-start gap-2">
+                        <button
+                          type="button"
+                          disabled={pdfLoadingId != null}
+                          onClick={() => void downloadPdf(item.active_application_id!)}
+                          className={actionClass}
+                          data-testid={`personnel-lk-pdf-application-${item.active_application_id}`}
+                        >
+                          {pdfLoadingId === item.active_application_id ? "Формирование…" : "PDF"}
+                        </button>
                         <button
                           type="button"
                           onClick={() => onOpenApplicant(item.active_application_id!)}
@@ -150,6 +173,12 @@ export default function PersonnelLkTable({
                         >
                           Открыть
                         </button>
+                        {pdfError?.applicationId === item.active_application_id ? (
+                          <p className="basis-full text-xs text-red-600" role="alert" data-testid={`personnel-lk-pdf-error-${item.active_application_id}`}>
+                            {pdfError.message}
+                          </p>
+                        ) : null}
+                        </div>
                       ) : (
                         "—"
                       )}

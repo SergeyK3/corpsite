@@ -1,5 +1,9 @@
 import { reconcileIntakeDraftPayload } from "./intakeDraftReconcile";
-import { emptyIntakeDraftPayload, type IntakeDraftPayload } from "./intakeApi.client";
+import {
+  emptyIntakeDraftPayload,
+  toIntakeFormPayload,
+  type IntakeDraftPayload,
+} from "./intakeApi.client";
 import { formatIntakeFullName } from "./intakeContactHelpers";
 import {
   buildIntakePdfGeneratedDateLabel,
@@ -20,6 +24,7 @@ export type IntakePdfViewModel = {
   personnelNumber: string;
   alphabet: string;
   birthPlace: string;
+  iin: string | null;
   photoDataUrl: string | null;
   summaries: IntakePdfCalculatedSummaries;
   payload: IntakeDraftPayload;
@@ -31,13 +36,17 @@ export type BuildIntakePdfViewModelInput = {
   generatedAt?: Date;
   summaries: IntakePdfCalculatedSummaries;
   photoDataUrl?: string | null;
+  /** IIN is kept in the application/person record, not duplicated into public intake payload. */
+  iin?: string | null;
 };
 
 export function buildIntakePdfViewModel(input: BuildIntakePdfViewModelInput): IntakePdfViewModel {
   const generatedAt = input.generatedAt ?? new Date();
-  const payload = reconcileIntakeDraftPayload(
+  // PDF is a display boundary.  The persisted v2 payload remains untouched;
+  // only this ephemeral view adapts nullable canonical values for legacy UI helpers.
+  const payload = reconcileIntakeDraftPayload(toIntakeFormPayload(
     (input.payload as IntakeDraftPayload | undefined) ?? emptyIntakeDraftPayload(),
-  );
+  ));
   return {
     applicationId: input.applicationId,
     fullName: formatIntakeFullName(payload.personal) || "—",
@@ -47,6 +56,7 @@ export function buildIntakePdfViewModel(input: BuildIntakePdfViewModelInput): In
     personnelNumber: normalizeIntakePersonnelNumber(payload.personal.personnel_number),
     alphabet: deriveIntakeSurnameAlphabet(payload.personal.last_name),
     birthPlace: String(payload.personal.birth_place ?? "").trim(),
+    iin: String(input.iin ?? "").trim() || null,
     photoDataUrl: input.photoDataUrl ?? null,
     summaries: input.summaries,
     payload,

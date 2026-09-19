@@ -1,6 +1,6 @@
-import { afterAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 
-import { emptyIntakeDraftPayload } from "./intakeApi.client";
+import { emptyIntakeDraftPayload, type IntakeDraftPayload } from "./intakeApi.client";
 import {
   buildIntakePdfContentDisposition,
   buildIntakePdfFilename,
@@ -53,6 +53,58 @@ function samplePayload() {
   ];
   payload.military.status = "Призывник";
   return payload;
+}
+
+/** Anonymized v2 shape matching the nullable fields of application 225. */
+function canonicalV2NullPayload(): IntakeDraftPayload {
+  return {
+    ...emptyIntakeDraftPayload(),
+    schema_version: 2,
+    personal: {
+      ...emptyIntakeDraftPayload().personal,
+      last_name: "Тестов",
+      first_name: "Тест",
+      middle_name: "Тестович",
+      photo_file_id: null,
+    },
+    contacts: { email: null, mobile_phone: "+77770000000", residence_address: null, registration_address: null },
+    education: [{
+      record_id: "10000000-0000-4000-8000-000000000001",
+      start_date: "2013-09-01", end_date: "2020-06-30",
+      institution_original: "Тестовый медицинский университет", institution_normalized: null,
+      city: null, country_code: "KZ", education_type: "basic", document_type: "diploma",
+      document_number: "TEST-001", document_date: null, specialty_original: "Общая медицина",
+      specialty_normalized: null, qualification_original: "Врач", qualification_normalized: null,
+      evidence_document_ids: [],
+    }],
+    employment_biography: [{
+      record_id: "10000000-0000-4000-8000-000000000002",
+      start_date: "2020-08-01", end_date: null, organization_original: "Тестовая поликлиника",
+      organization_normalized: null, city: null, position_original: "врач-хирург",
+      position_normalized: null, reason_for_leaving: null, note: null, evidence_document_ids: [],
+    }],
+    relatives: [{
+      record_id: "10000000-0000-4000-8000-000000000003", relationship: "жена", relationship_other: null,
+      full_name: "Тестова Тест Тестовна", birth_date: "1996-11-21", workplace: null,
+    }],
+    military: {
+      status: "not_provided", rank: null, category: null, composition: null, commissariat: null,
+      specialty_code: null, specialty_name: null, fitness_category: null, registration_group: null,
+      registration_category: null,
+    },
+    training: [{
+      record_id: "10000000-0000-4000-8000-000000000004", start_date: "2022-07-01", end_date: "2023-05-31",
+      training_type: "primary_specialization", course_name_original: "Тестовый курс", course_name_normalized: null,
+      specialty_original: "Онкология", specialty_normalized: null, institution_original: "Тестовый центр",
+      institution_normalized: null, document_type: "certificate", document_number: "123456", document_date: null,
+      hours: 840, hours_is_manual: true, study_leave_type: "unknown", employment_continued: null,
+      evidence_document_ids: [],
+    }],
+    additional: {
+      foreign_languages: [], foreign_languages_none: true, awards: [], awards_none: true,
+      academic_degrees: [], academic_degrees_none: true, academic_titles: [], academic_titles_none: true,
+    },
+  } as unknown as IntakeDraftPayload;
 }
 
 const AS_OF = "2026-07-23";
@@ -111,14 +163,13 @@ describe("intakePdfHtmlDocument", () => {
     expect(html).toContain("Иванов Иван Иванович");
     expect(html).toContain('data-testid="intake-pdf-alphabet"');
     expect(html).toContain("Дата формирования");
-    expect(html).toContain("Послужной список");
+    expect(html).toContain("Трудовая биография");
+    expect(html).toContain("Работа в текущей организации");
     expect(html).toContain("КазНУ");
     expect(html).toContain("Первая помощь");
     expect(html).toContain("Призывник");
-    expect(html).toContain("Часы обучения за последние 5 лет:");
-    expect(html).toContain("Сертификаты, истекающие в ближайшие 6 месяцев");
-    expect(html).toContain("Общий стаж");
-    expect(html).toContain("1 год 0 месяцев 0 дней");
+    expect(html).not.toContain("intake-pdf-employment-tenure-ymd");
+    expect(html).not.toContain("total_decimal_years");
 
     for (const testId of INTAKE_PDF_SECTION_TEST_IDS) {
       expect(html).toContain(`data-testid="${testId}"`);
@@ -203,6 +254,7 @@ describe("intakePdfHtmlDocument", () => {
     );
 
     expect(html).not.toContain("intake-pdf-employment-tenure-calc-date");
+    expect(html).not.toContain("intake-pdf-employment-tenure-ymd");
     expect(html).not.toContain("Код специальности");
     expect(html).toContain("Призывник");
     expect(html).toContain("Иностранные языки: 0 зап.");
@@ -361,9 +413,50 @@ describe("intakePdfRenderer", () => {
     },
     45_000,
   );
+
+  it(
+    "renders the full canonical-v2 nullable payload without null or undefined text",
+    async () => {
+      const payload = canonicalV2NullPayload();
+      const model = buildIntakePdfViewModel({
+        applicationId: 225,
+        payload,
+        summaries: sampleSummaries(payload),
+      });
+      const html = buildIntakePdfHtmlDocument(model);
+      const pdf = await getIntakePdfRenderer().render(model);
+
+      expect(html).not.toContain("null");
+      expect(html).not.toContain("undefined");
+      expect(pdf.byteLength).toBeGreaterThan(1000);
+      expect(pdf.subarray(0, 5).toString("utf8")).toBe("%PDF-");
+    },
+    45_000,
+  );
 });
 
 describe("intakePdfOpen client", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("keeps a canonical v2 840-hour course inside the five-year window", () => {
+    const payload = canonicalV2NullPayload();
+    const summaries = buildIntakePdfTrainingSummaries(payload, "2026-09-19");
+    expect(summaries.trainingHours.trainingHoursLast5y).toBe(840);
+  });
+
+  it("renders a localized not-provided military state without an empty fields table", () => {
+    const html = buildIntakePdfHtmlDocument(buildIntakePdfViewModel({
+      applicationId: 225,
+      payload: canonicalV2NullPayload(),
+      summaries: sampleSummaries(),
+    }));
+    expect(html).toContain("Сведения о воинском учёте не предоставлены");
+    expect(html).not.toContain("<td>Звание</td><td>—</td>");
+  });
+
   it("opens blob URL in a new tab", async () => {
     const openMock = vi.fn(() => ({ focus: vi.fn() }));
     vi.stubGlobal("open", openMock);
@@ -383,5 +476,82 @@ describe("intakePdfOpen client", () => {
     const result = await openIntakePdfByToken("token-abc");
     expect(result.ok).toBe(true);
     expect(openMock).toHaveBeenCalledWith("blob:pdf", "_blank", "noopener,noreferrer");
+  });
+
+  it("downloads the protected application PDF using the registered GET route and releases its object URL", async () => {
+    const fetchMock = vi.fn(async () => new Response("%PDF-1.7", {
+      status: 200,
+      headers: {
+        "Content-Type": "application/pdf",
+        "Content-Disposition": 'attachment; filename="anketa-225-nurtaev.pdf"',
+      },
+    }));
+    const createObjectUrl = vi.fn(() => "blob:pdf");
+    const revokeObjectUrl = vi.fn();
+    const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+    vi.stubGlobal("fetch", fetchMock);
+    vi.stubGlobal("URL", { createObjectURL: createObjectUrl, revokeObjectURL: revokeObjectUrl });
+    vi.spyOn(window, "setTimeout").mockImplementation(((callback: TimerHandler) => {
+      if (typeof callback === "function") callback();
+      return 1 as unknown as number;
+    }) as typeof window.setTimeout);
+
+    const { downloadIntakePdfByApplicationId } = await import("./intakePdfOpen.client");
+    const result = await downloadIntakePdfByApplicationId(225);
+
+    expect(result).toEqual({ ok: true, href: "/directory/personnel-applications/225/intake/pdf" });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/directory/personnel-applications/225/intake/pdf",
+      expect.objectContaining({ method: "GET", credentials: "same-origin" }),
+    );
+    expect(click).toHaveBeenCalledOnce();
+    expect(createObjectUrl).toHaveBeenCalledOnce();
+    expect(revokeObjectUrl).toHaveBeenCalledWith("blob:pdf");
+  });
+
+  it("uses a readable fallback filename when Content-Disposition is absent", async () => {
+    const append = vi.spyOn(document.body, "appendChild");
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("%PDF-1.7", {
+      status: 200,
+      headers: { "Content-Type": "application/pdf" },
+    })));
+    vi.stubGlobal("URL", { createObjectURL: vi.fn(() => "blob:pdf"), revokeObjectURL: vi.fn() });
+    vi.spyOn(window, "setTimeout").mockImplementation((() => 1) as typeof window.setTimeout);
+
+    const { downloadIntakePdfByApplicationId } = await import("./intakePdfOpen.client");
+    await downloadIntakePdfByApplicationId(225);
+
+    const anchor = append.mock.calls[0]?.[0] as HTMLAnchorElement;
+    expect(anchor.download).toBe("Анкета_225.pdf");
+  });
+
+  it.each([
+    [401, "Требуется авторизация для скачивания PDF."],
+    [403, "Недостаточно прав для скачивания PDF."],
+    [404, "Анкета не найдена."],
+    [422, "PDF временно невозможно сформировать из-за ошибки данных."],
+    [500, "Сервер формирования PDF недоступен."],
+  ])("returns a safe message for HTTP %i", async (status, message) => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ error: { code: "SAFE", message } }, { status })));
+    const { downloadIntakePdfByApplicationId } = await import("./intakePdfOpen.client");
+    await expect(downloadIntakePdfByApplicationId(225)).resolves.toMatchObject({
+      ok: false,
+      status,
+      code: "SAFE",
+      error: message,
+    });
+  });
+
+  it("rejects a successful JSON or HTML response instead of downloading it as PDF", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("<html>error</html>", {
+      status: 200,
+      headers: { "Content-Type": "text/html; charset=utf-8" },
+    })));
+    const { downloadIntakePdfByApplicationId } = await import("./intakePdfOpen.client");
+    await expect(downloadIntakePdfByApplicationId(225)).resolves.toMatchObject({
+      ok: false,
+      status: 200,
+      code: "UNEXPECTED_CONTENT_TYPE",
+    });
   });
 });

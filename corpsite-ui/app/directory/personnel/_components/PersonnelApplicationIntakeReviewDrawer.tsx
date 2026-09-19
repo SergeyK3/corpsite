@@ -22,7 +22,25 @@ type Props = {
   onTransferred?: () => void;
 };
 
-function renderPayload(payload: Record<string, unknown> | unknown[]): React.ReactNode {
+const MILITARY_FIELDS: ReadonlyArray<[string, string]> = [
+  ["rank", "\u0412\u043e\u0438\u043d\u0441\u043a\u043e\u0435 \u0437\u0432\u0430\u043d\u0438\u0435"], ["category", "\u041a\u0430\u0442\u0435\u0433\u043e\u0440\u0438\u044f \u0437\u0430\u043f\u0430\u0441\u0430"], ["composition", "\u0421\u043e\u0441\u0442\u0430\u0432"], ["commissariat", "\u0412\u043e\u0435\u043d\u043a\u043e\u043c\u0430\u0442"], ["specialty_code", "\u0412\u043e\u0438\u043d\u0441\u043a\u043e-\u0443\u0447\u0451\u0442\u043d\u0430\u044f \u0441\u043f\u0435\u0446\u0438\u0430\u043b\u044c\u043d\u043e\u0441\u0442\u044c (\u043a\u043e\u0434)"], ["specialty_name", "\u0412\u043e\u0438\u043d\u0441\u043a\u043e-\u0443\u0447\u0451\u0442\u043d\u0430\u044f \u0441\u043f\u0435\u0446\u0438\u0430\u043b\u044c\u043d\u043e\u0441\u0442\u044c"], ["fitness_category", "\u041a\u0430\u0442\u0435\u0433\u043e\u0440\u0438\u044f \u0433\u043e\u0434\u043d\u043e\u0441\u0442\u0438"], ["registration_group", "\u0413\u0440\u0443\u043f\u043f\u0430 \u0443\u0447\u0451\u0442\u0430"], ["registration_category", "\u041a\u0430\u0442\u0435\u0433\u043e\u0440\u0438\u044f \u0443\u0447\u0451\u0442\u0430"],
+];
+
+function renderMilitaryPayload(payload: Record<string, unknown> | unknown[]): React.ReactNode {
+  const values = !Array.isArray(payload) && payload && typeof payload === "object" ? payload : {};
+  const rows = MILITARY_FIELDS.filter(([key]) => values[key] != null && String(values[key]).trim() !== "");
+  const status = String(values.status ?? "").trim();
+  if (rows.length === 0 && (!status || status === "not_provided")) {
+    return <p className="text-sm text-zinc-600 dark:text-zinc-300" data-testid="intake-review-military-not-provided">Сведения о воинском учёте не предоставлены</p>;
+  }
+  return <dl className="grid gap-x-4 gap-y-2 text-sm sm:grid-cols-2" data-testid="intake-review-military-details">
+    {status ? <><dt className="text-zinc-500">Статус</dt><dd>{status}</dd></> : null}
+    {rows.map(([key, label]) => <React.Fragment key={key}><dt className="text-zinc-500">{label}</dt><dd>{String(values[key])}</dd></React.Fragment>)}
+  </dl>;
+}
+
+function renderPayload(payload: Record<string, unknown> | unknown[], sectionCode?: string): React.ReactNode {
+  if (sectionCode === "military") return renderMilitaryPayload(payload);
   if (Array.isArray(payload)) {
     if (payload.length === 0) return <span className="text-zinc-500">Нет записей</span>;
     return (
@@ -227,7 +245,7 @@ export default function PersonnelApplicationIntakeReviewDrawer({
                       </div>
                     ) : null}
                   </div>
-                  <div className="mt-3">{renderPayload(section.payload as Record<string, unknown> | unknown[])}</div>
+                  <div className="mt-3">{renderPayload(section.payload as Record<string, unknown> | unknown[], section.section_code)}</div>
                   {section.section_code === "education" && applicationId != null ? (
                     <EducationReconciliationDecisionsPanel
                       applicationId={applicationId}

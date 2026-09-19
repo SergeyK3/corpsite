@@ -1,8 +1,12 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PersonnelApplicationsTable } from "./PersonnelApplicationsTable";
 import type { PersonnelApplicationListItem } from "../_lib/personnelApplicationsApi.client";
+
+vi.mock("@/app/intake/_lib/intakePdfOpen.client", () => ({
+  downloadIntakePdfByApplicationId: vi.fn(),
+}));
 
 vi.mock("next/link", () => ({
   default: ({ children, href }: { children: React.ReactNode; href: string }) => (
@@ -69,6 +73,37 @@ describe("PersonnelApplicationsTable", () => {
     expect(screen.getByRole("columnheader", { name: "Действия" })).toHaveClass("sticky");
     expect(screen.getByTestId("personnel-application-open-10")).toHaveTextContent("Открыть");
     expect(screen.getByTestId("personnel-application-open-11")).toHaveTextContent("Открыть");
+  });
+
+  it("offers a textual PDF button when a pending intake payload exists", () => {
+    render(<PersonnelApplicationsTable items={[{ ...baseItem, intake_draft_status: "pending" }]} onOpen={vi.fn()} />);
+    expect(screen.getByTestId("personnel-application-pdf-10")).toHaveTextContent("PDF");
+  });
+
+  it("offers PDF for a pending applicant when the list DTO has no draft payload", async () => {
+    const { downloadIntakePdfByApplicationId } = await import("@/app/intake/_lib/intakePdfOpen.client");
+    vi.mocked(downloadIntakePdfByApplicationId).mockResolvedValue({ ok: true, href: "/pdf" });
+    render(<PersonnelApplicationsTable items={[{ ...baseItem, status: "pending", intake_draft_status: null }]} onOpen={vi.fn()} />);
+    fireEvent.click(screen.getByTestId("personnel-application-pdf-10"));
+    await waitFor(() => expect(downloadIntakePdfByApplicationId).toHaveBeenCalledWith(10));
+  });
+
+  it("downloads PDF for a pending intake without opening the detail drawer", async () => {
+    const { downloadIntakePdfByApplicationId } = await import("@/app/intake/_lib/intakePdfOpen.client");
+    vi.mocked(downloadIntakePdfByApplicationId).mockResolvedValue({ ok: true, href: "/pdf" });
+    const onOpen = vi.fn();
+    render(<PersonnelApplicationsTable items={[{ ...baseItem, intake_draft_status: "pending" }]} onOpen={onOpen} />);
+    fireEvent.click(screen.getByTestId("personnel-application-pdf-10"));
+    await waitFor(() => expect(downloadIntakePdfByApplicationId).toHaveBeenCalledWith(10));
+    expect(onOpen).not.toHaveBeenCalled();
+  });
+
+  it("shows a clear inline error when PDF download fails", async () => {
+    const { downloadIntakePdfByApplicationId } = await import("@/app/intake/_lib/intakePdfOpen.client");
+    vi.mocked(downloadIntakePdfByApplicationId).mockResolvedValue({ ok: false, error: "PDF temporarily unavailable" });
+    render(<PersonnelApplicationsTable items={[{ ...baseItem, intake_draft_status: "pending" }]} onOpen={vi.fn()} />);
+    fireEvent.click(screen.getByTestId("personnel-application-pdf-10"));
+    expect(await screen.findByTestId("personnel-application-pdf-error-10")).toHaveTextContent("PDF temporarily unavailable");
   });
 
   it("opens the selected application when Open is clicked", () => {

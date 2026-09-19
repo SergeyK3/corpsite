@@ -17,6 +17,7 @@ vi.mock("next/navigation", () => ({
 vi.mock("../_lib/pprQueryApi.client", () => ({
   getPprByPersonId: (...args: unknown[]) => getPprByPersonId(...args),
   getPprByEmployeeId: vi.fn(),
+  getPprPersonPhoto: vi.fn(async () => null),
 }));
 
 vi.mock("../_lib/personnelApplicationsApi.client", () => ({
@@ -165,7 +166,7 @@ describe("person-card current assignment integration", () => {
       </CurrentUserProvider>,
     );
 
-    expect(await screen.findByRole("heading", { name: "Текущее назначение" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Работа в текущей организации" })).toBeInTheDocument();
     await waitFor(() => expect(getEmployee).toHaveBeenCalledWith("16"));
     expect(getEmployees).toHaveBeenCalledWith(
       expect.objectContaining({ status: "all", q: "Өсерова Айсара Асанқызы" }),
@@ -186,7 +187,7 @@ describe("person-card current assignment integration", () => {
       </CurrentUserProvider>,
     );
 
-    expect(await screen.findByRole("heading", { name: "Текущее назначение" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Работа в текущей организации" })).toBeInTheDocument();
     await waitFor(() => expect(getEmployee).toHaveBeenCalledWith("16"));
     expect(screen.queryByRole("button", { name: "Оформить новое назначение" })).not.toBeInTheDocument();
   });

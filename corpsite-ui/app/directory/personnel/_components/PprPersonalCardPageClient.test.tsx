@@ -469,7 +469,7 @@ describe("PprPersonalCardPageClient", () => {
     expect(within(nav).getByRole("link", { name: "Воинский учёт" })).toBeInTheDocument();
     expect(within(nav).getByRole("link", { name: "Примечание" })).toBeInTheDocument();
     expect(within(nav).getByRole("link", { name: "Трудовая биография" })).toBeInTheDocument();
-    expect(within(nav).getByRole("link", { name: "Трудовая деятельность" })).toBeInTheDocument();
+    expect(within(nav).getByRole("link", { name: "Работа в текущей организации" })).toBeInTheDocument();
     expect(within(nav).getByRole("link", { name: "История изменений" })).toBeInTheDocument();
   });
 

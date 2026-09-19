@@ -206,16 +206,16 @@ export function buildIntakeRelativesReviewSection(payload: IntakeDraftPayload): 
 
 export function buildIntakeEmploymentReviewSection(payload: IntakeDraftPayload): IntakeReviewSectionContent {
   const records = payload.employment_biography.map((item, index) => {
-    const title = trimValue(item.organization) ?? `Запись ${index + 1}`;
-    const from = formatIntakePeriodForDisplay(item.year_from);
+    const title = trimValue(item.organization_normalized || item.organization_original) ?? `Запись ${index + 1}`;
+    const from = formatIntakePeriodForDisplay(item.start_date);
     const period = isIntakeEmploymentCurrent(item)
       ? from
         ? `${from} — по настоящее время`
         : "По настоящее время"
-      : formatIntakePeriodRange(item.year_from, item.year_to);
+      : formatIntakePeriodRange(item.start_date, item.end_date);
     return buildRecordCard(title, [
-      ["Организация", item.organization],
-      ["Должность", item.position],
+      ["Организация", item.organization_normalized || item.organization_original],
+      ["Должность", item.position_normalized || item.position_original],
       ["Период", period === "—" ? null : period],
       ["Причина увольнения", item.reason_for_leaving],
     ]);

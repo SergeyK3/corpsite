@@ -7,7 +7,7 @@ import {
 } from "@/lib/trainingSummary";
 
 import type { IntakeDraftPayload } from "./intakeApi.client";
-import { calculateEmploymentTenure, type EmploymentTenureCalculation } from "./employmentTenureApi.client";
+import type { EmploymentTenureCalculation } from "./employmentTenureApi.client";
 import { formatIntakePdfAsOfIso } from "./intakePdfDate";
 
 export type IntakePdfCalculatedSummaries = {
@@ -34,17 +34,11 @@ export async function buildIntakePdfCalculatedSummaries(
 ): Promise<IntakePdfCalculatedSummaries> {
   const asOfIso = formatIntakePdfAsOfIso(generatedAt);
   const training = buildIntakePdfTrainingSummaries(payload, asOfIso);
-  const employmentTenure =
-    payload.employment_biography.length > 0
-      ? await calculateEmploymentTenure(payload.employment_biography, {
-          calculationDate: asOfIso,
-          serverSide: true,
-        })
-      : null;
-
   return {
     asOfIso,
     ...training,
-    employmentTenure,
+    // Tenure is an HR-only working calculation.  A personal-card PDF must
+    // never request, embed, or imply a preliminary tenure decision.
+    employmentTenure: null,
   };
 }

@@ -1,8 +1,10 @@
 "use client";
 
+import * as React from "react";
 import Link from "next/link";
 
 import { buildPersonCardHref } from "@/lib/employeeCardNav";
+import { downloadIntakePdfByApplicationId } from "@/app/intake/_lib/intakePdfOpen.client";
 import ApplicantIntakeLinkTableCell from "./ApplicantIntakeLinkTableCell";
 import ApplicantWorkflowStatusBadge from "./ApplicantWorkflowStatusBadge";
 import { DirectorResolutionBadge } from "./PersonnelApplicationStatusBadge";
@@ -108,6 +110,18 @@ export function PersonnelApplicationsTable({
   highlightedApplicationId = null,
   onOpen,
 }: Props) {
+  const [pdfLoadingId, setPdfLoadingId] = React.useState<number | null>(null);
+  const [pdfError, setPdfError] = React.useState<{ applicationId: number; message: string } | null>(null);
+
+  async function downloadPdf(applicationId: number) {
+    if (pdfLoadingId != null) return;
+    setPdfLoadingId(applicationId);
+    setPdfError(null);
+    const result = await downloadIntakePdfByApplicationId(applicationId);
+    setPdfLoadingId(null);
+    if (!result.ok) setPdfError({ applicationId, message: result.error });
+  }
+
   if (loading) {
     return (
       <div className="space-y-2 p-4" data-testid="personnel-applications-table-skeleton">
@@ -244,6 +258,27 @@ export function PersonnelApplicationsTable({
                   <DirectorResolutionBadge status={item.director_resolution_status} />
                 </td>
                 <td className={actionCellClassName(isSelected, isHighlighted)}>
+                  {item.application_id > 0 ? (
+                    <>
+                      <button
+                        type="button"
+                        disabled={pdfLoadingId != null}
+                        className="mr-2 rounded-md border border-zinc-300 px-2 py-1 text-xs font-medium text-zinc-800 hover:bg-zinc-50 disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-900"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void downloadPdf(item.application_id);
+                        }}
+                        data-testid={`personnel-application-pdf-${item.application_id}`}
+                      >
+                        {pdfLoadingId === item.application_id ? "PDF…" : "PDF"}
+                      </button>
+                      {pdfError?.applicationId === item.application_id ? (
+                        <p className="mt-1 text-xs text-red-600" role="alert" data-testid={`personnel-application-pdf-error-${item.application_id}`}>
+                          {pdfError.message}
+                        </p>
+                      ) : null}
+                    </>
+                  ) : null}
                   <button
                     type="button"
                     className="rounded-md border border-zinc-300 px-2 py-1 text-xs font-medium text-zinc-800 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-100 dark:hover:bg-zinc-900"

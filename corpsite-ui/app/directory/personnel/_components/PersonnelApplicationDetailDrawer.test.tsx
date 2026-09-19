@@ -96,6 +96,8 @@ describe("PersonnelApplicationDetailDrawer", () => {
     expect(screen.getByText("Терапия")).toBeInTheDocument();
     expect(screen.getByText("Медсестра")).toBeInTheDocument();
     expect(screen.getByText("+77001234567")).toBeInTheDocument();
+    expect(screen.getByText("Внутренний ID: 5")).toBeInTheDocument();
+    expect(screen.queryByText(/person #5/i)).not.toBeInTheDocument();
     expect(screen.getByTestId("personnel-application-person-card-locked")).toHaveTextContent(
       /личная карточка станет доступна после проверки анкеты и переноса в ppr/i,
     );

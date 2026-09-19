@@ -36,7 +36,6 @@ import {
   type PprCompositeReadResponse,
   type PprEducationRecordResponse,
   type PprExternalEmploymentRecordResponse,
-  type PprIntendedEmploymentResponse,
   type PprMilitaryRecordResponse,
   type PprRelativeRecordResponse,
   type PprSectionRecordResponse,
@@ -55,7 +54,6 @@ import PprCardEmploymentBiographySection from "./PprCardEmploymentBiographySecti
 import PprCardAdditionalSection from "./PprCardAdditionalSection";
 import PprQualificationCategoryEditor from "./PprQualificationCategoryEditor";
 import PprCardEventHistorySection from "./PprCardEventHistorySection";
-import PprCardIntendedEmploymentSection from "./PprCardIntendedEmploymentSection";
 import PprCardApplicationsSection from "./PprCardApplicationsSection";
 import PprPersonPhoto from "./PprPersonPhoto";
 import EmployeeOperationalAssignmentSection from "./EmployeeOperationalAssignmentSection";
@@ -113,7 +111,6 @@ export default function PprPersonalCardPageClient({
   const [loading, setLoading] = React.useState(true);
   const [errorView, setErrorView] = React.useState<ReturnType<typeof mapPprCardError> | null>(null);
   const [ppr, setPpr] = React.useState<PprCompositeReadResponse | null>(null);
-  const [intendedEmployment, setIntendedEmployment] = React.useState<PprIntendedEmploymentResponse | null>(null);
   const [activeApplication, setActiveApplication] = React.useState<PersonnelApplicationDetail | null>(null);
   const [fallbackEmployeeId, setFallbackEmployeeId] = React.useState<string | null>(null);
   const [migrationCells, setMigrationCells] = React.useState<Partial<Record<MigrationSection, MigrationCell>>>({});
@@ -139,11 +136,9 @@ export default function PprPersonalCardPageClient({
             ? await getPprByPersonId(personId, { signal })
             : await getPprByEmployeeId(String(employeeId), { signal });
         setPpr(data);
-        setIntendedEmployment(data.intended_employment);
       } catch (e) {
         if (signal?.aborted) return;
         setPpr(null);
-        setIntendedEmployment(null);
         setErrorView(mapPprCardError(e));
       } finally {
         if (!signal?.aborted) setLoading(false);
@@ -563,22 +558,18 @@ export default function PprPersonalCardPageClient({
               {isApplicant && resolvedPersonId != null ? (
                 <PprCardSection
                   id="intended_employment"
-                  title="Предполагаемое трудоустройство"
-                  description="Намерение работодателя о подразделении, должности и ставке до приказа о приёме."
+                  title="Работа в текущей организации"
+                  description="Кадровые назначения и события внутри текущей организации."
                 >
-                  <PprCardIntendedEmploymentSection
-                    personId={resolvedPersonId}
-                    initial={intendedEmployment}
-                    onSaved={(value) => setIntendedEmployment(value)}
-                  />
+                  <p className="text-sm text-zinc-500">Работа в текущей организации ещё не начата.</p>
                 </PprCardSection>
               ) : null}
 
               {!isApplicant && resolvedEmployeeId ? (
                 <PprCardSection
                   id="assignment"
-                  title="Текущее назначение"
-                  description="Действующие подразделение и должность сотрудника."
+                  title="Работа в текущей организации"
+                  description="Назначения и кадровые события внутри текущей организации."
                 >
                   <EmployeeOperationalAssignmentSection
                     employeeId={resolvedEmployeeId}

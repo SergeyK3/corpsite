@@ -12,7 +12,7 @@ import {
   getIntakeEducationTypeLabel,
   intakeEducationCellValue,
 } from "./intakeEducation";
-import { INTAKE_STEPS } from "./intakeApi.client";
+import { personalCardSectionTitle } from "./personalCardSections";
 import { formatIntakeBirthDateForDisplay, formatIntakePeriodRange } from "./intakePeriodFormat";
 import {
   formatIntakeTrainingHoursCell,
@@ -26,7 +26,6 @@ import {
 } from "./intakeRelatives";
 import { intakeMilitaryCompositionLabel } from "./intakeMilitaryDictionary";
 import { INTAKE_PDF_DOCUMENT_CSS, INTAKE_PDF_SECTION_FLOW_CLASS } from "./intakePdfDocumentCss";
-import { buildIntakePdfCalculatedSummariesHtml } from "./intakePdfSummaryHtml";
 import type { IntakePdfViewModel } from "./intakePdfViewModel";
 
 function escapeHtml(value: string): string {
@@ -85,6 +84,7 @@ function buildIntakePdfHeaderHtml(model: IntakePdfViewModel): string {
   ${buildIntakePdfPhotoSlotHtml(model.photoDataUrl)}
   <table class="intake-pdf-header-fields"><tbody>
     <tr><td class="intake-pdf-field-label">ФИО</td><td colspan="3" data-testid="intake-pdf-full-name">${cell(model.fullName === "—" ? "" : model.fullName)}</td></tr>
+    <tr><td class="intake-pdf-field-label">ИИН</td><td colspan="3" data-testid="intake-pdf-iin">${cell(model.iin)}</td></tr>
     <tr><td class="intake-pdf-field-label">Место рождения</td><td colspan="3" data-testid="intake-pdf-birth-place">${cell(model.birthPlace)}</td></tr>
     <tr class="intake-pdf-split-row">
       <td class="intake-pdf-field-label">Пол</td><td>${cell(personal.gender)}</td>
@@ -125,6 +125,16 @@ function dataTable(headers: string[], rows: string[][]): string {
   return `<table class="intake-pdf-data-table"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
 }
 
+function militaryStatusLabel(status: string | null | undefined): string {
+  switch (String(status ?? "").trim()) {
+    case "not_provided": return "Сведения не предоставлены";
+    case "not_applicable": return "Не подлежит воинскому учёту";
+    case "not_registered": return "Не состоит на воинском учёте";
+    case "registered": return "Состоит на воинском учёте";
+    default: return String(status ?? "");
+  }
+}
+
 function additionalSubsection(title: string, testId: string, summary: string): string {
   const normalized = String(summary ?? "").trim();
   if (normalized === "0 зап." || normalized === "Нет сведений") {
@@ -139,25 +149,27 @@ function additionalSubsection(title: string, testId: string, summary: string): s
 }
 
 export function buildIntakePdfDocumentHtml(model: IntakePdfViewModel): string {
-  const { payload, summaries } = model;
-  const { employmentSummaryHtml, trainingSummaryHtml } = buildIntakePdfCalculatedSummariesHtml(summaries);
+  const { payload } = model;
   const contacts = payload.contacts;
   const military = payload.military;
   const additional = payload.additional;
 
-  const contactsSection = section(
-    INTAKE_STEPS.find((step) => step.id === "contacts")?.title ?? "Контакты",
-    "intake-pdf-section-contacts",
-    fieldsTable([
+  const generalSection = section(
+    personalCardSectionTitle("general"),
+    "intake-pdf-section-general",
+    [
+      buildIntakePdfHeaderHtml(model),
+      fieldsTable([
       ["Мобильный телефон", contacts.mobile_phone],
       ["Email", contacts.email],
       ["Адрес регистрации", contacts.registration_address],
       ["Адрес проживания", contacts.residence_address],
-    ]),
+      ]),
+    ].join(""),
   );
 
   const educationSection = section(
-    INTAKE_STEPS.find((step) => step.id === "education")?.title ?? "Образование",
+    personalCardSectionTitle("education"),
     "intake-pdf-section-education",
     dataTable(
       [
@@ -180,10 +192,9 @@ export function buildIntakePdfDocumentHtml(model: IntakePdfViewModel): string {
   );
 
   const trainingSection = section(
-    INTAKE_STEPS.find((step) => step.id === "training")?.title ?? "Обучение",
+    personalCardSectionTitle("training"),
     "intake-pdf-section-training",
     [
-      trainingSummaryHtml,
       dataTable(
         ["Курс", "Организация", "Период", "Документ", "№ документа", "Часы"],
         payload.training.map((item) => [
@@ -199,7 +210,7 @@ export function buildIntakePdfDocumentHtml(model: IntakePdfViewModel): string {
   );
 
   const relativesSection = section(
-    INTAKE_STEPS.find((step) => step.id === "relatives")?.title ?? "Родственники",
+    personalCardSectionTitle("relatives"),
     "intake-pdf-section-relatives",
     dataTable(
       ["Степень родства", "ФИО", "Дата рождения", "Место работы"],
@@ -213,46 +224,70 @@ export function buildIntakePdfDocumentHtml(model: IntakePdfViewModel): string {
   );
 
   const employmentSection = section(
-    "Послужной список",
+    personalCardSectionTitle("employment_biography"),
     "intake-pdf-section-employment",
     [
-      employmentSummaryHtml,
       dataTable(
         ["Организация", "Должность", "Период", "Причина увольнения"],
         payload.employment_biography.map((item) => [
-          item.organization,
-          item.position,
-          formatIntakePeriodRange(item.year_from, item.year_to),
-          item.reason_for_leaving,
+          item.organization_normalized || item.organization_original,
+          item.position_normalized || item.position_original,
+          item.end_date ? formatIntakePeriodRange(item.start_date, item.end_date) : `${formatIntakePeriodRange(item.start_date, null)} по настоящее время`,
+          item.reason_for_leaving ?? "",
         ]),
       ),
     ].join(""),
   );
 
+  const categorySection = section(
+    personalCardSectionTitle("qualification_category"),
+    "intake-pdf-section-category",
+    "<p class=\"intake-pdf-empty\">Квалификационная категория не указана</p>",
+  );
+  const currentOrganizationSection = section(
+    personalCardSectionTitle("current_organization"),
+    "intake-pdf-section-current-organization",
+    "<p class=\"intake-pdf-empty\">Работа в текущей организации ещё не начата</p>",
+  );
+
+  const militaryBody = String(military.status ?? "").trim() === "not_provided"
+    ? '<p class="intake-pdf-empty">Сведения о воинском учёте не предоставлены</p>'
+    : fieldsTable([
+        ["Статус", militaryStatusLabel(military.status)],
+        ["Звание", military.rank],
+        ["Категория", military.category],
+        ["Состав", intakeMilitaryCompositionLabel(military.composition)],
+      ]);
   const militarySection = section(
-    INTAKE_STEPS.find((step) => step.id === "military")?.title ?? "Воинский учёт",
+    personalCardSectionTitle("military"),
     "intake-pdf-section-military",
-    fieldsTable([
-      ["Статус", military.status],
-      ["Звание", military.rank],
-      ["Категория", military.category],
-      ["Состав", intakeMilitaryCompositionLabel(military.composition)],
-    ]),
+    militaryBody,
+  );
+
+  const languagesSection = section(
+    personalCardSectionTitle("foreign_languages"),
+    "intake-pdf-section-languages",
+    additionalSubsection(
+      "Иностранные языки",
+      "intake-pdf-additional-languages",
+      formatIntakeAdditionalSubsectionReviewSummary(
+        additional.foreign_languages,
+        additional.foreign_languages_none,
+        (item) => formatIntakeForeignLanguageReviewLine(item),
+      ),
+    ),
+  );
+
+  const noteSection = section(
+    personalCardSectionTitle("note"),
+    "intake-pdf-section-note",
+    '<p class="intake-pdf-empty">Нет примечаний</p>',
   );
 
   const additionalSection = section(
-    INTAKE_STEPS.find((step) => step.id === "additional")?.title ?? "Дополнительные сведения",
+    personalCardSectionTitle("additional"),
     "intake-pdf-section-additional",
     [
-      additionalSubsection(
-        "Иностранные языки",
-        "intake-pdf-additional-languages",
-        formatIntakeAdditionalSubsectionReviewSummary(
-          additional.foreign_languages,
-          additional.foreign_languages_none,
-          (item) => formatIntakeForeignLanguageReviewLine(item),
-        ),
-      ),
       additionalSubsection(
         "Награды",
         "intake-pdf-additional-awards",
@@ -284,13 +319,16 @@ export function buildIntakePdfDocumentHtml(model: IntakePdfViewModel): string {
   );
 
   const body = `<div class="intake-pdf-document">
-${buildIntakePdfHeaderHtml(model)}
-${contactsSection}
+${generalSection}
 ${educationSection}
 ${trainingSection}
-${relativesSection}
+${categorySection}
 ${employmentSection}
+${currentOrganizationSection}
 ${militarySection}
+${relativesSection}
+${languagesSection}
+${noteSection}
 ${additionalSection}
 </div>`;
 
@@ -313,11 +351,15 @@ ${body}
 }
 
 export const INTAKE_PDF_SECTION_TEST_IDS = [
-  "intake-pdf-section-contacts",
+  "intake-pdf-section-general",
   "intake-pdf-section-education",
   "intake-pdf-section-training",
-  "intake-pdf-section-relatives",
+  "intake-pdf-section-category",
   "intake-pdf-section-employment",
+  "intake-pdf-section-current-organization",
   "intake-pdf-section-military",
+  "intake-pdf-section-relatives",
+  "intake-pdf-section-languages",
+  "intake-pdf-section-note",
   "intake-pdf-section-additional",
 ] as const;

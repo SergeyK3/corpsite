@@ -149,11 +149,9 @@ export default function PersonnelApplicationDetailDrawer({
             <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
               Кадровое обращение #{applicationId ?? "—"}
             </h2>
-            {detail ? (
-              <p className="mt-1 text-sm text-zinc-500">
-                {detail.full_name || "—"} · person #{detail.person_id}
-              </p>
-            ) : null}
+            {detail ? (<>
+              <p className="mt-1 text-sm text-zinc-500">Внутренний ID: {detail.person_id}</p>
+            </>) : null}
           </div>
           <button
             type="button"
