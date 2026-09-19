@@ -26,6 +26,8 @@ from app.personnel_intake.application.intake_service import (
     submit_intake_draft_for_application,
 )
 from app.personnel_intake.domain.date_validation import collect_intake_date_validation_errors
+from app.personnel_intake.domain.employment_biography import normalize_employment_biography_payload
+from app.personnel_intake.domain.payload_canonical import additional_none_conflicts, normalize_intake_payload
 from app.personnel_intake.application.payload_diff import compute_intake_payload_field_changes
 from app.personnel_intake.domain.errors import (
     PersonnelIntakeConflictError,
@@ -168,6 +170,10 @@ def save_on_behalf_intake_draft(
     actor_user_id: int,
     expected_updated_at: datetime,
 ) -> SaveOnBehalfEditResult:
+    conflicts = additional_none_conflicts(payload)
+    if conflicts:
+        raise PersonnelIntakeValidationError("Contradictory *_none flags: " + ", ".join(conflicts))
+    payload = normalize_employment_biography_payload(normalize_intake_payload(payload))
     session = load_on_behalf_edit_session(conn, application_id)
     if not session.editable:
         raise PersonnelIntakeOnBehalfEditError(
@@ -255,6 +261,10 @@ def submit_on_behalf_intake_draft(
     actor_user_id: int,
     expected_updated_at: datetime,
 ) -> SubmitOnBehalfEditResult:
+    conflicts = additional_none_conflicts(payload)
+    if conflicts:
+        raise PersonnelIntakeValidationError("Contradictory *_none flags: " + ", ".join(conflicts))
+    payload = normalize_employment_biography_payload(normalize_intake_payload(payload))
     app_repo = SqlAlchemyPersonnelApplicationRepository(conn)
     app = app_repo.require_by_id(application_id)
 

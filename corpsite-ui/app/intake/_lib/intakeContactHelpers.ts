@@ -1,7 +1,7 @@
 import type { IntakeDraftPayload } from "./intakeApi.client";
 
 export function contactsMirrorResidence(contacts: IntakeDraftPayload["contacts"]): boolean {
-  const registration = contacts.registration_address.trim();
+  const registration = typeof contacts.registration_address === "string" ? contacts.registration_address.trim() : "";
   if (!registration) return false;
   return contacts.residence_address === contacts.registration_address;
 }
@@ -31,7 +31,7 @@ export function applyContactsResidenceMirror(
 
 export function formatIntakeFullName(personal: IntakeDraftPayload["personal"]): string {
   return [personal.last_name, personal.first_name, personal.middle_name]
-    .map((part) => part.trim())
+    .map((part) => (typeof part === "string" ? part.trim() : ""))
     .filter(Boolean)
     .join(" ");
 }

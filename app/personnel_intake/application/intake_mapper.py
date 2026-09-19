@@ -13,6 +13,7 @@ from app.db.models.personnel_migration import (
     TRAINING_KIND_COURSE,
 )
 from app.personnel_intake.domain.education_type import resolve_intake_education_kind
+from app.personnel_intake.domain.employment_biography import normalize_employment_biography_record
 
 _RELATIONSHIP_MAP = {
     "отец": "father",
@@ -72,12 +73,12 @@ def map_education_records(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
         mapped.append(
             {
                 "education_kind": resolve_intake_education_kind(item.get("education_type")),
-                "institution_name": str(item.get("institution") or "").strip() or None,
-                "specialty": str(item.get("specialty") or "").strip() or None,
-                "qualification": str(item.get("qualification") or "").strip() or None,
-                "started_at": parse_date_value(item.get("year_from")),
-                "completed_at": parse_date_value(item.get("year_to")),
-                "diploma_number": str(item.get("diploma_number") or "").strip() or None,
+                "institution_name": str(item.get("institution_normalized") or item.get("institution_original") or item.get("institution") or "").strip() or None,
+                "specialty": str(item.get("specialty_normalized") or item.get("specialty_original") or item.get("specialty") or "").strip() or None,
+                "qualification": str(item.get("qualification_normalized") or item.get("qualification_original") or item.get("qualification") or "").strip() or None,
+                "started_at": parse_date_value(item.get("start_date") or item.get("year_from")),
+                "completed_at": parse_date_value(item.get("end_date") or item.get("year_to")),
+                "diploma_number": str(item.get("document_number") or item.get("diploma_number") or "").strip() or None,
                 "metadata": {
                     "source": "personnel_intake",
                     "document_type": document_type,
@@ -101,11 +102,11 @@ def map_training_records(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
         mapped.append(
             {
                 "training_kind": TRAINING_KIND_COURSE,
-                "title": str(item.get("course_name") or "").strip() or None,
-                "organization_name": str(item.get("institution") or "").strip() or None,
+                "title": str(item.get("course_name_normalized") or item.get("course_name_original") or item.get("course_name") or "").strip() or None,
+                "organization_name": str(item.get("institution_normalized") or item.get("institution_original") or item.get("institution") or "").strip() or None,
                 "hours": hours,
-                "started_at": parse_date_value(item.get("year_from")),
-                "completed_at": parse_date_value(year_to),
+                "started_at": parse_date_value(item.get("start_date") or item.get("year_from")),
+                "completed_at": parse_date_value(item.get("end_date") or year_to),
                 "certificate_number": str(item.get("document_number") or "").strip() or None,
                 "metadata": {
                     "source": "personnel_intake",
@@ -124,8 +125,8 @@ def map_relative_records(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
             {
                 "relationship_type": map_relationship_type(item.get("relationship")),
                 "full_name": str(item.get("full_name") or "").strip(),
-                "birth_date": parse_date_value(item.get("birth_year")),
-                "organization_name": str(item.get("work_place") or "").strip() or None,
+                "birth_date": parse_date_value(item.get("birth_date") or item.get("birth_year")),
+                "organization_name": str(item.get("workplace") or item.get("work_place") or "").strip() or None,
                 "metadata": {"source": "personnel_intake"},
             }
         )
@@ -134,16 +135,17 @@ def map_relative_records(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def map_employment_records(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     mapped: list[dict[str, Any]] = []
-    for item in items:
+    for index, item in enumerate(items):
+        item = normalize_employment_biography_record(item, index)
         mapped.append(
             {
                 "record_kind": EXTERNAL_EMPLOYMENT_RECORD_KIND_EPISODE,
-                "employer_name": str(item.get("organization") or "").strip() or None,
-                "position_title": str(item.get("position") or "").strip() or None,
-                "started_at": parse_date_value(item.get("year_from")),
-                "ended_at": parse_date_value(item.get("year_to")),
+                "employer_name": str(item.get("organization_normalized") or item.get("organization_original") or "").strip() or None,
+                "position_title": str(item.get("position_normalized") or item.get("position_original") or "").strip() or None,
+                "started_at": parse_date_value(item.get("start_date")),
+                "ended_at": parse_date_value(item.get("end_date")),
                 "termination_reason": str(item.get("reason_for_leaving") or "").strip() or None,
-                "metadata": {"source": "personnel_intake"},
+                "metadata": {"source": "personnel_intake", "record_id": item["record_id"], "organization_original": item["organization_original"], "position_original": item["position_original"], "city": item["city"], "note": item["note"], "verification_status": item["verification_status"], "evidence_document_ids": item["evidence_document_ids"]},
             }
         )
     return mapped

@@ -164,26 +164,26 @@ export function collectIntakeDateValidationIssues(payload: IntakeDraftPayload): 
   });
 
   payload.employment_biography?.forEach((item, index) => {
-    const record = recordLabel(item.organization, `Запись ${index + 1}`);
-    if (isIncompletePersonnelDocumentDate(item.year_from)) {
+    const record = recordLabel(item.organization_original, `Запись ${index + 1}`);
+    if (isIncompletePersonnelDocumentDate(item.start_date)) {
       pushIssue(issues, {
-        field: `employment_biography[${index}].year_from`,
+        field: `employment_biography[${index}].start_date`,
         stepId: "employment_biography",
         focusTestId: `intake-employment-year-from-${index}`,
         message: formatIssueMessage("Трудовая биография", record, "дата начала"),
       });
     }
-    if (isIncompletePersonnelDocumentDate(item.year_to)) {
+    if (isIncompletePersonnelDocumentDate(item.end_date)) {
       pushIssue(issues, {
-        field: `employment_biography[${index}].year_to`,
+        field: `employment_biography[${index}].end_date`,
         stepId: "employment_biography",
         focusTestId: `intake-employment-year-to-${index}`,
         message: formatIssueMessage("Трудовая биография", record, "дата окончания"),
       });
     }
-    if (resolveIntakePeriodRangeError(item.year_from, item.year_to)) {
+    if (resolveIntakePeriodRangeError(item.start_date, item.end_date)) {
       pushIssue(issues, {
-        field: `employment_biography[${index}].year_to`,
+        field: `employment_biography[${index}].end_date`,
         stepId: "employment_biography",
         focusTestId: `intake-employment-year-to-${index}`,
         message: formatIssueMessage("Трудовая биография", record, INTAKE_PERIOD_RANGE_ERROR),

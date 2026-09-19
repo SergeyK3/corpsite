@@ -109,7 +109,13 @@ def _require_submitted_draft(conn: Connection, application_id: int, *, allow_com
             section_statuses=[section.status for section in sections],
         ):
             return app, draft
-    raise PersonnelIntakeNotFoundError("Submitted intake draft not found.")
+    # The draft exists but is deliberately editable while the applicant is
+    # addressing a rework request.  This is a review-state conflict, not a
+    # missing resource; expose it as a controlled 422 rather than a 500.
+    raise PersonnelIntakeReviewError(
+        "Review actions require a resubmitted intake draft.",
+        code="REVIEW_NOT_AVAILABLE",
+    )
 
 
 def _evaluate_can_transfer(

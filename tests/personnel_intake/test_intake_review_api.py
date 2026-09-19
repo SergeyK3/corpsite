@@ -104,7 +104,7 @@ def _accept_required_and_skip_optional(client, headers, app_id: int) -> None:
             headers=headers,
         )
         assert res.status_code == 200, res.text
-    for section in ("training", "relatives", "employment_biography", "military"):
+    for section in ("training", "relatives", "employment_biography", "military", "additional"):
         res = client.post(
             f"/directory/personnel-applications/{app_id}/intake/review/sections/{section}/skip",
             headers=headers,
@@ -170,7 +170,10 @@ def test_review_workflow_load_accept_rework_skip(
             f"/directory/personnel-applications/{app_id}/intake/review/sections/contacts/accept",
             headers=privileged_headers,
         )
-        assert accept_contacts.status_code == 200
+        # Rework makes the entire form editable.  HR may resume the review
+        # only after the applicant submits the new revision.
+        assert accept_contacts.status_code == 422
+        assert accept_contacts.json()["detail"]["code"] == "REVIEW_NOT_AVAILABLE"
 
         skip_education_fail = client.post(
             f"/directory/personnel-applications/{app_id}/intake/review/sections/education/skip",

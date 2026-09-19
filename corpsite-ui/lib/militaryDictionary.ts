@@ -231,7 +231,10 @@ export function applyPprMilitaryCompositionChange(
 export function reconcileIntakeMilitaryDraftOnLoad(
   military: IntakeMilitaryDraftFields,
 ): IntakeMilitaryDraftFields {
-  const normalizedComposition = normalizeIntakeMilitaryComposition(military.composition);
+  // Persisted canonical v2 uses null for an unprovided field; this helper is
+  // also used at the display/form boundary and must not call trim() on null.
+  const composition = String(military.composition ?? "");
+  const normalizedComposition = normalizeIntakeMilitaryComposition(composition);
   if (normalizedComposition) {
     return {
       ...military,
@@ -239,7 +242,7 @@ export function reconcileIntakeMilitaryDraftOnLoad(
       specialty_name: military.specialty_name ?? "",
     };
   }
-  const rank = military.rank.trim();
+  const rank = String(military.rank ?? "").trim();
   if (!rank) {
     return { ...military, composition: "", specialty_name: military.specialty_name ?? "" };
   }

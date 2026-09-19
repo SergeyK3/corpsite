@@ -61,6 +61,62 @@ describe("IntakeRelativesTable", () => {
     expect(onChange).toHaveBeenCalledWith([emptyIntakeRelativeEntry()]);
   });
 
+  it("stores a selected relationship from the predefined list", () => {
+    const onChange = vi.fn();
+    render(
+      <IntakeRelativesTable
+        items={[{ relationship: "", full_name: "Иванов Иван", birth_year: "", work_place: "" }]}
+        onChange={onChange}
+      />,
+    );
+
+    expandRelativeRow(0);
+    fireEvent.change(
+      within(screen.getByTestId("intake-relatives-desktop-view")).getByTestId("intake-relative-relationship-0"),
+      { target: { value: "мать" } },
+    );
+
+    expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ relationship: "мать" })]);
+  });
+
+  it("shows a required custom field for another relationship and preserves a legacy value", () => {
+    const onChange = vi.fn();
+    render(
+      <IntakeRelativesTable
+        items={[{ relationship: "бабушка", full_name: "Иванова Анна", birth_year: "", work_place: "" }]}
+        onChange={onChange}
+      />,
+    );
+
+    expandRelativeRow(0);
+    const desktop = within(screen.getByTestId("intake-relatives-desktop-view"));
+    expect(desktop.getByTestId("intake-relative-relationship-0")).toHaveValue("__other__");
+    const customRelationship = desktop.getByTestId("intake-relative-relationship-other-0");
+    expect(customRelationship).toHaveValue("бабушка");
+    expect(customRelationship).toBeRequired();
+
+    fireEvent.change(customRelationship, { target: { value: "опекун" } });
+    expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ relationship: "опекун" })]);
+  });
+
+  it("clears a preset value when switching to another relationship", () => {
+    const onChange = vi.fn();
+    render(
+      <IntakeRelativesTable
+        items={[{ relationship: "мать", full_name: "Иванова Анна", birth_year: "", work_place: "" }]}
+        onChange={onChange}
+      />,
+    );
+
+    expandRelativeRow(0);
+    fireEvent.change(
+      within(screen.getByTestId("intake-relatives-desktop-view")).getByTestId("intake-relative-relationship-0"),
+      { target: { value: "__other__" } },
+    );
+
+    expect(onChange).toHaveBeenCalledWith([expect.objectContaining({ relationship: "" })]);
+  });
+
   it("deletes a row after confirmation", () => {
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
     const onChange = vi.fn();

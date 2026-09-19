@@ -110,10 +110,10 @@ def _coerce_record_dict(record: Any) -> dict[str, Any] | None:
 
 
 def _record_label(record: Mapping[str, Any], index: int) -> str:
-    organization = str(record.get("organization") or "").strip()
+    organization = str(record.get("organization_normalized") or record.get("organization_original") or record.get("organization") or "").strip()
     if organization:
         return organization
-    position = str(record.get("position") or "").strip()
+    position = str(record.get("position_normalized") or record.get("position_original") or record.get("position") or "").strip()
     if position:
         return position
     return f"Запись {index + 1}"
@@ -154,8 +154,8 @@ def calculate_employment_tenure(
 
         record_id = _record_id(record, index)
         label = _record_label(record, index)
-        start = parse_employment_period_date(record.get("year_from"))
-        end_raw = record.get("year_to")
+        start = parse_employment_period_date(record.get("start_date") or record.get("year_from"))
+        end_raw = record.get("end_date") if record.get("end_date") is not None else record.get("year_to")
         end_text = str(end_raw or "").strip()
         end = parse_employment_period_date(end_text) if end_text else calc_date
         is_open_ended = not end_text

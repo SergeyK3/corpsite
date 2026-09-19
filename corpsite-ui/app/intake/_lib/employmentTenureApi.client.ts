@@ -31,11 +31,12 @@ export function prepareEmploymentTenureRecords(
 ): EmploymentTenureRecordInput[] {
   return items.map((item, index) => ({
     record_id: ensureEmploymentBiographyRecordId(item, index),
-    organization: item.organization,
-    position: item.position,
-    year_from: normalizeTenureDateForApi(item.year_from),
-    year_to: normalizeTenureDateForApi(item.year_to),
-    reason_for_leaving: item.reason_for_leaving,
+    organization_original: item.organization_original,
+    organization_normalized: item.organization_normalized,
+    position_original: item.position_original,
+    position_normalized: item.position_normalized,
+    start_date: normalizeTenureDateForApi(item.start_date),
+    end_date: normalizeTenureDateForApi(item.end_date),
   }));
 }
 

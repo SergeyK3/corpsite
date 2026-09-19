@@ -354,6 +354,69 @@ describe("IntakePageClient", () => {
     );
   });
 
+  it("autosaves a relative relationship selected from the list", async () => {
+    const payload = intakeApi.emptyIntakeDraftPayload();
+    payload.current_step = "relatives";
+    payload.relatives = [{ relationship: "", full_name: "Иванова Анна", birth_year: "", work_place: "" }];
+    vi.spyOn(intakeApi, "openIntakeSession").mockResolvedValue({
+      application_id: 1,
+      draft_id: 1,
+      link_id: 1,
+      status: "editable",
+      payload,
+      read_only: false,
+      link_status: "opened",
+    });
+    const autosave = vi.spyOn(intakeApi, "autosaveIntakeDraft").mockResolvedValue({
+      draft_id: 1,
+      status: "editable",
+      payload,
+      saved_at: new Date().toISOString(),
+    });
+
+    render(<IntakePageClient />);
+
+    const desktop = await screen.findByTestId("intake-relatives-desktop-view");
+    fireEvent.click(within(desktop).getByTestId("intake-relative-actions-0"));
+    fireEvent.click(within(desktop).getByTestId("intake-relative-row-edit-0"));
+    fireEvent.change(within(desktop).getByTestId("intake-relative-relationship-0"), {
+      target: { value: "мать" },
+    });
+
+    await waitFor(
+      () => {
+        expect(autosave).toHaveBeenCalledWith(
+          "test-token-abc",
+          expect.objectContaining({ relatives: [expect.objectContaining({ relationship: "мать" })] }),
+        );
+      },
+      { timeout: 2000 },
+    );
+  });
+
+  it("shows a saved custom relationship after reopening the session", async () => {
+    const payload = intakeApi.emptyIntakeDraftPayload();
+    payload.current_step = "relatives";
+    payload.relatives = [{ relationship: "крёстная мать", full_name: "Иванова Анна", birth_year: "", work_place: "" }];
+    vi.spyOn(intakeApi, "openIntakeSession").mockResolvedValue({
+      application_id: 1,
+      draft_id: 1,
+      link_id: 1,
+      status: "editable",
+      payload,
+      read_only: false,
+      link_status: "opened",
+    });
+
+    render(<IntakePageClient />);
+
+    const desktop = await screen.findByTestId("intake-relatives-desktop-view");
+    fireEvent.click(within(desktop).getByTestId("intake-relative-actions-0"));
+    fireEvent.click(within(desktop).getByTestId("intake-relative-row-edit-0"));
+    expect(within(desktop).getByTestId("intake-relative-relationship-0")).toHaveValue("__other__");
+    expect(within(desktop).getByTestId("intake-relative-relationship-other-0")).toHaveValue("крёстная мать");
+  });
+
   it("shows popular citizenship and nationality options on focus", async () => {
     const payload = intakeApi.emptyIntakeDraftPayload();
     vi.spyOn(intakeApi, "openIntakeSession").mockResolvedValue({
@@ -965,6 +1028,24 @@ describe("IntakePageClient", () => {
     expect(screen.queryByText(/Анкета отправлена/i)).not.toBeInTheDocument();
   });
 
+  it("keeps a submitted form read-only when the same link is opened again", async () => {
+    vi.spyOn(intakeApi, "openIntakeSession").mockResolvedValue({
+      application_id: 1,
+      draft_id: 1,
+      link_id: 1,
+      status: "submitted",
+      payload: intakeApi.emptyIntakeDraftPayload(),
+      read_only: true,
+      link_status: "submitted",
+      submitted_at: "2026-07-01T10:00:00Z",
+    });
+
+    render(<IntakePageClient />);
+
+    expect(await screen.findByText(/Анкета отправлена/i)).toBeInTheDocument();
+    expect(screen.queryByTestId("intake-submit-button")).not.toBeInTheDocument();
+  });
+
   it("shows success screen after submit", async () => {
     const payload = intakeApi.emptyIntakeDraftPayload();
     payload.personal.last_name = "Сидоров";
@@ -1008,5 +1089,24 @@ describe("IntakePageClient", () => {
     await waitFor(() => {
       expect(screen.getByText(/Анкета отправлена/i)).toBeInTheDocument();
     });
+  });
+  it("opens a schema v2 payload with null optional fields without form initialization failure", async () => {
+    const canonical = {
+      schema_version: 2,
+      personal: { last_name: null, first_name: null, middle_name: null, birth_date: null, birth_place: null, gender: null, citizenship: null, nationality: null, photo_file_id: null },
+      contacts: { email: null, mobile_phone: null, residence_address: null, registration_address: null },
+      military: { status: "not_provided", rank: null, category: null, composition: null, commissariat: null, specialty_code: null, specialty_name: null, fitness_category: null, registration_group: null, registration_category: null },
+      education: [{ record_id: "education-1", start_date: null, end_date: null, institution_original: null }],
+      employment_biography: [{ record_id: "employment-1", start_date: null, end_date: null, organization_original: null, position_original: null }],
+      relatives: [{ record_id: "relative-1", relationship: "жена", relationship_other: null, full_name: null, birth_date: null, workplace: null }],
+      training: [{ record_id: "training-1", start_date: null, end_date: null, course_name_original: null, institution_original: null, hours: 840, hours_is_manual: false }],
+      additional: { foreign_languages: [], awards: [], academic_degrees: [], academic_titles: [] }, current_step: "personal",
+    } as unknown as intakeApi.IntakeDraftPayload;
+    vi.spyOn(intakeApi, "openIntakeSession").mockResolvedValue({ application_id: 1, draft_id: 1, link_id: 1, status: "editable", payload: canonical, read_only: false, link_status: "opened" });
+
+    render(<IntakePageClient />);
+
+    await waitFor(() => expect(screen.queryByText(/Анкета недоступна/i)).not.toBeInTheDocument());
+    expect(screen.queryByText(/Cannot read properties/i)).not.toBeInTheDocument();
   });
 });

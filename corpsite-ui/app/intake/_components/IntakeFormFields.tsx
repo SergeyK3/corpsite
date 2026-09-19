@@ -56,6 +56,7 @@ export function IntakeSelectField<V extends string>({
       <select
         value={value}
         disabled={readOnly}
+        required={required}
         data-testid={testId}
         onChange={(e) => {
           const selected = options.find((option) => option.value === e.target.value);
@@ -106,6 +107,7 @@ export function IntakeTextField({
         type={type}
         value={value}
         readOnly={readOnly}
+        required={required}
         data-testid={testId}
         maxLength={maxLength}
         inputMode={inputMode}

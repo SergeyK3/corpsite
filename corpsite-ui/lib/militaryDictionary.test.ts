@@ -117,6 +117,17 @@ describe("militaryDictionary", () => {
     });
   });
 
+  it("accepts canonical not_provided military nulls at the display boundary", () => {
+    expect(
+      reconcileIntakeMilitaryDraftOnLoad({
+        ...emptyMilitary,
+        status: "not_provided",
+        rank: null,
+        composition: null,
+      } as unknown as typeof emptyMilitary),
+    ).toMatchObject({ status: "not_provided", composition: "", rank: null });
+  });
+
   it("preserves both composition and rank from legacy drafts when both are saved", () => {
     expect(
       reconcileIntakeMilitaryDraftOnLoad({

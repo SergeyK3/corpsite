@@ -2,7 +2,7 @@
 
 import * as React from "react";
 
-import { IntakeDateField, IntakeTextField } from "./IntakeFormFields";
+import { IntakeDateField, IntakeSelectField, IntakeTextField } from "./IntakeFormFields";
 import IntakeListRowActionsMenu from "./IntakeListRowActionsMenu";
 import {
   emptyIntakeRelativeEntry,
@@ -20,6 +20,27 @@ type Props = {
   readOnly?: boolean;
   focusTestId?: string | null;
 };
+
+const RELATIONSHIP_OTHER = "__other__";
+
+const RELATIONSHIP_OPTIONS = [
+  { value: "", label: "Выберите степень родства" },
+  { value: "муж", label: "муж" },
+  { value: "жена", label: "жена" },
+  { value: "сын", label: "сын" },
+  { value: "дочь", label: "дочь" },
+  { value: "мать", label: "мать" },
+  { value: "отец", label: "отец" },
+  { value: "брат", label: "брат" },
+  { value: "сестра", label: "сестра" },
+  { value: RELATIONSHIP_OTHER, label: "другое" },
+] as const;
+
+type RelationshipOption = (typeof RELATIONSHIP_OPTIONS)[number]["value"];
+
+function isPresetRelationship(value: string): value is Exclude<RelationshipOption, typeof RELATIONSHIP_OTHER> {
+  return RELATIONSHIP_OPTIONS.some((option) => option.value === value && option.value !== RELATIONSHIP_OTHER);
+}
 
 function updateItemAt(
   items: IntakeRelativeEntry[],
@@ -42,18 +63,39 @@ function RelativeRowEditor({
   readOnly?: boolean;
   onPatch: (patch: Partial<IntakeRelativeEntry>) => void;
 }) {
+  const relationshipValue = isPresetRelationship(item.relationship) ? item.relationship : RELATIONSHIP_OTHER;
+  const isOtherRelationship = relationshipValue === RELATIONSHIP_OTHER;
+
   return (
     <div
       className="grid gap-3 border-t border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/40 sm:grid-cols-2"
       data-testid={`intake-relative-editor-${index}`}
     >
-      <IntakeTextField
+      <IntakeSelectField<RelationshipOption>
         label="Степень родства"
-        value={item.relationship}
+        value={relationshipValue}
         readOnly={readOnly}
+        required
+        options={RELATIONSHIP_OPTIONS}
         testId={`intake-relative-relationship-${index}`}
-        onChange={(value) => onPatch({ relationship: value })}
+        onChange={(value) => {
+          if (value === RELATIONSHIP_OTHER) {
+            onPatch({ relationship: isPresetRelationship(item.relationship) ? "" : item.relationship });
+            return;
+          }
+          onPatch({ relationship: value });
+        }}
       />
+      {isOtherRelationship ? (
+        <IntakeTextField
+          label="Укажите степень родства"
+          value={item.relationship}
+          readOnly={readOnly}
+          required
+          testId={`intake-relative-relationship-other-${index}`}
+          onChange={(value) => onPatch({ relationship: value })}
+        />
+      ) : null}
       <IntakeTextField
         label="ФИО"
         value={item.full_name}

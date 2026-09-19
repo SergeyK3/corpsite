@@ -12,6 +12,7 @@ import {
   INTAKE_EMPLOYMENT_BIOGRAPHY_SHOW_TENURE_COLUMN,
   INTAKE_EMPLOYMENT_TENURE_OVERLAP_HINT,
   isIntakeEmploymentCurrent,
+  normalizeIntakeEmploymentBiographyEntry,
   parseIntakeEmploymentFocusRowIndex,
   sortIntakeEmploymentBiographyRows,
   type IntakeEmploymentBiographyEntry,
@@ -51,7 +52,7 @@ function EmploymentRowEditor({
   const currentlyEmployed = isIntakeEmploymentCurrent(item);
   const periodError = currentlyEmployed
     ? null
-    : resolveIntakePeriodRangeError(item.year_from, item.year_to);
+    : resolveIntakePeriodRangeError(item.start_date, item.end_date);
 
   return (
     <div
@@ -62,10 +63,10 @@ function EmploymentRowEditor({
         <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Организация</span>
         <input
           type="text"
-          value={item.organization}
+          value={item.organization_original}
           readOnly={readOnly}
           data-testid={`intake-employment-organization-${index}`}
-          onChange={(event) => onPatch({ organization: event.target.value })}
+          onChange={(event) => onPatch({ organization_original: event.target.value, organization_normalized: event.target.value })}
           className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm read-only:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950 dark:read-only:bg-zinc-900"
         />
       </label>
@@ -73,25 +74,25 @@ function EmploymentRowEditor({
         <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Должность</span>
         <input
           type="text"
-          value={item.position}
+          value={item.position_original}
           readOnly={readOnly}
           data-testid={`intake-employment-position-${index}`}
-          onChange={(event) => onPatch({ position: event.target.value })}
+          onChange={(event) => onPatch({ position_original: event.target.value, position_normalized: event.target.value })}
           className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm read-only:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950 dark:read-only:bg-zinc-900"
         />
       </label>
       <PersonnelDayDateField
         label="Дата начала"
-        value={item.year_from}
-        onChange={(value) => onPatch({ year_from: value })}
+        value={item.start_date ?? ""}
+        onChange={(value) => onPatch({ start_date: value })}
         readOnly={readOnly}
         testId={`intake-employment-year-from-${index}`}
         mode="document"
       />
       <PersonnelDayDateField
         label="Дата окончания"
-        value={item.year_to}
-        onChange={(value) => onPatch({ year_to: value })}
+        value={item.end_date ?? ""}
+        onChange={(value) => onPatch({ end_date: value || null })}
         readOnly={readOnly || currentlyEmployed}
         testId={`intake-employment-year-to-${index}`}
         mode="document"
@@ -103,7 +104,7 @@ function EmploymentRowEditor({
             checked={currentlyEmployed}
             data-testid={`intake-employment-current-${index}`}
             onChange={(event) => {
-              onPatch({ year_to: event.target.checked ? "" : item.year_to });
+              onPatch({ end_date: event.target.checked ? null : item.end_date });
             }}
           />
           <span className="text-sm text-zinc-700 dark:text-zinc-300">Работает по настоящее время</span>
@@ -113,10 +114,10 @@ function EmploymentRowEditor({
         <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Причина увольнения</span>
         <input
           type="text"
-          value={item.reason_for_leaving}
+          value={item.reason_for_leaving ?? ""}
           readOnly={readOnly}
           data-testid={`intake-employment-reason-${index}`}
-          onChange={(event) => onPatch({ reason_for_leaving: event.target.value })}
+          onChange={(event) => onPatch({ reason_for_leaving: event.target.value || null })}
           className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm read-only:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950 dark:read-only:bg-zinc-900"
         />
       </label>
@@ -241,14 +242,18 @@ export default function IntakeEmploymentBiographyTable({
   focusTestId = null,
 }: Props) {
   const [expandedIndex, setExpandedIndex] = React.useState<number | null>(null);
-  const rows = React.useMemo(() => sortIntakeEmploymentBiographyRows(items), [items]);
+  const canonicalItems = React.useMemo(
+    () => items.map((item, index) => normalizeIntakeEmploymentBiographyEntry(item as Record<string, unknown>, index)),
+    [items],
+  );
+  const rows = React.useMemo(() => sortIntakeEmploymentBiographyRows(canonicalItems), [canonicalItems]);
   const focusRowIndex = parseIntakeEmploymentFocusRowIndex(focusTestId);
   const visibleExpandedIndex = expandedIndex ?? focusRowIndex;
 
   React.useEffect(() => {
     if (focusRowIndex !== null) setExpandedIndex(focusRowIndex);
   }, [focusRowIndex]);
-  const { calculation, loading, error } = useEmploymentTenureCalculation(items);
+  const { calculation, loading, error } = useEmploymentTenureCalculation(canonicalItems);
   const tenureByRecordId = React.useMemo(() => {
     const map = new Map<string, EmploymentTenureRecordResult>();
     calculation?.records.forEach((row) => map.set(row.record_id, row));
@@ -256,18 +261,18 @@ export default function IntakeEmploymentBiographyTable({
   }, [calculation]);
 
   function patchRow(index: number, patch: Partial<IntakeEmploymentBiographyEntry>) {
-    onChange(updateItemAt(items, index, patch));
+    onChange(updateItemAt(canonicalItems, index, patch));
   }
 
   function handleDelete(index: number) {
-    const organization = items[index]?.organization?.trim() || "эту запись";
+    const organization = canonicalItems[index]?.organization_original?.trim() || "эту запись";
     if (!window.confirm(`Удалить место работы «${organization}»?`)) return;
-    onChange(items.filter((_, itemIndex) => itemIndex !== index));
+    onChange(canonicalItems.filter((_, itemIndex) => itemIndex !== index));
     setExpandedIndex((current) => (current === index ? null : current));
   }
 
   function handleAdd() {
-    const nextItems = [...items, emptyIntakeEmploymentBiographyEntry()];
+    const nextItems = [...canonicalItems, emptyIntakeEmploymentBiographyEntry()];
     onChange(nextItems);
     setExpandedIndex(nextItems.length - 1);
   }
@@ -279,13 +284,13 @@ export default function IntakeEmploymentBiographyTable({
   return (
     <div className="space-y-4" data-testid="intake-employment-biography-table">
       <EmploymentTenureSummary
-        items={items}
+      items={canonicalItems}
         calculation={calculation}
         loading={loading}
         error={error}
       />
 
-      {items.length === 0 ? (
+      {canonicalItems.length === 0 ? (
         <p className="text-sm text-zinc-500" data-testid="intake-employment-empty">
           Записей пока нет.
         </p>
@@ -329,13 +334,13 @@ export default function IntakeEmploymentBiographyTable({
                         data-testid={`intake-employment-row-${index}`}
                       >
                         <td className="whitespace-nowrap px-3 py-2 align-top text-sm">
-                          {formatIntakeEmploymentPeriodCell(item.year_from, item.year_to)}
+                          {formatIntakeEmploymentPeriodCell(item.start_date, item.end_date)}
                         </td>
                         <td className="px-3 py-2 align-top text-sm">
-                          {employmentBiographyCellValue(item.organization)}
+                          {employmentBiographyCellValue(item.organization_normalized || item.organization_original)}
                         </td>
                         <td className="px-3 py-2 align-top text-sm">
-                          {employmentBiographyCellValue(item.position)}
+                          {employmentBiographyCellValue(item.position_normalized || item.position_original)}
                         </td>
                         <td className="px-3 py-2 align-top text-sm">
                           {employmentBiographyCellValue(item.reason_for_leaving)}
@@ -393,13 +398,13 @@ export default function IntakeEmploymentBiographyTable({
               >
                 <div className="space-y-2 p-3">
                   <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                    {employmentBiographyCellValue(item.organization)}
+                    {employmentBiographyCellValue(item.organization_normalized || item.organization_original)}
                   </div>
                   <div className="text-sm text-zinc-600 dark:text-zinc-400">
-                    {employmentBiographyCellValue(item.position)}
+                    {employmentBiographyCellValue(item.position_normalized || item.position_original)}
                   </div>
                   <div className="text-sm text-zinc-600 dark:text-zinc-400">
-                    {formatIntakeEmploymentPeriodCell(item.year_from, item.year_to)}
+                    {formatIntakeEmploymentPeriodCell(item.start_date, item.end_date)}
                   </div>
                   {INTAKE_EMPLOYMENT_BIOGRAPHY_SHOW_TENURE_COLUMN ? (
                     <div className="text-sm text-zinc-600 dark:text-zinc-400">

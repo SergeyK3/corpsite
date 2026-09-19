@@ -93,11 +93,8 @@ describe("IntakeEmploymentBiographyTable", () => {
     fireEvent.click(screen.getByTestId("intake-employment-add-button"));
     expect(onChange).toHaveBeenCalledWith([
       expect.objectContaining({
-        organization: "",
-        position: "",
-        year_from: "",
-        year_to: "",
-        reason_for_leaving: "",
+        organization_original: "", organization_normalized: "", position_original: "", position_normalized: "",
+        start_date: "", end_date: null, reason_for_leaving: null,
         record_id: expect.any(String),
       }),
     ]);
@@ -151,7 +148,7 @@ describe("IntakeEmploymentBiographyTable", () => {
     fireEvent.click(within(screen.getByTestId("intake-employment-desktop-view")).getByTestId("intake-employment-current-0"));
 
     expect(onChange).toHaveBeenCalledWith([
-      expect.objectContaining({ year_to: "" }),
+      expect.objectContaining({ end_date: null }),
     ]);
   });
 });

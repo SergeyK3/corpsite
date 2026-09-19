@@ -36,10 +36,7 @@ export default function IntakeAdditionalStep({
           })
         }
         onDeclaredEmptyChange={(declaredEmpty) =>
-          patch({
-            foreign_languages_none: declaredEmpty,
-            foreign_languages: declaredEmpty ? [] : value.foreign_languages,
-          })
+          patch({ foreign_languages_none: declaredEmpty && value.foreign_languages.length === 0 })
         }
       />
 
@@ -52,10 +49,7 @@ export default function IntakeAdditionalStep({
           patch({ awards: items, awards_none: items.length > 0 ? false : value.awards_none })
         }
         onDeclaredEmptyChange={(declaredEmpty) =>
-          patch({
-            awards_none: declaredEmpty,
-            awards: declaredEmpty ? [] : value.awards,
-          })
+          patch({ awards_none: declaredEmpty && value.awards.length === 0 })
         }
       />
 
@@ -73,10 +67,7 @@ export default function IntakeAdditionalStep({
               })
             }
             onDeclaredEmptyChange={(declaredEmpty) =>
-              patch({
-                academic_degrees_none: declaredEmpty,
-                academic_degrees: declaredEmpty ? [] : value.academic_degrees,
-              })
+              patch({ academic_degrees_none: declaredEmpty && value.academic_degrees.length === 0 })
             }
           />
           <IntakeAcademicTitlesTable
@@ -91,10 +82,7 @@ export default function IntakeAdditionalStep({
               })
             }
             onDeclaredEmptyChange={(declaredEmpty) =>
-              patch({
-                academic_titles_none: declaredEmpty,
-                academic_titles: declaredEmpty ? [] : value.academic_titles,
-              })
+              patch({ academic_titles_none: declaredEmpty && value.academic_titles.length === 0 })
             }
           />
         </>

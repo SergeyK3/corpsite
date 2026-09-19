@@ -12,6 +12,7 @@ import {
   mapIntakeApiError,
   openIntakeSession,
   submitIntakeDraft,
+  toIntakeFormPayload,
   type IntakeDraftPayload,
 } from "../_lib/intakeApi.client";
 import { collectIntakeDateValidationIssues, resolveIntakeDateIssueStepIndex } from "../_lib/intakeDateValidation";
@@ -46,7 +47,7 @@ export default function IntakePageClient() {
     void openIntakeSession(token)
       .then((session) => {
         if (cancelled) return;
-        const reconciled = reconcileIntakeDraftPayload(session.payload ?? emptyIntakeDraftPayload());
+        const reconciled = reconcileIntakeDraftPayload(toIntakeFormPayload(session.payload ?? emptyIntakeDraftPayload()));
         setPayload(reconciled);
         setReadOnly(Boolean(session.read_only));
         setSubmitted(Boolean(session.read_only));

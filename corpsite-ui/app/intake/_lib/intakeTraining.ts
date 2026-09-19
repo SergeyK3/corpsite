@@ -60,11 +60,11 @@ export function resolveIntakeTrainingPeriodRangeError(
 export function normalizeIntakeTrainingEntry(
   item: Partial<IntakeTrainingEntry> & Record<string, unknown>,
 ): IntakeTrainingEntry {
-  const yearTo = String(item.year_to ?? item.year ?? "");
+  const yearTo = String(item.year_to ?? item.end_date ?? item.year ?? "");
   return {
-    institution: String(item.institution ?? ""),
-    course_name: String(item.course_name ?? ""),
-    year_from: String(item.year_from ?? ""),
+    institution: String(item.institution ?? item.institution_original ?? ""),
+    course_name: String(item.course_name ?? item.course_name_original ?? ""),
+    year_from: String(item.year_from ?? item.start_date ?? ""),
     year_to: yearTo,
     document_type: normalizeIntakeTrainingDocumentType(String(item.document_type ?? "")),
     document_number: String(item.document_number ?? ""),

@@ -38,6 +38,24 @@ def test_is_intake_section_empty_additional_respects_declared_none() -> None:
     assert is_intake_section_empty("additional", payload) is False
 
 
+def test_is_intake_section_empty_military_treats_not_provided_as_empty() -> None:
+    payload = {
+        "military": {
+            "status": "not_provided",
+            "rank": None,
+            "category": None,
+        }
+    }
+
+    assert is_intake_section_empty("military", payload) is True
+
+    payload["military"]["rank"] = "рядовой"
+    assert is_intake_section_empty("military", payload) is False
+
+    payload["military"] = {"status": "not_applicable"}
+    assert is_intake_section_empty("military", payload) is False
+
+
 def test_intake_mapper_additional_records() -> None:
     languages = map_foreign_language_records([{"language": "English", "proficiency": "B2"}])
     awards = map_award_records(

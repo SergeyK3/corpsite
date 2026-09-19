@@ -11,17 +11,17 @@ describe("intakeEmploymentBiography", () => {
     const rows = sortIntakeEmploymentBiographyRows([
       {
         ...emptyIntakeEmploymentBiographyEntry(),
-        organization: "Old",
-        year_from: "2018-09-01",
+        organization_original: "Old",
+        start_date: "2018-09-01",
       },
       {
         ...emptyIntakeEmploymentBiographyEntry(),
-        organization: "New",
-        year_from: "2022-06-15",
+        organization_original: "New",
+        start_date: "2022-06-15",
       },
     ]);
 
-    expect(rows.map(({ item }) => item.organization)).toEqual(["New", "Old"]);
+    expect(rows.map(({ item }) => item.organization_original)).toEqual(["New", "Old"]);
   });
 
   it("formats current employment period without end date", () => {

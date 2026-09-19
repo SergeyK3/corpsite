@@ -126,9 +126,9 @@ export default function EmploymentTenureSummary({ items, calculation, loading = 
                 .filter((row) => row.included && row.days !== null)
                 .map((row) => {
                   const item = findItemByRecordId(items, row.record_id);
-                  const periodFrom = formatIntakePeriodForDisplay(item?.year_from) || "—";
-                  const periodTo = String(item?.year_to ?? "").trim()
-                    ? formatIntakePeriodForDisplay(item?.year_to) || "—"
+                  const periodFrom = formatIntakePeriodForDisplay(item?.start_date) || "—";
+                  const periodTo = String(item?.end_date ?? "").trim()
+                    ? formatIntakePeriodForDisplay(item?.end_date) || "—"
                     : "по настоящее время";
                   return (
                     <div key={row.record_id} className="rounded-lg border border-zinc-200 px-3 py-2 dark:border-zinc-800">

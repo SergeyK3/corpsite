@@ -293,7 +293,7 @@ def test_on_behalf_edit_save_returns_version_conflict_for_two_hr_stale_sessions(
     applicant_view = client.get(f"/intake/{token}")
     assert applicant_view.status_code == 200, applicant_view.text
     assert (
-        applicant_view.json()["payload"]["employment_biography"][0]["organization"]
+        applicant_view.json()["payload"]["employment_biography"][0]["organization_original"]
         == "Городская поликлиника №1"
     )
 

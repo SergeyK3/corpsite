@@ -17,11 +17,12 @@ export type EmploymentTenureRecordResult = {
 
 export type EmploymentTenureRecordInput = {
   record_id: string;
-  organization: string;
-  position: string;
-  year_from: string | null;
-  year_to: string | null;
-  reason_for_leaving: string;
+  organization_original: string;
+  organization_normalized: string;
+  position_original: string;
+  position_normalized: string;
+  start_date: string | null;
+  end_date: string | null;
 };
 
 export type EmploymentTenureCalculation = {

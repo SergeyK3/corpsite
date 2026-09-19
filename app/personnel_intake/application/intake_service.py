@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import os
 import secrets
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -23,6 +24,8 @@ from app.personnel_intake.domain.applicant_reedit import (
     should_reopen_submitted_intake_for_applicant_edit,
 )
 from app.personnel_intake.domain.date_validation import collect_intake_date_validation_errors
+from app.personnel_intake.domain.employment_biography import normalize_employment_biography_payload
+from app.personnel_intake.domain.payload_canonical import additional_none_conflicts, normalize_intake_payload
 from app.personnel_intake.domain.education_type import (
     INTAKE_EDUCATION_TYPES,
     intake_education_duplicate_fingerprint,
@@ -431,6 +434,10 @@ def autosave_intake_draft(
     payload: dict[str, Any],
 ) -> AutosaveIntakeDraftResult:
     """Autosave draft payload for an open intake session."""
+    conflicts = additional_none_conflicts(payload)
+    if conflicts:
+        raise PersonnelIntakeValidationError("Contradictory *_none flags: " + ", ".join(conflicts))
+    payload = normalize_employment_biography_payload(normalize_intake_payload(payload))
     repo, link = _resolve_link_by_token(conn, raw_token)
     now = _now_utc()
 
@@ -494,6 +501,11 @@ def submit_intake_draft(
     payload: dict[str, Any] | None = None,
 ) -> SubmitIntakeDraftResult:
     """Submit intake draft — becomes read-only; application moves to intake_submitted."""
+    if payload is not None:
+        conflicts = additional_none_conflicts(payload)
+        if conflicts:
+            raise PersonnelIntakeValidationError("Contradictory *_none flags: " + ", ".join(conflicts))
+        payload = normalize_employment_biography_payload(normalize_intake_payload(payload))
     repo, link = _resolve_link_by_token(conn, raw_token)
     now = _now_utc()
 
@@ -559,6 +571,7 @@ def submit_intake_draft_for_application(
     now = _now_utc()
 
     if payload is not None:
+        payload = normalize_employment_biography_payload(normalize_intake_payload(payload))
         if not is_intake_draft_editable(draft.status):
             raise PersonnelIntakeTokenError(
                 "Intake draft is already submitted.",
@@ -597,6 +610,7 @@ def submit_intake_draft_for_application(
 
 
 def _validate_submit_payload(payload: dict[str, Any]) -> None:
+    payload = normalize_employment_biography_payload(payload)
     personal = payload.get("personal") or {}
     contacts = payload.get("contacts") or {}
     errors: list[str] = []
@@ -606,6 +620,11 @@ def _validate_submit_payload(payload: dict[str, Any]) -> None:
         errors.append("personal.first_name")
     if not str(contacts.get("mobile_phone") or "").strip():
         errors.append("contacts.mobile_phone")
+    elif not re.fullmatch(r"\+7\d{10}", str(contacts.get("mobile_phone"))):
+        errors.append("contacts.mobile_phone")
+    email = str(contacts.get("email") or "").strip()
+    if email and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+        errors.append("contacts.email")
     education = payload.get("education") or []
     if not isinstance(education, list) or len(education) == 0:
         errors.append("education")

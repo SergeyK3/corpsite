@@ -4,6 +4,7 @@ from __future__ import annotations
 import re
 from datetime import date
 from typing import Any
+from app.personnel_intake.domain.employment_biography import employment_dates_are_ordered, normalize_employment_biography_record
 
 ISO_DATE_RE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})$")
 YEAR_ONLY_RE = re.compile(r"^\d{4}$")
@@ -174,17 +175,20 @@ def collect_intake_date_validation_errors(payload: dict[str, Any]) -> list[str]:
         for index, item in enumerate(relatives):
             if not isinstance(item, dict):
                 continue
-            if is_incomplete_intake_period_date(item.get("birth_year")):
-                errors.append(f"relatives[{index}].birth_year")
+            if is_incomplete_intake_period_date(item.get("birth_date") or item.get("birth_year")):
+                errors.append(f"relatives[{index}].birth_date")
 
     employment = payload.get("employment_biography") or []
     if isinstance(employment, list):
         for index, item in enumerate(employment):
             if not isinstance(item, dict):
                 continue
-            if is_incomplete_intake_period_date(item.get("year_from")):
-                errors.append(f"employment_biography[{index}].year_from")
-            if is_incomplete_intake_period_date(item.get("year_to")):
-                errors.append(f"employment_biography[{index}].year_to")
+            record = normalize_employment_biography_record(item, index)
+            if is_incomplete_intake_period_date(record.get("start_date")):
+                errors.append(f"employment_biography[{index}].start_date")
+            if is_incomplete_intake_period_date(record.get("end_date")):
+                errors.append(f"employment_biography[{index}].end_date")
+            if not employment_dates_are_ordered(record):
+                errors.append(f"employment_biography[{index}].end_date")
 
     return errors

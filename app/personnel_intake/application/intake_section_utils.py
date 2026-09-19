@@ -53,7 +53,15 @@ def is_intake_section_empty(section_code: str, payload: dict[str, Any]) -> bool:
         return not isinstance(items, list) or len(items) == 0
     if section_code == INTAKE_SECTION_MILITARY:
         block = payload.get("military") or {}
-        return not any(_has_text(block.get(k)) for k in block)
+        if not isinstance(block, dict):
+            return True
+        # Canonical v2 represents an omitted military record explicitly as
+        # ``status=not_provided``.  The status itself must not make an
+        # otherwise empty section non-skippable.
+        status = str(block.get("status") or "").strip()
+        if status in {"", "not_provided"}:
+            return not any(_has_text(value) for key, value in block.items() if key != "status")
+        return False
     if section_code == INTAKE_SECTION_ADDITIONAL:
         block = payload.get("additional") or {}
         return all(

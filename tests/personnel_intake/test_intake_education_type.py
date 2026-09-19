@@ -175,7 +175,7 @@ def _accept_required_and_skip_optional(client, headers, app_id: int) -> None:
             headers=headers,
         )
         assert res.status_code == 200, res.text
-    for section in ("training", "relatives", "employment_biography", "military"):
+    for section in ("training", "relatives", "employment_biography", "military", "additional"):
         res = client.post(
             f"/directory/personnel-applications/{app_id}/intake/review/sections/{section}/skip",
             headers=headers,

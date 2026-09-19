@@ -87,6 +87,8 @@ def patch_intake_autosave(
         )
     except PersonnelIntakeTokenError as exc:
         raise _token_http403(exc)
+    except PersonnelIntakeValidationError as exc:
+        raise _validation_http422(exc)
     except HTTPException:
         raise
     except Exception as exc:

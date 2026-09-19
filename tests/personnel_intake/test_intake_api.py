@@ -361,6 +361,52 @@ def test_invalid_token_denied(client, intake_schema_ready) -> None:
     assert res.json()["detail"]["code"] == "TOKEN_INVALID"
 
 
+def test_intake_token_is_bound_to_its_own_application_and_does_not_leak_other_draft(
+    client, intake_schema_ready, privileged_headers
+) -> None:
+    person_ids: list[int] = []
+    first = _register_application(client, privileged_headers)
+    second = _register_application(client, privileged_headers)
+    person_ids.extend([first["person_id"], second["person_id"]])
+
+    first_link = client.post(
+        f"/directory/personnel-applications/{first['application_id']}/intake-link",
+        headers=privileged_headers,
+    )
+    second_link = client.post(
+        f"/directory/personnel-applications/{second['application_id']}/intake-link",
+        headers=privileged_headers,
+    )
+    assert first_link.status_code == 200, first_link.text
+    assert second_link.status_code == 200, second_link.text
+    first_token = first_link.json()["intake_url_path"].split("/intake/")[-1]
+    second_token = second_link.json()["intake_url_path"].split("/intake/")[-1]
+
+    first_payload = _filled_payload()
+    first_payload["personal"]["last_name"] = "token-a-private-name"
+    saved = client.patch(f"/intake/{first_token}", json={"payload": first_payload})
+    assert saved.status_code == 200, saved.text
+
+    second_session = client.get(f"/intake/{second_token}")
+    assert second_session.status_code == 200, second_session.text
+    assert second_session.json()["application_id"] == second["application_id"]
+    # A newly issued form is prefilled from its own protected Person record;
+    # the isolation guarantee is that it never inherits the first draft.
+    assert second_session.json()["payload"]["personal"]["last_name"] == "Intake"
+    assert "token-a-private-name" not in second_session.text
+
+    with engine.begin() as conn:
+        cleanup_person_graph(conn, person_ids=person_ids, employee_ids=[])
+
+
+def test_staff_and_admin_api_remain_protected_without_a_token(client, intake_schema_ready) -> None:
+    staff = client.get("/directory/personnel-applications")
+    admin = client.get("/admin/access/roles")
+
+    assert staff.status_code in {401, 403}
+    assert admin.status_code in {401, 403}
+
+
 def test_reopen_preserves_draft(client, intake_schema_ready, privileged_headers) -> None:
     person_ids: list[int] = []
     reg = _register_application(client, privileged_headers)

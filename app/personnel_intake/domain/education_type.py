@@ -55,5 +55,5 @@ def resolve_intake_education_kind(raw: Any) -> str:
 def intake_education_duplicate_fingerprint(item: dict[str, Any]) -> tuple[str, str]:
     """Fingerprint aligned with PPR duplicate guard: (education_kind, institution)."""
     kind = resolve_intake_education_kind(item.get("education_type"))
-    institution = str(item.get("institution") or "").strip()
+    institution = str(item.get("institution_original") or item.get("institution") or "").strip()
     return (kind, institution)

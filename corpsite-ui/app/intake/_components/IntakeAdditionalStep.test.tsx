@@ -40,7 +40,7 @@ describe("IntakeAdditionalStep", () => {
     });
   });
 
-  it("marks foreign languages as none and clears rows", async () => {
+  it("does not discard existing foreign-language rows when none is selected", async () => {
     render(<StatefulAdditionalStep />);
     fireEvent.click(screen.getByTestId("intake-foreign-languages-add-button"));
     await screen.findByTestId("intake-foreign-language-row-0");
@@ -48,11 +48,10 @@ describe("IntakeAdditionalStep", () => {
 
     await waitFor(() => {
       expect(JSON.parse(screen.getByTestId("additional-payload-json").textContent || "{}")).toMatchObject({
-        foreign_languages_none: true,
-        foreign_languages: [],
+        foreign_languages_none: false,
+        foreign_languages: [{ language: "", proficiency: "" }],
       });
     });
-    expect(screen.getByTestId("intake-foreign-languages-none-message")).toBeInTheDocument();
   });
 
   it("saves award category, exact name, document number and date", async () => {

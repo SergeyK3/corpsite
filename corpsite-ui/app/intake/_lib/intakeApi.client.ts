@@ -146,11 +146,23 @@ export type IntakeDraftPayload = {
     work_place: string;
   }>;
   employment_biography: Array<{
-    organization: string;
-    position: string;
-    year_from: string;
-    year_to: string;
-    reason_for_leaving: string;
+    record_id: string;
+    start_date: string | null;
+    end_date: string | null;
+    organization_original: string;
+    organization_normalized: string;
+    city: string | null;
+    position_original: string;
+    position_normalized: string;
+    reason_for_leaving: string | null;
+    note: string | null;
+    verification_status: "unverified" | "requires_review" | "verified" | "rejected";
+    evidence_document_ids: string[];
+    /** Read-only compatibility aliases. They are removed by the next save. */
+    organization?: string;
+    position?: string;
+    year_from?: string;
+    year_to?: string;
   }>;
   military: {
     status: string;
@@ -296,6 +308,19 @@ export function emptyIntakeDraftPayload(): IntakeDraftPayload {
 }
 
 export function mapIntakeApiError(error: unknown, fallback: string): string {
+  const apiError = error as {
+    code?: unknown;
+    details?: { detail?: { code?: unknown } };
+  };
+  const code = String(apiError?.code ?? apiError?.details?.detail?.code ?? "").trim();
+  const intakeMessages: Record<string, string> = {
+    TOKEN_MISSING: "Ссылка недействительна. Проверьте, что она скопирована полностью.",
+    TOKEN_INVALID: "Ссылка недействительна. Проверьте, что она скопирована полностью.",
+    TOKEN_EXPIRED: "Срок действия ссылки истёк. Попросите отдел кадров отправить новую ссылку.",
+    TOKEN_REVOKED: "Ссылка больше недоступна. Обратитесь в отдел кадров.",
+    TOKEN_NOT_ACCESSIBLE: "Ссылка недоступна. Обратитесь в отдел кадров.",
+  };
+  if (intakeMessages[code]) return intakeMessages[code];
   return formatThrownError(error, { fallback });
 }
 
@@ -314,7 +339,7 @@ export async function openIntakeSession(token: string): Promise<IntakeSessionRes
   });
   const body = await readJsonSafe(res);
   if (!res.ok) throw toApiError(res.status, body, { method: "GET", url: path });
-  return body as IntakeSessionResponse;
+  return normalizeIntakeResponsePayload(body as IntakeSessionResponse);
 }
 
 export async function autosaveIntakeDraft(
@@ -325,12 +350,87 @@ export async function autosaveIntakeDraft(
   const res = await fetch(resolveApiUrl(path), {
     method: "PATCH",
     headers: publicHeaders(true),
-    body: JSON.stringify({ payload }),
+    body: JSON.stringify({ payload: toCanonicalIntakeV2(payload) }),
     cache: "no-store",
   });
   const body = await readJsonSafe(res);
   if (!res.ok) throw toApiError(res.status, body, { method: "PATCH", url: path });
-  return body as IntakeAutosaveResponse;
+  return normalizeIntakeResponsePayload(body as IntakeAutosaveResponse);
+}
+
+function normalizeIntakeResponsePayload<T extends { payload: IntakeDraftPayload }>(response: T): T {
+  const source = response.payload as unknown as Record<string, unknown>;
+  const sourcePersonal = source.personal && typeof source.personal === "object" ? source.personal as Record<string, unknown> : {};
+  const sourceContacts = source.contacts && typeof source.contacts === "object" ? source.contacts as Record<string, unknown> : {};
+  const sourceMilitary = source.military && typeof source.military === "object" ? source.military as Record<string, unknown> : {};
+  // This is the single boundary between persisted canonical JSON and controlled
+  // form inputs.  Only nullish textual values become ""; numbers, booleans
+  // and arrays retain their types and therefore cannot become the text "null".
+  const formText = (value: unknown): unknown => value == null ? "" : value;
+  const toFormValue = (value: unknown): unknown => {
+    if (value == null) return "";
+    if (Array.isArray(value)) return value.map(toFormValue);
+    if (typeof value === "object") {
+      return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, item]) => [key, toFormValue(item)]));
+    }
+    return value;
+  };
+  const formTextFields = (value: Record<string, unknown>, keys: readonly string[]) => Object.fromEntries(
+    keys.map((key) => [key, formText(value[key])]),
+  );
+  const raw: unknown = response.payload?.employment_biography;
+  const employment_biography = Array.isArray(raw)
+    ? raw.filter((item): item is Record<string, unknown> => !!item && typeof item === "object").map((item, index) => ({
+      record_id: String(item.record_id || `legacy-${index}`),
+      start_date: nullable(item.start_date ?? item.year_from),
+      end_date: nullable(item.end_date ?? item.year_to),
+      organization_original: String(item.organization_original ?? item.organization ?? ""),
+      organization_normalized: String(item.organization_normalized ?? item.organization_original ?? item.organization ?? ""),
+      city: nullable(item.city),
+      position_original: String(item.position_original ?? item.position ?? ""),
+      position_normalized: String(item.position_normalized ?? item.position_original ?? item.position ?? ""),
+      reason_for_leaving: nullable(item.reason_for_leaving),
+      note: nullable(item.note),
+      verification_status: item.verification_status === "verified" || item.verification_status === "rejected" || item.verification_status === "requires_review" ? item.verification_status : "unverified",
+      evidence_document_ids: Array.isArray(item.evidence_document_ids) ? item.evidence_document_ids.map(String) : [],
+    }))
+    : [];
+  const legacyRows = (key: string) => Array.isArray(source[key]) ? source[key] as Record<string, unknown>[] : [];
+  const education = legacyRows("education").map((item) => ({ ...item,
+    institution: item.institution ?? item.institution_original ?? "", specialty: item.specialty ?? item.specialty_original ?? "",
+    qualification: item.qualification ?? item.qualification_original ?? "", year_from: item.year_from ?? item.start_date ?? "",
+    year_to: item.year_to ?? item.end_date ?? "", diploma_number: item.diploma_number ?? item.document_number ?? "",
+  }));
+  const training = legacyRows("training").map((item) => ({ ...item,
+    institution: item.institution ?? item.institution_original ?? "", course_name: item.course_name ?? item.course_name_original ?? "",
+    year_from: item.year_from ?? item.start_date ?? "", year_to: item.year_to || item.end_date || item.year || "",
+  }));
+  const relatives = legacyRows("relatives").map((item) => ({ ...item,
+    birth_year: formText(item.birth_year ?? item.birth_date), work_place: formText(item.work_place ?? item.workplace),
+  }));
+  const personal = {
+    ...sourcePersonal,
+    ...formTextFields(sourcePersonal, ["last_name", "first_name", "middle_name", "birth_date", "birth_place", "gender", "citizenship", "nationality", "photo_file_id"]),
+  };
+  const contacts = {
+    ...sourceContacts,
+    ...formTextFields(sourceContacts, ["mobile_phone", "email", "registration_address", "residence_address"]),
+  };
+  const military = {
+    ...sourceMilitary,
+    ...formTextFields(sourceMilitary, ["status", "rank", "category", "composition", "commissariat", "specialty_code", "specialty_name", "fitness_category", "registration_group", "registration_category"]),
+  };
+  return { ...response, payload: toFormValue({ ...response.payload, personal, contacts, military, education, training, relatives, employment_biography }) } as T;
+}
+
+/** Convert legacy or persisted v2 payload into safe controlled-input values. */
+export function toIntakeFormPayload(payload: IntakeDraftPayload): IntakeDraftPayload {
+  return normalizeIntakeResponsePayload({ payload }).payload;
+}
+
+function nullable(value: unknown): string | null {
+  const text = String(value ?? "").trim();
+  return text || null;
 }
 
 export async function submitIntakeDraft(
@@ -341,10 +441,28 @@ export async function submitIntakeDraft(
   const res = await fetch(resolveApiUrl(path), {
     method: "POST",
     headers: publicHeaders(true),
-    body: JSON.stringify({ payload: payload ?? null }),
+    body: JSON.stringify({ payload: payload ? toCanonicalIntakeV2(payload) : null }),
     cache: "no-store",
   });
   const body = await readJsonSafe(res);
   if (!res.ok) throw toApiError(res.status, body, { method: "POST", url: path });
   return body as IntakeSubmitResponse;
+}
+
+/** Convert the UI's legacy-compatible view model to the persisted v2 contract. */
+export function toCanonicalIntakeV2(payload: IntakeDraftPayload): Record<string, unknown> {
+  const additional = payload.additional;
+  for (const key of ["foreign_languages", "awards", "academic_degrees", "academic_titles"] as const) {
+    if (additional[`${key}_none`] && additional[key].length) {
+      throw new Error(`Нельзя указать «нет сведений», пока заполнен раздел ${key}`);
+    }
+  }
+  return {
+    ...payload, schema_version: 2,
+    personal: { ...payload.personal, personnel_number: undefined, photo_file_id: nullable(payload.personal.photo_file_id) },
+    contacts: { email: nullable(payload.contacts.email), mobile_phone: nullable(payload.contacts.mobile_phone), residence_address: nullable(payload.contacts.residence_address), registration_address: nullable(payload.contacts.registration_address) },
+    education: payload.education.map((item, index) => ({ record_id: item.record_id ?? `legacy-education-${index}`, start_date: item.start_date ?? item.year_from ?? null, end_date: item.end_date ?? item.year_to ?? null, institution_original: item.institution_original ?? item.institution ?? null, education_type: item.education_type, document_type: item.document_type, document_number: item.document_number ?? item.diploma_number ?? null, specialty_original: item.specialty_original ?? item.specialty ?? null, qualification_original: item.qualification_original ?? item.qualification ?? null })),
+    training: payload.training.map((item, index) => ({ record_id: item.record_id ?? `legacy-training-${index}`, start_date: item.start_date ?? item.year_from ?? null, end_date: item.end_date ?? item.year_to ?? item.year ?? null, course_name_original: item.course_name_original ?? item.course_name ?? null, institution_original: item.institution_original ?? item.institution ?? null, document_type: item.document_type, document_number: item.document_number ?? null, hours: item.hours === "" ? null : Number(item.hours), hours_is_manual: item.hours_is_manual })),
+    relatives: payload.relatives.map((item, index) => ({ record_id: item.record_id ?? `legacy-relative-${index}`, relationship: item.relationship, relationship_other: item.relationship_other ?? null, full_name: nullable(item.full_name), birth_date: nullable(item.birth_year ?? item.birth_date), workplace: nullable(item.work_place ?? item.workplace) })),
+  };
 }

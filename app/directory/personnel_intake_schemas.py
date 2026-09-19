@@ -342,11 +342,18 @@ def review_state_to_out(state: IntakeReviewState, *, link: IntakeLinkSnapshot | 
 
 class EmploymentTenureRecordIn(BaseModel):
     record_id: str = ""
-    organization: str = ""
-    position: str = ""
+    organization_original: str = ""
+    # Canonical v2 deliberately keeps an unverified normalization as null.
+    organization_normalized: str | None = None
+    position_original: str = ""
+    position_normalized: str | None = None
+    start_date: str | None = None
+    end_date: str | None = None
+    # Accepted only while clients with the former payload are still in flight.
     year_from: str | None = None
     year_to: str | None = None
-    reason_for_leaving: str = ""
+    organization: str = ""
+    position: str = ""
 
 
 class EmploymentTenureCalculateIn(BaseModel):
