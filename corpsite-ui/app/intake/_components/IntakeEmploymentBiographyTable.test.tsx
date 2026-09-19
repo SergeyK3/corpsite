@@ -4,7 +4,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import IntakeDraftFormEditor from "./IntakeDraftFormEditor";
 import IntakeEmploymentBiographyTable from "./IntakeEmploymentBiographyTable";
 import { emptyIntakeDraftPayload, INTAKE_STEPS } from "../_lib/intakeApi.client";
-import { emptyIntakeEmploymentBiographyEntry } from "../_lib/intakeEmploymentBiography";
 
 vi.mock("../_lib/employmentTenureApi.client", () => ({
   calculateEmploymentTenure: vi.fn(),
