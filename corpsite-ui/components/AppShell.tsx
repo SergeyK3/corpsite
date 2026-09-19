@@ -53,6 +53,10 @@ import PositionCabinetNav from "./PositionCabinetNav";
 function isPersonnelOrderPrintRoute(pathname: string): boolean {
   return /\/directory\/personnel\/orders\/\d+\/print(?:\/|$)/.test(pathname);
 }
+
+function isPublicIntakeRoute(pathname: string): boolean {
+  return /^\/intake\/[^/]+$/.test(pathname);
+}
 type NavItem = {
   href: string;
   title: string;
@@ -261,9 +265,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() || "/tasks";
 
   const isLogin = pathname === "/login";
+  const isPublicIntake = isPublicIntakeRoute(pathname);
   const isPrintPage = isPersonnelOrderPrintRoute(pathname);
   const [me, setMe] = useState<MeInfo | null>(null);
-  const [loading, setLoading] = useState<boolean>(!isLogin);
+  const [loading, setLoading] = useState<boolean>(!isLogin && !isPublicIntake);
   const [err, setErr] = useState<string | null>(null);
 
   function redirectToLogin() {
@@ -277,7 +282,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   useEffect(() => {
-    if (isLogin) return;
+    if (isLogin || isPublicIntake) return;
 
     void (async () => {
       setLoading(true);
@@ -302,7 +307,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         setLoading(false);
       }
     })();
-  }, [isLogin, router]);
+  }, [isLogin, isPublicIntake, router]);
 
   const cabinetTitle = useMemo(() => resolveCabinetTitle(me), [me]);
 
@@ -386,7 +391,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     return <CurrentUserProvider value={me}>{node}</CurrentUserProvider>;
   }
 
-  if (isLogin) return withCurrentUser(<>{children}</>);
+  if (isLogin || isPublicIntake) return withCurrentUser(<>{children}</>);
 
   if (isPrintPage) {
     if (loading) {
