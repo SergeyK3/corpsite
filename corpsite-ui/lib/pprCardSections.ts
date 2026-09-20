@@ -2,6 +2,7 @@
 
 export type PprCardSectionId =
   | "general"
+  | "contacts"
   | "education"
   | "training"
   | "category"
@@ -23,6 +24,7 @@ export type PprCardSectionDef = {
 };
 
 export const PPR_CARD_SECTIONS: PprCardSectionDef[] = [
+  { id: "contacts", title: "Контакты" },
   { id: "general", title: "Общие сведения" },
   { id: "education", title: "Образование" },
   { id: "training", title: "Обучение и повышение квалификации" },

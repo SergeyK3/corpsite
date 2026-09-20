@@ -46,12 +46,15 @@ import type { PprEmploymentBiographyRoute, PprMilitaryServiceRoute } from "../_l
 import { PprCardSection } from "./PprCardSection";
 import { PprCardSectionNav } from "./PprCardSectionNav";
 import PprCardGeneralSection from "./PprCardGeneralSection";
+import PprCardContactsSection from "./PprCardContactsSection";
 import PprCardEducationSection from "./PprCardEducationSection";
 import PprCardTrainingSection from "./PprCardTrainingSection";
 import PprCardFamilySection from "./PprCardFamilySection";
+import PprCardVersionedSectionEditor from "./PprCardVersionedSectionEditor";
 import PprCardMilitarySection from "./PprCardMilitarySection";
 import PprCardEmploymentBiographySection from "./PprCardEmploymentBiographySection";
 import PprCardAdditionalSection from "./PprCardAdditionalSection";
+import PprForeignLanguagesEditor from "./PprForeignLanguagesEditor";
 import PprQualificationCategoryEditor from "./PprQualificationCategoryEditor";
 import PprCardEventHistorySection from "./PprCardEventHistorySection";
 import PprCardApplicationsSection from "./PprCardApplicationsSection";
@@ -115,6 +118,7 @@ export default function PprPersonalCardPageClient({
   const [fallbackEmployeeId, setFallbackEmployeeId] = React.useState<string | null>(null);
   const [migrationCells, setMigrationCells] = React.useState<Partial<Record<MigrationSection, MigrationCell>>>({});
   const [migrationUniverses, setMigrationUniverses] = React.useState<MigrationUniverse[]>([]);
+  const [correctionMode, setCorrectionMode] = React.useState(false);
   const scrolledSectionRef = React.useRef<PprCardSectionId | null>(null);
 
   const resolvedPersonId = ppr?.identity.resolved_person_id ?? (personId ? Number(personId) : null);
@@ -296,9 +300,14 @@ export default function PprPersonalCardPageClient({
     ppr != null &&
     (!ppr.materialization.materialized ||
       ppr.materialization.lifecycle_state === PPR_LIFECYCLE_NOT_MATERIALIZED);
-  const employmentBiographyEditable = !notMaterialized && canEditPprSections;
-  const militaryEditable = !notMaterialized && canEditPprSections;
-  const canManagePhoto = Boolean(currentUser?.is_privileged || currentUser?.has_personnel_admin);
+  const canCorrectCard = currentUser?.has_personnel_card_edit === true;
+  const employmentBiographyEditable = !notMaterialized && canEditPprSections && canCorrectCard && correctionMode;
+  const militaryEditable = !notMaterialized && canEditPprSections && canCorrectCard && correctionMode;
+  const canManagePhoto = Boolean(canCorrectCard && correctionMode);
+
+  React.useEffect(() => {
+    if (editCategory && canCorrectCard) setCorrectionMode(true);
+  }, [canCorrectCard, editCategory]);
 
   const employmentBiographyRoute: PprEmploymentBiographyRoute | null =
     personId != null
@@ -315,7 +324,7 @@ export default function PprPersonalCardPageClient({
         : null;
 
   return (
-    <div className="flex max-h-[calc(100dvh-8.5rem)] min-h-[min(100dvh-8.5rem,640px)] flex-col overflow-hidden">
+    <div className="w-full">
       <div
         className={`shrink-0 border-b px-4 py-3 sm:px-6 ${
           isApplicant
@@ -358,6 +367,13 @@ export default function PprPersonalCardPageClient({
           >
             {backButtonLabel}
           </button>
+          {canCorrectCard ? (
+            <button type="button" onClick={() => setCorrectionMode((value) => !value)}
+              className="rounded border border-blue-500 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-800 dark:bg-blue-950/40 dark:text-blue-100"
+              data-testid="ppr-card-edit-mode-button">
+              {correctionMode ? "Завершить редактирование" : "Редактировать"}
+            </button>
+          ) : null}
           {canCreateHireOrder ? (
             <button
               type="button"
@@ -380,9 +396,10 @@ export default function PprPersonalCardPageClient({
               : "Трудовые отношения ещё не оформлены. Приказ о приёме станет доступен после отправки анкеты претендентом."}
           </p>
         ) : null}
+        {correctionMode ? <p className="mt-2 text-sm text-blue-800 dark:text-blue-200">Режим корректировки: доступны только персональные разделы. Назначения, приказы и обращения не изменяются из карточки.</p> : null}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-5 sm:px-6">
+      <div className="px-4 py-5 sm:px-6">
         {errorView ? (
           <div
             className={`mb-4 rounded-lg border px-3 py-2 text-sm ${
@@ -450,6 +467,10 @@ export default function PprPersonalCardPageClient({
                 <PprCardGeneralSection ppr={ppr} />
               </PprCardSection>
 
+              {resolvedPersonId != null ? <PprCardSection id="contacts" title="Контакты" description="Канонические контактные сведения сотрудника.">
+                <PprCardContactsSection personId={resolvedPersonId} editable={correctionMode && canCorrectCard} onSaved={() => void loadCard()} />
+              </PprCardSection> : null}
+
               <PprCardSection
                 id="education"
                 title="Образование"
@@ -461,6 +482,7 @@ export default function PprPersonalCardPageClient({
                   superseded={educationSuperseded}
                   voided={educationVoided}
                 />
+                {resolvedPersonId != null && correctionMode && canCorrectCard ? <PprCardVersionedSectionEditor personId={resolvedPersonId} section="education" active={educationActive} onSaved={() => void loadCard()} /> : null}
               </PprCardSection>
 
               <PprCardSection
@@ -475,6 +497,7 @@ export default function PprPersonalCardPageClient({
                   voided={trainingVoided}
                   employeeId={resolvedEmployeeId}
                 />
+                {resolvedPersonId != null && correctionMode && canCorrectCard ? <PprCardVersionedSectionEditor personId={resolvedPersonId} section="training" active={trainingActive} onSaved={() => void loadCard()} /> : null}
               </PprCardSection>
 
               <PprCardSection
@@ -483,7 +506,7 @@ export default function PprPersonalCardPageClient({
                 description="Сведения о квалификационной категории."
               >
                 <MigrationStatusBlock cell={migrationCells.category} />
-                {editCategory && currentUser?.has_personnel_admin && resolvedPersonId ? <PprQualificationCategoryEditor personId={resolvedPersonId} items={ppr.additional.qualification_categories ?? []} version={ppr.additional.qualification_categories_version ?? ""} onSaved={() => { void loadCard(); router.push(returnToHref); }} /> : <PprCardAdditionalSection additional={ppr.additional} mode="category" />}
+                {editCategory && correctionMode && canCorrectCard && resolvedPersonId ? <PprQualificationCategoryEditor personId={resolvedPersonId} items={ppr.additional.qualification_categories ?? []} version={ppr.additional.qualification_categories_version ?? ""} onSaved={() => { void loadCard(); router.replace("?section=category"); }} /> : <><PprCardAdditionalSection additional={ppr.additional} mode="category" />{correctionMode && canCorrectCard ? <button type="button" className="mt-3 rounded border px-3 py-1 text-sm" onClick={() => router.replace("?section=category&edit=1")}>Редактировать</button> : null}</>}
               </PprCardSection>
 
               <PprCardSection
@@ -496,6 +519,7 @@ export default function PprPersonalCardPageClient({
                   superseded={familySuperseded}
                   voided={familyVoided}
                 />
+                {resolvedPersonId != null && correctionMode && canCorrectCard ? <PprCardVersionedSectionEditor personId={resolvedPersonId} section="relatives" active={familyActive} onSaved={() => void loadCard()} /> : null}
               </PprCardSection>
 
               {militaryRoute ? (
@@ -522,6 +546,7 @@ export default function PprPersonalCardPageClient({
               >
                 <MigrationStatusBlock cell={migrationCells.foreign_languages} />
                 <PprCardAdditionalSection additional={ppr.additional} mode="languages" />
+                {resolvedPersonId != null && correctionMode && canCorrectCard ? <PprForeignLanguagesEditor personId={resolvedPersonId} items={ppr.additional.foreign_languages ?? []} version={ppr.additional.qualification_categories_version ?? ""} onSaved={() => void loadCard()} /> : null}
               </PprCardSection>
 
               <PprCardSection

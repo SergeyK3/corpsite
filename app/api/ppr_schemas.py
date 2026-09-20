@@ -154,6 +154,7 @@ class PprEducationRecordResponse(BaseModel):
     document_date: date | None = None
     verification_status: str
     lifecycle_status: str
+    updated_at: datetime | None = None
 
 
 class PprTrainingRecordResponse(BaseModel):
@@ -169,6 +170,7 @@ class PprTrainingRecordResponse(BaseModel):
     document_type: str | None = None
     verification_status: str
     lifecycle_status: str
+    updated_at: datetime | None = None
 
 
 class PprRelativeRecordResponse(BaseModel):
@@ -183,6 +185,7 @@ class PprRelativeRecordResponse(BaseModel):
     notes: str | None = None
     verification_status: str
     lifecycle_status: str
+    updated_at: datetime | None = None
 
 
 class PprExternalEmploymentRecordResponse(BaseModel):

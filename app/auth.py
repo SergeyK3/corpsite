@@ -310,6 +310,8 @@ def _enrich_user_context(user: Dict[str, Any]) -> Dict[str, Any]:
     )
     out["has_personnel_orders_archive"] = has_admin_permission(uid, "PERSONNEL_ORDERS_ARCHIVE")
     out["has_personnel_orders_restore"] = has_admin_permission(uid, "PERSONNEL_ORDERS_RESTORE")
+    from app.security.personnel_card_edit import has_personnel_card_edit
+    out["has_personnel_card_edit"] = has_personnel_card_edit(out)
     out.update(get_test_personnel_deletion_capabilities(
         uid, primary_role_code=str(out.get("role_code") or ""),
     ))

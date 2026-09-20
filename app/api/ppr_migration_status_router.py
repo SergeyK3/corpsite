@@ -2,6 +2,7 @@ from fastapi import APIRouter,Depends,HTTPException,Query,Body
 from app.auth import get_current_user
 from app.db.engine import engine
 from app.directory.rbac import compute_scope,require_personnel_visibility_or_403,require_personnel_admin_or_403
+from app.security.personnel_card_edit import require_personnel_card_edit_for_person
 from app.services.ppr_qualification_category_service import save_categories,CategoryVersionConflict
 from app.services.ppr_additional_note_service import save_note_facts,NoteFactVersionConflict
 from app.security.admin_permissions import PPR_MIGRATION_STATUS_READ_PERMISSION,has_admin_permission
@@ -26,7 +27,7 @@ _FALLBACK_UNIVERSE_ID = 1414
 @router.put('/persons/{person_id}/qualification-categories')
 def update_qualification_categories(person_id:int, body:dict=Body(default={}), user:dict=Depends(get_current_user)):
     """Canonical HR correction; authorization is the existing personnel-admin gate."""
-    require_personnel_admin_or_403(user)
+    require_personnel_card_edit_for_person(user, person_id)
     rows=body.get('qualification_categories')
     if not isinstance(rows,list): raise HTTPException(422,detail='qualification_categories array is required')
     with engine.begin() as conn:
@@ -41,6 +42,7 @@ def update_qualification_categories(person_id:int, body:dict=Body(default={}), u
 @router.put('/persons/{person_id}/additional-status-facts')
 def update_additional_status_facts(person_id:int, body:dict=Body(default={}), user:dict=Depends(get_current_user)):
     """Save structured note tables through the ordinary personnel-admin gate."""
+    # Sensitive status facts remain outside the first personnel-card editor.
     require_personnel_admin_or_403(user)
     pension_rows=body.get('pension_rows')
     disability_rows=body.get('disability_rows')

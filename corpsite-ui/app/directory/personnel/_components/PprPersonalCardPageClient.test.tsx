@@ -554,7 +554,9 @@ describe("PprPersonalCardPageClient", () => {
   it("shows employment biography mutations for materialized editable card", async () => {
     getPprByEmployeeIdMock.mockResolvedValue(buildMaterializedPpr());
 
-    render(<PprPersonalCardPageClient employeeId="42" canEditPprSections />);
+    render(<CurrentUserProvider value={{ has_personnel_card_edit: true }}><PprPersonalCardPageClient employeeId="42" canEditPprSections /></CurrentUserProvider>);
+    await waitFor(() => expect(screen.getByTestId("ppr-card-edit-mode-button")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("ppr-card-edit-mode-button"));
 
     await waitFor(() => {
       expect(screen.getByTestId("emp-bio-create-btn")).toBeInTheDocument();
@@ -651,7 +653,9 @@ describe("PprPersonalCardPageClient", () => {
       }),
     );
 
-    render(<PprPersonalCardPageClient personId="501" />);
+    render(<CurrentUserProvider value={{ has_personnel_card_edit: true }}><PprPersonalCardPageClient personId="501" /></CurrentUserProvider>);
+    await waitFor(() => expect(screen.getByTestId("ppr-card-edit-mode-button")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("ppr-card-edit-mode-button"));
 
     await waitFor(() => {
       expect(screen.getByTestId("emp-bio-empty")).toBeInTheDocument();
@@ -990,7 +994,9 @@ describe("PprPersonalCardPageClient", () => {
   it("shows military mutations for materialized editable card", async () => {
     getPprByEmployeeIdMock.mockResolvedValue(buildMaterializedPpr());
 
-    render(<PprPersonalCardPageClient employeeId="42" canEditPprSections />);
+    render(<CurrentUserProvider value={{ has_personnel_card_edit: true }}><PprPersonalCardPageClient employeeId="42" canEditPprSections /></CurrentUserProvider>);
+    await waitFor(() => expect(screen.getByTestId("ppr-card-edit-mode-button")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("ppr-card-edit-mode-button"));
 
     await waitFor(() => {
       expect(screen.queryByTestId("military-create-btn")).not.toBeInTheDocument();
@@ -1045,7 +1051,9 @@ describe("PprPersonalCardPageClient", () => {
       }),
     );
 
-    render(<PprPersonalCardPageClient personId="501" />);
+    render(<CurrentUserProvider value={{ has_personnel_card_edit: true }}><PprPersonalCardPageClient personId="501" /></CurrentUserProvider>);
+    await waitFor(() => expect(screen.getByTestId("ppr-card-edit-mode-button")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("ppr-card-edit-mode-button"));
 
     await waitFor(() => {
       expect(screen.getByTestId("military-empty")).toBeInTheDocument();

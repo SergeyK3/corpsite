@@ -82,6 +82,7 @@ def _education_record(record: EducationRecord) -> PprEducationRecordResponse:
         document_date=record.document_date,
         verification_status=record.verification_status,
         lifecycle_status=record.lifecycle_status,
+        updated_at=record.updated_at,
     )
 
 
@@ -101,6 +102,7 @@ def _training_record(record: TrainingRecord) -> PprTrainingRecordResponse:
         document_type=str(document_type).strip().lower() if document_type else None,
         verification_status=record.verification_status,
         lifecycle_status=record.lifecycle_status,
+        updated_at=record.updated_at,
     )
 
 
@@ -117,6 +119,7 @@ def _relative_record(record: RelativeRecord) -> PprRelativeRecordResponse:
         notes=record.notes,
         verification_status=record.verification_status,
         lifecycle_status=record.lifecycle_status,
+        updated_at=record.updated_at,
     )
 
 

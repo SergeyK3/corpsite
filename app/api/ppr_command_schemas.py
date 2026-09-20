@@ -83,6 +83,7 @@ class PprMilitaryServiceCreateRequest(BaseModel):
 
     command_id: str = Field(min_length=1)
     correlation_id: str | None = None
+    comment: str = Field(min_length=1)
     record: PprMilitaryServiceRecordWrite
 
 
@@ -100,6 +101,7 @@ class PprMilitaryServiceSupersedeRequest(BaseModel):
 
     command_id: str = Field(min_length=1)
     correlation_id: str | None = None
+    comment: str = Field(min_length=1)
     expected_updated_at: datetime
     replacement: PprMilitaryServiceRecordWrite
 

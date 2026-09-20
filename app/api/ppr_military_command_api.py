@@ -10,7 +10,7 @@ from app.api.ppr_command_schemas import (
     PprMilitaryServiceSupersedeRequest,
     PprMilitaryServiceVoidRequest,
 )
-from app.ppr.application.authorization import HrImportAdminAuthorizationAdapter
+from app.ppr.application.authorization import PersonnelCardEditAuthorizationAdapter
 from app.ppr.application.command_models import (
     COMMAND_TYPE_CREATE_MILITARY_SERVICE,
     COMMAND_TYPE_SUPERSEDE_MILITARY_SERVICE,
@@ -24,7 +24,7 @@ from app.ppr.domain.section_models import SECTION_CODE_PPR_MILITARY
 
 
 def _command_service(user_ctx: dict[str, Any]) -> PprCommandApplicationService:
-    return PprSectionApplicationService(authorization=HrImportAdminAuthorizationAdapter(user_ctx))
+    return PprSectionApplicationService(authorization=PersonnelCardEditAuthorizationAdapter(user_ctx))
 
 
 def _actor_id(user_ctx: dict[str, Any]) -> str:

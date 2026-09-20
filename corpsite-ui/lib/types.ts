@@ -47,6 +47,7 @@ export type MeInfo = {
   has_personnel_orders_restore?: boolean;
   /** ADR-042 E1 — personnel directory / org sidebar visibility. */
   has_personnel_visibility?: boolean;
+  has_personnel_card_edit?: boolean;
   show_org_sidebar?: boolean;
   personnel_visibility?: PersonnelVisibilityInfo;
   /** GET /auth/me — backend can_view_team_tasks(); controls «Все задачи» tab visibility. */

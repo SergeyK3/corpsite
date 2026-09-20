@@ -238,7 +238,7 @@ def handle_void_education_record(
 ) -> SectionMutationResult:
     _require_positive_person_id(command.person_id)
     _require_non_empty(command.reason, "reason")
-    _require_active_education(uow, command.person_id, command.record_id)
+    before = _require_active_education(uow, command.person_id, command.record_id)
     voided = uow.section_mutations().void_record(
         command.person_id,
         SECTION_CODE_PPR_EDUCATION,
@@ -247,7 +247,7 @@ def handle_void_education_record(
     )
     if not isinstance(voided, EducationRecord):
         raise SectionValidationError("void_record returned unexpected section type")
-    return SectionMutationResult(record=voided, mutation_kind=MUTATION_KIND_VOID)
+    return SectionMutationResult(record=voided, mutation_kind=MUTATION_KIND_VOID, prior_record=before)
 
 
 def handle_supersede_education_record(
@@ -408,7 +408,7 @@ def handle_void_relative_record(
 ) -> SectionMutationResult:
     _require_positive_person_id(command.person_id)
     _require_non_empty(command.reason, "reason")
-    _require_active_relative(uow, command.person_id, command.record_id)
+    before = _require_active_relative(uow, command.person_id, command.record_id)
     voided = uow.section_mutations().void_record(
         command.person_id,
         SECTION_CODE_PPR_FAMILY,
@@ -417,7 +417,7 @@ def handle_void_relative_record(
     )
     if not isinstance(voided, RelativeRecord):
         raise SectionValidationError("void_record returned unexpected section type")
-    return SectionMutationResult(record=voided, mutation_kind=MUTATION_KIND_VOID)
+    return SectionMutationResult(record=voided, mutation_kind=MUTATION_KIND_VOID, prior_record=before)
 
 
 def handle_supersede_relative_record(
@@ -522,7 +522,7 @@ def handle_void_training_record(
 ) -> SectionMutationResult:
     _require_positive_person_id(command.person_id)
     _require_non_empty(command.reason, "reason")
-    _require_active_training(uow, command.person_id, command.record_id)
+    before = _require_active_training(uow, command.person_id, command.record_id)
     voided = uow.section_mutations().void_record(
         command.person_id,
         SECTION_CODE_PPR_TRAINING,
@@ -531,7 +531,7 @@ def handle_void_training_record(
     )
     if not isinstance(voided, TrainingRecord):
         raise SectionValidationError("void_record returned unexpected section type")
-    return SectionMutationResult(record=voided, mutation_kind=MUTATION_KIND_VOID)
+    return SectionMutationResult(record=voided, mutation_kind=MUTATION_KIND_VOID, prior_record=before)
 
 
 def handle_supersede_training_record(
@@ -634,7 +634,7 @@ def handle_void_external_employment_record(
 ) -> SectionMutationResult:
     _require_positive_person_id(command.person_id)
     _require_non_empty(command.reason, "reason")
-    _require_active_external_employment(uow, command.person_id, command.record_id)
+    before = _require_active_external_employment(uow, command.person_id, command.record_id)
     voided = uow.section_mutations().void_record(
         command.person_id,
         SECTION_CODE_PPR_EMPLOYMENT_BIOGRAPHY,
@@ -643,7 +643,7 @@ def handle_void_external_employment_record(
     )
     if not isinstance(voided, ExternalEmploymentRecord):
         raise SectionValidationError("void_record returned unexpected section type")
-    return SectionMutationResult(record=voided, mutation_kind=MUTATION_KIND_VOID)
+    return SectionMutationResult(record=voided, mutation_kind=MUTATION_KIND_VOID, prior_record=before)
 
 
 def handle_supersede_external_employment_record(
@@ -793,7 +793,7 @@ def handle_void_military_service_record(
 ) -> SectionMutationResult:
     _require_positive_person_id(command.person_id)
     _require_non_empty(command.reason, "reason")
-    _require_active_military_service(uow, command.person_id, command.record_id)
+    before = _require_active_military_service(uow, command.person_id, command.record_id)
     voided = uow.section_mutations().void_record(
         command.person_id,
         SECTION_CODE_PPR_MILITARY,
@@ -802,7 +802,7 @@ def handle_void_military_service_record(
     )
     if not isinstance(voided, MilitaryServiceRecord):
         raise SectionValidationError("void_record returned unexpected section type")
-    return SectionMutationResult(record=voided, mutation_kind=MUTATION_KIND_VOID)
+    return SectionMutationResult(record=voided, mutation_kind=MUTATION_KIND_VOID, prior_record=before)
 
 
 def handle_supersede_military_service_record(

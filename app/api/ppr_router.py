@@ -21,7 +21,7 @@ from app.api.ppr_schemas import (
 )
 from app.auth import get_current_user
 from app.db.models.person_photos import MAX_PHOTO_BYTE_SIZE, MIME_TYPE_JPEG
-from app.directory.rbac import require_personnel_admin_or_403
+from app.security.personnel_card_edit import require_personnel_card_edit_for_person
 from app.security.personnel_admin_guard import evaluate_personnel_admin_access
 from app.directory.common import as_http500
 from app.person_photos.application.manual_upload_service import register_manual_person_photo
@@ -121,9 +121,8 @@ async def post_ppr_person_photo(
     """
     try:
         assert_ppr_read_path_activation_allowed()
-        require_personnel_admin_or_403(user)
+        require_personnel_card_edit_for_person(user, person_id)
         summary = _query_service.load_summary(person_id=person_id)
-        require_ppr_write_for_person(user, summary.person_id)
 
         if (file.content_type or "").strip().lower() != MIME_TYPE_JPEG:
             raise HTTPException(status_code=422, detail="Only JPEG photos are accepted.")

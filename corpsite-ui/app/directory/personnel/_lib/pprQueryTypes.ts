@@ -45,6 +45,7 @@ export type PprEducationRecordResponse = {
   document_date: string | null;
   verification_status: string;
   lifecycle_status: string;
+  updated_at?: string | null;
 };
 
 export type PprTrainingRecordResponse = {
@@ -60,6 +61,7 @@ export type PprTrainingRecordResponse = {
   document_type?: string | null;
   verification_status: string;
   lifecycle_status: string;
+  updated_at?: string | null;
 };
 
 export type PprRelativeRecordResponse = {
@@ -74,6 +76,7 @@ export type PprRelativeRecordResponse = {
   notes: string | null;
   verification_status: string;
   lifecycle_status: string;
+  updated_at?: string | null;
 };
 
 export type PprExternalEmploymentRecordResponse = {

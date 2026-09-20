@@ -86,7 +86,7 @@ export default function PprPersonPhoto({ personId, fullName, canManagePhoto = fa
   };
 
   return (
-    <div className="w-24 shrink-0 sm:h-40 sm:w-[7.5rem]" data-testid="ppr-person-photo">
+    <div className="w-24 shrink-0 sm:w-[7.5rem]" data-testid="ppr-person-photo">
       <div
         className="flex h-32 w-24 items-center justify-center overflow-hidden rounded-lg border border-zinc-300 bg-zinc-100 text-center text-xs text-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 sm:h-40 sm:w-[7.5rem]"
       >

@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from dataclasses import asdict, is_dataclass
+from datetime import date, datetime
 from typing import Any
 
 from app.ppr.domain.event_models import (
@@ -132,6 +134,25 @@ def build_section_event(
         "mutation_kind": mutation.mutation_kind,
         "command_id": command_id,
     }
+    # This is the business audit store, not an application log.  Preserve a
+    # field-level immutable before/after trail while deliberately omitting
+    # server-owned metadata/provenance from client correction evidence.
+    def audit_value(value: SectionRecord) -> dict[str, Any]:
+        raw = asdict(value) if is_dataclass(value) else dict(value)  # pragma: no cover
+        for key in ("metadata", "provenance", "verification_status", "lifecycle_status"):
+            raw.pop(key, None)
+        def json_value(item: Any) -> Any:
+            if isinstance(item, (date, datetime)):
+                return item.isoformat()
+            if isinstance(item, dict):
+                return {str(key): json_value(child) for key, child in item.items()}
+            if isinstance(item, (list, tuple)):
+                return [json_value(child) for child in item]
+            return item
+        return json_value(raw)
+    payload["after"] = audit_value(record)
+    if mutation.prior_record is not None:
+        payload["before"] = audit_value(mutation.prior_record)
     if mutation.prior_record is not None and mutation.prior_record.record_id is not None:
         payload["prior_record_id"] = mutation.prior_record.record_id
     if employee_context_id is not None:

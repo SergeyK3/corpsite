@@ -70,3 +70,20 @@ class HrImportAdminAuthorizationAdapter:
         resolved_actor = str(self._user_ctx.get("user_id") or self._user_ctx.get("id") or "")
         if actor_id and resolved_actor and actor_id != resolved_actor:
             raise PprAuthorizationDeniedError("actor_id does not match authenticated user")
+
+
+class PersonnelCardEditAuthorizationAdapter:
+    """Production port for the dedicated Personnel Card correction permission."""
+
+    def __init__(self, user_ctx: dict[str, Any]) -> None:
+        self._user_ctx = user_ctx
+
+    def authorize_mutation(self, *, actor_id: str, operation_code: str, person_id: int,
+                           employee_context_id: int | None = None, section_code: str | None = None) -> None:
+        del operation_code, person_id, employee_context_id, section_code
+        from app.security.personnel_card_edit import has_personnel_card_edit
+        if not has_personnel_card_edit(self._user_ctx):
+            raise PprAuthorizationDeniedError("Permission required: PERSONNEL_CARD_EDIT")
+        resolved_actor = str(self._user_ctx.get("user_id") or self._user_ctx.get("id") or "")
+        if not resolved_actor or actor_id != resolved_actor:
+            raise PprAuthorizationDeniedError("actor_id does not match authenticated user")

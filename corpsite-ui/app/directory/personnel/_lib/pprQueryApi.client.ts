@@ -115,6 +115,57 @@ export async function getPprSummaryByPersonId(
   );
 }
 
+export type PprPersonContacts = {
+  person_id: number;
+  canonical: { mobile_phone: string | null; email: string | null; registration_address: string | null; residence_address: string | null; version: number; updated_at: string } | null;
+  fallback: { mobile_phone: string | null; email: string | null; registration_address: string | null; residence_address: string | null; source: string } | null;
+};
+export async function getPprPersonContacts(personId: string | number): Promise<PprPersonContacts> {
+  return pprGetJson<PprPersonContacts>(`/api/ppr/persons/${encodeURIComponent(String(personId))}/contacts`);
+}
+export async function savePprPersonContacts(personId: string | number, body: { command_id: string; expected_version?: number | null; mobile_phone?: string | null; email?: string | null; registration_address?: string | null; residence_address?: string | null; comment?: string | null; }): Promise<PprPersonContacts["canonical"]> {
+  const path=`/api/ppr/persons/${encodeURIComponent(String(personId))}/contacts`;
+  const res=await fetch(resolveApiUrl(path),{method:"PUT",headers:{...authHeaders(),"Content-Type":"application/json"},body:JSON.stringify(body),cache:"no-store"});
+  const payload=await readJsonSafe(res); if(!res.ok) throw toApiError(res.status,payload,{method:"PUT",url:path}); return payload as PprPersonContacts["canonical"];
+}
+
+export type PprCardSectionCommand = {
+  command_id: string;
+  correlation_id?: string;
+  comment?: string;
+};
+
+async function pprCardCommand<T>(personId: string | number, path: string, body: object): Promise<T> {
+  const url = `/api/ppr/persons/${encodeURIComponent(String(personId))}/${path}`;
+  const res = await fetch(resolveApiUrl(url), {
+    method: "POST",
+    headers: { ...authHeaders(), "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+    cache: "no-store",
+  });
+  const payload = await readJsonSafe(res);
+  if (!res.ok) throw toApiError(res.status, payload, { method: "POST", url });
+  return payload as T;
+}
+
+export function createPprCardRecord(personId: string | number, section: "education" | "training" | "relatives", body: PprCardSectionCommand & { record: Record<string, unknown> }) {
+  return pprCardCommand(personId, `${section}/records`, body);
+}
+
+export function supersedePprCardRecord(personId: string | number, section: "education" | "training" | "relatives", recordId: number, body: PprCardSectionCommand & { expected_updated_at: string; replacement: Record<string, unknown> }) {
+  return pprCardCommand(personId, `${section}/records/${recordId}/supersede`, body);
+}
+
+export function voidPprCardRecord(personId: string | number, section: "education" | "training" | "relatives", recordId: number, body: PprCardSectionCommand & { expected_updated_at: string; reason: string }) {
+  return pprCardCommand(personId, `${section}/records/${recordId}/void`, body);
+}
+
+export async function savePprForeignLanguages(personId: string | number, body: { command_id: string; expected_updated_at?: string | null; foreign_languages: { language: string; proficiency: string }[] }) {
+  const path = `/api/ppr/persons/${encodeURIComponent(String(personId))}/foreign-languages`;
+  const res = await fetch(resolveApiUrl(path), { method: "PUT", headers: { ...authHeaders(), "Content-Type": "application/json" }, body: JSON.stringify(body), cache: "no-store" });
+  const payload = await readJsonSafe(res); if (!res.ok) throw toApiError(res.status, payload, { method: "PUT", url: path }); return payload;
+}
+
 export type PprIntendedEmploymentUpdateBody = {
   org_group_id?: number | null;
   org_unit_id?: number | null;
