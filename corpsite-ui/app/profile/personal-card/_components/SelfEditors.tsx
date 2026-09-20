@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 
 import PersonnelDayDateField from "@/lib/PersonnelDayDateField";
+import { displayForeignLanguageLevel, FOREIGN_LANGUAGE_LEVELS } from "../_lib/foreignLanguageDisplay";
 import {
   addMyEducation,
   addMyExternalEmployment,
@@ -21,7 +22,8 @@ const inputClassName =
 const selectClassName = inputClassName;
 
 function apiErrorMessage(error: unknown, labels: Record<string, string>) {
-  const candidate = error as { message?: string; details?: { detail?: Array<{ loc?: unknown[]; msg?: string }> } };
+  const candidate = error as { status?: number; message?: string; details?: { detail?: Array<{ loc?: unknown[]; msg?: string }> } };
+  if (candidate?.status === 409) return "Данные изменились. Обновите карточку и повторите.";
   const issue = candidate?.details?.detail?.[0];
   const location = Array.isArray(issue?.loc) ? issue.loc[issue.loc.length - 1] : undefined;
   if (typeof location === "string" && labels[location] && issue?.msg) {
@@ -178,25 +180,40 @@ export function EducationEditor({ onSaved }: EditorProps) {
 }
 
 const languages = ["Казахский", "Русский", "Английский", "Немецкий", "Французский", "Китайский", "Турецкий", "Арабский", "Узбекский", "Кыргызский", "Корейский", "Испанский", "Другой"];
-const levels = [["dictionary", "Со словарём"], ["conversational", "Читает и может объясняться"], ["fluent", "Владеет свободно"]];
+const levels = FOREIGN_LANGUAGE_LEVELS;
 
 export function LanguagesEditor({ onSaved }: EditorProps) {
-  const draft = useDraft({ language: "", proficiency: "dictionary", other_language: "" });
+  const draft = useDraft({ language: "", proficiency: levels[0], other_language: "" });
+  const [items, setItems] = useState<Array<{ language: string; proficiency: string }>>([]);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const load = async () => {
     const response = await getMyForeignLanguages();
-    const first = response.foreign_languages?.[0];
-    const known = first && languages.includes(first.language) ? first.language : first ? "Другой" : "";
-    draft.replace({ language: known, proficiency: first?.proficiency ?? "dictionary", other_language: known === "Другой" ? first?.language ?? "" : "" });
+    const next = response.foreign_languages ?? [];
+    setItems(next);
     setUpdatedAt(response.updated_at ?? null);
+    return next;
   };
   useEffect(() => { void load(); }, []);
+  const begin = async (index: number | null) => {
+    const current = await load();
+    const item = index === null ? undefined : current[index];
+    const known = item && languages.includes(item.language) ? item.language : item ? "Другой" : "";
+    draft.replace({ language: known, proficiency: displayForeignLanguageLevel(item?.proficiency) || levels[0], other_language: known === "Другой" ? item?.language ?? "" : "" });
+    setEditingIndex(index);
+    draft.begin();
+  };
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     const language = draft.values.language === "Другой" ? draft.values.other_language.trim() : draft.values.language;
     if (!language) { draft.fail("Укажите язык."); return; }
+    if (items.some((item, index) => index !== editingIndex && item.language.toLocaleLowerCase() === language.toLocaleLowerCase())) { draft.fail("Этот язык уже добавлен."); return; }
     try {
-      await saveMyForeignLanguages({ foreign_languages: [{ language, proficiency: draft.values.proficiency }], expected_updated_at: updatedAt });
+      const foreign_languages = editingIndex === null
+        ? [...items, { language, proficiency: draft.values.proficiency }]
+        : items.map((item, index) => index === editingIndex ? { language, proficiency: draft.values.proficiency } : item);
+      const saved = await saveMyForeignLanguages({ foreign_languages, expected_updated_at: updatedAt }) as { updated_at?: string | null };
+      setUpdatedAt(saved.updated_at ?? null);
       await onSaved();
       await load();
       draft.finish();
@@ -205,13 +222,17 @@ export function LanguagesEditor({ onSaved }: EditorProps) {
   return <EditorCard testId="self-languages-editor">
     <h2 className="mb-4 text-xl font-semibold text-slate-900">Иностранные языки</h2>
     <form onSubmit={submit} className="space-y-4">
+      {!draft.editing && <div className="space-y-3">
+        {items.map((item, index) => <div key={`${item.language}-${index}`} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-slate-200 p-3"><span>{item.language} — {displayForeignLanguageLevel(item.proficiency)}</span><button type="button" className="rounded-md border border-blue-600 px-3 py-1.5 text-blue-700 hover:bg-blue-50" onClick={() => { void begin(index); }}>Редактировать</button></div>)}
+        <button type="button" className="rounded-md border border-blue-600 px-4 py-2 text-base font-medium text-blue-700 hover:bg-blue-50" onClick={() => { void begin(null); }}>Добавить язык</button>
+      </div>}
       {draft.editing && <div className="grid gap-4 md:grid-cols-2">
         <label className="block text-base font-medium text-slate-800">Язык<select required className={selectClassName} value={draft.values.language} onChange={(e) => draft.change("language", e.target.value)}><option value="">Выберите язык</option>{languages.map((language) => <option key={language} value={language}>{language}</option>)}</select></label>
-        <label className="block text-base font-medium text-slate-800">Уровень владения<select className={selectClassName} value={draft.values.proficiency} onChange={(e) => draft.change("proficiency", e.target.value)}>{levels.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+        <label className="block text-base font-medium text-slate-800">Уровень владения<select className={selectClassName} value={draft.values.proficiency} onChange={(e) => draft.change("proficiency", e.target.value)}>{levels.map((level) => <option key={level} value={level}>{level}</option>)}</select></label>
         {draft.values.language === "Другой" && <TextField required label="Укажите язык" value={draft.values.other_language} onChange={(value) => draft.change("other_language", value)} />}
       </div>}
       {draft.error && <p role="alert" className="rounded-md border border-red-300 bg-red-50 px-3 py-2 text-red-900">{draft.error}</p>}
-      <EditorActions editing={draft.editing} dirty={draft.dirty} onEdit={draft.begin} onCancel={draft.cancel} />
+      {draft.editing && <EditorActions editing={draft.editing} dirty={draft.dirty} onEdit={() => { void begin(null); }} onCancel={draft.cancel} />}
     </form>
   </EditorCard>;
 }

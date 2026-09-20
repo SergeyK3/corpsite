@@ -338,6 +338,39 @@ def test_self_employment_biography_is_id_free_idempotent_and_audited(client: Tes
 
 
 @pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
+def test_self_foreign_languages_can_reload_cas_version_and_save_again(
+    client: TestClient, linked_self_user: dict[str, int]
+) -> None:
+    """A current version returned by the ID-free GET must be accepted by the next PUT."""
+    _authenticate_as(linked_self_user["user_id"])
+    first = client.put("/api/ppr/me/foreign-languages", json={
+        "command_id": f"language-first-{uuid4().hex}",
+        "foreign_languages": [{"language": "English", "proficiency": "Со словарём"}],
+    })
+    assert first.status_code == 200
+    version_one = client.get("/api/ppr/me/foreign-languages").json()["updated_at"]
+    second = client.put("/api/ppr/me/foreign-languages", json={
+        "command_id": f"language-second-{uuid4().hex}",
+        "expected_updated_at": version_one,
+        "foreign_languages": [{"language": "English", "proficiency": "Читает и может объясняться"}],
+    })
+    assert second.status_code == 200
+    reloaded = client.get("/api/ppr/me/foreign-languages").json()
+    assert reloaded["foreign_languages"] == [{"language": "English", "proficiency": "Читает и может объясняться"}]
+    third = client.put("/api/ppr/me/foreign-languages", json={
+        "command_id": f"language-third-{uuid4().hex}",
+        "expected_updated_at": reloaded["updated_at"],
+        "foreign_languages": [{"language": "English", "proficiency": "Владеет свободно"}],
+    })
+    assert third.status_code == 200
+    assert client.put("/api/ppr/me/foreign-languages", json={
+        "command_id": f"language-stale-{uuid4().hex}",
+        "expected_updated_at": version_one,
+        "foreign_languages": [{"language": "English", "proficiency": "Со словарём"}],
+    }).status_code == 409
+
+
+@pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
 def test_self_employment_supersede_is_versioned_cas_id_free_and_audited(
     client: TestClient, linked_self_user: dict[str, int]
 ) -> None:

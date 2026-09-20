@@ -34,6 +34,7 @@ afterEach(() => {
   getMyPersonalCardMock.mockReset();
   getMyOperationalAssignmentMock.mockReset();
   downloadMyPersonalCardPdfMock.mockReset();
+  saveMyForeignLanguagesMock.mockReset();
   addMyExternalEmploymentMock.mockReset();
   supersedeMyExternalEmploymentMock.mockReset();
   getMyContactsMock.mockReset(); getMyForeignLanguagesMock.mockReset();
@@ -100,7 +101,7 @@ describe("PersonalCardPageClient", () => {
     const contacts = screen.getByTestId("self-contacts-editor");
     expect(contacts).toHaveClass("rounded-xl", "border", "p-4");
     expect(screen.queryByTestId("self-education-editor")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Редактировать" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Редактировать" }));
     const mobile = screen.getByLabelText("Мобильный телефон");
     expect(mobile).toHaveClass("h-11", "w-full", "border", "border-zinc-300");
     expect(screen.getByLabelText("Email")).toBeInTheDocument();
@@ -203,6 +204,100 @@ describe("PersonalCardPageClient", () => {
     expect(commandId).toEqual(expect.stringMatching(/^self-employment-/));
     expect(JSON.stringify(payload)).not.toMatch(/person_id|employee_id/i);
     expect(record).toContainElement(within(record).getByRole("button", { name: "Редактировать" }));
+  });
+
+  it("reloads the self language CAS version before each consecutive save", async () => {
+    getMyPersonalCardMock.mockResolvedValue(readyResponse);
+    getMyOperationalAssignmentMock.mockResolvedValue(readyAssignmentResponse);
+    getMyForeignLanguagesMock
+      .mockResolvedValueOnce({ foreign_languages: [{ language: "Английский", proficiency: "C1" }], updated_at: "2026-01-01T00:00:00+00:00" })
+      .mockResolvedValueOnce({ foreign_languages: [{ language: "Английский", proficiency: "C1" }], updated_at: "2026-01-01T00:00:00+00:00" })
+      .mockResolvedValueOnce({ foreign_languages: [{ language: "Английский", proficiency: "Читает и может объясняться" }], updated_at: "2026-01-02T00:00:00+00:00" })
+      .mockResolvedValueOnce({ foreign_languages: [{ language: "Английский", proficiency: "Читает и может объясняться" }], updated_at: "2026-01-02T00:00:00+00:00" })
+      .mockResolvedValueOnce({ foreign_languages: [{ language: "Английский", proficiency: "Владеет свободно" }], updated_at: "2026-01-03T00:00:00+00:00" });
+    saveMyForeignLanguagesMock
+      .mockResolvedValueOnce({ updated_at: "2026-01-02T00:00:00+00:00" })
+      .mockResolvedValueOnce({ updated_at: "2026-01-03T00:00:00+00:00" });
+    render(<PersonalCardPageClient />);
+
+    await screen.findByTestId("self-personal-card-ready");
+    fireEvent.click(screen.getByRole("tab", { name: "Иностранные языки" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Редактировать" }));
+    expect(await screen.findByLabelText("Уровень владения")).toHaveValue("Владеет свободно");
+    fireEvent.change(screen.getByLabelText("Уровень владения"), { target: { value: "Читает и может объясняться" } });
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+    await waitFor(() => expect(saveMyForeignLanguagesMock).toHaveBeenCalledTimes(1));
+    expect(saveMyForeignLanguagesMock.mock.calls[0]?.[0]).toMatchObject({
+      foreign_languages: [{ language: "Английский", proficiency: "Читает и может объясняться" }],
+      expected_updated_at: "2026-01-01T00:00:00+00:00",
+    });
+
+    await waitFor(() => expect(getMyForeignLanguagesMock).toHaveBeenCalledTimes(3));
+    fireEvent.click(screen.getByRole("button", { name: "Редактировать" }));
+    await waitFor(() => expect(getMyForeignLanguagesMock).toHaveBeenCalledTimes(4));
+    fireEvent.change(screen.getByLabelText("Уровень владения"), { target: { value: "Владеет свободно" } });
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+    await waitFor(() => expect(saveMyForeignLanguagesMock).toHaveBeenCalledTimes(2));
+    expect(saveMyForeignLanguagesMock.mock.calls[1]?.[0]).toMatchObject({
+      foreign_languages: [{ language: "Английский", proficiency: "Владеет свободно" }],
+      expected_updated_at: "2026-01-02T00:00:00+00:00",
+    });
+  });
+
+  it("adds a language without replacing an existing one, then edits that language", async () => {
+    const turkish = { language: "Турецкий", proficiency: "Со словарём" };
+    const arabicDictionary = { language: "Арабский", proficiency: "Со словарём" };
+    const arabicFluent = { language: "Арабский", proficiency: "Владеет свободно" };
+    getMyPersonalCardMock.mockResolvedValue(readyResponse);
+    getMyOperationalAssignmentMock.mockResolvedValue(readyAssignmentResponse);
+    getMyForeignLanguagesMock
+      .mockResolvedValueOnce({ foreign_languages: [turkish], updated_at: "2026-09-20T10:00:00Z" })
+      .mockResolvedValueOnce({ foreign_languages: [turkish], updated_at: "2026-09-20T10:00:00Z" })
+      .mockResolvedValueOnce({ foreign_languages: [turkish, arabicDictionary], updated_at: "2026-09-20T10:01:00Z" })
+      .mockResolvedValueOnce({ foreign_languages: [turkish, arabicDictionary], updated_at: "2026-09-20T10:01:00Z" })
+      .mockResolvedValueOnce({ foreign_languages: [turkish, arabicFluent], updated_at: "2026-09-20T10:02:00Z" });
+    saveMyForeignLanguagesMock
+      .mockResolvedValueOnce({ foreign_languages: [turkish, arabicDictionary], updated_at: "2026-09-20T10:01:00Z" })
+      .mockResolvedValueOnce({ foreign_languages: [turkish, arabicFluent], updated_at: "2026-09-20T10:02:00Z" });
+
+    render(<PersonalCardPageClient />);
+    fireEvent.click(await screen.findByRole("tab", { name: "Иностранные языки" }));
+
+    fireEvent.click(await screen.findByRole("button", { name: "Добавить язык" }));
+    fireEvent.change(await screen.findByLabelText("Язык"), { target: { value: "Арабский" } });
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(saveMyForeignLanguagesMock).toHaveBeenCalledTimes(1));
+    expect(saveMyForeignLanguagesMock.mock.calls[0][0]).toMatchObject({
+      foreign_languages: [turkish, arabicDictionary],
+      expected_updated_at: "2026-09-20T10:00:00Z",
+    });
+
+    const editButtons = await screen.findAllByRole("button", { name: "Редактировать" });
+    fireEvent.click(editButtons[1]);
+    fireEvent.change(await screen.findByLabelText("Уровень владения"), { target: { value: "Владеет свободно" } });
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(saveMyForeignLanguagesMock).toHaveBeenCalledTimes(2));
+    expect(saveMyForeignLanguagesMock.mock.calls[1][0]).toMatchObject({
+      foreign_languages: [turkish, arabicFluent],
+      expected_updated_at: "2026-09-20T10:01:00Z",
+    });
+  });
+
+  it("localizes a foreign-language CAS conflict", async () => {
+    getMyPersonalCardMock.mockResolvedValue(readyResponse);
+    getMyOperationalAssignmentMock.mockResolvedValue(readyAssignmentResponse);
+    getMyForeignLanguagesMock.mockResolvedValue({ foreign_languages: [{ language: "Английский", proficiency: "C1" }], updated_at: "2026-01-01T00:00:00+00:00" });
+    saveMyForeignLanguagesMock.mockRejectedValue({ status: 409 });
+    render(<PersonalCardPageClient />);
+
+    await screen.findByTestId("self-personal-card-ready");
+    fireEvent.click(screen.getByRole("tab", { name: "Иностранные языки" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Редактировать" }));
+    await screen.findByLabelText("Уровень владения");
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Данные изменились. Обновите карточку и повторите.");
   });
 
   it("shows a clear HR contact state when Person is not linked", async () => {

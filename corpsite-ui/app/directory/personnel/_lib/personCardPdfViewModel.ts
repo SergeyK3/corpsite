@@ -7,6 +7,7 @@ import type {
   PprRelativeRecordResponse,
   PprTrainingRecordResponse,
 } from "./pprQueryTypes";
+import { displayForeignLanguageLevel } from "@/app/profile/personal-card/_lib/foreignLanguageDisplay";
 
 /** Minimal safe projection used by the ID-free employee self-PDF loader. */
 export type SelfCardPdfProjection = Pick<
@@ -99,7 +100,7 @@ export function buildPersonCardPdfViewModel(input: {
         },
     military: { headers: ["Статус", "Категория", "Звание", "Состав", "Военкомат"], rows: military.map((item) => [text(item.registration_status ?? item.obligation_status), text(item.registration_category), text(item.military_rank), text(item.personnel_composition), text(item.commissariat_name)]) },
     relatives: { headers: ["Степень родства", "Ф.И.О.", "Дата рождения", "Место работы", "Адрес"], rows: relatives.map((item) => [text(item.relationship_label ?? item.relationship_type), text(item.full_name), text(item.birth_date), text(item.organization_name), text(item.residence_address)]) },
-    foreign_languages: { headers: ["Язык", "Уровень владения"], rows: ppr.additional.foreign_languages.map((item) => [text(item.language), text(item.proficiency)]) },
+    foreign_languages: { headers: ["Язык", "Уровень владения"], rows: ppr.additional.foreign_languages.map((item) => [text(item.language), text(displayForeignLanguageLevel(item.proficiency))]) },
     note: { headers: ["Примечание"], rows: ppr.additional.source_note_hint ? [[text(ppr.additional.source_note_hint)]] : [] },
     additional: { headers: ["Раздел", "Сведения"], rows: [
       ...ppr.additional.awards.map((item) => ["Награда", [text(item.name), text(item.issued_by), text(item.awarded_at)].filter(Boolean).join(" · ")]),
