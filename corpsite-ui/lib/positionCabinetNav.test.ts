@@ -10,36 +10,37 @@ import {
 } from "./positionCabinetNav";
 
 describe("positionCabinetNav", () => {
-  it("lists tasks, dashboards, and education sections", () => {
+  it("lists tasks, dashboards, and the personal-card section", () => {
     expect(POSITION_CABINET_NAV_ITEMS.map((item) => item.id)).toEqual([
       "tasks",
       "dashboards",
-      "education",
+      "personal_card",
     ]);
     expect(POSITION_CABINET_NAV_ITEMS.map((item) => item.label)).toEqual([
       "Мои задачи",
       "Дашборды",
-      "Образование",
+      "Личная карточка",
     ]);
     expect(POSITION_CABINET_NAV_ITEMS.map((item) => item.title)).toEqual([
       "Мои задачи",
       "Дашборды",
-      "Образование",
+      "Личная карточка",
     ]);
     expect(POSITION_CABINET_TAB_LABELS).toEqual({
       tasks: "Мои задачи",
       dashboards: "Дашборды",
-      education: "Образование",
+      personal_card: "Личная карточка",
     });
     expect(getPositionCabinetTabLabel("dashboards")).toBe("Дашборды");
-    expect(getPositionCabinetTabLabel("education")).toBe("Образование");
+    expect(getPositionCabinetTabLabel("personal_card")).toBe("Личная карточка");
   });
 
   it("detects position cabinet routes", () => {
     expect(isPositionCabinetRoute("/tasks")).toBe(true);
     expect(isPositionCabinetRoute("/tasks?task_id=1")).toBe(false);
     expect(isPositionCabinetRoute("/dashboards")).toBe(true);
-    expect(isPositionCabinetRoute("/education")).toBe(true);
+    expect(isPositionCabinetRoute("/profile/personal-card")).toBe(true);
+    expect(isPositionCabinetRoute("/education")).toBe(false);
     expect(isPositionCabinetRoute("/profile")).toBe(false);
     expect(isPositionCabinetRoute("/directory/personnel/orders")).toBe(false);
   });
@@ -47,7 +48,7 @@ describe("positionCabinetNav", () => {
   it("shouldShowPositionCabinetNav keeps HR routes out of active tab semantics", () => {
     expect(shouldShowPositionCabinetNav("/tasks", { showPersonnelVisibility: false })).toBe(true);
     expect(shouldShowPositionCabinetNav("/dashboards", { showPersonnelVisibility: false })).toBe(true);
-    expect(shouldShowPositionCabinetNav("/education", { showPersonnelVisibility: false })).toBe(true);
+    expect(shouldShowPositionCabinetNav("/profile/personal-card", { showPersonnelVisibility: false })).toBe(true);
     expect(shouldShowPositionCabinetNav("/directory/personnel/orders", { showPersonnelVisibility: true })).toBe(
       true,
     );
@@ -83,7 +84,7 @@ describe("positionCabinetNav", () => {
   it("resolves active section from pathname", () => {
     expect(resolvePositionCabinetSection("/tasks")).toBe("tasks");
     expect(resolvePositionCabinetSection("/dashboards")).toBe("dashboards");
-    expect(resolvePositionCabinetSection("/education")).toBe("education");
+    expect(resolvePositionCabinetSection("/profile/personal-card")).toBe("personal_card");
     expect(resolvePositionCabinetSection("/profile")).toBeNull();
   });
 });

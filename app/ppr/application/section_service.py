@@ -354,6 +354,7 @@ class PprSectionApplicationService(PprCommandApplicationService):
                     correlation_id=envelope.correlation_id,
                     employee_context_id=envelope.employee_context_id or envelope.employee_id,
                     mutation=mutation,
+                    audit_source=envelope.audit_source,
                 )
             )
             return PprApplicationResult(
@@ -403,6 +404,7 @@ class PprSectionApplicationService(PprCommandApplicationService):
                     correlation_id=envelope.correlation_id,
                     employee_context_id=envelope.employee_context_id or envelope.employee_id,
                     mutation=mutation,
+                    audit_source=envelope.audit_source,
                 )
             )
             table = "person_education" if section_code == "PPR-EDUCATION" else "person_training"

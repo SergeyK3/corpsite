@@ -8,6 +8,12 @@ import type {
   PprTrainingRecordResponse,
 } from "./pprQueryTypes";
 
+/** Minimal safe projection used by the ID-free employee self-PDF loader. */
+export type SelfCardPdfProjection = Pick<
+  PprCompositeReadResponse,
+  "general" | "sections" | "additional"
+>;
+
 export type PersonCardPdfSection = {
   key: PersonalCardSectionKey;
   title: string;
@@ -17,7 +23,8 @@ export type PersonCardPdfSection = {
 };
 
 export type PersonCardPdfViewModel = {
-  personId: number;
+  /** HR routes have a Person ID; self routes intentionally do not. */
+  personId: number | null;
   fullName: string;
   iin: string | null;
   birthDate: string | null;
@@ -41,14 +48,14 @@ export type PersonCardCurrentAssignment = {
   rate: string;
 };
 
-const sectionRecords = <T>(ppr: PprCompositeReadResponse, code: string): T[] =>
+const sectionRecords = <T>(ppr: SelfCardPdfProjection, code: string): T[] =>
   (ppr.sections[code]?.active ?? []) as T[];
 const text = (value: unknown): string => String(value ?? "").trim();
 const period = (from: unknown, to: unknown): string => [text(from), text(to)].filter(Boolean).join(" — ");
 
 export function buildPersonCardPdfViewModel(input: {
-  personId: number;
-  ppr: PprCompositeReadResponse;
+  personId?: number | null;
+  ppr: PprCompositeReadResponse | SelfCardPdfProjection;
   contacts: PersonCardContacts | null;
   photoDataUrl: string | null;
   currentAssignment: PersonCardCurrentAssignment | null;
@@ -64,7 +71,7 @@ export function buildPersonCardPdfViewModel(input: {
     general: {
       headers: ["Поле", "Значение"],
       rows: [
-        ["Ф.И.О.", ppr.general.full_name], ["ИИН", ppr.general.iin ?? ppr.identity.iin ?? ""],
+        ["Ф.И.О.", ppr.general.full_name], ["ИИН", ppr.general.iin ?? ""],
         ["Дата рождения", ppr.general.birth_date ?? ""], ["Телефон", contacts?.mobile_phone ?? ""],
         ["Email", contacts?.email ?? ""], ["Адрес регистрации", contacts?.registration_address ?? ""],
         ["Адрес проживания", contacts?.residence_address ?? ""],
@@ -101,9 +108,9 @@ export function buildPersonCardPdfViewModel(input: {
     ] },
   };
   return {
-    personId: input.personId,
+    personId: input.personId ?? null,
     fullName: ppr.general.full_name,
-    iin: ppr.general.iin ?? ppr.identity.iin,
+    iin: ppr.general.iin,
     birthDate: ppr.general.birth_date,
     photoDataUrl: input.photoDataUrl,
     sections: PERSONAL_CARD_PDF_SECTIONS.map((section) => ({ key: section.key, title: section.title, ...(rows[section.key] ?? { headers: [], rows: [] }) })),

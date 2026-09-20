@@ -4,7 +4,7 @@ import { isOperationalOrdersRoute } from "./operationalOrdersNav";
 import { isHrProcessesRoute } from "./personnelNav";
 
 /** Position Cabinet section identifiers (UI shell only — no backend binding yet). */
-export type PositionCabinetSection = "tasks" | "dashboards" | "education";
+export type PositionCabinetSection = "tasks" | "dashboards" | "personal_card";
 
 export type PositionCabinetNavItem = {
   id: PositionCabinetSection;
@@ -15,7 +15,7 @@ export type PositionCabinetNavItem = {
   /**
    * Architectural ownership (ARCH-001 / Position Cabinet):
    * - dashboards: bound to Position Cabinet; survives occupant change.
-   * - education: bound to Employee; follows current cabinet occupant.
+   * - personal_card: bound to Employee; follows current cabinet occupant.
    * - tasks: existing subsystem (unchanged in this phase).
    */
   ownership: "position_cabinet" | "employee" | "existing";
@@ -25,7 +25,7 @@ export type PositionCabinetNavItem = {
 export const POSITION_CABINET_TAB_LABELS: Record<PositionCabinetSection, string> = {
   tasks: "Мои задачи",
   dashboards: "Дашборды",
-  education: "Образование",
+  personal_card: "Личная карточка",
 };
 
 export function getPositionCabinetTabLabel(section: PositionCabinetSection): string {
@@ -44,13 +44,13 @@ function buildNavItem(
 export const POSITION_CABINET_NAV_ITEMS: PositionCabinetNavItem[] = [
   buildNavItem("tasks", "/tasks", "existing"),
   buildNavItem("dashboards", "/dashboards", "position_cabinet"),
-  buildNavItem("education", "/education", "employee"),
+  buildNavItem("personal_card", "/profile/personal-card", "employee"),
 ];
 
 const SECTION_BY_PATH: Array<{ prefix: string; section: PositionCabinetSection }> = [
   { prefix: "/tasks", section: "tasks" },
   { prefix: "/dashboards", section: "dashboards" },
-  { prefix: "/education", section: "education" },
+  { prefix: "/profile/personal-card", section: "personal_card" },
 ];
 
 export function isPositionCabinetRoute(pathname: string): boolean {

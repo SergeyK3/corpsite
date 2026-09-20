@@ -44,6 +44,7 @@ class PprCommandEnvelope:
     source_event_id: str | None = None
     expected_envelope_version: int | None = None
     employee_context_id: int | None = None
+    audit_source: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

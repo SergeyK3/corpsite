@@ -23,11 +23,11 @@ describe("PositionCabinetNav UI", () => {
   it("renders all three tab captions with visible text", () => {
     render(<PositionCabinetNav />);
 
-    for (const section of ["tasks", "dashboards", "education"] as const) {
+    for (const section of ["tasks", "dashboards", "personal_card"] as const) {
       const label = POSITION_CABINET_TAB_LABELS[section];
       const tab = screen.getByTestId(`position-cabinet-tab-${section}`);
 
-      expect(tab).toHaveAttribute("href", section === "tasks" ? "/tasks" : `/${section}`);
+      expect(tab).toHaveAttribute("href", section === "tasks" ? "/tasks" : section === "dashboards" ? "/dashboards" : "/profile/personal-card");
       expect(tab).toHaveAccessibleName(label);
       expect(tab.textContent?.trim()).toBe(label);
       expect(getPositionCabinetTabLabel(section)).toBe(label);
@@ -42,16 +42,16 @@ describe("PositionCabinetNav UI", () => {
       "aria-current",
       "page",
     );
-    expect(screen.getByTestId("position-cabinet-tab-education")).not.toHaveAttribute(
+    expect(screen.getByTestId("position-cabinet-tab-personal_card")).not.toHaveAttribute(
       "aria-current",
     );
   });
 
-  it("marks education as active on /education", () => {
-    usePathnameMock.mockReturnValue("/education");
+  it("marks personal card as active on /profile/personal-card", () => {
+    usePathnameMock.mockReturnValue("/profile/personal-card");
     render(<PositionCabinetNav />);
 
-    expect(screen.getByTestId("position-cabinet-tab-education")).toHaveAttribute(
+    expect(screen.getByTestId("position-cabinet-tab-personal_card")).toHaveAttribute(
       "aria-current",
       "page",
     );
@@ -63,14 +63,14 @@ describe("PositionCabinetNav UI", () => {
 
     expect(screen.getByTestId("position-cabinet-tab-tasks")).toHaveAttribute("aria-current", "page");
     expect(screen.getByTestId("position-cabinet-tab-dashboards")).not.toHaveAttribute("aria-current");
-    expect(screen.getByTestId("position-cabinet-tab-education")).not.toHaveAttribute("aria-current");
+    expect(screen.getByTestId("position-cabinet-tab-personal_card")).not.toHaveAttribute("aria-current");
   });
 
   it("does not mark any tab active on operational orders routes", () => {
     usePathnameMock.mockReturnValue("/directory/operational-orders");
     render(<PositionCabinetNav />);
 
-    for (const section of ["tasks", "dashboards", "education"] as const) {
+    for (const section of ["tasks", "dashboards", "personal_card"] as const) {
       expect(screen.getByTestId(`position-cabinet-tab-${section}`)).not.toHaveAttribute("aria-current");
     }
   });
@@ -79,7 +79,7 @@ describe("PositionCabinetNav UI", () => {
     usePathnameMock.mockReturnValue("/directory/operational-orders/workspaces/1");
     render(<PositionCabinetNav />);
 
-    for (const section of ["tasks", "dashboards", "education"] as const) {
+    for (const section of ["tasks", "dashboards", "personal_card"] as const) {
       expect(screen.getByTestId(`position-cabinet-tab-${section}`)).not.toHaveAttribute("aria-current");
     }
   });

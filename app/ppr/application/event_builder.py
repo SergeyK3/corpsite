@@ -123,6 +123,7 @@ def build_section_event(
     correlation_id: str | None,
     employee_context_id: int | None,
     mutation: SectionMutationResult,
+    audit_source: str | None = None,
 ) -> PprEventAppendRequest:
     record = mutation.record
     section_code = record.section_code
@@ -157,6 +158,8 @@ def build_section_event(
         payload["prior_record_id"] = mutation.prior_record.record_id
     if employee_context_id is not None:
         payload["employee_context_id"] = employee_context_id
+    if audit_source:
+        payload["source"] = audit_source
 
     return PprEventAppendRequest(
         person_id=person_id,

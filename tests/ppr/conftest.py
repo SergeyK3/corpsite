@@ -83,6 +83,11 @@ def insert_employee(
 
 def cleanup_person_graph(conn, *, person_ids: list[int], employee_ids: list[int]) -> None:
     if person_ids:
+        if table_exists(conn, "person_contacts"):
+            conn.execute(
+                text("DELETE FROM public.person_contacts WHERE person_id = ANY(:ids)"),
+                {"ids": person_ids},
+            )
         if table_exists(conn, "person_assignments"):
             conn.execute(
                 text("DELETE FROM public.person_assignments WHERE person_id = ANY(:ids)"),

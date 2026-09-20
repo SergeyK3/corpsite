@@ -32,7 +32,6 @@ export function canSeeHrProcessesNav(me: MeInfo | null | undefined): boolean {
   return me?.has_personnel_admin === true;
 }
 
-/** «Контакты» — full directory contacts for HR head / enrollment manager and visibility users. */
 /** Narrow, read-only personnel event journal capability. */
 export function canSeePersonnelJournalNav(me: MeInfo | null | undefined): boolean {
   return (
@@ -42,6 +41,7 @@ export function canSeePersonnelJournalNav(me: MeInfo | null | undefined): boolea
   );
 }
 
+/** «Контакты» — full directory contacts for HR head / enrollment manager and visibility users. */
 export function canSeeContactsDirectoryNav(me: MeInfo | null | undefined): boolean {
   if (isSystemAdminRole(me)) return true;
   if (me?.is_privileged === true) return true;
@@ -96,18 +96,18 @@ export const HR_PROCESSES_NAV_ITEM: PersonnelNavItem = {
   matchPrefixes: ["/directory/personnel"],
 };
 
+export const PERSONNEL_JOURNAL_NAV_ITEM: PersonnelNavItem = {
+  href: HR_PROCESSES_NAV_HREF,
+  title: "Кадровый журнал",
+  matchPrefixes: ["/directory/personnel/journal"],
+};
+
 export function canSeePprMigrationNav(me: MeInfo | null | undefined): boolean {
   return String(me?.role_code ?? "").toUpperCase() === "HR_HEAD";
 }
 
 export const PPR_MIGRATION_NAV_ITEM: PersonnelNavItem = {
   href: "/directory/personnel/ppr-migration",
-export const PERSONNEL_JOURNAL_NAV_ITEM: PersonnelNavItem = {
-  href: HR_PROCESSES_NAV_HREF,
-  title: "???????? ??????",
-  matchPrefixes: ["/directory/personnel/journal"],
-};
-
   title: "Миграция личных карточек",
   matchPrefixes: ["/directory/personnel/ppr-migration"],
 };
@@ -129,6 +129,7 @@ export function buildPersonnelSidebarNavItems(me: MeInfo | null | undefined): Pe
   const items: PersonnelNavItem[] = [];
   if (canSeePersonnelDirectoryNav(me)) items.push(PERSONNEL_DIRECTORY_NAV_ITEM);
   if (canSeeHrProcessesNav(me)) items.push(HR_PROCESSES_NAV_ITEM);
+  else if (canSeePersonnelJournalNav(me)) items.push(PERSONNEL_JOURNAL_NAV_ITEM);
   if (canSeePprMigrationNav(me)) items.push(PPR_MIGRATION_NAV_ITEM);
   return items;
 }
@@ -142,7 +143,6 @@ export function isIncomingInformationNavItem(item: Pick<PersonnelNavItem, "href"
 }
 
 /**
-  else if (canSeePersonnelJournalNav(me)) items.push(PERSONNEL_JOURNAL_NAV_ITEM);
  * Directory sidebar: Персонал → Кадровые процессы → Производственные приказы → Контакты → Должности.
  * Operational Orders is a sibling top-level node, not nested under HR.
  */
@@ -228,7 +228,8 @@ export function isDirectorySidebarNavItemActive(pathname: string, item: Personne
 export function resolveDirectoryOrgTreeBasePath(pathname: string): string {
   if (pathname.startsWith("/tasks")) return "/tasks";
   if (pathname.startsWith("/dashboards")) return "/dashboards";
-  if (pathname.startsWith("/education")) return "/education";
+  if (pathname.startsWith("/education")) return "/profile/personal-card";
+  if (pathname.startsWith("/profile/personal-card")) return "/profile/personal-card";
   if (pathname.startsWith("/admin/regular-tasks/catch-up")) return "/admin/regular-tasks/catch-up";
   if (pathname.startsWith("/admin/regular-tasks")) return "/admin/regular-tasks";
   if (pathname.startsWith("/admin/system/org-units")) return "/admin/system/org-units";

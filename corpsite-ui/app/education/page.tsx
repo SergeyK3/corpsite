@@ -1,6 +1,6 @@
 // FILE: corpsite-ui/app/education/page.tsx
-import EducationPageClient from "./_components/EducationPageClient";
+import { redirect } from "next/navigation";
 
 export default function EducationPage() {
-  return <EducationPageClient />;
+  redirect("/profile/personal-card");
 }

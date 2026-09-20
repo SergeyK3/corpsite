@@ -45,6 +45,7 @@ from app.api.ppr_stage2_education_router import router as ppr_stage2_education_r
 from app.api.ppr_stage3_training_router import router as ppr_stage3_training_router
 from app.api.ppr_migration_status_router import router as ppr_migration_status_router
 from app.api.ppr_router import router as ppr_router
+from app.api.ppr_self_router import router as ppr_self_router
 from app.api.ppr_command_router import router as ppr_command_router
 from app.api.ppr_card_command_router import router as ppr_card_command_router
 from app.api.personnel_verification_router import router as personnel_verification_router
@@ -139,6 +140,7 @@ app.include_router(ppr_stage2_education_router)
 app.include_router(ppr_stage3_training_router)
 app.include_router(ppr_migration_status_router)
 app.include_router(ppr_router)
+app.include_router(ppr_self_router)
 app.include_router(ppr_command_router)
 app.include_router(ppr_card_command_router)
 app.include_router(personnel_verification_router)

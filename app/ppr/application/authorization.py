@@ -87,3 +87,18 @@ class PersonnelCardEditAuthorizationAdapter:
         resolved_actor = str(self._user_ctx.get("user_id") or self._user_ctx.get("id") or "")
         if not resolved_actor or actor_id != resolved_actor:
             raise PprAuthorizationDeniedError("actor_id does not match authenticated user")
+
+
+class SelfPersonalCardAuthorizationAdapter:
+    """Allows a mutation only for the Person already resolved from this user."""
+
+    def __init__(self, user_ctx: dict[str, Any], *, person_id: int) -> None:
+        self._user_ctx = user_ctx
+        self._person_id = int(person_id)
+
+    def authorize_mutation(self, *, actor_id: str, operation_code: str, person_id: int,
+                           employee_context_id: int | None = None, section_code: str | None = None) -> None:
+        del operation_code, employee_context_id, section_code
+        resolved_actor = str(self._user_ctx.get("user_id") or self._user_ctx.get("id") or "")
+        if not resolved_actor or actor_id != resolved_actor or int(person_id) != self._person_id:
+            raise PprAuthorizationDeniedError("Self personal-card subject mismatch")

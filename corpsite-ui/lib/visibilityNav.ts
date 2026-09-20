@@ -75,7 +75,7 @@ export function shouldShowOrgUnitsPanel(
     return (
       pathname.startsWith("/tasks") ||
       pathname.startsWith("/dashboards") ||
-      pathname.startsWith("/education") ||
+      pathname.startsWith("/profile/personal-card") ||
       pathname.startsWith("/admin/regular-tasks") ||
       pathname.startsWith("/regular-tasks") ||
       pathname.startsWith("/directory")
@@ -85,7 +85,7 @@ export function shouldShowOrgUnitsPanel(
   return (
     pathname.startsWith("/tasks") ||
     pathname.startsWith("/dashboards") ||
-    pathname.startsWith("/education") ||
+    pathname.startsWith("/profile/personal-card") ||
     pathname.startsWith("/directory")
   );
 }

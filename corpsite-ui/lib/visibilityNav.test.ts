@@ -48,7 +48,7 @@ describe("visibilityNav", () => {
 
   it("shouldShowOrgUnitsPanel keeps org tree on position cabinet routes for visibility users", () => {
     expect(shouldShowOrgUnitsPanel("/dashboards", observerWithAssignment)).toBe(true);
-    expect(shouldShowOrgUnitsPanel("/education", observerWithAssignment)).toBe(true);
+    expect(shouldShowOrgUnitsPanel("/profile/personal-card", observerWithAssignment)).toBe(true);
     expect(shouldShowOrgUnitsPanel("/dashboards", observerPlain)).toBe(false);
   });
 
@@ -61,7 +61,7 @@ describe("visibilityNav", () => {
 
   it("canAccessDirectoryRoute allows position cabinet stub sections without task read access", () => {
     expect(canAccessDirectoryRoute("/dashboards", observerWithAssignment)).toBe(true);
-    expect(canAccessDirectoryRoute("/education", observerWithAssignment)).toBe(true);
+    expect(canAccessDirectoryRoute("/profile/personal-card", observerWithAssignment)).toBe(true);
     expect(canAccessDirectoryRoute("/dashboards", observerPlain)).toBe(true);
   });
 
