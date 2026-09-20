@@ -15,12 +15,29 @@ import type {
 
 type Section = "education" | "training" | "relatives";
 type RecordValue = PprEducationRecordResponse | PprTrainingRecordResponse | PprRelativeRecordResponse;
-type Field = { key: string; label: string; required?: boolean; type?: "date" | "number" };
+type SelectOption = { value: string; label: string };
+type Field = { key: string; label: string; required?: boolean; type?: "date" | "number"; options?: readonly SelectOption[] };
+
+const EDUCATION_KIND_OPTIONS: readonly SelectOption[] = [
+  { value: "basic", label: "Основное образование" },
+  { value: "internship", label: "Интернатура" },
+  { value: "residency", label: "Резидентура" },
+  { value: "masters", label: "Магистратура" },
+  { value: "phd", label: "Докторантура (PhD)" },
+  { value: "other", label: "Другое" },
+];
+
+const INSTITUTION_TYPE_OPTIONS: readonly SelectOption[] = [
+  { value: "university", label: "ВУЗ (университет, академия, институт)" },
+  { value: "college", label: "Колледж / училище" },
+  { value: "other", label: "Другое" },
+  { value: "unknown", label: "Не указано" },
+];
 
 const FIELDS: Record<Section, Field[]> = {
   education: [
-    { key: "education_kind", label: "Вид образования", required: true },
-    { key: "institution_type", label: "Тип учреждения" },
+    { key: "education_kind", label: "Вид образования", required: true, options: EDUCATION_KIND_OPTIONS },
+    { key: "institution_type", label: "Тип учреждения", options: INSTITUTION_TYPE_OPTIONS },
     { key: "institution_name", label: "Учебное заведение" },
     { key: "specialty", label: "Специальность" },
     { key: "qualification", label: "Квалификация" },
@@ -140,7 +157,7 @@ export default function PprCardVersionedSectionEditor({
       </div> : null)}
     </> : null}
     {editing !== undefined ? <div className="grid gap-2 sm:grid-cols-2">
-      {FIELDS[section].map((field) => <label key={field.key} className="text-sm">{field.label}{field.required ? " *" : ""}<input type={field.type ?? "text"} value={values[field.key] ?? ""} onChange={(event) => setValues((current) => ({ ...current, [field.key]: event.target.value }))} className="mt-1 block w-full rounded border bg-white p-1 dark:bg-zinc-950" /></label>)}
+      {FIELDS[section].map((field) => <label key={field.key} className="text-sm">{field.label}{field.required ? " *" : ""}{field.options ? <select aria-label={field.label} value={values[field.key] ?? ""} onChange={(event) => setValues((current) => ({ ...current, [field.key]: event.target.value }))} className="mt-1 block w-full rounded border bg-white p-1 dark:bg-zinc-950"><option value="">Не выбрано</option>{field.options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select> : <input type={field.type ?? "text"} value={values[field.key] ?? ""} onChange={(event) => setValues((current) => ({ ...current, [field.key]: event.target.value }))} className="mt-1 block w-full rounded border bg-white p-1 dark:bg-zinc-950" />}</label>)}
       <div className="sm:col-span-2 flex gap-2"><button type="button" className="rounded border border-blue-500 bg-blue-600 px-3 py-1 text-sm text-white disabled:opacity-50" disabled={saving} onClick={() => void save()}>{saving ? "Сохранение…" : "Сохранить"}</button><button type="button" className="rounded border px-3 py-1 text-sm" disabled={saving} onClick={cancel}>Отмена</button></div>
     </div> : null}
     {voiding ? <div className="space-y-2"><p className="text-sm">Удаление аннулирует запись и сохраняется в истории.</p><label className="block text-sm">Причина удаления *<textarea value={reason} onChange={(event) => setReason(event.target.value)} className="mt-1 block w-full rounded border bg-white p-1 dark:bg-zinc-950" /></label><div className="flex gap-2"><button type="button" disabled={saving} className="rounded border border-red-500 px-3 py-1 text-sm text-red-700" onClick={() => void confirmVoid()}>Удалить</button><button type="button" disabled={saving} className="rounded border px-3 py-1 text-sm" onClick={cancel}>Отмена</button></div></div> : null}
