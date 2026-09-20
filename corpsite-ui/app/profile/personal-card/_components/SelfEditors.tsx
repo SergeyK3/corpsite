@@ -3,7 +3,12 @@
 import { FormEvent, useEffect, useState } from "react";
 
 import PersonnelDayDateField from "@/lib/PersonnelDayDateField";
-import { displayForeignLanguageLevel, FOREIGN_LANGUAGE_LEVELS } from "../_lib/foreignLanguageDisplay";
+import {
+  displayForeignLanguageLevel,
+  foreignLanguageLevelForEditor,
+  FOREIGN_LANGUAGE_LEVELS,
+  type ForeignLanguageLevel,
+} from "../_lib/foreignLanguageDisplay";
 import {
   addMyEducation,
   addMyExternalEmployment,
@@ -183,7 +188,7 @@ const languages = ["Казахский", "Русский", "Английский
 const levels = FOREIGN_LANGUAGE_LEVELS;
 
 export function LanguagesEditor({ onSaved }: EditorProps) {
-  const draft = useDraft({ language: "", proficiency: levels[0], other_language: "" });
+  const draft = useDraft<{ language: string; proficiency: ForeignLanguageLevel; other_language: string }>({ language: "", proficiency: levels[0], other_language: "" });
   const [items, setItems] = useState<Array<{ language: string; proficiency: string }>>([]);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
@@ -199,7 +204,7 @@ export function LanguagesEditor({ onSaved }: EditorProps) {
     const current = await load();
     const item = index === null ? undefined : current[index];
     const known = item && languages.includes(item.language) ? item.language : item ? "Другой" : "";
-    draft.replace({ language: known, proficiency: displayForeignLanguageLevel(item?.proficiency) || levels[0], other_language: known === "Другой" ? item?.language ?? "" : "" });
+    draft.replace({ language: known, proficiency: foreignLanguageLevelForEditor(item?.proficiency), other_language: known === "Другой" ? item?.language ?? "" : "" });
     setEditingIndex(index);
     draft.begin();
   };
