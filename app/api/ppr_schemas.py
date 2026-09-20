@@ -41,6 +41,16 @@ class PprIntendedEmploymentResponse(BaseModel):
     position_name: str | None = None
 
 
+class PprOperationalAssignmentResponse(BaseModel):
+    """Read-only operational assignment resolved from the canonical Person link."""
+    has_assignment: bool
+    department_group_name: str | None = None
+    org_unit_name: str | None = None
+    position_name: str | None = None
+    status: str | None = None
+    employment_rate: str | None = None
+
+
 class PprIntendedEmploymentUpdateRequest(BaseModel):
     org_group_id: int | None = Field(default=None, ge=1)
     org_unit_id: int | None = Field(default=None, ge=1)

@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import { buildPersonalCardHref } from "@/lib/employeeCardNav";
 import { downloadIntakePdfByApplicationId } from "@/app/intake/_lib/intakePdfOpen.client";
+import { downloadPersonCardPdf } from "../_lib/personCardPdfOpen.client";
 import type { PersonnelLkRegistryItem } from "../_lib/personnelLkApi.client";
 import {
   formatPersonnelLkRate,
@@ -42,6 +43,8 @@ export default function PersonnelLkTable({
 }: Props) {
   const [pdfLoadingId, setPdfLoadingId] = React.useState<number | null>(null);
   const [pdfError, setPdfError] = React.useState<{ applicationId: number; message: string } | null>(null);
+  const [personPdfLoadingId, setPersonPdfLoadingId] = React.useState<number | null>(null);
+  const [personPdfError, setPersonPdfError] = React.useState<{ personId: number; message: string } | null>(null);
   const colSpan = showBulkSelect ? 7 : 6;
 
   async function downloadPdf(applicationId: number) {
@@ -51,6 +54,15 @@ export default function PersonnelLkTable({
     const result = await downloadIntakePdfByApplicationId(applicationId);
     setPdfLoadingId(null);
     if (!result.ok) setPdfError({ applicationId, message: result.error });
+  }
+
+  async function downloadPersonPdf(personId: number) {
+    if (personPdfLoadingId != null) return;
+    setPersonPdfLoadingId(personId);
+    setPersonPdfError(null);
+    const result = await downloadPersonCardPdf(personId);
+    setPersonPdfLoadingId(null);
+    if (!result.ok) setPersonPdfError({ personId, message: result.error });
   }
 
   return (
@@ -144,6 +156,16 @@ export default function PersonnelLkTable({
                     </td>
                     <td className="px-3 py-1.5">
                       {item.record_kind === "employee" ? (
+                        <div className="flex flex-wrap items-start gap-2">
+                        {Number.isSafeInteger(item.person_id) && item.person_id > 0 ? <button
+                          type="button"
+                          disabled={personPdfLoadingId != null}
+                          onClick={() => void downloadPersonPdf(item.person_id)}
+                          className={actionClass}
+                          data-testid={`personnel-lk-pdf-person-${item.person_id}`}
+                        >
+                          {personPdfLoadingId === item.person_id ? "Формирование…" : "PDF"}
+                        </button> : null}
                         <Link
                           href={buildPersonalCardHref(
                             { personId: item.person_id },
@@ -154,6 +176,8 @@ export default function PersonnelLkTable({
                         >
                           Открыть
                         </Link>
+                        {personPdfError?.personId === item.person_id ? <p className="basis-full text-xs text-red-600" role="alert" data-testid={`personnel-lk-pdf-person-error-${item.person_id}`}>{personPdfError.message}</p> : null}
+                        </div>
                       ) : item.record_kind === "applicant" && item.active_application_id != null ? (
                         <div className="flex flex-wrap items-start gap-2">
                         <button

@@ -15,6 +15,7 @@ from app.api.ppr_schemas import (
     PprCompositeSummaryResponse,
     PprHireDefaultsResponse,
     PprIntendedEmploymentResponse,
+    PprOperationalAssignmentResponse,
     PprIntendedEmploymentUpdateRequest,
     PprPersonnelApplicationHistoryResponse,
     PprPersonnelApplicationItemResponse,
@@ -43,6 +44,7 @@ from app.services.ppr_query_access_service import (
     include_military_restricted_fields,
     include_sensitive_identity_fields,
     require_ppr_write_for_person,
+    load_current_operational_assignment_for_person,
 )
 
 router = APIRouter(prefix="/api/ppr", tags=["ppr"])
@@ -177,6 +179,30 @@ def get_ppr_composite_by_person(
             include_sensitive_identity=include_sensitive_identity_fields(user),
             include_military_restricted=include_military_restricted_fields(user),
             include_status_facts=_include_additional_status_facts(user),
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        mapped = map_ppr_query_error(exc)
+        if mapped is not None:
+            raise mapped
+        raise as_http500(exc)
+
+
+@router.get("/persons/{person_id}/operational-assignment", response_model=PprOperationalAssignmentResponse)
+def get_ppr_person_operational_assignment(
+    person_id: int = Path(..., ge=1),
+    user: dict[str, Any] = Depends(get_current_user),
+) -> PprOperationalAssignmentResponse:
+    """Protected current operational assignment projection, rooted exclusively at Person."""
+    try:
+        assert_ppr_read_path_activation_allowed()
+        # Resolve/read authorization first; the projection performs the same
+        # scoped employee read used by the operational assignment screen.
+        composite = _query_service.load_by_person_id(person_id)
+        assert_ppr_read_allowed_for_person(user, composite.person_id, resolved_employee_id=composite.employee_id)
+        return PprOperationalAssignmentResponse(
+            **load_current_operational_assignment_for_person(user, composite.person_id)
         )
     except HTTPException:
         raise

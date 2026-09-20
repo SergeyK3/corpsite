@@ -121,6 +121,82 @@ def assert_ppr_read_allowed_for_person(
     raise HTTPException(status_code=404, detail="Person not found.")
 
 
+def load_current_operational_assignment_for_person(
+    user_ctx: dict[str, Any],
+    person_id: int,
+) -> dict[str, Any]:
+    """Resolve one active Employee for a Person and project its current assignment.
+
+    This is intentionally a direct, server-side Person→Employee lookup.  It
+    never scans the employee list and reuses ``get_employee`` for the same
+    scope and current-primary-assignment rules as the operational card.
+    """
+    uid = int(user_ctx["user_id"])
+    scope = compute_scope(uid, user_ctx, include_inactive=True)
+    require_personnel_visibility_or_403(user_ctx, scope)
+    assert_ppr_read_allowed_for_person(user_ctx, int(person_id))
+
+    with default_engine.connect() as conn:
+        employee_ids = [
+            int(value)
+            for value in conn.execute(
+                text(
+                    """
+                    SELECT employee_id
+                    FROM public.employees
+                    WHERE person_id = :person_id AND is_active IS TRUE
+                    ORDER BY employee_id
+                    """
+                ),
+                {"person_id": int(person_id)},
+            ).scalars().all()
+        ]
+    if len(employee_ids) > 1:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "ACTIVE_EMPLOYEE_CARDINALITY_INVALID", "message": "Person has multiple active employees."},
+        )
+    if not employee_ids:
+        return {"has_assignment": False}
+
+    employee = get_employee(
+        scope_unit_id=scope.get("scope_unit_id"),
+        scope_unit_ids=scope.get("scope_unit_ids"),
+        employee_id=str(employee_ids[0]),
+    )
+    if employee.get("person_id") != int(person_id) or employee.get("active_assignment_id") is None:
+        return {"has_assignment": False}
+
+    org_unit = employee.get("org_unit") or {}
+    position = employee.get("position") or {}
+    unit_id = org_unit.get("unit_id")
+    if unit_id is None or not org_unit.get("name") or not position.get("name") or employee.get("rate") is None:
+        return {"has_assignment": False}
+
+    with default_engine.connect() as conn:
+        group_name = conn.execute(
+            text(
+                """
+                SELECT dg.group_name
+                FROM public.org_units ou
+                JOIN public.deps_group dg ON dg.group_id = ou.group_id
+                WHERE ou.unit_id = :unit_id
+                """
+            ),
+            {"unit_id": int(unit_id)},
+        ).scalar_one_or_none()
+    if not group_name:
+        return {"has_assignment": False}
+    return {
+        "has_assignment": True,
+        "department_group_name": str(group_name).strip(),
+        "org_unit_name": str(org_unit["name"]).strip(),
+        "position_name": str(position["name"]).strip(),
+        "status": "Зачислен" if employee.get("status") == "active" else "Зачислен (неактивен)",
+        "employment_rate": str(employee["rate"]),
+    }
+
+
 def _unit_visible_in_scope(
     *,
     unit_id: int,
