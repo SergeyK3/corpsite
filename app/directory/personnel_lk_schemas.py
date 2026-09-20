@@ -293,6 +293,47 @@ class PersonLinkApplyOut(BaseModel):
     name_corrected: bool
 
 
+class ActiveEmployeePersonCardPreflightIn(BaseModel):
+    """No assignment data is accepted by the existing-employee card flow."""
+
+    model_config = ConfigDict(extra="forbid")
+    employee_id: int = Field(ge=1)
+
+
+class ActiveEmployeePersonCardCandidateOut(BaseModel):
+    person_id: int
+    person_status: str
+    compatible: bool
+
+
+class ActiveEmployeePersonCardPreflightOut(BaseModel):
+    employee_id: int
+    employee_full_name: str | None = None
+    operational_status: str | None = None
+    iin: SafeIinOut
+    person_candidates: list[ActiveEmployeePersonCardCandidateOut]
+    ready: bool
+    blockers: list[ControlListRepairBlockerOut]
+    expected_precondition: str | None = None
+
+
+class ActiveEmployeePersonCardApplyIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    employee_id: int = Field(ge=1)
+    expected_precondition: str = Field(min_length=64, max_length=64, pattern=r"^[0-9a-f]{64}$")
+    request_id: str = Field(min_length=8, max_length=128, pattern=r"^[A-Za-z0-9][A-Za-z0-9._:/-]{7,127}$")
+    hr_confirmed: Literal[True]
+
+
+class ActiveEmployeePersonCardApplyOut(BaseModel):
+    request_id: str
+    employee_id: int
+    person_id: int
+    decision: Literal["CREATE", "REPLAY"]
+    employee_full_name: str
+
+
 class PersonnelLkRegistryItemOut(BaseModel):
     person_id: int
     record_kind: Literal["employee", "applicant"]

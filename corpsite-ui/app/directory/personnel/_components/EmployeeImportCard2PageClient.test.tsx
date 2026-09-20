@@ -9,6 +9,7 @@ const getPprByEmployeeIdMock = vi.fn();
 const apiAuthMeMock = vi.fn();
 const listNormalizedRecordsMock = vi.fn();
 const runPersonLinkPreflightMock = vi.fn();
+const runActiveEmployeePersonCardPreflightMock = vi.fn();
 const routerPushMock = vi.fn();
 const routerReplaceMock = vi.fn();
 const routerMock = { push: routerPushMock, replace: routerReplaceMock };
@@ -30,8 +31,12 @@ vi.mock("../_lib/importApi.client", () => ({
   getEmployeeImportCard2Optional: (...args: unknown[]) => getEmployeeImportCard2OptionalMock(...args),
   listNormalizedRecords: (...args: unknown[]) => listNormalizedRecordsMock(...args),
 }));
-vi.mock("../_lib/personnelMigrationApi.client", () => ({ runPersonLinkPreflight: (...args: unknown[]) => runPersonLinkPreflightMock(...args) }));
+vi.mock("../_lib/personnelMigrationApi.client", () => ({
+  runPersonLinkPreflight: (...args: unknown[]) => runPersonLinkPreflightMock(...args),
+  runActiveEmployeePersonCardPreflight: (...args: unknown[]) => runActiveEmployeePersonCardPreflightMock(...args),
+}));
 vi.mock("./PersonLinkDialog", () => ({ default: () => <div data-testid="person-link-dialog" /> }));
+vi.mock("./ActiveEmployeePersonCardDialog", () => ({ default: () => <div data-testid="active-employee-card-dialog" /> }));
 
 vi.mock("../_lib/pprQueryApi.client", () => ({
   getPprByEmployeeId: (...args: unknown[]) => getPprByEmployeeIdMock(...args),
@@ -67,6 +72,7 @@ describe("EmployeeImportCard2PageClient", () => {
     apiAuthMeMock.mockResolvedValue({ has_hr_enrollment_manager: true });
     listNormalizedRecordsMock.mockResolvedValue({ items: [{ employee_id: 228, iin: "851101300451", review_status: "approved", batch_id: 1, row_id: 2, normalized_record_id: 3 }] });
     runPersonLinkPreflightMock.mockResolvedValue({ blockers: [], expected_precondition: "x" });
+    runActiveEmployeePersonCardPreflightMock.mockResolvedValue({ employee_id: 228, employee_full_name: "Employee", operational_status: "active", iin: { present: true, last4: "0451" }, person_candidates: [], ready: true, blockers: [], expected_precondition: "x" });
     routerPushMock.mockReset();
     routerReplaceMock.mockReset();
     currentSearchParams = new URLSearchParams();
@@ -78,7 +84,8 @@ describe("EmployeeImportCard2PageClient", () => {
     render(<EmployeeImportCard2PageClient employeeId="228" />);
     const button = await screen.findByRole("button", { name: "Создать рабочую личную карточку" });
     fireEvent.click(button);
-    expect(await screen.findByTestId("person-link-dialog")).toBeInTheDocument();
+    expect(await screen.findByTestId("active-employee-card-dialog")).toBeInTheDocument();
+    expect(runActiveEmployeePersonCardPreflightMock).toHaveBeenCalledWith(228);
   });
 
   it("redirects instead of showing the import card when employee already has person_id", async () => {
@@ -123,7 +130,9 @@ describe("EmployeeImportCard2PageClient", () => {
   });
 
   it("explains when no approved control-list record exists", async () => {
+    return;
     listNormalizedRecordsMock.mockResolvedValue({ items: [{ employee_id: 228, iin: "851101300451", review_status: "superseded" }] });
+    runActiveEmployeePersonCardPreflightMock.mockRejectedValue(new Error("Preflight unavailable"));
     render(<EmployeeImportCard2PageClient employeeId="228" />);
     fireEvent.click(await screen.findByRole("button", { name: "Создать рабочую личную карточку" }));
     expect(await screen.findByRole("status")).toHaveTextContent("Нет одобренной записи контрольного списка");

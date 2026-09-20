@@ -126,6 +126,33 @@ export type PersonLinkPreflight = {
   control_list_full_name: string | null;
 };
 
+export type ActiveEmployeePersonCardPreflight = {
+  employee_id: number;
+  employee_full_name: string | null;
+  operational_status: string | null;
+  iin: { present: boolean; last4: string | null };
+  person_candidates: Array<{ person_id: number; person_status: string; compatible: boolean }>;
+  ready: boolean;
+  blockers: Array<{ code: string; detail: string }>;
+  expected_precondition: string | null;
+};
+
+export type ActiveEmployeePersonCardApplyResponse = {
+  request_id: string;
+  employee_id: number;
+  person_id: number;
+  decision: "CREATE" | "REPLAY";
+  employee_full_name: string;
+};
+
+export async function runActiveEmployeePersonCardPreflight(employeeId: number): Promise<ActiveEmployeePersonCardPreflight> {
+  return apiPostJson<ActiveEmployeePersonCardPreflight>("/directory/personnel/lk/active-employee-card/preflight", { employee_id: employeeId });
+}
+
+export async function applyActiveEmployeePersonCard(payload: { employee_id: number; expected_precondition: string; request_id: string }): Promise<ActiveEmployeePersonCardApplyResponse> {
+  return apiPostJson<ActiveEmployeePersonCardApplyResponse>("/directory/personnel/lk/active-employee-card/apply", { ...payload, hr_confirmed: true });
+}
+
 export async function runPersonLinkPreflight(iin: string, importSelection: { batch_id: number; row_id: number; normalized_record_ids: number[] }): Promise<PersonLinkPreflight> {
   return apiPostJson<PersonLinkPreflight>("/directory/personnel/lk/control-list-repair/preflight", { iin, import_selection: importSelection });
 }

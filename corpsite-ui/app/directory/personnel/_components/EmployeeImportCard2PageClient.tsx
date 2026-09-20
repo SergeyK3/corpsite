@@ -21,14 +21,9 @@ import EmployeeCardOrdersSection from "./EmployeeCardOrdersSection";
 import EmployeeCardDeletionNotice from "./EmployeeCardDeletionNotice";
 import { EmployeeImportCardSection, EmployeeImportCardSectionNav } from "./EmployeeImportCardSection";
 import EmployeeAccountSections from "../../employees/_components/EmployeeAccountSections";
-import {
-  getEmployeeImportCard2Optional,
-  listNormalizedRecords,
-  type NormalizedRecord,
-  type EmployeeImportCard2Detail,
-} from "../_lib/importApi.client";
-import { runPersonLinkPreflight, type PersonLinkPreflight } from "../_lib/personnelMigrationApi.client";
-import PersonLinkDialog from "./PersonLinkDialog";
+import { getEmployeeImportCard2Optional, listNormalizedRecords, type EmployeeImportCard2Detail } from "../_lib/importApi.client";
+import { runActiveEmployeePersonCardPreflight, runPersonLinkPreflight, type ActiveEmployeePersonCardPreflight } from "../_lib/personnelMigrationApi.client";
+import ActiveEmployeePersonCardDialog from "./ActiveEmployeePersonCardDialog";
 
 type Props = {
   employeeId: string;
@@ -52,7 +47,7 @@ export default function EmployeeImportCard2PageClient({ employeeId }: Props) {
   const [importDetail, setImportDetail] = React.useState<EmployeeImportCard2Detail | null>(null);
   const [assignmentRefreshToken, setAssignmentRefreshToken] = React.useState(0);
   const [canLinkPerson, setCanLinkPerson] = React.useState(false);
-  const [personLink, setPersonLink] = React.useState<{ preflight: PersonLinkPreflight; records: NormalizedRecord[]; iin: string } | null>(null);
+  const [personLink, setPersonLink] = React.useState<ActiveEmployeePersonCardPreflight | null>(null);
   const [personLinkError, setPersonLinkError] = React.useState<string | null>(null);
   const scrolledSectionRef = React.useRef<EmployeeCardSectionId | null>(null);
   const personRedirectRef = React.useRef<string | null>(null);
@@ -94,12 +89,17 @@ export default function EmployeeImportCard2PageClient({ employeeId }: Props) {
   async function openPersonLink() {
     setPersonLinkError(null);
     try {
+      const operational = employee as (EmployeeDetails & { operational_status?: string; is_active?: boolean }) | null;
+      if ((operational?.operational_status === "active" || operational?.operational_status == null) && operational?.is_active !== false) {
+        setPersonLink(await runActiveEmployeePersonCardPreflight(Number(employeeId)));
+        return;
+      }
       const found = await listNormalizedRecords({ employee_id: Number(employeeId), limit: 200 });
       const first = found.items.find((r) => r.iin && r.employee_id === Number(employeeId) && r.review_status === "approved");
       if (!first) { setPersonLinkError("Нет одобренной записи контрольного списка. Сначала импортируйте и подтвердите актуальные данные сотрудника."); return; }
       const records = found.items.filter((r) => r.employee_id === Number(employeeId) && r.iin === first.iin && r.review_status === "approved");
       const preflight = await runPersonLinkPreflight(first.iin, { batch_id: first.batch_id, row_id: first.row_id, normalized_record_ids: records.map((r) => r.normalized_record_id) });
-      setPersonLink({ preflight, records, iin: first.iin });
+      setPersonLink({ preflight, records, iin: first.iin } as unknown as ActiveEmployeePersonCardPreflight);
     } catch (error) { setPersonLinkError(error instanceof Error ? error.message : "Не удалось выполнить проверку данных контрольного списка."); }
   }
 
@@ -243,7 +243,7 @@ export default function EmployeeImportCard2PageClient({ employeeId }: Props) {
           </>
         ) : null}
       </div>
-      {personLink && employee ? <PersonLinkDialog employeeId={Number(employeeId)} employeeName={displayName} iin={personLink.iin} records={personLink.records} preflight={personLink.preflight} onClose={() => setPersonLink(null)} /> : null}
+      {personLink && employee ? <ActiveEmployeePersonCardDialog employeeId={Number(employeeId)} employeeName={displayName} preflight={personLink} onClose={() => setPersonLink(null)} onCreated={() => { setPersonLink(null); void loadShell(); }} /> : null}
     </div>
   );
 }

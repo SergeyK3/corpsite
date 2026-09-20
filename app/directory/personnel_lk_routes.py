@@ -15,6 +15,10 @@ from app.auth import get_current_user
 from app.db.engine import engine
 from app.directory.common import as_http500
 from app.directory.personnel_lk_schemas import (
+    ActiveEmployeePersonCardApplyIn,
+    ActiveEmployeePersonCardApplyOut,
+    ActiveEmployeePersonCardPreflightIn,
+    ActiveEmployeePersonCardPreflightOut,
     ControlListRepairPreflightIn,
     ControlListRepairPreflightOut,
     PersonnelLkRegistryListOut,
@@ -23,6 +27,10 @@ from app.directory.personnel_lk_schemas import (
 from app.directory.rbac import require_personnel_admin_or_403
 from app.directory.rbac import compute_scope
 from app.services.adr065_person_link_service import PersonLinkError, link_person_tx
+from app.services.active_employee_person_card_service import (
+    active_employee_person_card_preflight,
+    create_active_employee_person_card_tx,
+)
 from app.directory.personnel_lk_schemas import PersonLinkApplyIn, PersonLinkApplyOut
 from app.personnel_lk.application.control_list_repair_preflight_service import (
     control_list_repair_preflight,
@@ -65,6 +73,57 @@ router = APIRouter(
     tags=["personnel-lk"],
     route_class=_ControlListRepairSafeValidationRoute,
 )
+
+
+@router.post(
+    "/active-employee-card/preflight",
+    response_model=ActiveEmployeePersonCardPreflightOut,
+)
+def active_employee_person_card_preflight_route(
+    body: ActiveEmployeePersonCardPreflightIn,
+    user: dict[str, Any] = Depends(get_current_user),
+) -> ActiveEmployeePersonCardPreflightOut:
+    """Read-only HR preflight; deliberately does not accept assignment intent."""
+    require_personnel_admin_or_403(user)
+    scope = compute_scope(int(user["user_id"]), user)
+    scope_ids = None if scope.get("scope_unit_ids") is None else set(scope.get("scope_unit_ids") or [])
+    with engine.connect() as conn:
+        transaction = conn.begin()
+        try:
+            conn.exec_driver_sql("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
+            result = active_employee_person_card_preflight(
+                conn, employee_id=body.employee_id, scope_unit_ids=scope_ids
+            )
+        finally:
+            transaction.rollback()
+    return ActiveEmployeePersonCardPreflightOut.model_validate(result)
+
+
+@router.post(
+    "/active-employee-card/apply",
+    response_model=ActiveEmployeePersonCardApplyOut,
+)
+def active_employee_person_card_apply_route(
+    body: ActiveEmployeePersonCardApplyIn,
+    user: dict[str, Any] = Depends(get_current_user),
+) -> ActiveEmployeePersonCardApplyOut:
+    require_personnel_admin_or_403(user)
+    scope = compute_scope(int(user["user_id"]), user)
+    scope_ids = None if scope.get("scope_unit_ids") is None else set(scope.get("scope_unit_ids") or [])
+    try:
+        with engine.begin() as conn:
+            result = create_active_employee_person_card_tx(
+                conn,
+                employee_id=body.employee_id,
+                expected_precondition=body.expected_precondition,
+                request_id=body.request_id,
+                actor_user_id=int(user["user_id"]),
+                hr_confirmed=body.hr_confirmed,
+                scope_unit_ids=scope_ids,
+            )
+        return ActiveEmployeePersonCardApplyOut.model_validate(result)
+    except PersonLinkError as exc:
+        raise HTTPException(status_code=exc.status, detail={"code": exc.code, "message": str(exc)}) from None
 
 
 @router.post("/control-list-repair/apply", response_model=PersonLinkApplyOut)
