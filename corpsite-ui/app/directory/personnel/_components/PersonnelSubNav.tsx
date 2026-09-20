@@ -11,6 +11,7 @@ import {
   canSeeTestPersonnelApprovals,
   TEST_PERSONNEL_APPROVALS_HREF,
 } from "@/lib/testPersonnelDeletionNav";
+import { canSeeHrProcessesNav, canSeePersonnelJournalNav } from "@/lib/personnelNav";
 
 const BASE_ITEMS = [
   { href: "/directory/personnel/journal", title: "Кадровый журнал", prefixes: ["/directory/personnel/journal"] },
@@ -53,10 +54,12 @@ export default function PersonnelSubNav() {
   const pathname = usePathname() || "";
   const me = useCurrentUser();
   const controlListActive = isPersonnelControlListPath(pathname);
+  const journalOnly = canSeePersonnelJournalNav(me) && !canSeeHrProcessesNav(me);
 
   return (
     <nav aria-label="Навигация кадровых процессов" className="flex flex-wrap gap-2">
       {BASE_ITEMS.map((item) => {
+        if (journalOnly && item.href !== "/directory/personnel/journal") return null;
         if (item.href === "/directory/personnel/migration-status" && !canReadPprMigrationStatus(me)) return null;
         const active = isBaseItemActive(pathname, item.prefixes, item.href);
         return (
@@ -70,13 +73,13 @@ export default function PersonnelSubNav() {
           </Link>
         );
       })}
-      <Link
+      {!journalOnly ? <Link
         href="/directory/personnel/import"
         className={tabClassName(controlListActive)}
         aria-current={controlListActive ? "page" : undefined}
       >
         Контрольный список
-      </Link>
+      </Link> : null}
       {canSeeTestPersonnelApprovals(me) ? (
         <Link
           href={TEST_PERSONNEL_APPROVALS_HREF}

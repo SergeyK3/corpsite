@@ -13,6 +13,7 @@ from app.security.directory_scope import (
     require_dept_scope as _require_dept_scope,
 )
 from app.security.personnel_admin_guard import evaluate_personnel_admin_access
+from app.security.admin_permissions import PERSONNEL_EVENTS_READ, has_admin_permission
 from app.services.org_units_service import OrgUnitsService, OrgUnit
 
 org_units = OrgUnitsService(engine)
@@ -37,6 +38,33 @@ def require_personnel_admin_or_403(user_ctx: Dict[str, Any]) -> None:
         user_ctx,
         detail="Personnel admin access required.",
     )
+
+
+def require_personnel_events_read_or_403(user_ctx: Dict[str, Any]) -> None:
+    """Allow the narrow journal reader without broad HR-process authority."""
+    if _is_privileged(user_ctx) or evaluate_personnel_admin_access(user_ctx):
+        return
+    try:
+        user_id = int(user_ctx["user_id"])
+    except (KeyError, TypeError, ValueError):
+        raise HTTPException(status_code=403, detail="Personnel events read access required.")
+    if has_admin_permission(user_id, PERSONNEL_EVENTS_READ):
+        return
+    raise HTTPException(status_code=403, detail="Personnel events read access required.")
+
+
+def resolve_personnel_events_scope_or_403(user_ctx: Dict[str, Any]) -> Optional[List[int]]:
+    """Resolve journal scope without promoting an observer into PPR visibility."""
+    if _is_privileged(user_ctx) or evaluate_personnel_admin_access(user_ctx):
+        scope = compute_scope(int(user_ctx["user_id"]), user_ctx)
+        require_personnel_visibility_or_403(user_ctx, scope)
+        return scope["scope_unit_ids"]
+    require_personnel_events_read_or_403(user_ctx)
+    from app.services.personnel_event_visibility_service import resolve_event_visibility_scope
+    scope = resolve_event_visibility_scope(int(user_ctx["user_id"]))
+    if not scope.get("has_event_visibility"):
+        raise HTTPException(status_code=403, detail="Personnel event visibility is not granted.")
+    return scope["scope_unit_ids"]
 
 
 def require_hr_import_admin_or_403(user_ctx: Dict[str, Any]) -> None:

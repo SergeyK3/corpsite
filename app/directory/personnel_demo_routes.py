@@ -14,7 +14,9 @@ from typing import Any, Dict, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.auth import get_current_user
-from app.directory.rbac import require_personnel_admin_or_403
+from app.directory.rbac import (
+    resolve_personnel_events_scope_or_403,
+)
 from app.services.directory_service import list_personnel_events as svc_list_personnel_events
 
 from .common import as_http500, call_service
@@ -42,7 +44,7 @@ def list_personnel_events_register(
 ) -> Dict[str, Any]:
     """Track B: organization-wide personnel event register."""
     try:
-        require_personnel_admin_or_403(user)
+        scope_unit_ids = resolve_personnel_events_scope_or_403(user)
 
         return call_service(
             svc_list_personnel_events,
@@ -57,7 +59,8 @@ def list_personnel_events_register(
             date_to=date_to,
             org_group_id=org_group_id,
             org_unit_id=org_unit_id,
-            position_id=position_id,
+            position_id=position_id,
+            scope_unit_ids=scope_unit_ids,
             limit=limit,
             offset=offset,
         )

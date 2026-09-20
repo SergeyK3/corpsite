@@ -33,6 +33,8 @@ export type MeInfo = {
   has_sysadmin_api?: boolean;
   /** ADR-043 C4.2 — personnel lifecycle admin (ADMIN or HR_ENROLLMENT_MANAGER). */
   has_personnel_admin?: boolean;
+  /** Narrow read-only access to the personnel event journal. */
+  has_personnel_events_read?: boolean;
   /** ADR-043 C4.2 — override approve/reject (ADMIN or HR_ENROLLMENT_MANAGER). */
   has_hr_governance?: boolean;
   /** Exact effective permission used by manual assignment change. */

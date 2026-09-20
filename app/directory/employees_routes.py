@@ -44,6 +44,7 @@ from .common import as_http500, call_service
 from .rbac import (
     compute_scope,
     require_personnel_admin_or_403,
+    resolve_personnel_events_scope_or_403,
     require_privileged_or_403,
     require_personnel_visibility_or_403,
 )
@@ -645,7 +646,7 @@ def get_hr_event_registry(
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
     try:
-        require_personnel_admin_or_403(user)
+        resolve_personnel_events_scope_or_403(user)
         return {"version": HR_EVENT_REGISTRY_VERSION, "items": list_journal_registry_for_ui()}
     except HTTPException:
         raise

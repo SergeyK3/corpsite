@@ -18,6 +18,7 @@ export function isSystemAdministrator(me: MeInfo | null | undefined): boolean {
 /** Read-only «Персонал» — management-facing personnel browser (ADR-042 E1 + admin + HR). */
 export function canSeePersonnelDirectoryNav(me: MeInfo | null | undefined): boolean {
   if (isSystemAdminRole(me)) return true;
+  if (me?.has_sysadmin_api === true) return true;
   if (me?.is_privileged === true) return true;
   if (me?.has_personnel_admin === true) return true;
   return me?.show_org_sidebar === true || me?.has_personnel_visibility === true;
@@ -32,6 +33,15 @@ export function canSeeHrProcessesNav(me: MeInfo | null | undefined): boolean {
 }
 
 /** «Контакты» — full directory contacts for HR head / enrollment manager and visibility users. */
+/** Narrow, read-only personnel event journal capability. */
+export function canSeePersonnelJournalNav(me: MeInfo | null | undefined): boolean {
+  return (
+    canSeeHrProcessesNav(me) ||
+    me?.has_sysadmin_api === true ||
+    me?.has_personnel_events_read === true
+  );
+}
+
 export function canSeeContactsDirectoryNav(me: MeInfo | null | undefined): boolean {
   if (isSystemAdminRole(me)) return true;
   if (me?.is_privileged === true) return true;
@@ -92,6 +102,12 @@ export function canSeePprMigrationNav(me: MeInfo | null | undefined): boolean {
 
 export const PPR_MIGRATION_NAV_ITEM: PersonnelNavItem = {
   href: "/directory/personnel/ppr-migration",
+export const PERSONNEL_JOURNAL_NAV_ITEM: PersonnelNavItem = {
+  href: HR_PROCESSES_NAV_HREF,
+  title: "???????? ??????",
+  matchPrefixes: ["/directory/personnel/journal"],
+};
+
   title: "Миграция личных карточек",
   matchPrefixes: ["/directory/personnel/ppr-migration"],
 };
@@ -126,6 +142,7 @@ export function isIncomingInformationNavItem(item: Pick<PersonnelNavItem, "href"
 }
 
 /**
+  else if (canSeePersonnelJournalNav(me)) items.push(PERSONNEL_JOURNAL_NAV_ITEM);
  * Directory sidebar: Персонал → Кадровые процессы → Производственные приказы → Контакты → Должности.
  * Operational Orders is a sibling top-level node, not nested under HR.
  */
@@ -187,7 +204,7 @@ export function shouldShowPrimaryAdminNavItem(
   if (item.href === "/admin/system/org-units") return opts.showSysadminNav;
   if (item.href === "/admin/system") return opts.showSysadminNav;
   if (isPersonnelDirectoryNavItem(item)) return canSeePersonnelDirectoryNav(me);
-  if (isHrProcessesNavItem(item)) return canSeeHrProcessesNav(me);
+  if (isHrProcessesNavItem(item)) return canSeePersonnelJournalNav(me);
   if (isOperationalOrdersNavItem(item)) return canSeeOperationalOrdersNav(me);
   if (isIncomingInformationNavItem(item)) return canSeeIncomingInformationNav(me);
   return opts.isAdmin;
@@ -235,7 +252,7 @@ export function resolveDirectoryOrgTreeBasePath(pathname: string): string {
 
 /** Legacy /directory/personnel bookmark — HR journal vs management staff vs tasks fallback. */
 export function resolvePersonnelRootRedirect(me: MeInfo | null | undefined): string {
-  if (canSeeHrProcessesNav(me)) return HR_PROCESSES_NAV_HREF;
+  if (canSeePersonnelJournalNav(me)) return HR_PROCESSES_NAV_HREF;
   if (canSeePersonnelDirectoryNav(me)) return PERSONNEL_DIRECTORY_NAV_HREF;
   return "/tasks";
 }

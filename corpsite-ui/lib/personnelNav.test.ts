@@ -9,6 +9,7 @@ import {
   buildVisibilityDirectoryNavItems,
   canSeeContactsDirectoryNav,
   canSeeHrProcessesNav,
+  canSeePersonnelJournalNav,
   canSeePersonnelDirectoryNav,
   HR_PROCESSES_NAV_HREF,
   HR_PROCESSES_NAV_ITEM,
@@ -60,6 +61,21 @@ describe("personnelNav", () => {
     expect(canSeeHrProcessesNav(headWithVisibility)).toBe(false);
     expect(canSeeHrProcessesNav(directorLike)).toBe(false);
     expect(canSeeHrProcessesNav(regular)).toBe(false);
+  });
+
+  it("shows only the personnel journal to the narrow observer capability", () => {
+    const observer: MeInfo = {
+      user_id: 90,
+      has_personnel_events_read: true,
+      has_personnel_visibility: false,
+    };
+    expect(canSeePersonnelJournalNav(observer)).toBe(true);
+    expect(canSeePersonnelDirectoryNav(observer)).toBe(false);
+    expect(canSeeHrProcessesNav(observer)).toBe(false);
+    expect(buildPersonnelSidebarNavItems(observer)).toEqual([
+      expect.objectContaining({ title: "Кадровый журнал", href: "/directory/personnel/journal" }),
+    ]);
+    expect(resolvePersonnelRootRedirect(observer)).toBe("/directory/personnel/journal");
   });
 
   it("canSeeContactsDirectoryNav for HR head and visibility users", () => {

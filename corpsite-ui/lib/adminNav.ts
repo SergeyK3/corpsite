@@ -2,6 +2,7 @@
 import type { MeInfo } from "./types";
 import {
   canSeeHrProcessesNav,
+  canSeePersonnelJournalNav,
   canSeePersonnelDirectoryNav,
   isHrProcessesRoute,
   isPersonnelDirectoryRoute,
@@ -89,6 +90,9 @@ export function isForbiddenAdminRoute(
     return !canSeeRegularTaskRunsJournal(me);
   }
   if (isHrProcessesRoute(pathname)) {
+    if (pathname === "/directory/personnel/journal" || pathname.startsWith("/directory/personnel/journal/")) {
+      return !canSeePersonnelJournalNav(me);
+    }
     return !canSeeHrProcessesNav(me);
   }
   if (isPersonnelDirectoryRoute(pathname)) {

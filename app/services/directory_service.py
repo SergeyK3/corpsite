@@ -2264,6 +2264,7 @@ def list_personnel_events(
     org_group_id: Optional[int] = None,
     org_unit_id: Optional[int] = None,
     position_id: Optional[int] = None,
+    scope_unit_ids: Optional[List[int]] = None,
     limit: int = 100,
     offset: int = 0,
 ) -> Dict[str, Any]:
@@ -2324,6 +2325,18 @@ def list_personnel_events(
             "(ev.from_position_id = :position_id OR ev.to_position_id = :position_id)"
         )
         params["position_id"] = int(position_id)
+    # Event history is visible only if at least one side of the event belongs
+    # to the caller's resolved personnel-visibility scope.  ``None`` means
+    # organization-wide scope; an empty list intentionally yields no events.
+    if scope_unit_ids is not None:
+        normalized_scope_unit_ids = sorted({int(value) for value in scope_unit_ids})
+        if normalized_scope_unit_ids:
+            where_parts.append(
+                "(ev.from_org_unit_id IN :scope_unit_ids OR ev.to_org_unit_id IN :scope_unit_ids)"
+            )
+            params["scope_unit_ids"] = normalized_scope_unit_ids
+        else:
+            where_parts.append("FALSE")
 
     where_sql = " AND ".join(where_parts)
 
@@ -2369,9 +2382,14 @@ def list_personnel_events(
         """
     )
 
+    expanding_params = []
     if registry_codes:
-        q_total = q_total.bindparams(bindparam("event_types", expanding=True))
-        q_list = q_list.bindparams(bindparam("event_types", expanding=True))
+        expanding_params.append(bindparam("event_types", expanding=True))
+    if scope_unit_ids is not None and params.get("scope_unit_ids"):
+        expanding_params.append(bindparam("scope_unit_ids", expanding=True))
+    if expanding_params:
+        q_total = q_total.bindparams(*expanding_params)
+        q_list = q_list.bindparams(*expanding_params)
 
     def _event_rate(v: Any) -> Optional[float]:
         if v is None:
