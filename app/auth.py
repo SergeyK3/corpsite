@@ -16,6 +16,7 @@ from sqlalchemy import text
 
 from app.db.engine import engine
 from app.security.directory_scope import is_privileged, is_system_admin
+from app.services.security_audit_service import write_security_event
 from app.security.auth_policy import (
     fetch_user_auth_policy_row,
     fetch_user_auth_policy_row_by_login,
@@ -171,8 +172,9 @@ def create_access_token(user_id: int, *, token_version: Optional[int] = None) ->
     exp = now + _jwt_ttl_seconds()
     header = {"alg": "HS256", "typ": "JWT"}
     payload: Dict[str, Any] = {"sub": str(int(user_id)), "iat": now, "exp": exp}
-    if token_version is not None:
-        payload["token_version"] = int(token_version)
+    # All newly issued JWTs carry the version claim.  This is required for
+    # password changes and account retirement to revoke prior sessions.
+    payload["token_version"] = int(token_version if token_version is not None else 1)
 
     header_b64 = _b64url(_json_dumps(header))
     payload_b64 = _b64url(_json_dumps(payload))
@@ -436,8 +438,9 @@ class TokenResponse(BaseModel):
 
 
 class PasswordChangeRequest(BaseModel):
-    current_password: str = Field(..., min_length=1, max_length=200)
-    new_password: str = Field(..., min_length=8, max_length=200)
+    current_password: str
+    new_password: str
+    new_password_confirmation: str
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -508,12 +511,106 @@ def login(payload: LoginRequest, request: Request) -> TokenResponse:
 
 
 @router.post("/password-change")
-def password_change(_payload: PasswordChangeRequest) -> Dict[str, Any]:
-    """Stub for future self-service password change (Phase C1/C2)."""
-    raise HTTPException(
-        status_code=501,
-        detail="Password change endpoint is not implemented yet.",
-    )
+def password_change(
+    payload: PasswordChangeRequest,
+    request: Request,
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Change only the authenticated user's password and revoke prior JWTs."""
+    current_password = payload.current_password or ""
+    new_password = payload.new_password or ""
+    confirmation = payload.new_password_confirmation or ""
+    ip_address = request.client.host if request.client else None
+    user_agent = request.headers.get("user-agent")
+    user_id = int(user["user_id"])
+
+    def reject(detail: str, reason: str) -> None:
+        write_security_event(
+            event_type="PASSWORD_CHANGED",
+            actor_user_id=user_id,
+            target_user_id=user_id,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            success=False,
+            failure_reason=reason,
+            metadata={"action": "self_service_password_change", "outcome": "rejected"},
+        )
+        raise HTTPException(status_code=400, detail=detail)
+
+    if not 1 <= len(current_password) <= 200:
+        reject("Введите текущий пароль.", "invalid_current_password")
+    if not 8 <= len(new_password) <= 200:
+        reject("Новый пароль должен содержать от 8 до 200 символов.", "password_policy_failed")
+    if new_password != confirmation:
+        reject("Подтверждение нового пароля не совпадает.", "password_confirmation_mismatch")
+
+    with engine.begin() as conn:
+        current = conn.execute(
+            text(
+                """
+                SELECT user_id, password_hash, is_active, token_version
+                FROM public.users
+                WHERE user_id = :user_id
+                FOR UPDATE
+                """
+            ),
+            {"user_id": user_id},
+        ).mappings().one_or_none()
+        if current is None or not bool(current["is_active"]):
+            raise HTTPException(status_code=403, detail="Пользователь неактивен.")
+        stored_hash = str(current.get("password_hash") or "")
+        if not stored_hash or not verify_password(current_password, stored_hash):
+            write_security_event(
+                event_type="PASSWORD_CHANGED",
+                actor_user_id=user_id,
+                target_user_id=user_id,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                success=False,
+                failure_reason="invalid_current_password",
+                metadata={"action": "self_service_password_change", "outcome": "rejected"},
+                conn=conn,
+            )
+            raise HTTPException(status_code=400, detail="Текущий пароль указан неверно.")
+        if verify_password(new_password, stored_hash):
+            write_security_event(
+                event_type="PASSWORD_CHANGED",
+                actor_user_id=user_id,
+                target_user_id=user_id,
+                ip_address=ip_address,
+                user_agent=user_agent,
+                success=False,
+                failure_reason="password_reuse",
+                metadata={"action": "self_service_password_change", "outcome": "rejected"},
+                conn=conn,
+            )
+            raise HTTPException(status_code=400, detail="Новый пароль должен отличаться от текущего.")
+
+        conn.execute(
+            text(
+                """
+                UPDATE public.users
+                SET password_hash = :password_hash,
+                    password_changed_at = now(),
+                    must_change_password = FALSE,
+                    temp_password_expires_at = NULL,
+                    token_version = COALESCE(token_version, 1) + 1
+                WHERE user_id = :user_id
+                """
+            ),
+            {"password_hash": hash_password(new_password), "user_id": user_id},
+        )
+        write_security_event(
+            event_type="PASSWORD_CHANGED",
+            actor_user_id=user_id,
+            target_user_id=user_id,
+            ip_address=ip_address,
+            user_agent=user_agent,
+            metadata={"action": "self_service_password_change"},
+            conn=conn,
+        )
+
+    return {"message": "Пароль изменён. Выполните вход повторно."}
 
 
 @router.get("/me")

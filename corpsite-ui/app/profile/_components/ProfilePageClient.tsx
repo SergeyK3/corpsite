@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 
 import TelegramBindPanel from "@/components/TelegramBindPanel";
+import PasswordChangePanel from "./PasswordChangePanel";
 import { apiAuthMe } from "@/lib/api";
 import { isAuthed, logout as authLogout } from "@/lib/auth";
 import { formatThrownError } from "@/lib/i18n";
@@ -102,6 +103,13 @@ export default function ProfilePageClient() {
         onRefresh={async () => {
           const data = await loadMe();
           setMe(data);
+        }}
+      />
+
+      <PasswordChangePanel
+        onSuccess={() => {
+          authLogout();
+          router.replace("/login");
         }}
       />
     </div>

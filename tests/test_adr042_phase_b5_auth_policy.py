@@ -8,7 +8,8 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 
-from app.auth import create_access_token, hash_password
+import app.auth as auth_module
+from app.auth import create_access_token, decode_and_verify_token, hash_password
 from app.db.engine import engine
 from app.services.admin_password_reset_service import issue_temporary_password
 from app.services.security_audit_service import sanitize_metadata, write_security_event
@@ -219,10 +220,21 @@ def test_successful_login_resets_failed_count(client: TestClient, login_user):
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
-def test_token_version_mismatch_rejected_only_when_flag_enabled(client: TestClient, seed, monkeypatch):
-    user_id = int(seed["executor_user_id"])
-    monkeypatch.delenv("ADR042_TOKEN_VERSION_ENFORCEMENT", raising=False)
+def test_login_issued_jwt_already_contains_token_version(client: TestClient, login_user):
+    """Guard the compatibility prerequisite before version validation is mandatory."""
+    response = client.post(
+        "/auth/login",
+        json={"login": login_user["login"], "password": PASSWORD},
+    )
+    assert response.status_code == 200
+    payload = decode_and_verify_token(response.json()["access_token"])
+    assert payload["sub"] == str(login_user["user_id"])
+    assert payload["token_version"] == 1
 
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_token_version_mismatch_is_always_rejected(client: TestClient, seed, monkeypatch):
+    user_id = int(seed["executor_user_id"])
     stale_token = create_access_token(user_id, token_version=1)
     with engine.begin() as conn:
         conn.execute(
@@ -231,10 +243,6 @@ def test_token_version_mismatch_rejected_only_when_flag_enabled(client: TestClie
         )
 
     try:
-        ok = client.get("/auth/me", headers={"Authorization": f"Bearer {stale_token}"})
-        assert ok.status_code == 200
-
-        monkeypatch.setenv("ADR042_TOKEN_VERSION_ENFORCEMENT", "true")
         bad = client.get("/auth/me", headers={"Authorization": f"Bearer {stale_token}"})
         assert bad.status_code == 401
     finally:
@@ -243,6 +251,21 @@ def test_token_version_mismatch_rejected_only_when_flag_enabled(client: TestClie
                 text("UPDATE public.users SET token_version = 1 WHERE user_id = :uid"),
                 {"uid": user_id},
             )
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_jwt_without_token_version_requires_relogin(client: TestClient, seed):
+    user_id = int(seed["executor_user_id"])
+    header = auth_module._b64url(auth_module._json_dumps({"alg": "HS256", "typ": "JWT"}))
+    payload = auth_module._b64url(
+        auth_module._json_dumps({"sub": str(user_id), "iat": 1_700_000_000, "exp": 4_000_000_000})
+    )
+    signature = auth_module._b64url(auth_module._sign(f"{header}.{payload}".encode("utf-8"), auth_module.AUTH_JWT_SECRET))
+    legacy_token = f"{header}.{payload}.{signature}"
+
+    response = client.get("/auth/me", headers={"Authorization": f"Bearer {legacy_token}"})
+    assert response.status_code == 401
+    assert "вход" in response.json()["detail"].lower()
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
@@ -275,9 +298,13 @@ def test_must_change_password_enforcement_only_when_flag_enabled(client: TestCli
         password_change = client.post(
             "/auth/password-change",
             headers=headers,
-            json={"current_password": "x", "new_password": "NewPass123"},
+            json={
+                "current_password": "x",
+                "new_password": "NewPass123",
+                "new_password_confirmation": "NewPass123",
+            },
         )
-        assert password_change.status_code == 501
+        assert password_change.status_code == 400
     finally:
         with engine.begin() as conn:
             conn.execute(

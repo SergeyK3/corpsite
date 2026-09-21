@@ -35,10 +35,6 @@ def login_max_failed_attempts() -> int:
         return 5
 
 
-def token_version_enforcement_enabled() -> bool:
-    return _env_bool("ADR042_TOKEN_VERSION_ENFORCEMENT", default=False)
-
-
 def must_change_password_enforcement_enabled() -> bool:
     return _env_bool("ADR042_MUST_CHANGE_PASSWORD_ENFORCEMENT", default=False)
 
@@ -67,14 +63,16 @@ def require_password_not_expired_or_change_allowed(
 
 
 def validate_token_version_claim(payload: Dict[str, Any], user_ctx: Dict[str, Any]) -> None:
-    if not token_version_enforcement_enabled():
-        return
     claim = payload.get("token_version")
     if claim is None:
-        return
+        raise HTTPException(status_code=401, detail="Сеанс устарел. Выполните вход повторно.")
     db_version = int(user_ctx.get("token_version") or 1)
-    if int(claim) != db_version:
-        raise HTTPException(status_code=401, detail="Token invalidated.")
+    try:
+        claim_version = int(claim)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=401, detail="Сеанс устарел. Выполните вход повторно.")
+    if claim_version != db_version:
+        raise HTTPException(status_code=401, detail="Сеанс устарел. Выполните вход повторно.")
 
 
 def _users_has_column(conn: Connection, column: str) -> bool:

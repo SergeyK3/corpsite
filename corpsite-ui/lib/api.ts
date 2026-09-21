@@ -200,6 +200,21 @@ export async function apiAuthLogin(params: {
   return body;
 }
 
+export async function apiAuthPasswordChange(params: {
+  current_password: string;
+  new_password: string;
+  new_password_confirmation: string;
+}): Promise<{ message: string }> {
+  return apiFetchJson<{ message: string }>("/auth/password-change", {
+    method: "POST",
+    body: {
+      current_password: String(params.current_password ?? ""),
+      new_password: String(params.new_password ?? ""),
+      new_password_confirmation: String(params.new_password_confirmation ?? ""),
+    },
+  });
+}
+
 export type { TelegramBindCodeResponse } from "./types";
 
 export async function apiAuthMe(): Promise<MeInfo> {
