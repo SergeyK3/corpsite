@@ -288,6 +288,7 @@ def _enrich_user_context(user: Dict[str, Any]) -> Dict[str, Any]:
         CONTROL_LIST_EXPORT_PERMISSION,
         HR_ENROLLMENT_MANAGER_CODE,
         PERSONNEL_EVENTS_READ,
+        USER_ACCESS_ADMIN,
         PPR_MIGRATION_STATUS_READ_PERMISSION,
         has_admin_permission,
         has_any_personnel_read_permission,
@@ -306,6 +307,7 @@ def _enrich_user_context(user: Dict[str, Any]) -> Dict[str, Any]:
     out["has_personnel_events_read"] = (
         out["has_personnel_admin"] or has_admin_permission(uid, PERSONNEL_EVENTS_READ)
     )
+    out["has_user_access_admin"] = has_admin_permission(uid, USER_ACCESS_ADMIN)
     out["has_hr_governance"] = out["has_sysadmin_api"] or has_hr_governance_permission(uid)
     out["has_hr_enrollment_manager"] = has_admin_permission(uid, HR_ENROLLMENT_MANAGER_CODE)
     out["has_control_list_export"] = has_admin_permission(

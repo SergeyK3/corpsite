@@ -28,6 +28,7 @@ PERSONNEL_CARD_EDIT = "PERSONNEL_CARD_EDIT"
 # Read-only personnel event journal.  Deliberately separate from the broader
 # HR enrollment/admin contour.
 PERSONNEL_EVENTS_READ = "PERSONNEL_EVENTS_READ"
+USER_ACCESS_ADMIN = "USER_ACCESS_ADMIN"
 TEST_PERSONNEL_DELETION_CAPABILITY_BY_PERMISSION = {
     TEST_PERSONNEL_DELETION_REQUEST: "can_request_test_personnel_deletion",
     TEST_PERSONNEL_DELETION_APPROVE: "can_approve_test_personnel_deletion",
@@ -59,6 +60,7 @@ PERMISSION_CODES: FrozenSet[str] = frozenset(
         "PERSONNEL_ORDERS_CANCEL_SCOPE",
         "PERSONNEL_ORDERS_VOID",
         PERSONNEL_EVENTS_READ,
+        USER_ACCESS_ADMIN,
         "PERSONNEL_ORDERS_VOID_APPLIED",
         "PERSONNEL_ORDERS_ARCHIVE",
         "PERSONNEL_ORDERS_RESTORE",

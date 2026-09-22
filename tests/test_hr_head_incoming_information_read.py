@@ -12,7 +12,6 @@ from alembic import command
 from alembic.config import Config
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
-from sqlalchemy.exc import DBAPIError
 
 from app.db.engine import engine
 from app.incoming_information.permissions import (
@@ -240,7 +239,7 @@ def test_corrective_migration_grants_actual_hr_head_not_role_14(
             transaction.rollback()
 
 
-def test_corrective_migration_is_fail_closed_and_read_only(monkeypatch) -> None:
+def test_corrective_migration_keeps_integrity_checks_and_uses_no_role_id(monkeypatch) -> None:
     migration = _load_migration(
         "h5c6d7e8f9a0_hr_head_incoming_info_read_grant_correction.py"
     )
@@ -249,7 +248,8 @@ def test_corrective_migration_is_fail_closed_and_read_only(monkeypatch) -> None:
     migration["upgrade"]()
 
     statement = statements[0]
-    assert "v_role_count <> 1" in statement
+    assert "v_role_count = 0" in statement
+    assert "ELSIF v_role_count <> 1" in statement
     assert "v_permission_count <> 1" in statement
     assert "v_permission_active IS DISTINCT FROM TRUE" in statement
     assert "RAISE EXCEPTION" in statement
@@ -260,7 +260,7 @@ def test_corrective_migration_is_fail_closed_and_read_only(monkeypatch) -> None:
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
-def test_corrective_migration_fails_when_hr_head_role_is_missing(
+def test_corrective_migration_skips_when_hr_head_role_is_missing(
     monkeypatch,
     hr_head_role_not_14: int,
 ) -> None:
@@ -282,8 +282,11 @@ def test_corrective_migration_fails_when_hr_head_role_is_missing(
                 "execute",
                 lambda statement: conn.execute(text(statement)),
             )
-            with pytest.raises(DBAPIError, match="requires exactly one role with code HR_HEAD"):
-                migration["upgrade"]()
+            migration["upgrade"]()
+            assert conn.execute(
+                text("SELECT COUNT(*) FROM public.access_grants WHERE reason = :reason"),
+                {"reason": migration["_GRANT_REASON"]},
+            ).scalar_one() == 0
         finally:
             transaction.rollback()
 

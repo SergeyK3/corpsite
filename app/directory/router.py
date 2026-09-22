@@ -29,6 +29,7 @@ from .employee_onboarding_routes import router as employee_onboarding_router
 from .hr_import_routes import router as hr_import_router
 from .mrd_routes import router as mrd_router
 from .hr_sync_routes import router as hr_sync_router
+from .employee_access_routes import router as employee_access_router
 
 router = APIRouter(prefix="/directory", tags=["directory"])
 
@@ -46,6 +47,7 @@ if _debug_routes_enabled():
 
 router.include_router(org_units_router)
 router.include_router(employees_router)
+router.include_router(employee_access_router)
 router.include_router(test_personnel_deletion_router)
 router.include_router(test_system_identity_deletion_router)
 router.include_router(import_router)

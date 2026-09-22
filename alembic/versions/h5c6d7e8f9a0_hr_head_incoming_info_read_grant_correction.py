@@ -1,4 +1,9 @@
-"""Correct HR_HEAD Incoming Information read grant lookup by stable role code."""
+"""Correct an existing HR_HEAD Incoming Information read grant by role code.
+
+This is a one-time data correction for populated installations.  A clean
+database has neither the historical HR_HEAD role nor an audit grantor, so there
+is nothing to correct and the migration must be a no-op in that case.
+"""
 from __future__ import annotations
 
 from alembic import op
@@ -30,7 +35,10 @@ def upgrade() -> None:
             FROM public.roles
             WHERE code = '{_ROLE_CODE}';
 
-            IF v_role_count <> 1 THEN
+            IF v_role_count = 0 THEN
+                -- Historical data is absent on a clean installation.
+                RETURN;
+            ELSIF v_role_count <> 1 THEN
                 RAISE EXCEPTION
                     'h5c6d7e8f9a0 requires exactly one role with code %, found %',
                     '{_ROLE_CODE}', v_role_count;
@@ -87,8 +95,9 @@ def upgrade() -> None:
             LIMIT 1;
 
             IF v_granted_by_user_id IS NULL THEN
-                RAISE EXCEPTION
-                    'h5c6d7e8f9a0 requires an active user for granted_by_user_id';
+                -- The correction cannot be attributed without an existing
+                -- active user.  Do not manufacture an actor or a grant.
+                RETURN;
             END IF;
 
             INSERT INTO public.access_grants (

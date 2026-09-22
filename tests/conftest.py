@@ -435,7 +435,7 @@ def _resolve_executor_user_id(conn, executor_role_id: int, preferred_unit_id: Op
 # Core creators
 # =============================
 
-def create_unit(conn, name: str) -> Optional[int]:
+def create_unit(conn, name: str, *, group_id: Optional[int] = None) -> Optional[int]:
     ut = _detect_unit_table(conn)
     if not ut:
         return None
@@ -464,8 +464,24 @@ def create_unit(conn, name: str) -> Optional[int]:
     if "code" in cols:
         values["code"] = name
     if "group_id" in cols:
-        values["group_id"] = 1
+        values["group_id"] = group_id if group_id is not None else 1
     return insert_returning_id(conn, table=ut, id_col=id_col, values=values)
+
+
+def create_deps_group(conn, name: str) -> int:
+    """Create a disposable org group and return its generated identifier."""
+    if not table_exists(conn, "deps_group"):
+        raise RuntimeError("Table public.deps_group does not exist")
+    return int(conn.execute(
+        text(
+            """
+            INSERT INTO public.deps_group (group_name)
+            VALUES (:group_name)
+            RETURNING group_id
+            """
+        ),
+        {"group_name": name},
+    ).scalar_one())
 
 
 def _insert_role_row(conn, name: str) -> int:
@@ -557,6 +573,27 @@ def _ensure_seed_user_id_above_env_allowlists(conn) -> None:
         floor = max(floor, max(int(uid) for uid in reserved) + 1)
     sync_owned_sequence(conn, "users", "user_id")
     seq_name = get_owned_sequence(conn, "users", "user_id")
+    if seq_name:
+        sequence_state = conn.execute(
+            text(f"SELECT last_value, is_called FROM {seq_name}")
+        ).mappings().one()
+        next_value = int(sequence_state["last_value"]) + (
+            1 if sequence_state["is_called"] else 0
+        )
+        if next_value < floor:
+            conn.execute(
+                text("SELECT setval(CAST(:seq_name AS regclass), :floor, false)"),
+                {"seq_name": seq_name, "floor": floor},
+            )
+
+
+def _ensure_seed_role_id_above_env_allowlists(conn) -> None:
+    """Keep ephemeral seed roles clear of configured privileged role IDs."""
+    floor = 1000
+    if _RESERVED_PRIVILEGED_ROLE_IDS:
+        floor = max(floor, max(int(rid) for rid in _RESERVED_PRIVILEGED_ROLE_IDS) + 1)
+    sync_owned_sequence(conn, "roles", "role_id")
+    seq_name = get_owned_sequence(conn, "roles", "role_id")
     if seq_name:
         sequence_state = conn.execute(
             text(f"SELECT last_value, is_called FROM {seq_name}")
@@ -841,14 +878,19 @@ def canonical_deps_groups() -> Iterator[None]:
 @pytest.fixture(scope="function")
 def seed() -> Iterator[Dict[str, Any]]:
     created_unit_id: Optional[int] = None
+    created_group_id: Optional[int] = None
     created_role_ids: list[int] = []
     created_user_ids: list[int] = []
     suffix = uuid4().hex[:8]
 
     with engine.begin() as conn:
+        # Core INSERT ... RETURNING executes immediately, so the FK target is
+        # available before the dependent org_units INSERT below.
+        created_group_id = create_deps_group(conn, f"pytest_group_{suffix}")
         unit_name = f"pytest_unit_{suffix}"
-        created_unit_id = create_unit(conn, unit_name)
+        created_unit_id = create_unit(conn, unit_name, group_id=created_group_id)
 
+        _ensure_seed_role_id_above_env_allowlists(conn)
         executor_role_id = create_non_privileged_role(conn, f"pytest_executor_{suffix}")
         initiator_role_id = create_non_privileged_role(conn, f"pytest_initiator_{suffix}")
         created_role_ids = [executor_role_id, initiator_role_id]
@@ -1014,6 +1056,9 @@ def seed() -> Iterator[Dict[str, Any]]:
                     exec_sql(conn, f"DELETE FROM public.{ut} WHERE org_unit_id = :u", u=created_unit_id)
                 elif "id" in ucols:
                     exec_sql(conn, f"DELETE FROM public.{ut} WHERE id = :u", u=created_unit_id)
+
+            if created_group_id is not None:
+                safe_delete(conn, "deps_group", "group_id = :group_id", {"group_id": created_group_id})
 
             sync_common_seed_sequences(conn)
 

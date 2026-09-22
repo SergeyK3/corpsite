@@ -41,6 +41,51 @@ def _get_access_role_id(conn, code: str) -> int:
     return int(row)
 
 
+@pytest.fixture
+def resolver_access_role_catalog():
+    """Supply only the access-role catalogue rows this test module requires."""
+    created_role_ids: list[int] = []
+    with engine.begin() as conn:
+        for code, name, access_level, level_rank in (
+            ("ACCESS_OBSERVER", "Test access observer", "OBSERVER", 10),
+            ("ACCESS_MANAGER", "Test access manager", "MANAGER", 20),
+            ("ACCESS_ADMIN", "Test access administrator", "ADMIN", 30),
+        ):
+            created = conn.execute(
+                text(
+                    """
+                    INSERT INTO public.access_roles
+                        (code, name, description, access_level, level_rank, is_system)
+                    VALUES (:code, :name, :description, :access_level, :level_rank, TRUE)
+                    ON CONFLICT (code) DO NOTHING
+                    RETURNING access_role_id
+                    """
+                ),
+                {
+                    "code": code,
+                    "name": name,
+                    "description": "ADR-042 resolver test catalogue row",
+                    "access_level": access_level,
+                    "level_rank": level_rank,
+                },
+            ).scalar_one_or_none()
+            if created is not None:
+                created_role_ids.append(int(created))
+    try:
+        yield
+    finally:
+        if created_role_ids:
+            with engine.begin() as conn:
+                conn.execute(
+                    text("DELETE FROM public.access_grants WHERE access_role_id = ANY(:role_ids)"),
+                    {"role_ids": created_role_ids},
+                )
+                conn.execute(
+                    text("DELETE FROM public.access_roles WHERE access_role_id = ANY(:role_ids)"),
+                    {"role_ids": created_role_ids},
+                )
+
+
 def _create_position(conn, suffix: str) -> int:
     cols = get_columns(conn, "positions")
     values = {"name": f"B3 Position {suffix}"}
@@ -126,7 +171,7 @@ def _create_person_employee_user(conn, seed, suffix: str) -> dict:
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
-def test_user_grant_resolves_max_rank(seed):
+def test_user_grant_resolves_max_rank(seed, resolver_access_role_catalog):
     _require_b2()
     suffix = uuid4().hex[:8]
     created: dict = {}
@@ -165,7 +210,7 @@ def test_user_grant_resolves_max_rank(seed):
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
-def test_position_and_org_unit_inherited_grants(seed):
+def test_position_and_org_unit_inherited_grants(seed, resolver_access_role_catalog):
     _require_b2()
     suffix = uuid4().hex[:8]
 
@@ -202,7 +247,7 @@ def test_position_and_org_unit_inherited_grants(seed):
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
-def test_revoked_grant_ignored_and_audit_written(seed):
+def test_revoked_grant_ignored_and_audit_written(seed, resolver_access_role_catalog):
     _require_b2()
     suffix = uuid4().hex[:8]
 
@@ -232,7 +277,7 @@ def test_revoked_grant_ignored_and_audit_written(seed):
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
-def test_expired_grant_ignored(seed):
+def test_expired_grant_ignored(seed, resolver_access_role_catalog):
     _require_b2()
     suffix = uuid4().hex[:8]
 
