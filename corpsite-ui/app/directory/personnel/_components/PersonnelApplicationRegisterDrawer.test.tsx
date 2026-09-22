@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { CurrentUserProvider } from "@/lib/currentUser";
 import PersonnelApplicationRegisterDrawer from "./PersonnelApplicationRegisterDrawer";
 
 const UNIT_2_POSITIONS = [
@@ -177,6 +178,22 @@ afterEach(() => {
 });
 
 describe("PersonnelApplicationRegisterDrawer", () => {
+  it("makes the universal checklist available before entering an IIN", () => {
+    const open = vi.spyOn(window, "open").mockImplementation(() => null);
+    render(<PersonnelApplicationRegisterDrawer open onClose={vi.fn()} onRegistered={vi.fn()} onToast={vi.fn()} />);
+    fireEvent.click(screen.getByTestId("register-drawer-print-checklist"));
+    expect(open).toHaveBeenCalledWith("/directory/personnel/hiring-document-checklist", "_blank", "noopener,noreferrer");
+  });
+
+  it("shows template editing only to the HR head", () => {
+    render(
+      <CurrentUserProvider value={{ role_code: "HR_HEAD" }}>
+        <PersonnelApplicationRegisterDrawer open onClose={vi.fn()} onRegistered={vi.fn()} onToast={vi.fn()} />
+      </CurrentUserProvider>,
+    );
+    expect(screen.getByTestId("register-drawer-edit-checklist")).toBeInTheDocument();
+  });
+
   it("runs preview flow for new person and shows registration form with placement cascade", async () => {
     render(
       <PersonnelApplicationRegisterDrawer

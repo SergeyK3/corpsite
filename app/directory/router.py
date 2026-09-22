@@ -30,6 +30,7 @@ from .hr_import_routes import router as hr_import_router
 from .mrd_routes import router as mrd_router
 from .hr_sync_routes import router as hr_sync_router
 from .employee_access_routes import router as employee_access_router
+from .hiring_document_checklist_routes import router as hiring_document_checklist_router
 
 router = APIRouter(prefix="/directory", tags=["directory"])
 
@@ -60,6 +61,7 @@ router.include_router(personnel_demo_router)
 router.include_router(employee_documents_router)
 router.include_router(personnel_orders_router)
 router.include_router(personnel_applications_router)
+router.include_router(hiring_document_checklist_router)
 router.include_router(personnel_lk_router)
 router.include_router(personnel_intake_router)
 router.include_router(personnel_reports_router)

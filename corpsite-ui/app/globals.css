@@ -132,4 +132,64 @@ html.dark body {
     -webkit-print-color-adjust: exact;
     print-color-adjust: exact;
   }
+
+  /* The checklist is printed from inside the regular personnel workspace. */
+  body:has(.hiring-document-checklist-print) * {
+    visibility: hidden !important;
+  }
+
+  body:has(.hiring-document-checklist-print) .hiring-document-checklist-print,
+  body:has(.hiring-document-checklist-print) .hiring-document-checklist-print * {
+    visibility: visible !important;
+  }
+
+  body:has(.hiring-document-checklist-print) .hiring-document-checklist-print {
+    position: absolute !important;
+    top: 0 !important;
+    left: 0 !important;
+    width: 100% !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    color: #000 !important;
+    background: #fff !important;
+    font-size: 10pt;
+    line-height: 1.2;
+  }
+
+  .hiring-document-checklist-print h1 {
+    margin: 0 0 4mm !important;
+    font-size: 15pt;
+    line-height: 1.15;
+  }
+
+  .hiring-document-checklist-print ol {
+    margin: 0 !important;
+    padding-left: 5.5mm !important;
+  }
+
+  .hiring-document-checklist-print ol > li {
+    margin-bottom: 2mm !important;
+    gap: 2.5mm !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .hiring-document-checklist-print section {
+    margin-top: 4mm !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .hiring-document-checklist-print h2 {
+    font-size: 10pt;
+  }
+
+  .hiring-document-checklist-print section p {
+    margin-top: 1.5mm !important;
+  }
+
+  .hiring-document-checklist-print section > div {
+    margin-top: 3mm !important;
+  }
 }

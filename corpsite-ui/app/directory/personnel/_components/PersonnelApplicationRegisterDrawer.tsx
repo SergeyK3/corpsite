@@ -2,6 +2,7 @@
 
 import * as React from "react";
 
+import { useCurrentUser } from "@/lib/currentUser";
 import OrgScopeFilter from "@/components/OrgScopeFilter";
 import OrgUnitScopeFilter from "@/components/OrgUnitScopeFilter";
 import {
@@ -66,6 +67,9 @@ export default function PersonnelApplicationRegisterDrawer({
   onRegistered,
   onToast,
 }: Props) {
+  const me = useCurrentUser();
+  const canEditChecklist =
+    me?.is_system_admin === true || me?.is_privileged === true || String(me?.role_code ?? "").toUpperCase() === "HR_HEAD";
   const [iin, setIin] = React.useState("");
   const [preview, setPreview] = React.useState<PersonnelApplicationPreviewResponse | null>(null);
   const [previewLoading, setPreviewLoading] = React.useState(false);
@@ -295,6 +299,26 @@ export default function PersonnelApplicationRegisterDrawer({
 
         <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
           <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-4 py-4">
+            <div className="flex flex-wrap gap-2" data-testid="register-drawer-checklist-actions">
+              <button
+                type="button"
+                onClick={() => window.open("/directory/personnel/hiring-document-checklist", "_blank", "noopener,noreferrer")}
+                className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
+                data-testid="register-drawer-print-checklist"
+              >
+                Распечатать перечень документов
+              </button>
+              {canEditChecklist ? (
+                <button
+                  type="button"
+                  onClick={() => window.open("/directory/personnel/hiring-document-checklist?edit=1", "_blank", "noopener,noreferrer")}
+                  className="rounded-lg border border-zinc-300 px-3 py-2 text-sm hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-900"
+                  data-testid="register-drawer-edit-checklist"
+                >
+                  Редактировать шаблон
+                </button>
+              ) : null}
+            </div>
             <section className="space-y-3" data-testid="register-drawer-iin-block">
               <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">ИИН</h3>
               <div className="flex flex-wrap gap-2">
