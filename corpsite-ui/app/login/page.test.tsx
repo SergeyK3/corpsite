@@ -28,7 +28,7 @@ describe("LoginPage Telegram recovery", () => {
       body: { login: "staff.login" },
       noAuth: true,
     }));
-    expect(await screen.findByRole("status")).toHaveTextContent("Запрос принят. Если Telegram привязан к этой учётной записи, код придёт в Telegram. Проверьте телефон.");
+    expect(await screen.findByRole("status")).toHaveTextContent("Запрос отправлен. Если Telegram привязан к этой учётной записи, код придёт в Telegram. Проверьте телефон.");
     expect(screen.getByLabelText("Код из Telegram")).toBeVisible();
     expect(screen.getByLabelText("Новый пароль")).toBeVisible();
     expect(screen.getByLabelText("Подтверждение нового пароля")).toBeVisible();
@@ -60,14 +60,14 @@ describe("LoginPage Telegram recovery", () => {
     }));
   });
 
-  it("shows a technical error instead of claiming that a code was sent", async () => {
+  it("shows the same safe status when the public request is rejected", async () => {
     apiFetchJson.mockRejectedValueOnce(new Error("network unavailable"));
     render(<LoginPage />);
     fireEvent.change(screen.getByLabelText("Логин"), { target: { value: "staff.login" } });
     fireEvent.click(screen.getByRole("button", { name: "Забыли пароль?" }));
     fireEvent.click(screen.getByRole("button", { name: "Получить код в Telegram" }));
 
-    expect(await screen.findByRole("status")).toHaveTextContent("Не удалось связаться с сервером. Повторите попытку позже");
-    expect(screen.queryByText(/код отправлен/i)).not.toBeInTheDocument();
+    expect(await screen.findByRole("status")).toHaveTextContent("Запрос отправлен. Если Telegram привязан к этой учётной записи, код придёт в Telegram. Проверьте телефон.");
+    expect(screen.queryByText(/Не удалось связаться с сервером/i)).not.toBeInTheDocument();
   });
 });
