@@ -16,7 +16,7 @@ describe("LoginPage Telegram recovery", () => {
     fireEvent.change(screen.getByLabelText("Логин"), { target: { value: "staff.login" } });
     fireEvent.click(screen.getByRole("button", { name: "Забыли пароль?" }));
     expect(screen.queryByLabelText("Код из Telegram")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Отправить код в Telegram" }));
+    fireEvent.click(screen.getByRole("button", { name: "Получить код в Telegram" }));
     await waitFor(() => expect(apiFetchJson).toHaveBeenCalledWith("/auth/password-recovery/telegram/request", expect.anything()));
     expect(screen.getByLabelText("Код из Telegram")).toBeVisible();
     expect(screen.getByLabelText("Новый пароль")).toBeVisible();

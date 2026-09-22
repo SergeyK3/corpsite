@@ -221,8 +221,8 @@ export default function LoginPage() {
             Забыли пароль?
           </button>
           {forgotPassword ? <div className="mt-2 space-y-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200" data-testid="telegram-password-recovery">
-            <p>Если Telegram подтверждён, запросите одноразовый код. Иначе обратитесь к системному администратору и сообщите свой логин.</p>
-            <button type="button" className="rounded-xl border border-zinc-300 bg-white px-3 py-2 text-zinc-900 hover:bg-zinc-100 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:hover:bg-zinc-800" disabled={recoveryBusy || !normalizeLogin(login)} onClick={() => void requestTelegramRecovery()}>Отправить код в Telegram</button>
+            <p>Если Telegram подключён, получите одноразовый код. Иначе обратитесь к системному администратору и сообщите свой логин.</p>
+            <button type="button" className="rounded-xl border border-zinc-300 bg-white px-3 py-2 text-zinc-900 hover:bg-zinc-100 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:hover:bg-zinc-800" disabled={recoveryBusy || !normalizeLogin(login)} onClick={() => void requestTelegramRecovery()}>Получить код в Telegram</button>
             {recoveryMessage ? <p role="status">{recoveryMessage}</p> : null}
             {recoveryRequested ? <form className="space-y-3" onSubmit={completeTelegramRecovery}>
               <div className="space-y-1">
