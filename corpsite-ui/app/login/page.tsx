@@ -19,6 +19,7 @@ export default function LoginPage() {
   const [login, setLogin] = useState("");
   const [password, setPassword] = useState("");
   const [showPwd, setShowPwd] = useState(false);
+  const [forgotPassword, setForgotPassword] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -191,6 +192,12 @@ export default function LoginPage() {
             {busy ? "Входим..." : "Войти"}
           </button>
         </form>
+        <div className="mt-4 text-sm">
+          <button type="button" className="text-blue-700 underline dark:text-blue-300" onClick={() => setForgotPassword((value) => !value)}>
+            Забыли пароль?
+          </button>
+          {forgotPassword ? <p className="mt-2 rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200">Обратитесь к системному администратору и сообщите свой логин.</p> : null}
+        </div>
       </div>
     </div>
   );

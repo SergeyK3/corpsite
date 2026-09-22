@@ -11,7 +11,7 @@ from sqlalchemy import text
 import app.auth as auth_module
 from app.auth import create_access_token, decode_and_verify_token, hash_password
 from app.db.engine import engine
-from app.services.admin_password_reset_service import issue_temporary_password
+from app.services.admin_password_reset_service import AdminPasswordResetError, issue_temporary_password
 from app.services.security_audit_service import sanitize_metadata, write_security_event
 from tests.conftest import auth_headers, get_columns, table_exists
 
@@ -335,12 +335,13 @@ def test_audit_metadata_sanitizer_blocks_sensitive_keys():
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
-def test_admin_password_reset_stub_not_implemented(seed):
-    with pytest.raises(NotImplementedError):
+def test_admin_password_reset_requires_employee_linkage(seed):
+    with pytest.raises(AdminPasswordResetError) as exc:
         issue_temporary_password(
-            user_id=int(seed["executor_user_id"]),
+            employee_id=999999999,
             actor_user_id=int(seed["initiator_user_id"]),
         )
+    assert exc.value.code == "EMPLOYEE_NOT_FOUND"
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")

@@ -35,6 +35,8 @@ export type MeInfo = {
   has_personnel_admin?: boolean;
   /** Narrow read-only access to the personnel event journal. */
   has_personnel_events_read?: boolean;
+  /** WP-ACCESS-002: exact effective permission for read-only employee access state. */
+  has_user_access_admin?: boolean;
   /** ADR-043 C4.2 — override approve/reject (ADMIN or HR_ENROLLMENT_MANAGER). */
   has_hr_governance?: boolean;
   /** Exact effective permission used by manual assignment change. */

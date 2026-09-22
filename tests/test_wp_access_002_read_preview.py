@@ -7,6 +7,7 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
+from app.auth import verify_password
 from app.db.engine import engine
 from app.services import employee_access_read_service
 from tests.conftest import auth_headers, create_non_privileged_role, create_task, create_user
@@ -99,6 +100,51 @@ def access_case(seed):
             conn.execute(text("DELETE FROM public.reporting_periods WHERE period_id=:period_id"), {"period_id": ids["period_id"]})
             if created_task_status_id is not None:
                 conn.execute(text("DELETE FROM public.task_statuses WHERE status_id=:status_id"), {"status_id": created_task_status_id})
+            if created_permission_id is not None:
+                conn.execute(text("DELETE FROM public.access_roles WHERE access_role_id=:access_role_id"), {"access_role_id": created_permission_id})
+
+
+@pytest.fixture
+def password_reset_case(seed):
+    suffix = uuid4().hex[:10]
+    ids: dict[str, int] = {}
+    created_permission_id: int | None = None
+    with engine.begin() as conn:
+        position_id = int(conn.execute(text("""
+            INSERT INTO public.positions (name, category) VALUES (:name, 'other') RETURNING position_id
+        """), {"name": f"WP ACCESS reset position {suffix}"}).scalar_one())
+        person_id = int(conn.execute(text("""
+            INSERT INTO public.persons (full_name, match_key, person_status, source)
+            VALUES (:name, :key, 'active', 'manual') RETURNING person_id
+        """), {"name": f"WP ACCESS reset {suffix}", "key": f"wp-access-003:{suffix}"}).scalar_one())
+        employee_id = int(conn.execute(text("""
+            INSERT INTO public.employees (person_id, full_name, org_unit_id, position_id, is_active, operational_status)
+            VALUES (:person_id, :name, :unit_id, :position_id, TRUE, 'active') RETURNING employee_id
+        """), {"person_id": person_id, "name": f"WP ACCESS reset {suffix}", "unit_id": seed["unit_id"], "position_id": position_id}).scalar_one())
+        target_user_id = create_user(conn, full_name=f"reset target {suffix}", role_id=seed["executor_role_id"], unit_id=seed["unit_id"])
+        conn.execute(text("UPDATE public.users SET employee_id=:employee_id WHERE user_id=:user_id"), {"employee_id": employee_id, "user_id": target_user_id})
+        created_permission_id = conn.execute(text("""
+            INSERT INTO public.access_roles (code, name, description, access_level, level_rank, is_system)
+            VALUES ('USER_ACCESS_ADMIN', 'User Access Administrator', 'test catalogue row', 'MANAGER', 20, TRUE)
+            ON CONFLICT (code) DO NOTHING
+            RETURNING access_role_id
+        """)).scalar_one_or_none()
+        permission_id = int(conn.execute(text("SELECT access_role_id FROM public.access_roles WHERE code='USER_ACCESS_ADMIN'")).scalar_one())
+        conn.execute(text("""
+            INSERT INTO public.access_grants (access_role_id, target_type, target_id, granted_by_user_id, reason)
+            VALUES (:role_id, 'USER', :user_id, :user_id, 'WP-ACCESS-003 test')
+        """), {"role_id": permission_id, "user_id": seed["initiator_user_id"]})
+        ids.update(person_id=person_id, employee_id=employee_id, position_id=position_id, target_user_id=target_user_id)
+    try:
+        yield {**seed, **ids}
+    finally:
+        with engine.begin() as conn:
+            conn.execute(text("DELETE FROM public.access_grants WHERE reason='WP-ACCESS-003 test'"))
+            conn.execute(text("DELETE FROM public.security_audit_log WHERE target_user_id=:user_id AND event_type='TEMP_PASSWORD_ISSUED'"), {"user_id": ids["target_user_id"]})
+            conn.execute(text("DELETE FROM public.users WHERE user_id=:user_id"), {"user_id": ids["target_user_id"]})
+            conn.execute(text("DELETE FROM public.employees WHERE employee_id=:employee_id"), {"employee_id": ids["employee_id"]})
+            conn.execute(text("DELETE FROM public.persons WHERE person_id=:person_id"), {"person_id": ids["person_id"]})
+            conn.execute(text("DELETE FROM public.positions WHERE position_id=:position_id"), {"position_id": ids["position_id"]})
             if created_permission_id is not None:
                 conn.execute(text("DELETE FROM public.access_roles WHERE access_role_id=:access_role_id"), {"access_role_id": created_permission_id})
 
@@ -245,3 +291,150 @@ def test_permission_migration_has_no_automatic_grants():
     assert "down_revision = \"adm001canonicalroles\"" in source
     assert "INSERT INTO public.access_grants" not in source
     assert "USER_ACCESS_ADMIN" in source
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_password_reset_requires_permission_and_resolves_linkage(client, password_reset_case):
+    endpoint = f"/directory/personnel/employees/{password_reset_case['employee_id']}/access/password-reset"
+    assert client.post(endpoint, headers=auth_headers(password_reset_case["target_user_id"])).status_code == 403
+    with engine.begin() as conn:
+        conn.execute(text("UPDATE public.users SET employee_id=NULL WHERE user_id=:user_id"), {"user_id": password_reset_case["target_user_id"]})
+    try:
+        response = client.post(endpoint, headers=auth_headers(password_reset_case["initiator_user_id"]))
+        assert response.status_code == 409
+        assert response.json()["detail"]["code"] == "USER_MISSING"
+    finally:
+        with engine.begin() as conn:
+            conn.execute(text("UPDATE public.users SET employee_id=:employee_id WHERE user_id=:user_id"), {
+                "employee_id": password_reset_case["employee_id"], "user_id": password_reset_case["target_user_id"],
+            })
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_password_reset_changes_hash_revokes_tokens_and_audits_without_secret(client, password_reset_case):
+    uid = password_reset_case["target_user_id"]
+    endpoint = f"/directory/personnel/employees/{password_reset_case['employee_id']}/access/password-reset"
+    with engine.begin() as conn:
+        before = conn.execute(text("""
+            SELECT password_hash, token_version FROM public.users WHERE user_id=:user_id
+        """), {"user_id": uid}).mappings().one()
+        conn.execute(text("""
+            UPDATE public.users
+            SET locked_at=now(), locked_until=now() + interval '1 hour', locked_reason='brute_force', failed_login_count=5
+            WHERE user_id=:user_id
+        """), {"user_id": uid})
+    response = client.post(endpoint, headers=auth_headers(password_reset_case["initiator_user_id"]))
+    assert response.status_code == 200, response.text
+    body = response.json()
+    temporary_password = body.pop("temporary_password")
+    assert len(temporary_password) >= 8
+    assert body["must_change_password"] is True
+    assert body["brute_force_lock_cleared"] is True
+    with engine.begin() as conn:
+        after = conn.execute(text("""
+            SELECT password_hash, must_change_password, token_version, locked_at, locked_until, locked_reason, failed_login_count
+            FROM public.users WHERE user_id=:user_id
+        """), {"user_id": uid}).mappings().one()
+        audit = conn.execute(text("""
+            SELECT metadata::text FROM public.security_audit_log
+            WHERE event_type='TEMP_PASSWORD_ISSUED' AND target_user_id=:user_id
+            ORDER BY audit_id DESC LIMIT 1
+        """), {"user_id": uid}).scalar_one()
+    assert after["password_hash"] != before["password_hash"]
+    assert verify_password(temporary_password, str(after["password_hash"]))
+    assert after["must_change_password"] is True
+    assert int(after["token_version"]) == int(before["token_version"]) + 1
+    assert after["locked_at"] is None and after["locked_until"] is None and after["locked_reason"] is None
+    assert int(after["failed_login_count"] or 0) == 0
+    assert temporary_password not in audit
+    assert str(after["password_hash"]) not in audit
+    assert "password" not in audit.lower()
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_password_reset_preserves_non_brute_force_lock(client, password_reset_case):
+    uid = password_reset_case["target_user_id"]
+    endpoint = f"/directory/personnel/employees/{password_reset_case['employee_id']}/access/password-reset"
+    with engine.begin() as conn:
+        conn.execute(text("""
+            UPDATE public.users SET locked_at=now(), locked_reason='admin', locked_until=NULL
+            WHERE user_id=:user_id
+        """), {"user_id": uid})
+    try:
+        response = client.post(endpoint, headers=auth_headers(password_reset_case["initiator_user_id"]))
+        assert response.status_code == 200, response.text
+        assert response.json()["brute_force_lock_cleared"] is False
+        with engine.connect() as conn:
+            lock = conn.execute(text("SELECT locked_at, locked_reason FROM public.users WHERE user_id=:user_id"), {"user_id": uid}).mappings().one()
+        assert lock["locked_at"] is not None
+        assert lock["locked_reason"] == "admin"
+    finally:
+        with engine.begin() as conn:
+            conn.execute(text("UPDATE public.users SET locked_at=NULL, locked_until=NULL, locked_reason=NULL WHERE user_id=:user_id"), {"user_id": uid})
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_access_user_search_and_reset_do_not_require_employee_linkage(client, password_reset_case):
+    uid = password_reset_case["target_user_id"]
+    actor_headers = auth_headers(password_reset_case["initiator_user_id"])
+    with engine.begin() as conn:
+        conn.execute(text("UPDATE public.users SET login=:login, employee_id=NULL WHERE user_id=:user_id"), {"login": "wp-access-003-search", "user_id": uid})
+    try:
+        denied = client.get("/directory/access/users?q=wp-access-003-search", headers=auth_headers(uid))
+        assert denied.status_code == 403
+        found = client.get("/directory/access/users?q=wp-access-003-search", headers=actor_headers)
+        assert found.status_code == 200, found.text
+        item = next(row for row in found.json()["items"] if row["user_id"] == uid)
+        assert item["login"] == "wp-access-003-search"
+        assert item["has_linked_employee"] is False
+        response = client.post(f"/directory/access/users/{uid}/password-reset", headers=actor_headers)
+        assert response.status_code == 200, response.text
+        assert response.json()["temporary_password"]
+        assert response.json()["employee_id"] is None
+    finally:
+        with engine.begin() as conn:
+            conn.execute(text("UPDATE public.users SET employee_id=:employee_id WHERE user_id=:user_id"), {"employee_id": password_reset_case["employee_id"], "user_id": uid})
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_user_activation_is_audited_and_preserves_identity_and_credentials(client, password_reset_case):
+    uid = password_reset_case["target_user_id"]
+    actor = password_reset_case["initiator_user_id"]
+    with engine.begin() as conn:
+        conn.execute(text("UPDATE public.users SET is_active=FALSE WHERE user_id=:user_id"), {"user_id": uid})
+        before = conn.execute(text("""
+            SELECT password_hash, role_id, employee_id, token_version FROM public.users WHERE user_id=:user_id
+        """), {"user_id": uid}).mappings().one()
+        grants_before = int(conn.execute(text("SELECT count(*) FROM public.access_grants WHERE target_type='USER' AND target_id=:user_id"), {"user_id": uid}).scalar_one())
+    denied = client.post(f"/directory/access/users/{uid}/activate?reason=test", headers=auth_headers(uid))
+    assert denied.status_code == 403
+    response = client.post(f"/directory/access/users/{uid}/activate?reason=approved+test+activation", headers=auth_headers(actor))
+    assert response.status_code == 200, response.text
+    with engine.connect() as conn:
+        after = conn.execute(text("""
+            SELECT password_hash, role_id, employee_id, is_active, token_version FROM public.users WHERE user_id=:user_id
+        """), {"user_id": uid}).mappings().one()
+        grants_after = int(conn.execute(text("SELECT count(*) FROM public.access_grants WHERE target_type='USER' AND target_id=:user_id"), {"user_id": uid}).scalar_one())
+        assert conn.execute(text("SELECT count(*) FROM public.audit_log WHERE entity='users' AND entity_id=:id AND action='USER_ACTIVATED'"), {"id": str(uid)}).scalar_one() == 1
+        assert conn.execute(text("""
+            SELECT count(*) FROM public.security_audit_log
+            WHERE target_user_id=:user_id
+              AND event_type='ACCESS_CHANGED'
+              AND metadata->>'operation'='USER_ACTIVATED'
+        """), {"user_id": uid}).scalar_one() == 1
+        security_metadata = conn.execute(text("""
+            SELECT metadata::text FROM public.security_audit_log
+            WHERE target_user_id=:user_id
+              AND event_type='ACCESS_CHANGED'
+              AND metadata->>'operation'='USER_ACTIVATED'
+            ORDER BY audit_id DESC LIMIT 1
+        """), {"user_id": uid}).scalar_one()
+    assert after["is_active"] is True
+    assert after["password_hash"] == before["password_hash"]
+    assert after["role_id"] == before["role_id"] and after["employee_id"] == before["employee_id"]
+    assert grants_after == grants_before
+    assert int(after["token_version"]) == int(before["token_version"] or 1) + 1
+    assert "password" not in security_metadata.lower()
+    repeated = client.post(f"/directory/access/users/{uid}/activate?reason=repeat", headers=auth_headers(actor))
+    assert repeated.status_code == 409
+    assert repeated.json()["detail"]["code"] == "USER_ALREADY_ACTIVE"
