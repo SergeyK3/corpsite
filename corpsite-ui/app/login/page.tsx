@@ -4,7 +4,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { apiAuthLogin, apiAuthMe } from "@/lib/api";
+import { apiAuthLogin, apiAuthMe, apiFetchJson } from "@/lib/api";
 import { isAuthed, logout, setSessionLogin } from "@/lib/auth";
 
 const LAST_LOGIN_KEY = "corpsite.lastLogin";
@@ -20,6 +20,11 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [showPwd, setShowPwd] = useState(false);
   const [forgotPassword, setForgotPassword] = useState(false);
+  const [recoveryCode, setRecoveryCode] = useState("");
+  const [recoveryPassword, setRecoveryPassword] = useState("");
+  const [recoveryConfirmation, setRecoveryConfirmation] = useState("");
+  const [recoveryMessage, setRecoveryMessage] = useState("");
+  const [recoveryBusy, setRecoveryBusy] = useState(false);
 
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -121,6 +126,24 @@ export default function LoginPage() {
     }
   }
 
+  async function requestTelegramRecovery() {
+    setRecoveryBusy(true); setRecoveryMessage("");
+    try {
+      const result = await apiFetchJson<{ message: string }>("/auth/password-recovery/telegram/request", { method: "POST", body: JSON.stringify({ login: normalizeLogin(login) }) });
+      setRecoveryMessage(result.message);
+    } catch { setRecoveryMessage("Если для этой учётной записи доступно восстановление, код отправлен в Telegram."); }
+    finally { setRecoveryBusy(false); }
+  }
+
+  async function completeTelegramRecovery(e: React.FormEvent) {
+    e.preventDefault(); setRecoveryBusy(true); setRecoveryMessage("");
+    try {
+      const result = await apiFetchJson<{ message: string }>("/auth/password-recovery/telegram/complete", { method: "POST", body: JSON.stringify({ login: normalizeLogin(login), code: recoveryCode, new_password: recoveryPassword, new_password_confirmation: recoveryConfirmation }) });
+      setRecoveryMessage(result.message); setRecoveryCode(""); setRecoveryPassword(""); setRecoveryConfirmation("");
+    } catch (err: any) { setRecoveryMessage(String(err?.details?.detail ?? "Не удалось изменить пароль.")); }
+    finally { setRecoveryBusy(false); }
+  }
+
   return (
     <div className="min-h-[calc(100vh-0px)] flex items-center justify-center px-4">
       <div className="w-full max-w-md rounded-2xl border bg-white dark:bg-zinc-950 p-6 shadow-sm">
@@ -196,7 +219,17 @@ export default function LoginPage() {
           <button type="button" className="text-blue-700 underline dark:text-blue-300" onClick={() => setForgotPassword((value) => !value)}>
             Забыли пароль?
           </button>
-          {forgotPassword ? <p className="mt-2 rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200">Обратитесь к системному администратору и сообщите свой логин.</p> : null}
+          {forgotPassword ? <div className="mt-2 space-y-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200" data-testid="telegram-password-recovery">
+            <p>Если Telegram подтверждён, запросите одноразовый код. Иначе обратитесь к системному администратору и сообщите свой логин.</p>
+            <button type="button" className="rounded border px-3 py-1" disabled={recoveryBusy || !normalizeLogin(login)} onClick={() => void requestTelegramRecovery()}>Отправить код в Telegram</button>
+            {recoveryMessage ? <p role="status">{recoveryMessage}</p> : null}
+            <form className="space-y-2" onSubmit={completeTelegramRecovery}>
+              <input aria-label="Код из Telegram" value={recoveryCode} onChange={(e) => setRecoveryCode(e.target.value)} inputMode="numeric" maxLength={8} required />
+              <input aria-label="Новый пароль для восстановления" type="password" value={recoveryPassword} onChange={(e) => setRecoveryPassword(e.target.value)} minLength={8} required />
+              <input aria-label="Подтвердите новый пароль" type="password" value={recoveryConfirmation} onChange={(e) => setRecoveryConfirmation(e.target.value)} minLength={8} required />
+              <button className="rounded border px-3 py-1" disabled={recoveryBusy}>Установить новый пароль</button>
+            </form>
+          </div> : null}
         </div>
       </div>
     </div>

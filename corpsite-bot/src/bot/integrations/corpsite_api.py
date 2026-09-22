@@ -421,3 +421,12 @@ class CorpsiteAPI:
             user_id=user_id,
             json_body=body,
         )
+
+    async def claim_password_recovery(self, *, user_id: int) -> APIResponse:
+        return await self._request("GET", "/internal/bot/password-recovery/pending", user_id=user_id)
+
+    async def record_password_recovery_delivery(self, *, user_id: int, request_id: str, code: str) -> APIResponse:
+        return await self._request(
+            "POST", f"/internal/bot/password-recovery/{request_id}/delivered",
+            user_id=user_id, json_body={"code": code},
+        )

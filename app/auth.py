@@ -17,6 +17,7 @@ from sqlalchemy import text
 from app.db.engine import engine
 from app.security.directory_scope import is_privileged, is_system_admin
 from app.services.security_audit_service import write_security_event
+from app.services.telegram_password_recovery_service import complete_recovery, request_recovery
 from app.security.auth_policy import (
     fetch_user_auth_policy_row,
     fetch_user_auth_policy_row_by_login,
@@ -445,6 +446,17 @@ class PasswordChangeRequest(BaseModel):
     new_password_confirmation: str
 
 
+class TelegramRecoveryRequest(BaseModel):
+    login: str = Field(..., min_length=1, max_length=200)
+
+
+class TelegramRecoveryCompleteRequest(BaseModel):
+    login: str = Field(..., min_length=1, max_length=200)
+    code: str = Field(..., min_length=1, max_length=32)
+    new_password: str = Field(..., min_length=1, max_length=200)
+    new_password_confirmation: str = Field(..., min_length=1, max_length=200)
+
+
 @router.post("/login", response_model=TokenResponse)
 def login(payload: LoginRequest, request: Request) -> TokenResponse:
     ip_address = request.client.host if request.client else None
@@ -613,6 +625,29 @@ def password_change(
         )
 
     return {"message": "Пароль изменён. Выполните вход повторно."}
+
+
+@router.post("/password-recovery/telegram/request")
+def telegram_password_recovery_request(payload: TelegramRecoveryRequest) -> Dict[str, str]:
+    """Always return the same response to prevent login/Telegram enumeration."""
+    return request_recovery(payload.login)
+
+
+@router.post("/password-recovery/telegram/complete")
+def telegram_password_recovery_complete(payload: TelegramRecoveryCompleteRequest) -> Dict[str, str]:
+    try:
+        return complete_recovery(
+            login=payload.login, code=payload.code,
+            new_password=payload.new_password,
+            confirmation=payload.new_password_confirmation,
+        )
+    except ValueError as exc:
+        messages = {
+            "PASSWORD_POLICY_FAILED": "Новый пароль должен содержать от 8 до 200 символов.",
+            "PASSWORD_CONFIRMATION_MISMATCH": "Подтверждение нового пароля не совпадает.",
+            "CODE_EXPIRED": "Код истёк. Запросите новый.",
+        }
+        raise HTTPException(status_code=400, detail=messages.get(str(exc), "Код недействителен.")) from exc
 
 
 @router.get("/me")

@@ -6,7 +6,7 @@ import os
 from typing import Any, Dict, List, Literal, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Path, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import text
 
 from app.db.engine import engine
@@ -32,6 +32,7 @@ from app.services.tasks_service import (
 )
 from app.task_events import list_my_task_events
 from app.tg_bind import resolve_user_id_by_telegram_id, unbind_user_telegram
+from app.services.telegram_password_recovery_service import claim_pending_delivery, record_bot_delivery
 
 router = APIRouter(prefix="/internal/bot", tags=["internal-bot"])
 
@@ -46,6 +47,27 @@ class TgUnbindResponse(BaseModel):
     applied: bool
     telegram_bound: bool
     employee_id: Optional[int] = None
+
+
+class PasswordRecoveryDeliveryIn(BaseModel):
+    code: str = Field(min_length=8, max_length=8)
+
+
+@router.get("/password-recovery/pending")
+def bot_claim_password_recovery(
+    _internal: None = Depends(require_valid_internal_api_token),
+) -> Dict[str, Any]:
+    item = claim_pending_delivery()
+    return {"item": item}
+
+
+@router.post("/password-recovery/{request_id}/delivered")
+def bot_record_password_recovery_delivery(
+    request_id: str,
+    payload: PasswordRecoveryDeliveryIn,
+    _internal: None = Depends(require_valid_internal_api_token),
+) -> Dict[str, bool]:
+    return {"accepted": record_bot_delivery(request_id, payload.code)}
 
 
 @router.post("/tg/resolve", response_model=TgResolveResponse)

@@ -26,6 +26,7 @@ from .handlers.unbind import cmd_unbind
 from .handlers.events import cmd_events
 
 from .events_poller import events_polling_loop
+from .password_recovery_poller import password_recovery_polling_loop
 from .storage.cursor_store import CursorStore
 
 
@@ -199,21 +200,28 @@ async def _post_init(application: Application) -> None:
         name="events-poller",
     )
     application.bot_data["events_poll_task"] = task
+    application.bot_data["password_recovery_task"] = asyncio.create_task(
+        password_recovery_polling_loop(
+            application=application, backend=backend,
+            service_user_id=int(os.getenv("EVENTS_INTERNAL_API_USER_ID", "1")),
+            interval_s=POLL_INTERVAL_S,
+        ), name="password-recovery-poller",
+    )
     log.info("Events polling started.")
 
 
 async def _post_stop(application: Application) -> None:
-    t: Any = application.bot_data.get("events_poll_task")
-    if t is None:
-        return
-
-    try:
-        t.cancel()
-        await t
-    except asyncio.CancelledError:
-        pass
-    except Exception:
-        log.exception("Failed while stopping events poller task")
+    for key in ("events_poll_task", "password_recovery_task"):
+        t: Any = application.bot_data.get(key)
+        if t is None:
+            continue
+        try:
+            t.cancel()
+            await t
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            log.exception("Failed while stopping %s", key)
 
 
 async def _post_shutdown(application: Application) -> None:
