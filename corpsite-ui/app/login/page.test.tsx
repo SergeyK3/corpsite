@@ -15,11 +15,16 @@ describe("LoginPage Telegram recovery", () => {
     render(<LoginPage />);
     fireEvent.change(screen.getByLabelText("Логин"), { target: { value: "staff.login" } });
     fireEvent.click(screen.getByRole("button", { name: "Забыли пароль?" }));
+    expect(screen.queryByLabelText("Код из Telegram")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Отправить код в Telegram" }));
     await waitFor(() => expect(apiFetchJson).toHaveBeenCalledWith("/auth/password-recovery/telegram/request", expect.anything()));
+    expect(screen.getByLabelText("Код из Telegram")).toBeVisible();
+    expect(screen.getByLabelText("Новый пароль")).toBeVisible();
+    expect(screen.getByLabelText("Подтверждение нового пароля")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Установить новый пароль" })).toBeVisible();
     fireEvent.change(screen.getByLabelText("Код из Telegram"), { target: { value: "12345678" } });
-    fireEvent.change(screen.getByLabelText("Новый пароль для восстановления"), { target: { value: "new-password" } });
-    fireEvent.change(screen.getByLabelText("Подтвердите новый пароль"), { target: { value: "new-password" } });
+    fireEvent.change(screen.getByLabelText("Новый пароль"), { target: { value: "new-password" } });
+    fireEvent.change(screen.getByLabelText("Подтверждение нового пароля"), { target: { value: "new-password" } });
     fireEvent.click(screen.getByRole("button", { name: "Установить новый пароль" }));
     await waitFor(() => expect(apiFetchJson).toHaveBeenLastCalledWith("/auth/password-recovery/telegram/complete", expect.anything()));
   });

@@ -20,6 +20,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [showPwd, setShowPwd] = useState(false);
   const [forgotPassword, setForgotPassword] = useState(false);
+  const [recoveryRequested, setRecoveryRequested] = useState(false);
   const [recoveryCode, setRecoveryCode] = useState("");
   const [recoveryPassword, setRecoveryPassword] = useState("");
   const [recoveryConfirmation, setRecoveryConfirmation] = useState("");
@@ -127,7 +128,7 @@ export default function LoginPage() {
   }
 
   async function requestTelegramRecovery() {
-    setRecoveryBusy(true); setRecoveryMessage("");
+    setRecoveryBusy(true); setRecoveryMessage(""); setRecoveryRequested(true);
     try {
       const result = await apiFetchJson<{ message: string }>("/auth/password-recovery/telegram/request", { method: "POST", body: JSON.stringify({ login: normalizeLogin(login) }) });
       setRecoveryMessage(result.message);
@@ -221,14 +222,23 @@ export default function LoginPage() {
           </button>
           {forgotPassword ? <div className="mt-2 space-y-3 rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-zinc-700 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-200" data-testid="telegram-password-recovery">
             <p>Если Telegram подтверждён, запросите одноразовый код. Иначе обратитесь к системному администратору и сообщите свой логин.</p>
-            <button type="button" className="rounded border px-3 py-1" disabled={recoveryBusy || !normalizeLogin(login)} onClick={() => void requestTelegramRecovery()}>Отправить код в Telegram</button>
+            <button type="button" className="rounded-xl border border-zinc-300 bg-white px-3 py-2 text-zinc-900 hover:bg-zinc-100 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:hover:bg-zinc-800" disabled={recoveryBusy || !normalizeLogin(login)} onClick={() => void requestTelegramRecovery()}>Отправить код в Telegram</button>
             {recoveryMessage ? <p role="status">{recoveryMessage}</p> : null}
-            <form className="space-y-2" onSubmit={completeTelegramRecovery}>
-              <input aria-label="Код из Telegram" value={recoveryCode} onChange={(e) => setRecoveryCode(e.target.value)} inputMode="numeric" maxLength={8} required />
-              <input aria-label="Новый пароль для восстановления" type="password" value={recoveryPassword} onChange={(e) => setRecoveryPassword(e.target.value)} minLength={8} required />
-              <input aria-label="Подтвердите новый пароль" type="password" value={recoveryConfirmation} onChange={(e) => setRecoveryConfirmation(e.target.value)} minLength={8} required />
-              <button className="rounded border px-3 py-1" disabled={recoveryBusy}>Установить новый пароль</button>
-            </form>
+            {recoveryRequested ? <form className="space-y-3" onSubmit={completeTelegramRecovery}>
+              <div className="space-y-1">
+                <label htmlFor="telegram-recovery-code" className="text-sm font-medium">Код из Telegram</label>
+                <input id="telegram-recovery-code" aria-label="Код из Telegram" value={recoveryCode} onChange={(e) => setRecoveryCode(e.target.value)} inputMode="numeric" maxLength={8} placeholder="Введите код" required className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-zinc-950 placeholder:text-zinc-500 outline-none focus:ring-2 focus:ring-black/10 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:placeholder:text-zinc-400" />
+              </div>
+              <div className="space-y-1">
+                <label htmlFor="telegram-recovery-password" className="text-sm font-medium">Новый пароль</label>
+                <input id="telegram-recovery-password" aria-label="Новый пароль" type="password" value={recoveryPassword} onChange={(e) => setRecoveryPassword(e.target.value)} minLength={8} placeholder="Введите новый пароль" required className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-zinc-950 placeholder:text-zinc-500 outline-none focus:ring-2 focus:ring-black/10 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:placeholder:text-zinc-400" />
+              </div>
+              <div className="space-y-1">
+                <label htmlFor="telegram-recovery-confirmation" className="text-sm font-medium">Подтверждение нового пароля</label>
+                <input id="telegram-recovery-confirmation" aria-label="Подтверждение нового пароля" type="password" value={recoveryConfirmation} onChange={(e) => setRecoveryConfirmation(e.target.value)} minLength={8} placeholder="Повторите новый пароль" required className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-zinc-950 placeholder:text-zinc-500 outline-none focus:ring-2 focus:ring-black/10 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:placeholder:text-zinc-400" />
+              </div>
+              <button className="w-full rounded-xl border border-zinc-300 bg-white px-3 py-2 text-zinc-900 hover:bg-zinc-100 disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-100 dark:hover:bg-zinc-800" disabled={recoveryBusy}>Установить новый пароль</button>
+            </form> : null}
           </div> : null}
         </div>
       </div>
