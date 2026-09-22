@@ -28,6 +28,7 @@ describe("LoginPage Telegram recovery", () => {
       body: { login: "staff.login" },
       noAuth: true,
     }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Запрос принят. Если Telegram привязан к этой учётной записи, код придёт в Telegram. Проверьте телефон.");
     expect(screen.getByLabelText("Код из Telegram")).toBeVisible();
     expect(screen.getByLabelText("Новый пароль")).toBeVisible();
     expect(screen.getByLabelText("Подтверждение нового пароля")).toBeVisible();

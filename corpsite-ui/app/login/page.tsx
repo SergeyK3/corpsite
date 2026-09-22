@@ -132,8 +132,8 @@ export default function LoginPage() {
   async function requestTelegramRecovery() {
     setRecoveryBusy(true); setRecoveryMessage(""); setRecoveryRequested(true);
     try {
-      const result = await apiFetchJson<{ message: string }>("/auth/password-recovery/telegram/request", { method: "POST", body: { login: normalizeLogin(login) }, noAuth: true });
-      setRecoveryMessage(result.message);
+      await apiFetchJson<{ message: string }>("/auth/password-recovery/telegram/request", { method: "POST", body: { login: normalizeLogin(login) }, noAuth: true });
+      setRecoveryMessage("Запрос принят. Если Telegram привязан к этой учётной записи, код придёт в Telegram. Проверьте телефон.");
     } catch { setRecoveryMessage("Не удалось связаться с сервером. Повторите попытку позже"); }
     finally { setRecoveryBusy(false); }
   }
