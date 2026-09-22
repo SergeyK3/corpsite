@@ -32,6 +32,17 @@ describe("LoginPage Telegram recovery", () => {
     expect(screen.getByLabelText("Новый пароль")).toBeVisible();
     expect(screen.getByLabelText("Подтверждение нового пароля")).toBeVisible();
     expect(screen.getByRole("button", { name: "Установить новый пароль" })).toBeVisible();
+    expect(screen.getByLabelText("Код из Telegram")).toHaveAttribute("name", "telegram-recovery-code");
+    expect(screen.getByLabelText("Код из Telegram")).toHaveAttribute("autocomplete", "one-time-code");
+    expect(screen.getByLabelText("Новый пароль")).toHaveAttribute("name", "telegram-recovery-password");
+    expect(screen.getByLabelText("Новый пароль")).toHaveAttribute("autocomplete", "new-password");
+    expect(screen.getByLabelText("Подтверждение нового пароля")).toHaveAttribute("name", "telegram-recovery-confirmation");
+    expect(screen.getByLabelText("Подтверждение нового пароля")).toHaveAttribute("autocomplete", "new-password");
+    fireEvent.click(screen.getByRole("button", { name: "Показать новый пароль" }));
+    expect(screen.getByLabelText("Новый пароль")).toHaveAttribute("type", "text");
+    expect(screen.getByLabelText("Подтверждение нового пароля")).toHaveAttribute("type", "password");
+    fireEvent.click(screen.getByRole("button", { name: "Показать подтверждение нового пароля" }));
+    expect(screen.getByLabelText("Подтверждение нового пароля")).toHaveAttribute("type", "text");
     fireEvent.change(screen.getByLabelText("Код из Telegram"), { target: { value: "12345678" } });
     fireEvent.change(screen.getByLabelText("Новый пароль"), { target: { value: "new-password" } });
     fireEvent.change(screen.getByLabelText("Подтверждение нового пароля"), { target: { value: "new-password" } });
