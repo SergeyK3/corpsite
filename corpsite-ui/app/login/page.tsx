@@ -130,16 +130,16 @@ export default function LoginPage() {
   async function requestTelegramRecovery() {
     setRecoveryBusy(true); setRecoveryMessage(""); setRecoveryRequested(true);
     try {
-      const result = await apiFetchJson<{ message: string }>("/auth/password-recovery/telegram/request", { method: "POST", body: JSON.stringify({ login: normalizeLogin(login) }) });
+      const result = await apiFetchJson<{ message: string }>("/auth/password-recovery/telegram/request", { method: "POST", body: { login: normalizeLogin(login) }, noAuth: true });
       setRecoveryMessage(result.message);
-    } catch { setRecoveryMessage("Если для этой учётной записи доступно восстановление, код отправлен в Telegram."); }
+    } catch { setRecoveryMessage("Не удалось связаться с сервером. Повторите попытку позже"); }
     finally { setRecoveryBusy(false); }
   }
 
   async function completeTelegramRecovery(e: React.FormEvent) {
     e.preventDefault(); setRecoveryBusy(true); setRecoveryMessage("");
     try {
-      const result = await apiFetchJson<{ message: string }>("/auth/password-recovery/telegram/complete", { method: "POST", body: JSON.stringify({ login: normalizeLogin(login), code: recoveryCode, new_password: recoveryPassword, new_password_confirmation: recoveryConfirmation }) });
+      const result = await apiFetchJson<{ message: string }>("/auth/password-recovery/telegram/complete", { method: "POST", body: { login: normalizeLogin(login), code: recoveryCode, new_password: recoveryPassword, new_password_confirmation: recoveryConfirmation }, noAuth: true });
       setRecoveryMessage(result.message); setRecoveryCode(""); setRecoveryPassword(""); setRecoveryConfirmation("");
     } catch (err: any) { setRecoveryMessage(String(err?.details?.detail ?? "Не удалось изменить пароль.")); }
     finally { setRecoveryBusy(false); }
