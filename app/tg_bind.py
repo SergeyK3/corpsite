@@ -32,18 +32,20 @@ def _now_utc() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _normalize_code(code: str) -> str:
+    return str(code or "").strip().lower()
+
+
 def _hash_code(code: str) -> str:
-    return hashlib.sha256(code.encode("utf-8")).hexdigest()
+    return hashlib.sha256(_normalize_code(code).encode("utf-8")).hexdigest()
 
 
 def _gen_code() -> str:
     """
-    Human-readable code: 8 chars + dash + 4 chars.
-    Sufficient for MVP.
+    Human-readable, case-insensitive 8-character code for phone input.
     """
-    a = secrets.token_hex(4)  # 8 hex chars
-    b = secrets.token_hex(2)  # 4 hex chars
-    return f"{a}-{b}".upper()
+    alphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
+    return "".join(secrets.choice(alphabet) for _ in range(8))
 
 
 def _conflict_detail(
@@ -379,7 +381,7 @@ def consume_bind_code(
     """
     _require_bot_token(x_bot_token)
 
-    code_hash = _hash_code(payload.code.strip().upper())
+    code_hash = _hash_code(payload.code)
     now = _now_utc()
     with engine.begin() as conn:
         rec = conn.execute(

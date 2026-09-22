@@ -168,6 +168,39 @@ def test_tg_bind_code_regenerate_invalidates_previous_code(
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_tg_bind_code_accepts_lowercase_and_uppercase_input(
+    client: TestClient,
+    seed: Dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("app.tg_bind.BOT_BIND_TOKEN", "test-bot-bind-token")
+    monkeypatch.setattr("app.tg_bind._gen_code", lambda: "ab12cd34")
+
+    user_id = int(seed["executor_user_id"])
+    issued = client.post("/me/tg-bind-code", headers=auth_headers(user_id))
+    assert issued.status_code == 200, issued.text
+    code = str(issued.json()["code"])
+    assert code == "ab12cd34"
+    assert _hash_code(code.lower()) == _hash_code(code.upper())
+
+    consumed = client.post(
+        "/tg/bind/consume",
+        headers={"X-Bot-Bind-Token": "test-bot-bind-token"},
+        json={"code": f"  {code.upper()}  ", "tg_user_id": 9_000_000_003},
+    )
+    assert consumed.status_code == 200, consumed.text
+
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "UPDATE public.users SET telegram_id = NULL, telegram_username = NULL, "
+                "telegram_bound_at = NULL WHERE user_id = :user_id"
+            ),
+            {"user_id": user_id},
+        )
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
 def test_tg_bind_code_survives_new_db_session_and_is_consumed_once(
     client: TestClient,
     seed: Dict[str, Any],
