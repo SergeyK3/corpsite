@@ -213,12 +213,17 @@ class CorpsiteAPI:
         *,
         code: str,
         telegram_user_id: int,
+        telegram_username: Optional[str] = None,
     ) -> APIResponse:
         if not self._bot_bind_token:
             return APIResponse(status_code=0, json=None, text="BOT_BIND_TOKEN is not set in bot environment")
 
         headers: Dict[str, str] = {"X-Bot-Bind-Token": self._bot_bind_token}
-        body = {"code": str(code or "").strip(), "tg_user_id": int(telegram_user_id)}
+        body = {
+            "code": str(code or "").strip(),
+            "tg_user_id": int(telegram_user_id),
+            "telegram_username": (str(telegram_username).strip() if telegram_username else None),
+        }
         return await self._request_headers("POST", "/tg/bind/consume", headers=headers, json_body=body)
 
     async def list_tasks(

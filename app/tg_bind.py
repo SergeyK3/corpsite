@@ -4,9 +4,9 @@ from __future__ import annotations
 import hashlib
 import os
 import secrets
-from dataclasses import dataclass
+from contextlib import nullcontext
 from datetime import datetime, timedelta, timezone
-from typing import Dict, Optional, Any
+from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Header, HTTPException, status
 from pydantic import BaseModel, Field
@@ -44,18 +44,6 @@ def _gen_code() -> str:
     a = secrets.token_hex(4)  # 8 hex chars
     b = secrets.token_hex(2)  # 4 hex chars
     return f"{a}-{b}".upper()
-
-
-@dataclass
-class _BindCodeRecord:
-    user_id: int
-    expires_at: datetime
-    used_at: Optional[datetime] = None
-    used_by_tg_user_id: Optional[int] = None
-
-
-# in-memory store: code_hash -> record
-_CODES: Dict[str, _BindCodeRecord] = {}
 
 
 def _conflict_detail(
@@ -107,19 +95,6 @@ def _require_request_user_id(
     except HTTPException:
         raise_error(ErrorCode.TGBIND_FORBIDDEN_NOT_AUTH)
 
-
-
-def _invalidate_active_codes_for_user(user_id: int) -> None:
-    for code_hash, rec in list(_CODES.items()):
-        if rec.user_id == int(user_id) and rec.used_at is None:
-            _CODES.pop(code_hash, None)
-
-
-def _gc_expired_codes() -> None:
-    now = _now_utc()
-    dead = [h for h, rec in _CODES.items() if rec.expires_at <= now or rec.used_at is not None]
-    for h in dead:
-        _CODES.pop(h, None)
 
 
 # ---- DB helpers ----
@@ -227,9 +202,19 @@ def _get_telegram_id_by_user_id(user_id: int) -> Optional[int]:
         return None
 
 
-def _bind_user_to_telegram(*, user_id: int, tg_user_id: int) -> None:
+def _bind_user_to_telegram(
+    *,
+    user_id: int,
+    tg_user_id: int,
+    telegram_username: Optional[str] = None,
+    conn: Any | None = None,
+) -> None:
     """
-    Sets users.telegram_id = tg_user_id (TEXT) for user_id.
+    Sets users.telegram_id (TEXT), telegram_username and telegram_bound_at for user_id.
+
+    When ``conn`` is provided, the binding participates in the caller's
+    transaction.  This is used by bind-code consumption so the code cannot be
+    marked used unless the User binding is committed as well.
 
     Conflicts:
       - if tg_user_id already bound to another user_id -> 409
@@ -241,10 +226,10 @@ def _bind_user_to_telegram(*, user_id: int, tg_user_id: int) -> None:
     uid = int(user_id)
     tg_text = str(int(tg_user_id))  # ALWAYS TEXT
 
-    with engine.begin() as conn:
+    with (nullcontext(conn) if conn is not None else engine.begin()) as conn:
         # 1) Is this tg already used by another user?
         row = conn.execute(
-            text("SELECT user_id FROM users WHERE telegram_id = :tg LIMIT 1"),
+            text("SELECT user_id FROM users WHERE telegram_id = :tg LIMIT 1 FOR UPDATE"),
             {"tg": tg_text},
         ).fetchone()
         if row and int(row[0]) != uid:
@@ -262,7 +247,7 @@ def _bind_user_to_telegram(*, user_id: int, tg_user_id: int) -> None:
 
         # 2) Does user already have another telegram_id?
         row2 = conn.execute(
-            text("SELECT telegram_id FROM users WHERE user_id = :uid"),
+            text("SELECT telegram_id FROM users WHERE user_id = :uid FOR UPDATE"),
             {"uid": uid},
         ).fetchone()
         if not row2:
@@ -286,8 +271,11 @@ def _bind_user_to_telegram(*, user_id: int, tg_user_id: int) -> None:
         # 3) Set (if NULL/empty or already same)
         try:
             conn.execute(
-                text("UPDATE users SET telegram_id = :tg WHERE user_id = :uid"),
-                {"tg": tg_text, "uid": uid},
+                text(
+                    "UPDATE users SET telegram_id = :tg, telegram_username = :telegram_username, "
+                    "telegram_bound_at = now() WHERE user_id = :uid"
+                ),
+                {"tg": tg_text, "telegram_username": telegram_username, "uid": uid},
             )
         except IntegrityError:
             # In case unique constraint triggers unexpectedly
@@ -312,6 +300,7 @@ class TgBindCodeOut(BaseModel):
 class ConsumeBindCodeIn(BaseModel):
     code: str = Field(min_length=3, max_length=64)
     tg_user_id: int = Field(gt=0)
+    telegram_username: Optional[str] = Field(default=None, max_length=256)
 
 
 class ConsumeBindCodeOut(BaseModel):
@@ -334,21 +323,44 @@ def create_bind_code(
     issues a one-time code for current user identified by JWT
     or by X-User-Id only in development / compatibility mode.
     """
-    _gc_expired_codes()
-
     user_id = _require_request_user_id(
         authorization=authorization,
         x_user_id=x_user_id,
         x_internal_api_token=x_internal_api_token,
     )
 
-    _invalidate_active_codes_for_user(user_id)
-
     code = _gen_code()
     code_hash = _hash_code(code)
-
     expires_at = _now_utc() + timedelta(minutes=DEFAULT_TTL_MINUTES)
-    _CODES[code_hash] = _BindCodeRecord(user_id=user_id, expires_at=expires_at)
+
+    with engine.begin() as conn:
+        # Serialize issuance per User across backend processes.  Without this,
+        # two concurrent requests that both see no active row could leave two
+        # valid codes (or race on the partial unique index).
+        conn.execute(
+            text("SELECT pg_advisory_xact_lock(:user_id)"),
+            {"user_id": int(user_id)},
+        )
+        conn.execute(
+            text(
+                "UPDATE public.telegram_bind_codes "
+                "SET invalidated_at = now() "
+                "WHERE user_id = :user_id AND used_at IS NULL AND invalidated_at IS NULL"
+            ),
+            {"user_id": int(user_id)},
+        )
+        conn.execute(
+            text(
+                "INSERT INTO public.telegram_bind_codes "
+                "(user_id, code_hash, created_at, expires_at) "
+                "VALUES (:user_id, :code_hash, now(), :expires_at)"
+            ),
+            {
+                "user_id": int(user_id),
+                "code_hash": code_hash,
+                "expires_at": expires_at,
+            },
+        )
 
     return TgBindCodeOut(code=code, expires_at=expires_at)
 
@@ -367,32 +379,42 @@ def consume_bind_code(
     """
     _require_bot_token(x_bot_token)
 
-    _gc_expired_codes()
-
     code_hash = _hash_code(payload.code.strip().upper())
-    rec = _CODES.get(code_hash)
-
     now = _now_utc()
+    with engine.begin() as conn:
+        rec = conn.execute(
+            text(
+                "SELECT bind_code_id, user_id, expires_at, used_at, invalidated_at "
+                "FROM public.telegram_bind_codes WHERE code_hash = :code_hash FOR UPDATE"
+            ),
+            {"code_hash": code_hash},
+        ).mappings().one_or_none()
 
-    # Do not disclose details: same 409 for missing/expired/used.
-    if rec is None:
-        raise_error(ErrorCode.TGBIND_CONFLICT_CODE_INVALID)
+        # Do not disclose details: same 409 for missing, expired, invalidated or used.
+        if (
+            rec is None
+            or rec["used_at"] is not None
+            or rec["invalidated_at"] is not None
+            or rec["expires_at"] <= now
+        ):
+            raise_error(ErrorCode.TGBIND_CONFLICT_CODE_INVALID)
 
-    if rec.used_at is not None:
-        raise_error(ErrorCode.TGBIND_CONFLICT_CODE_INVALID)
+        username = (payload.telegram_username or "").strip() or None
+        _bind_user_to_telegram(
+            user_id=int(rec["user_id"]),
+            tg_user_id=int(payload.tg_user_id),
+            telegram_username=username,
+            conn=conn,
+        )
+        conn.execute(
+            text(
+                "UPDATE public.telegram_bind_codes SET used_at = :used_at "
+                "WHERE bind_code_id = :bind_code_id AND used_at IS NULL AND invalidated_at IS NULL"
+            ),
+            {"used_at": now, "bind_code_id": int(rec["bind_code_id"])},
+        )
 
-    if rec.expires_at <= now:
-        _CODES.pop(code_hash, None)
-        raise_error(ErrorCode.TGBIND_CONFLICT_CODE_INVALID)
-
-    # Persist binding in DB (atomic in helper transaction)
-    _bind_user_to_telegram(user_id=int(rec.user_id), tg_user_id=int(payload.tg_user_id))
-
-    # Mark code as used after successful DB write
-    rec.used_at = now
-    rec.used_by_tg_user_id = int(payload.tg_user_id)
-
-    return ConsumeBindCodeOut(user_id=int(rec.user_id))
+    return ConsumeBindCodeOut(user_id=int(rec["user_id"]))
 
 
 @router.post("/auth/self-bind", response_model=SelfBindOut)

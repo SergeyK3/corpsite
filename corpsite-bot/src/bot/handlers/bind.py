@@ -67,7 +67,11 @@ async def cmd_bind(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             return
 
         try:
-            r = await api.consume_bind_code(code=code, telegram_user_id=tg_user_id)
+            r = await api.consume_bind_code(
+                code=code,
+                telegram_user_id=tg_user_id,
+                telegram_username=tg_username,
+            )
         except Exception:
             log.exception("consume_bind_code failed")
             await msg.reply_text("Сервис временно недоступен. Попробуйте позже.")

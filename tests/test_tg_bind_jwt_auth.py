@@ -10,7 +10,7 @@ from sqlalchemy import text
 from app.auth import create_access_token
 from app.db.engine import engine
 from app.security.directory_scope import legacy_x_user_id_enabled, require_uid, user_id_from_authorization
-from app.tg_bind import _CODES
+from app.tg_bind import _hash_code
 from tests.conftest import auth_headers
 
 
@@ -57,9 +57,14 @@ def test_require_uid_legacy_x_user_id_blocked_when_disabled(monkeypatch: pytest.
 
 @pytest.fixture(autouse=True)
 def _clear_bind_codes() -> None:
-    _CODES.clear()
+    if not _db_available():
+        yield
+        return
+    with engine.begin() as conn:
+        conn.execute(text("DELETE FROM public.telegram_bind_codes"))
     yield
-    _CODES.clear()
+    with engine.begin() as conn:
+        conn.execute(text("DELETE FROM public.telegram_bind_codes"))
 
 
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
@@ -154,8 +159,84 @@ def test_tg_bind_code_regenerate_invalidates_previous_code(
 
     with engine.begin() as conn:
         conn.execute(
-            text("UPDATE public.users SET telegram_id = NULL WHERE user_id = :uid"),
+            text(
+                "UPDATE public.users SET telegram_id = NULL, telegram_username = NULL, "
+                "telegram_bound_at = NULL WHERE user_id = :uid"
+            ),
             {"uid": user_id},
+        )
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_tg_bind_code_survives_new_db_session_and_is_consumed_once(
+    client: TestClient,
+    seed: Dict[str, Any],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("app.tg_bind.BOT_BIND_TOKEN", "test-bot-bind-token")
+
+    user_id = int(seed["executor_user_id"])
+    issued = client.post("/me/tg-bind-code", headers=auth_headers(user_id))
+    assert issued.status_code == 200, issued.text
+    code = str(issued.json()["code"])
+
+    # This is a fresh DB session after the issuing endpoint committed and closed.
+    with engine.connect() as conn:
+        persisted = conn.execute(
+            text(
+                "SELECT user_id, code_hash, created_at, expires_at, used_at, invalidated_at "
+                "FROM public.telegram_bind_codes WHERE code_hash = :code_hash"
+            ),
+            {"code_hash": _hash_code(code)},
+        ).mappings().one()
+    assert int(persisted["user_id"]) == user_id
+    assert persisted["code_hash"] != code
+    assert persisted["created_at"] is not None
+    assert persisted["expires_at"] is not None
+    assert persisted["used_at"] is None
+    assert persisted["invalidated_at"] is None
+
+    consumed = client.post(
+        "/tg/bind/consume",
+        headers={"X-Bot-Bind-Token": "test-bot-bind-token"},
+        json={
+            "code": code,
+            "tg_user_id": 9_000_000_002,
+            "telegram_username": "bind_session_test",
+        },
+    )
+    assert consumed.status_code == 200, consumed.text
+    assert int(consumed.json()["user_id"]) == user_id
+
+    with engine.connect() as conn:
+        result = conn.execute(
+            text(
+                "SELECT u.telegram_id, u.telegram_username, u.telegram_bound_at, c.used_at "
+                "FROM public.users u JOIN public.telegram_bind_codes c ON c.user_id = u.user_id "
+                "WHERE c.code_hash = :code_hash"
+            ),
+            {"code_hash": _hash_code(code)},
+        ).mappings().one()
+    assert str(result["telegram_id"]) == "9000000002"
+    assert result["telegram_username"] == "bind_session_test"
+    assert result["telegram_bound_at"] is not None
+    assert result["used_at"] is not None
+
+    replay = client.post(
+        "/tg/bind/consume",
+        headers={"X-Bot-Bind-Token": "test-bot-bind-token"},
+        json={"code": code, "tg_user_id": 9_000_000_002},
+    )
+    assert replay.status_code == 409, replay.text
+    assert _response_error_code(replay.json()) == "TGBIND_CONFLICT_CODE_INVALID"
+
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "UPDATE public.users SET telegram_id = NULL, telegram_username = NULL, "
+                "telegram_bound_at = NULL WHERE user_id = :user_id"
+            ),
+            {"user_id": user_id},
         )
 
 
