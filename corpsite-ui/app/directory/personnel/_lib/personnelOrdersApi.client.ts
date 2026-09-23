@@ -48,6 +48,7 @@ export type PersonnelOrderListItem = {
   signed_by_position?: string | null;
   executor_name?: string | null;
   basis_summary?: string | null;
+  storage_json?: Record<string, unknown> | null;
   comment?: string | null;
   void_reason?: string | null;
   voided_at?: string | null;
