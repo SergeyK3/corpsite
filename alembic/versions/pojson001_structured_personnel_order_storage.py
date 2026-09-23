@@ -7,7 +7,7 @@ from alembic import op
 
 
 revision = "pojson001"
-down_revision = ("dxe002vacation01", "hdc001checklist")
+down_revision = "hdc001checklist"
 branch_labels = None
 depends_on = None
 
