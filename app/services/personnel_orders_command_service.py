@@ -346,14 +346,19 @@ def create_personnel_order_draft(
     signed_by_position: Optional[str] = None,
     executor_name: Optional[str] = None,
     basis_summary: Optional[str] = None,
+    storage_json: Optional[Dict[str, Any]] = None,
     comment: Optional[str] = None,
 ) -> Dict[str, Any]:
     _require_available()
 
-    # Paper First: registration number/date may be filled later from the paper journal.
-    normalized_number = str(order_number or "").strip() or None
+    normalized_number = str(order_number) if order_number is not None else None
+    if normalized_number is None or not normalized_number.strip():
+        raise PersonnelOrderValidationError("order_number is required to save a personnel order.")
+    if order_date is None:
+        raise PersonnelOrderValidationError("order_date is required to save a personnel order.")
     normalized_type = _normalize_header_type(order_type_code)
     normalized_source_mode = _normalize_source_mode(source_mode)
+    storage_json_value = json.dumps(storage_json or {})
 
     try:
         with engine.begin() as conn:
@@ -387,6 +392,7 @@ def create_personnel_order_draft(
                         signed_by_position,
                         executor_name,
                         basis_summary,
+                        storage_json,
                         comment,
                         created_by
                     )
@@ -402,6 +408,7 @@ def create_personnel_order_draft(
                         :signed_by_position,
                         :executor_name,
                         :basis_summary,
+                        CAST(:storage_json AS jsonb),
                         :comment,
                         :created_by
                     )
@@ -420,6 +427,7 @@ def create_personnel_order_draft(
                     "signed_by_position": signed_by_position,
                     "executor_name": executor_name,
                     "basis_summary": basis_summary,
+                    "storage_json": storage_json_value,
                     "comment": comment,
                     "created_by": int(created_by),
                 },
@@ -442,6 +450,7 @@ def create_personnel_order_draft_tx(
     order_number: str,
     order_date: date,
     order_type_code: str,
+    storage_json: Optional[Dict[str, Any]] = None,
     comment: Optional[str] = None,
 ) -> int:
     """Create a DRAFT order in the caller's transaction.
@@ -450,7 +459,11 @@ def create_personnel_order_draft_tx(
     the same validation, defaults and evidence scope as the public draft
     command, but deliberately does not open its own transaction.
     """
-    normalized_number = str(order_number or "").strip() or None
+    normalized_number = str(order_number) if order_number is not None else None
+    if normalized_number is None or not normalized_number.strip():
+        raise PersonnelOrderValidationError("order_number is required to save a personnel order.")
+    if order_date is None:
+        raise PersonnelOrderValidationError("order_date is required to save a personnel order.")
     normalized_type = _normalize_header_type(order_type_code)
     (
         signed_by_employee_id,
@@ -464,11 +477,11 @@ def create_personnel_order_draft_tx(
             INSERT INTO public.personnel_orders (
                 order_number, order_date, order_type_code, status, source_mode,
                 signed_by_employee_id, signed_by_name, signed_by_position,
-                comment, created_by
+                storage_json, comment, created_by
             ) VALUES (
                 :order_number, :order_date, :order_type_code, :status, :source_mode,
                 :signed_by_employee_id, :signed_by_name, :signed_by_position,
-                :comment, :created_by
+                CAST(:storage_json AS jsonb), :comment, :created_by
             ) RETURNING order_id
             """
         ),
@@ -481,6 +494,7 @@ def create_personnel_order_draft_tx(
             "signed_by_employee_id": signed_by_employee_id,
             "signed_by_name": signed_by_name,
             "signed_by_position": signed_by_position,
+            "storage_json": json.dumps(storage_json or {}),
             "comment": comment,
             "created_by": int(created_by),
         },
@@ -572,8 +586,8 @@ def update_personnel_order_draft(
 
     updates: Dict[str, Any] = {}
     if order_number is not None:
-        normalized_number = str(order_number).strip()
-        if not normalized_number:
+        normalized_number = str(order_number)
+        if not normalized_number.strip():
             raise PersonnelOrderValidationError("order_number cannot be empty.")
         updates["order_number"] = normalized_number
     if order_date is not None:

@@ -249,7 +249,7 @@ def _serialize_order_header(
     include_archive_summary: bool = False,
 ) -> Dict[str, Any]:
     raw_number = row.get("order_number")
-    order_number = str(raw_number).strip() if raw_number is not None and str(raw_number).strip() else None
+    order_number = str(raw_number) if raw_number is not None and str(raw_number).strip() else None
     archived_at = row.get("archived_at")
     is_archived = archived_at is not None
     payload = {
@@ -268,6 +268,7 @@ def _serialize_order_header(
         "signed_by_position": row.get("signed_by_position"),
         "executor_name": row.get("executor_name"),
         "basis_summary": row.get("basis_summary"),
+        "storage_json": _parse_payload(row.get("storage_json")),
         "comment": row.get("comment"),
         "void_reason": row.get("void_reason"),
         "voided_at": _iso_datetime(row.get("voided_at")),
@@ -460,6 +461,7 @@ def list_personnel_orders(
             po.signed_by_position,
             po.executor_name,
             po.basis_summary,
+            po.storage_json,
             po.comment,
             po.void_reason,
             po.voided_at,
@@ -533,6 +535,7 @@ def get_personnel_order(order_id: int) -> Dict[str, Any]:
                     po.signed_by_position,
                     po.executor_name,
                     po.basis_summary,
+                    po.storage_json,
                     po.comment,
                     po.void_reason,
                     po.voided_at,

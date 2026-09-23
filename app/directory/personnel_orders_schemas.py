@@ -21,6 +21,7 @@ class PersonnelOrderHeaderOut(BaseModel):
     signed_by_position: Optional[str] = None
     executor_name: Optional[str] = None
     basis_summary: Optional[str] = None
+    storage_json: Dict[str, Any] = Field(default_factory=dict)
     comment: Optional[str] = None
     void_reason: Optional[str] = None
     voided_at: Optional[str] = None
@@ -151,8 +152,8 @@ class PersonnelOrderSignatoryDefaultOut(BaseModel):
 
 
 class PersonnelOrderCreateIn(BaseModel):
-    order_number: Optional[str] = Field(default=None, min_length=1, max_length=200)
-    order_date: Optional[date] = None
+    order_number: str = Field(..., min_length=1, max_length=200)
+    order_date: date
     order_type_code: str = Field(..., min_length=1, max_length=80)
     source_mode: str = Field(default="DIGITAL", max_length=20)
     legal_basis_article: Optional[str] = Field(default=None, max_length=500)
@@ -161,6 +162,7 @@ class PersonnelOrderCreateIn(BaseModel):
     signed_by_position: Optional[str] = Field(default=None, max_length=200)
     executor_name: Optional[str] = Field(default=None, max_length=200)
     basis_summary: Optional[str] = Field(default=None, max_length=2000)
+    storage_json: Dict[str, Any] = Field(default_factory=dict)
     comment: Optional[str] = Field(default=None, max_length=2000)
 
 

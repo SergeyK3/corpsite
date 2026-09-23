@@ -184,6 +184,11 @@ class PersonnelOrder(Base):
     signed_by_position: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     executor_name: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     basis_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    storage_json: Mapped[dict[str, Any]] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default=text("'{}'::jsonb"),
+    )
     comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     void_reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     voided_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)

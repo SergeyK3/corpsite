@@ -224,6 +224,7 @@ def create_personnel_order_route(
             signed_by_position=payload.signed_by_position,
             executor_name=payload.executor_name,
             basis_summary=payload.basis_summary,
+            storage_json=payload.storage_json,
             comment=payload.comment,
         )
     except PersonnelOrderArchivedError as exc:
