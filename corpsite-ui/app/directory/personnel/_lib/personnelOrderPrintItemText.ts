@@ -6,6 +6,7 @@ import {
 } from "./personnelOrderPrintFormat";
 import type { LocalizedText } from "./personnelOrderPrintLocalized";
 import { resolveLocalizedText } from "./personnelOrderPrintLocalized";
+import { russianEmployeeForOrder, russianOrderAssignment } from "./personnelOrderRussianWording";
 
 export type PersonnelOrderPrintItemContext = {
   itemNumber: number;
@@ -39,7 +40,10 @@ function renderHire(ctx: PersonnelOrderPrintItemContext, lang: "kk" | "ru"): str
   if (lang === "kk") {
     return `${fio} «${org}» бөлімшесіне «${position}» лауазымына ${rateValue} мөлшерлемесінде ${date} бастап жұмысқа қабылдансын.`;
   }
-  return `Принять на работу ${fio} в подразделение «${org}» на должность «${position}» со ставкой ${rateValue} с ${date}.`;
+  const employee = russianEmployeeForOrder(fio);
+  return employee
+    ? `Принять сотрудника ${employee} с ${date} на должность ${russianOrderAssignment(position, org)} с оплатой ${rateValue} ставки.`
+    : `Принять на работу ${fio} в подразделение «${org}» на должность «${position}» со ставкой ${rateValue} с ${date}.`;
 }
 
 function renderTransfer(ctx: PersonnelOrderPrintItemContext, lang: "kk" | "ru"): string {
@@ -55,6 +59,11 @@ function renderTransfer(ctx: PersonnelOrderPrintItemContext, lang: "kk" | "ru"):
     const ratePart = rateValue ? `, ${rateValue} мөлшерлемесінде` : "";
     return `${fio} «${org}» бөлімшесіне «${position}» лауазымына${ratePart} ${date} бастап ауыстырылсын.`;
   }
+  const employee = russianEmployeeForOrder(fio);
+  if (employee) {
+    const ratePart = rateValue ? ` с оплатой ${rateValue} ставки` : "";
+    return `Перевести сотрудника ${employee} с ${date} на должность ${russianOrderAssignment(position, org)}${ratePart}.`;
+  }
   const ratePart = rateValue ? ` со ставкой ${rateValue}` : "";
   return `Перевести ${fio} в подразделение «${org}» на должность «${position}»${ratePart} с ${date}.`;
 }
@@ -68,7 +77,14 @@ function renderTermination(ctx: PersonnelOrderPrintItemContext, lang: "kk" | "ru
     return `${fio} ${date} бастап жұмыстан босатылсын.${reasonPart}`;
   }
   const reasonPart = reason ? ` Основание: ${reason}.` : "";
-  return `Уволить ${fio} с ${date}.${reasonPart}`;
+  const unusedLeaveDays = ctx.payload.unused_leave_days;
+  const confirmedDays = typeof unusedLeaveDays === "number"
+    ? String(unusedLeaveDays)
+    : optionalReason(typeof unusedLeaveDays === "string" ? unusedLeaveDays : null);
+  const accountingInstruction = confirmedDays
+    ? ` Бухгалтерии произвести расчёт за ${confirmedDays} календарных дней неиспользованного отпуска.`
+    : " Бухгалтерии произвести расчёт за неиспользованные дни отпуска.";
+  return `Уволить ${fio} с ${date}.${reasonPart}${accountingInstruction}`;
 }
 
 function optionalReason(value: string | null | undefined): string | null {
@@ -87,6 +103,13 @@ function renderConcurrentStart(ctx: PersonnelOrderPrintItemContext, lang: "kk" |
   if (lang === "kk") {
     const totalPart = total ? ` Жалпы мөлшерлеме: ${total}.` : "";
     return `${fio} үшін қоса атқару ${concurrentValue} мөлшерлемесінде ${date} бастап белгіленсін.${totalPart}`;
+  }
+  const employee = russianEmployeeForOrder(fio);
+  const position = resolveLocalizedText(ctx.toPositionName || ctx.positionName, "ru");
+  const unit = resolveLocalizedText(ctx.toOrgUnitName || ctx.orgUnitName, "ru");
+  const assignment = russianOrderAssignment(position, unit);
+  if (employee) {
+    return `Разрешить сотруднику ${employee} с ${date} совмещение обязанностей по должности ${assignment} с оплатой ${concurrentValue} ставки.`;
   }
   const totalPart = total ? ` Итоговая ставка: ${total}.` : "";
   return `Установить ${fio} совмещение в размере ${concurrentValue} ставки с ${date}.${totalPart}`;

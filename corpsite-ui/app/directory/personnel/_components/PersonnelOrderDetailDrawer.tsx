@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 
 import {
   formatPersonnelOrderDate,
@@ -20,6 +21,10 @@ import {
   resolvePersonnelOrderSignatoryDisplay,
   type PersonnelOrderRequisitesSnapshot,
 } from "../_lib/personnelOrderDocumentRequisites";
+import {
+  normalizePersonnelOrderSignatoryRole,
+  personnelOrderSignatoryRoleLabel,
+} from "../_lib/personnelOrderSignatoryRole";
 import PersonnelOrderAppliedBadge from "./PersonnelOrderAppliedBadge";
 import PersonnelOrderArchivedBadge from "./PersonnelOrderArchivedBadge";
 import PersonnelOrderEditorialTextEditor from "./PersonnelOrderEditorialTextEditor";
@@ -123,6 +128,14 @@ export default function PersonnelOrderDetailDrawer({
     React.useState<PersonnelOrderRequisitesSnapshot | null>(null);
   const [activeTab, setActiveTab] = React.useState<"document" | "data">("document");
   const [documentLanguage, setDocumentLanguage] = React.useState<PersonnelOrderDocumentLanguage>("kk");
+  const [printLanguage, setPrintLanguage] = React.useState<PersonnelOrderDocumentLanguage | null>(null);
+
+  React.useEffect(() => {
+    if (!printLanguage) return;
+    const clearPrintRoot = () => setPrintLanguage(null);
+    window.addEventListener("afterprint", clearPrintRoot, { once: true });
+    return () => window.removeEventListener("afterprint", clearPrintRoot);
+  }, [printLanguage]);
 
   React.useEffect(() => {
     if (!open) return;
@@ -203,6 +216,11 @@ export default function PersonnelOrderDetailDrawer({
     ? order.storage_json.basis_documents
         .filter((basis): basis is Record<string, unknown> => Boolean(basis) && typeof basis === "object")
     : [];
+  const reconstructedForReview = order?.storage_json?.reconstruction_status === "NEEDS_DOCX_REVIEW";
+  const signatoryRole = normalizePersonnelOrderSignatoryRole(order?.signed_by_position);
+  const signatoryPositionLabel = signatoryRole
+    ? personnelOrderSignatoryRoleLabel(signatoryRole, "ru")
+    : order?.signed_by_position || "—";
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end" data-testid="personnel-order-detail-drawer">
@@ -226,6 +244,7 @@ export default function PersonnelOrderDetailDrawer({
                 data-testid="personnel-order-drawer-print"
                 onClick={() => {
                   setActiveTab("document");
+                  setPrintLanguage(documentLanguage);
                   window.setTimeout(() => window.print(), 50);
                 }}
                 disabled={!documentAvailable}
@@ -266,7 +285,14 @@ export default function PersonnelOrderDetailDrawer({
         </div>
 
         <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-4 py-4">
-          <style>{`@media print { body * { visibility: hidden !important; } #personnel-order-document-print, #personnel-order-document-print * { visibility: visible !important; } #personnel-order-document-print { position: absolute; left: 0; top: 0; width: 100%; max-width: none; border: 0; box-shadow: none; } }`}</style>
+          {reconstructedForReview ? (
+            <div
+              data-testid="personnel-order-reconstruction-warning"
+              className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-100"
+            >
+              Восстановлено по журналу. Автоматически подставленные сведения требуют сверки с DOCX
+            </div>
+          ) : null}
           {toast ? (
             <div
               className={
@@ -337,7 +363,7 @@ export default function PersonnelOrderDetailDrawer({
                     <dl className="grid gap-3 sm:grid-cols-2">
                     <Field label="№ приказа" value={formatPersonnelOrderNumber(order.order_number)} />
                     <Field label="Дата приказа" value={formatPersonnelOrderDate(order.order_date)} />
-                    <Field label="Должность подписанта" value={order.signed_by_position || "—"} />
+                    <Field label="Должность подписанта" value={signatoryPositionLabel} />
                     <Field label="ФИО подписанта" value={order.signed_by_name || "—"} />
                     <Field label="Источник" value={personnelOrderSourceModeLabel(order.source_mode)} />
                     <Field label="Основание" value={order.legal_basis_article || order.basis_summary || "—"} />
@@ -523,6 +549,12 @@ export default function PersonnelOrderDetailDrawer({
           {printError}
         </div>
       ) : null}
+      {printLanguage && detail
+        ? createPortal(
+            <PersonnelOrderDocumentView detail={detail} language={printLanguage} printRoot />,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

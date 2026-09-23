@@ -145,6 +145,7 @@ def list_personnel_orders_route(
     employee_id: Optional[int] = Query(default=None, ge=1),
     org_unit_id: Optional[int] = Query(default=None, ge=1),
     q: Optional[str] = Query(default=None, max_length=200),
+    reconstruction_quality: Optional[str] = Query(default=None),
     include_closed: bool = Query(
         default=False,
         description="Include closed documents (VOIDED and archived) in the journal.",
@@ -169,6 +170,7 @@ def list_personnel_orders_route(
             employee_id=employee_id,
             org_unit_id=org_unit_id,
             q=q,
+            reconstruction_quality=reconstruction_quality,
             include_closed=include_closed,
             include_archived=include_archived,
             limit=limit,

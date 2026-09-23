@@ -58,6 +58,18 @@ afterEach(() => {
 });
 
 describe("PersonnelOrderHeaderEditor signatory requisites", () => {
+  it("keeps signatory edits local and enables the explicit save only when changed", () => {
+    const order = sampleOrder({ signed_by_name: "М. Тулеутаев", signed_by_position: "DIRECTOR" });
+    render(<PersonnelOrderHeaderEditor order={order} onSaved={onSaved} />);
+    const save = screen.getByTestId("personnel-order-header-save-signatory");
+    expect(save).toBeDisabled();
+    fireEvent.change(screen.getByTestId("personnel-order-header-signatory-position"), {
+      target: { value: "ACTING_DIRECTOR" },
+    });
+    expect(save).toBeEnabled();
+    expect(updatePersonnelOrder).not.toHaveBeenCalled();
+  });
+
   it("prefills resolved values as controlled input state and auto-patches once", async () => {
     vi.mocked(getPersonnelOrderSignatoryDefault).mockResolvedValue({
       signed_by_employee_id: 7,
@@ -81,7 +93,7 @@ describe("PersonnelOrderHeaderEditor signatory requisites", () => {
     await waitFor(() => {
       expect(
         (screen.getByTestId("personnel-order-header-signatory-position") as HTMLInputElement).value,
-      ).toBe("Директор");
+      ).toBe("DIRECTOR");
     });
 
     await waitFor(() => {
@@ -184,6 +196,40 @@ describe("PersonnelOrderHeaderEditor signatory requisites", () => {
     ).toBe("К. Замещающий");
   });
 
+  it("stores a language-independent acting-director role while preserving the FIO", async () => {
+    const order = sampleOrder({ signed_by_name: "М. Тулеутаев", signed_by_position: "Директор" });
+    vi.mocked(updatePersonnelOrder).mockResolvedValue(savedDetail({ ...order, signed_by_position: "ACTING_DIRECTOR" }));
+    render(<PersonnelOrderHeaderEditor order={order} onSaved={onSaved} />);
+
+    fireEvent.change(screen.getByTestId("personnel-order-header-signatory-position"), {
+      target: { value: "ACTING_DIRECTOR" },
+    });
+    fireEvent.click(screen.getByTestId("personnel-order-header-save-signatory"));
+
+    await waitFor(() => {
+      expect(updatePersonnelOrder).toHaveBeenCalledWith(order.order_id, expect.objectContaining({
+        signed_by_position: "ACTING_DIRECTOR",
+        signed_by_name: "М. Тулеутаев",
+      }));
+    });
+    expect(onSaved).toHaveBeenCalledWith(expect.objectContaining({
+      order: expect.objectContaining({ signed_by_position: "ACTING_DIRECTOR" }),
+    }));
+  });
+
+  it("keeps the local draft after a requisites save error", async () => {
+    const order = sampleOrder({ signed_by_name: "М. Тулеутаев", signed_by_position: "DIRECTOR" });
+    vi.mocked(updatePersonnelOrder).mockRejectedValue(new Error("network"));
+    render(<PersonnelOrderHeaderEditor order={order} onSaved={onSaved} />);
+    fireEvent.change(screen.getByTestId("personnel-order-header-signatory-name"), {
+      target: { value: "Л. Козгамбаева" },
+    });
+    fireEvent.click(screen.getByTestId("personnel-order-header-save-signatory"));
+    expect(await screen.findByText("network")).toBeInTheDocument();
+    expect((screen.getByTestId("personnel-order-header-signatory-name") as HTMLInputElement).value)
+      .toBe("Л. Козгамбаева");
+  });
+
   it("resets prefill guard when orderId changes", async () => {
     vi.mocked(getPersonnelOrderSignatoryDefault).mockResolvedValue({
       signed_by_employee_id: null,
@@ -226,11 +272,11 @@ describe("PersonnelOrderHeaderEditor signatory requisites", () => {
     });
 
     fireEvent.change(screen.getByTestId("personnel-order-header-signatory-position"), {
-      target: { value: "Директор" },
+      target: { value: "ACTING_DIRECTOR" },
     });
-    fireEvent.click(screen.getByRole("button", { name: "Сохранить заголовок" }));
+    fireEvent.click(screen.getByTestId("personnel-order-header-save-signatory"));
 
-    expect(await screen.findByText("Укажите и должность, и ФИО подписанта.")).toBeInTheDocument();
+    expect(await screen.findByText("Укажите ФИО подписанта.")).toBeInTheDocument();
     expect(updatePersonnelOrder).not.toHaveBeenCalled();
   });
 });

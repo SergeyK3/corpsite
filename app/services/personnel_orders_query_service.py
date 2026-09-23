@@ -170,6 +170,7 @@ def _build_list_filters(
     employee_id: Optional[int],
     org_unit_id: Optional[int],
     q: Optional[str],
+    reconstruction_quality: Optional[str],
     include_closed: bool = False,
     include_archived: bool = False,
 ) -> tuple[list[str], Dict[str, Any]]:
@@ -239,6 +240,15 @@ def _build_list_filters(
     if q:
         where_parts.append("po.order_number ILIKE :q_pattern")
         params["q_pattern"] = f"%{str(q).strip()}%"
+
+    if reconstruction_quality:
+        normalized_quality = str(reconstruction_quality).strip().upper()
+        if normalized_quality == "RECONSTRUCTED_PILOT":
+            where_parts.append("po.storage_json ->> 'reconstruction_pilot' = 'personnel-orders-reconstruction-pilot-01'")
+        elif normalized_quality == "NEEDS_DOCX_REVIEW":
+            where_parts.append("po.storage_json ->> 'reconstruction_status' = 'NEEDS_DOCX_REVIEW'")
+        else:
+            raise PersonnelOrderValidationError(f"Invalid reconstruction_quality filter: {reconstruction_quality}")
 
     return where_parts, params
 
@@ -415,6 +425,7 @@ def list_personnel_orders(
     employee_id: Optional[int] = None,
     org_unit_id: Optional[int] = None,
     q: Optional[str] = None,
+    reconstruction_quality: Optional[str] = None,
     include_closed: bool = False,
     include_archived: bool = False,
     limit: int = 100,
@@ -431,6 +442,7 @@ def list_personnel_orders(
         employee_id=employee_id,
         org_unit_id=org_unit_id,
         q=q,
+        reconstruction_quality=reconstruction_quality,
         include_closed=bool(include_closed),
         include_archived=bool(include_archived),
     )

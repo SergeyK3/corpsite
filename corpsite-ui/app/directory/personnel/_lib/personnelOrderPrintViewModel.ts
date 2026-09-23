@@ -7,6 +7,10 @@ import type {
 import type { LocalizedText } from "./personnelOrderPrintLocalized";
 import { localizedFromSingle, localizedText } from "./personnelOrderPrintLocalized";
 import type { PersonnelOrderPrintItemContext } from "./personnelOrderPrintItemText";
+import {
+  normalizePersonnelOrderSignatoryRole,
+  personnelOrderSignatoryRoleLabel,
+} from "./personnelOrderSignatoryRole";
 
 export type PersonnelOrderPrintStatusMark = "none" | "draft" | "unsigned" | "cancelled";
 
@@ -197,7 +201,15 @@ function resolveSignatoryPosition(
   orderPosition: string | null,
   maps: PersonnelOrderPrintNameMaps,
 ): LocalizedText | null {
-  if (orderPosition) return localizedFromSingle(orderPosition);
+  if (orderPosition) {
+    const role = normalizePersonnelOrderSignatoryRole(orderPosition);
+    return role
+      ? localizedText(
+          personnelOrderSignatoryRoleLabel(role, "kk"),
+          personnelOrderSignatoryRoleLabel(role, "ru"),
+        )
+      : localizedFromSingle(orderPosition);
+  }
   const fromMap = maps.signatoryPosition;
   if (fromMap == null) return null;
   if (typeof fromMap === "string") {

@@ -82,6 +82,25 @@ html.dark body {
     margin: 15mm 18mm 18mm 25mm;
   }
 
+  /* Drawer printing uses one direct-body root.  `display` (not visibility)
+     prevents inactive drawers, tabs and hidden language copies taking space. */
+  body:has([data-personnel-order-active-print-root]) > *:not([data-personnel-order-active-print-root]) {
+    display: none !important;
+  }
+
+  body:has([data-personnel-order-active-print-root]) > [data-personnel-order-active-print-root] {
+    display: block !important;
+    width: auto !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    color: #000 !important;
+    background: #fff !important;
+  }
+
   .personnel-order-print-page {
     background: #fff !important;
     padding: 0 !important;

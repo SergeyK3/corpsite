@@ -9,6 +9,10 @@ import {
   renderPersonnelOrderDocument,
   type PersonnelOrderDocumentLanguage,
 } from "./personnelOrderDocumentTemplates";
+import {
+  normalizePersonnelOrderSignatoryRole,
+  personnelOrderSignatoryRoleLabel,
+} from "../_lib/personnelOrderSignatoryRole";
 
 export type { PersonnelOrderDocumentLanguage } from "./personnelOrderDocumentTemplates";
 
@@ -18,20 +22,23 @@ const labels = {
     number: "№",
     date: "Күні",
     basis: "Негіз",
-    noTemplate: "Осы құрылымдалған деректер үшін бекітілген құжат шаблоны таңдалмаған.",
+    noTemplate: "Бұл бұйрық түрі үшін бекітілген шаблон әзірге жоқ.",
     additional: "Қосымша өкімдер",
-    signatory: "Қол қоюшы",
   },
   ru: {
     document: "ПРИКАЗ",
     number: "№",
     date: "Дата",
     basis: "Основание",
-    noTemplate: "Для этих структурированных данных не выбран утверждённый шаблон документа.",
+    noTemplate: "Для этого типа приказа утверждённый шаблон пока отсутствует.",
     additional: "Дополнительные распоряжения",
-    signatory: "Подписант",
   },
 } as const;
+
+function signatoryPosition(position: string, language: PersonnelOrderDocumentLanguage): string {
+  const role = normalizePersonnelOrderSignatoryRole(position);
+  return role ? personnelOrderSignatoryRoleLabel(role, language) : position;
+}
 
 export function personnelOrderDocumentAvailable(
   detail: PersonnelOrderDetailResponse | null,
@@ -43,9 +50,12 @@ export function personnelOrderDocumentAvailable(
 export default function PersonnelOrderDocumentView({
   detail,
   language,
+  printRoot = false,
 }: {
   detail: PersonnelOrderDetailResponse;
   language: PersonnelOrderDocumentLanguage;
+  /** The sole direct-body document included in an in-place browser print. */
+  printRoot?: boolean;
 }) {
   const ui = labels[language];
   const document = renderPersonnelOrderDocument(detail, language);
@@ -58,7 +68,12 @@ export default function PersonnelOrderDocumentView({
   }
 
   return (
-    <article id="personnel-order-document-print" className="mx-auto max-w-3xl space-y-6 rounded-xl border border-zinc-200 bg-white p-6 text-zinc-900 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100" data-testid="personnel-order-document">
+    <article
+      id={printRoot ? "personnel-order-active-print-root" : undefined}
+      className="mx-auto max-w-3xl space-y-6 rounded-xl border border-zinc-200 bg-white p-6 text-zinc-900 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-100"
+      data-personnel-order-active-print-root={printRoot ? "true" : undefined}
+      data-testid={printRoot ? "personnel-order-active-print-root" : "personnel-order-document"}
+    >
       <header className="text-center">
         <div className="text-base font-semibold tracking-wide">{ui.document}</div>
         <div className="mt-3 flex flex-wrap justify-between gap-2 text-sm">
@@ -89,10 +104,16 @@ export default function PersonnelOrderDocumentView({
         </section>
       ) : null}
 
-      <footer className="grid gap-3 pt-6 text-sm sm:grid-cols-[1fr_auto]">
-        <div className="font-medium">{detail.order.signed_by_position || ui.signatory}</div>
-        <div className="text-right">{detail.order.signed_by_name || "—"}</div>
-      </footer>
+      {detail.order.signed_by_position && detail.order.signed_by_name ? (
+        <footer className="grid gap-3 pt-6 text-sm sm:grid-cols-[1fr_auto]">
+          <div className="font-medium">{signatoryPosition(detail.order.signed_by_position, language)}</div>
+          <div className="text-right">{detail.order.signed_by_name}</div>
+        </footer>
+      ) : (
+        <p className="print:hidden rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/35 dark:text-amber-100" role="alert">
+          {language === "kk" ? "Басшының қолы анықталмады: құжат DOCX-пен тексерілген деп саналмайды." : "Подпись руководителя не установлена: документ не считается проверенным по DOCX."}
+        </p>
+      )}
     </article>
   );
 }

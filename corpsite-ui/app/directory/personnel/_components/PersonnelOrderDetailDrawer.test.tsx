@@ -75,27 +75,56 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-describe("PersonnelOrderDetailDrawer print entry", () => {
-  it("shows exactly one Печать button that opens the language dialog, and keeps Аннулировать", async () => {
-    vi.mocked(getPersonnelOrder).mockResolvedValue(detail);
+describe("PersonnelOrderDetailDrawer document tab", () => {
+  it("opens the standardized document by default, switches language, and prints it directly", async () => {
+    vi.mocked(getPersonnelOrder).mockResolvedValue({
+      ...detail,
+      order: {
+        ...detail.order,
+        order_type_code: "COMPOSITE",
+        storage_json: { basis_documents: [{ basis_id: "application", document_type: "EMPLOYEE_APPLICATION" }] },
+      },
+      items: [
+        {
+          item_id: 1, order_id: 42, item_number: 1, item_type_code: "TRANSFER", item_status: "ACTIVE", employee_id: null, employee_name: null, effective_date: "2026-02-01",
+          payload: { employee: { name: { canonical: "Ару Мұратқызы Амантай" } }, to_assignment: { unit: { kk: "қабылдау бөлімшесі" }, position: { kk: "күндізгі мейіргері" }, rate: "1" }, legal_basis: "38", basis_ids: ["application"] },
+        },
+        {
+          item_id: 2, order_id: 42, item_number: 2, item_type_code: "CONCURRENT_DUTY_START", item_status: "ACTIVE", employee_id: null, employee_name: null, effective_date: "2026-02-01",
+          payload: { assignment: { unit: { kk: "қабылдау бөлімшесі" }, position: { kk: "күндізгі мейіргері" }, rate: "0.5" }, basis_ids: ["application"] },
+        },
+      ],
+    });
+    const print = vi.spyOn(window, "print").mockImplementation(() => undefined);
 
     render(<PersonnelOrderDetailDrawer orderId={42} open onClose={vi.fn()} />);
 
     await waitFor(() => {
-      expect(screen.getByTestId("personnel-order-drawer-print")).toBeInTheDocument();
+      expect(screen.getByTestId("personnel-order-document")).toHaveTextContent("БҰЙЫРАМЫН:");
     });
 
-    const printButtons = screen.getAllByRole("button", { name: "Печать" });
-    expect(printButtons).toHaveLength(1);
-    expect(printButtons[0]).toHaveAttribute("data-testid", "personnel-order-drawer-print");
-    expect(screen.queryByTestId("personnel-order-actions-print")).not.toBeInTheDocument();
-
-    expect(screen.getByRole("button", { name: "Аннулировать" })).toBeInTheDocument();
-
+    expect(screen.getByRole("tab", { name: "Документ" })).toHaveAttribute("aria-selected", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Русский" }));
+    expect(screen.getByTestId("personnel-order-document")).toHaveTextContent("ПРИКАЗЫВАЮ:");
     fireEvent.click(screen.getByTestId("personnel-order-drawer-print"));
-    expect(screen.getByTestId("personnel-order-print-language-dialog")).toBeInTheDocument();
-    expect(screen.getByTestId("personnel-order-print-open")).toHaveTextContent("Предпросмотр");
-    expect(screen.getByTestId("personnel-order-pdf-open")).toHaveTextContent("Открыть PDF");
+    await waitFor(() => expect(print).toHaveBeenCalled());
+    await waitFor(() => {
+      expect(document.querySelectorAll("[data-personnel-order-active-print-root]")).toHaveLength(1);
+    });
+    const printRoot = screen.getByTestId("personnel-order-active-print-root");
+    expect(printRoot).toHaveTextContent("ПРИКАЗЫВАЮ:");
+    expect(printRoot).not.toHaveTextContent("БҰЙЫРАМЫН:");
+    fireEvent.click(screen.getByTestId("personnel-order-drawer-print"));
+    expect(document.querySelectorAll("[data-personnel-order-active-print-root]")).toHaveLength(1);
+    fireEvent(window, new Event("afterprint"));
+    await waitFor(() => {
+      expect(screen.queryByTestId("personnel-order-active-print-root")).not.toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Қазақша" }));
+    fireEvent.click(screen.getByTestId("personnel-order-drawer-print"));
+    await waitFor(() => {
+      expect(screen.getByTestId("personnel-order-active-print-root")).toHaveTextContent("БҰЙЫРАМЫН:");
+    });
   });
 
   it("shows archive block for archived orders", async () => {
@@ -112,6 +141,8 @@ describe("PersonnelOrderDetailDrawer print entry", () => {
     });
 
     render(<PersonnelOrderDetailDrawer orderId={42} open onClose={vi.fn()} />);
+
+    fireEvent.click(await screen.findByRole("tab", { name: "Данные" }));
 
     await waitFor(() => {
       expect(screen.getByTestId("personnel-order-archive-block")).toBeInTheDocument();
@@ -137,12 +168,14 @@ describe("PersonnelOrderDetailDrawer print entry", () => {
 
     render(<PersonnelOrderDetailDrawer orderId={42} open onClose={vi.fn()} />);
 
+    fireEvent.click(await screen.findByRole("tab", { name: "Данные" }));
+
     await waitFor(() => {
       expect(screen.getByText("Должность подписанта")).toBeInTheDocument();
     });
 
-    expect(screen.getByText("М. Тулеутаев")).toBeInTheDocument();
-    expect(screen.getByText("Директор")).toBeInTheDocument();
+    expect(screen.getAllByText("М. Тулеутаев").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Директор").length).toBeGreaterThan(0);
     expect(screen.getByText("Дата приказа")).toBeInTheDocument();
     expect(screen.queryByTestId("personnel-order-header-editor")).not.toBeInTheDocument();
   });
@@ -161,10 +194,12 @@ describe("PersonnelOrderDetailDrawer print entry", () => {
 
     render(<PersonnelOrderDetailDrawer orderId={42} open onClose={vi.fn()} />);
 
+    fireEvent.click(await screen.findByRole("tab", { name: "Данные" }));
+
     await waitFor(() => {
       expect(screen.getByText("И. о. директора")).toBeInTheDocument();
     });
-    expect(screen.getByText("К. Замещающий")).toBeInTheDocument();
+    expect(screen.getAllByText("К. Замещающий").length).toBeGreaterThan(0);
     expect(screen.queryByText("М. Тулеутаев")).not.toBeInTheDocument();
   });
 });

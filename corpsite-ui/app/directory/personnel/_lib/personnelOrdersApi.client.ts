@@ -225,6 +225,7 @@ export type PersonnelOrdersFilters = {
   org_unit_id?: number;
   order_id?: number;
   q?: string;
+  reconstruction_quality?: "NEEDS_DOCX_REVIEW" | "RECONSTRUCTED_PILOT";
   include_closed?: boolean;
   limit?: number;
   offset?: number;
@@ -380,6 +381,7 @@ export function buildPersonnelOrdersQueryParams(
     params.set("order_id", String(filters.order_id));
   }
   if (includeClientSearch && filters.q?.trim()) params.set("q", filters.q.trim());
+  if (filters.reconstruction_quality) params.set("reconstruction_quality", filters.reconstruction_quality);
   if (filters.include_closed) params.set("include_closed", "true");
   if (filters.limit != null && filters.limit > 0) params.set("limit", String(filters.limit));
   if (filters.offset != null && filters.offset >= 0) params.set("offset", String(filters.offset));
@@ -401,6 +403,11 @@ export function parsePersonnelOrdersFilters(searchParams: URLSearchParams): Pers
     org_unit_id: orgFilters.org_unit_id,
     order_id: Number.isFinite(orderId) && orderId > 0 ? orderId : undefined,
     q: searchParams.get("q") || undefined,
+    reconstruction_quality:
+      searchParams.get("reconstruction_quality") === "NEEDS_DOCX_REVIEW"
+      || searchParams.get("reconstruction_quality") === "RECONSTRUCTED_PILOT"
+        ? searchParams.get("reconstruction_quality") as "NEEDS_DOCX_REVIEW" | "RECONSTRUCTED_PILOT"
+        : undefined,
     include_closed:
       searchParams.get("include_closed") === "true"
       || searchParams.get("include_archived") === "true",

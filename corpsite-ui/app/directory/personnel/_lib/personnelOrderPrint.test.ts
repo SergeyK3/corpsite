@@ -525,21 +525,21 @@ describe("personnelOrderPrint item text", () => {
       positionNames: { 20: "Врач" },
     });
     const ctx = model.items[0]!.context;
-    expect(renderPersonnelOrderPrintItemText(ctx, "ru")[0]).toContain("Принять на работу");
-    expect(renderPersonnelOrderPrintItemText(ctx, "ru")[0]).toContain("со ставкой 1,0");
+    expect(renderPersonnelOrderPrintItemText(ctx, "ru")[0]).toContain("Принять сотрудника");
+    expect(renderPersonnelOrderPrintItemText(ctx, "ru")[0]).toContain("врач (хирургия)");
     expect(renderPersonnelOrderPrintItemText(ctx, "kk")[0]).toContain("жұмысқа қабылдансын");
     expect(renderPersonnelOrderPrintItemText(ctx, "kk-ru")).toHaveLength(2);
   });
 
-  it("renders concurrent start without technical tone", () => {
+  it("renders the Russian concurrent-duty wording with a normalized assignment", () => {
     const text = renderPersonnelOrderPrintItemText(
       {
         itemNumber: 2,
         itemTypeCode: "CONCURRENT_DUTY_START",
         employeeName: "Макибаева Акмарал Сабитовна",
         effectiveDate: "2026-07-10",
-        orgUnitName: null,
-        positionName: null,
+        orgUnitName: { ru: "Приемное", kk: null },
+        positionName: { ru: "Санитар", kk: null },
         toOrgUnitName: null,
         toPositionName: null,
         rate: null,
@@ -552,6 +552,23 @@ describe("personnelOrderPrint item text", () => {
       },
       "ru",
     )[0];
-    expect(text).toContain("совмещение в размере 0,5 ставки");
+    expect(text).toContain("Разрешить сотруднику Макибаева Акмарал Сабитовна");
+    expect(text).toContain("санитар (приемное отделение)");
+    expect(text).toContain("с оплатой 0,5 ставки");
+  });
+
+  it("does not print a leave-days placeholder when the source does not confirm days", () => {
+    const text = renderPersonnelOrderPrintItemText(
+      {
+        itemNumber: 1, itemTypeCode: "TERMINATION", employeeName: "Сотрудник", effectiveDate: "2026-02-01",
+        orgUnitName: null, positionName: null, toOrgUnitName: null, toPositionName: null,
+        rate: null, toRate: null, concurrentRate: null, remainingRate: null, totalRate: null,
+        terminationReason: null, payload: {},
+      },
+      "ru",
+    )[0];
+    expect(text).toContain("Бухгалтерии произвести расчёт за неиспользованные дни отпуска.");
+    expect(text).not.toContain("календарных дней");
+    expect(text).not.toContain("— календарных");
   });
 });

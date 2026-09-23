@@ -510,14 +510,38 @@ def create_personnel_order_item_tx(
     item_type_code: str,
     effective_date: date,
     payload: Dict[str, Any],
+    employee_id: Optional[int] = None,
+    allow_unlinked_employee: bool = False,
 ) -> int:
-    """Add an active item in the caller's transaction."""
+    """Add an active item in the caller's transaction.
+
+    ``allow_unlinked_employee`` is for source-only structured drafts whose
+    employee was read from an order but was not matched to an ``employees``
+    record. Such a draft cannot pass the existing registration validation.
+    """
     normalized_type = _normalize_item_type(item_type_code)
     order = _fetch_order_row(conn, int(order_id))
     _ensure_order_editable(order)
     from app.services.personnel_order_hire_from_person_service import validate_hire_item_identity
 
-    validate_hire_item_identity(conn, item_type_code=normalized_type, employee_id=None, payload=payload)
+    normalized_employee_id = int(employee_id) if employee_id is not None else None
+    if normalized_employee_id is not None:
+        _ensure_employee_exists(conn, normalized_employee_id)
+    if allow_unlinked_employee and normalized_employee_id is None:
+        employee = payload.get("employee") if isinstance(payload, dict) else None
+        name = employee.get("name") if isinstance(employee, dict) else None
+        canonical = name.get("canonical") if isinstance(name, dict) else None
+        if not isinstance(canonical, str) or not canonical.strip():
+            raise PersonnelOrderValidationError(
+                "Unlinked source item requires payload.employee.name.canonical."
+            )
+    else:
+        validate_hire_item_identity(
+            conn,
+            item_type_code=normalized_type,
+            employee_id=normalized_employee_id,
+            payload=payload,
+        )
     item_id = conn.execute(
         text(
             """
@@ -525,7 +549,7 @@ def create_personnel_order_item_tx(
                 order_id, item_number, item_type_code, employee_id, effective_date,
                 payload, item_status
             ) VALUES (
-                :order_id, :item_number, :item_type_code, NULL, :effective_date,
+                :order_id, :item_number, :item_type_code, :employee_id, :effective_date,
                 CAST(:payload AS jsonb), :item_status
             ) RETURNING item_id
             """
@@ -534,6 +558,7 @@ def create_personnel_order_item_tx(
             "order_id": int(order_id),
             "item_number": _next_item_number(conn, int(order_id)),
             "item_type_code": normalized_type,
+            "employee_id": normalized_employee_id,
             "effective_date": effective_date,
             "payload": json.dumps(payload),
             "item_status": ITEM_STATUS_ACTIVE,

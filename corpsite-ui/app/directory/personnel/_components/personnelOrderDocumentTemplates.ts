@@ -2,6 +2,7 @@ import type {
   PersonnelOrderDetailResponse,
   PersonnelOrderItem,
 } from "../_lib/personnelOrdersApi.client";
+import { russianEmployeeForOrder, russianOrderAssignment } from "../_lib/personnelOrderRussianWording";
 
 export type PersonnelOrderDocumentLanguage = "kk" | "ru";
 
@@ -25,6 +26,58 @@ export type RenderedOrderDocument = {
   points: RenderedOrderPoint[];
   additionalInstructions: string[];
 };
+
+export const APPROVED_PERSONNEL_ORDER_TEMPLATE_VERSIONS = {
+  "personnel.hire.standard": { kk: 1, ru: 1 },
+  "personnel.transfer.permanent": { kk: 1, ru: 1 },
+  "personnel.concurrent-duty.start": { kk: 1, ru: 1 },
+  "personnel.termination.employee-initiative-unused-leave": { kk: 1, ru: 1 },
+  "personnel.transfer.permanent-with-concurrent-duty": { kk: 1, ru: 1 },
+} as const;
+
+export type ApprovedPersonnelOrderTemplateKey = keyof typeof APPROVED_PERSONNEL_ORDER_TEMPLATE_VERSIONS;
+
+/** Approved title pairs are selected by action type, never by an order number. */
+export const PERSONNEL_ORDER_TITLE_DICTIONARY = {
+  HIRE: { kk: "Жұмысқа қабылдау туралы", ru: "О приёме на работу" },
+  TRANSFER: { kk: "Ауыстыру туралы", ru: "О переводе" },
+  CONCURRENT_DUTY_START: { kk: "Қоса атқару туралы", ru: "О совмещении должностей" },
+  TERMINATION: { kk: "Еңбек шартын бұзу туралы", ru: "О расторжении трудового договора" },
+  TRANSFER_WITH_CONCURRENT_DUTY: { kk: "Ауыстыру туралы", ru: "О переводе и совмещении должностей" },
+} as const;
+
+// Runtime projection of the existing bilingual position and unit dictionaries.
+const POSITION_KK_BY_RU: Record<string, string> = {
+  "медсестра": "мейіргер", "медицинская сестра": "мейіргер", "врач": "дәрігер",
+  "санитар": "санитар", "сестра хозяйка": "шаруашылық мейіргері",
+};
+const UNIT_KK_BY_RU: Record<string, string> = {
+  "химиотерапия 1": "№1 химиялық терапия бөлімшесі", "химиотерапия 2": "№2 химиялық терапия бөлімшесі",
+  "цсо": "Залалсыздандыру орталығы", "диспансер": "Диспансер бөлімшесі",
+  "реанимация": "Жансақтау бөлімі", "лучевая диагностика": "Сәулелік диагностика бөлімшесі",
+  "инсультный": "Инсульт орталығы", "приемное": "Қабылдау бөлімшесі",
+};
+const POSITION_RU_BY_KK: Record<string, string> = {
+  "мейіргер": "Медицинская сестра", "күндізгі мейіргері": "Медицинская сестра",
+};
+const UNIT_RU_BY_KK: Record<string, string> = {
+  "қабылдау бөлімшесі": "Приемное",
+};
+
+function isApprovedTemplateKey(value: unknown): value is ApprovedPersonnelOrderTemplateKey {
+  return typeof value === "string" && value in APPROVED_PERSONNEL_ORDER_TEMPLATE_VERSIONS;
+}
+
+function titleFor(key: ApprovedPersonnelOrderTemplateKey, language: PersonnelOrderDocumentLanguage): string {
+  const code = ({
+    "personnel.hire.standard": "HIRE",
+    "personnel.transfer.permanent": "TRANSFER",
+    "personnel.concurrent-duty.start": "CONCURRENT_DUTY_START",
+    "personnel.termination.employee-initiative-unused-leave": "TERMINATION",
+    "personnel.transfer.permanent-with-concurrent-duty": "TRANSFER_WITH_CONCURRENT_DUTY",
+  } as const)[key];
+  return PERSONNEL_ORDER_TITLE_DICTIONARY[code][language];
+}
 
 type BasisDocument = {
   basis_id?: unknown;
@@ -54,13 +107,33 @@ function localized(value: unknown, language: PersonnelOrderDocumentLanguage): st
   return text(record(value)[language]);
 }
 
+function dictionaryValue(
+  value: unknown,
+  language: PersonnelOrderDocumentLanguage,
+  dictionary: Record<string, string>,
+  reverseDictionary: Record<string, string> = {},
+): string | null {
+  const preferred = localized(value, language);
+  if (language !== "kk") {
+    if (preferred) return preferred;
+    const source = localized(value, "kk");
+    return source ? reverseDictionary[source.toLocaleLowerCase("kk-KZ").trim()] || source : null;
+  }
+  const source = preferred || localized(value, "ru");
+  if (!source) return null;
+  return dictionary[source.toLocaleLowerCase("ru-RU").trim()] || source;
+}
+
 function payload(item: PersonnelOrderItem): Record<string, unknown> {
   return record(item.payload);
 }
 
 function employeeName(item: PersonnelOrderItem): string {
   const employee = record(payload(item).employee);
-  return text(item.employee_name) || text(record(employee.name).canonical) || "—";
+  return text(item.employee_name)
+    || text(record(employee.name).canonical)
+    || text(payload(item).source_employee_name)
+    || "—";
 }
 
 function assignment(value: unknown, language: PersonnelOrderDocumentLanguage): {
@@ -70,8 +143,8 @@ function assignment(value: unknown, language: PersonnelOrderDocumentLanguage): {
 } {
   const source = record(value);
   return {
-    unit: localized(source.unit, language) || localized(source.unit, language === "kk" ? "ru" : "kk") || "—",
-    position: localized(source.position, language) || localized(source.position, language === "kk" ? "ru" : "kk") || "—",
+    unit: dictionaryValue(source.unit, language, UNIT_KK_BY_RU, UNIT_RU_BY_KK) || "—",
+    position: dictionaryValue(source.position, language, POSITION_KK_BY_RU, POSITION_RU_BY_KK) || "—",
     rate: text(source.rate) || "—",
   };
 }
@@ -136,42 +209,114 @@ function renderBasis(
   return entries;
 }
 
-function hasLegalBasis(item: PersonnelOrderItem, ...parts: string[]): boolean {
-  const legalBasis = text(payload(item).legal_basis)?.toLowerCase() || "";
-  return parts.every((part) => legalBasis.includes(part));
-}
-
 export function renderPersonnelOrderDocument(
   detail: PersonnelOrderDetailResponse,
   language: PersonnelOrderDocumentLanguage,
 ): RenderedOrderDocument | null {
-  const transfer = detail.items.find((item) => String(item.item_type_code).toUpperCase() === "TRANSFER");
-  const concurrent = detail.items.find((item) => String(item.item_type_code).toUpperCase() === "CONCURRENT_DUTY_START");
-  if (transfer && concurrent && hasLegalBasis(transfer, "38")) {
-    return permanentTransferWithConcurrentDutyForLanguage(detail, language);
+  if (!detail.items.length) return null;
+  const templateKey = resolvePersonnelOrderTemplateKey(detail);
+  if (!templateKey) return null;
+  const rendered = templateKey === "personnel.hire.standard" ? hireForLanguage(detail, language)
+    : templateKey === "personnel.transfer.permanent" ? transferForLanguage(detail, language)
+      : templateKey === "personnel.concurrent-duty.start" ? concurrentDutyForLanguage(detail, language)
+        : templateKey === "personnel.termination.employee-initiative-unused-leave" ? terminationByEmployeeInitiativeForLanguage(detail, language)
+          : permanentTransferWithConcurrentDutyForLanguage(detail, language);
+  return { ...rendered, title: titleFor(templateKey, language) };
+}
+
+/** Resolve only catalogued approved templates.  Order number is deliberately absent. */
+export function resolvePersonnelOrderTemplateKey(
+  detail: PersonnelOrderDetailResponse,
+): ApprovedPersonnelOrderTemplateKey | null {
+  const saved = record(detail.order.storage_json).template_key;
+  if (isApprovedTemplateKey(saved)) return saved;
+  const types = new Set(detail.items.map((item) => String(item.item_type_code).toUpperCase()));
+  if (types.has("TRANSFER") && types.has("CONCURRENT_DUTY_START")) {
+    return "personnel.transfer.permanent-with-concurrent-duty";
   }
-  const termination = detail.items.find((item) => String(item.item_type_code).toUpperCase() === "TERMINATION");
-  if (termination && hasLegalBasis(termination, "49", "56")) {
-    return terminationByEmployeeInitiativeForLanguage(detail, language);
+  if (types.size === 1) {
+    const [type] = [...types];
+    return ({
+      HIRE: "personnel.hire.standard",
+      TRANSFER: "personnel.transfer.permanent",
+      CONCURRENT_DUTY_START: "personnel.concurrent-duty.start",
+      TERMINATION: "personnel.termination.employee-initiative-unused-leave",
+    } as Record<string, ApprovedPersonnelOrderTemplateKey | undefined>)[type] || null;
   }
-  return null;
+  return ({
+    HIRE: "personnel.hire.standard",
+    TRANSFER: "personnel.transfer.permanent",
+    CONCURRENT_DUTY_START: "personnel.concurrent-duty.start",
+    TERMINATION: "personnel.termination.employee-initiative-unused-leave",
+  } as Record<string, ApprovedPersonnelOrderTemplateKey | undefined>)[String(detail.order.order_type_code).toUpperCase()] || null;
+}
+
+function primaryItem(detail: PersonnelOrderDetailResponse, type: string): PersonnelOrderItem {
+  return detail.items.find((item) => String(item.item_type_code).toUpperCase() === type) || detail.items[0]!;
+}
+
+function assignmentForItem(item: PersonnelOrderItem, language: PersonnelOrderDocumentLanguage) {
+  const source = payload(item);
+  return assignment(source.to_assignment || source.assignment, language);
+}
+
+function russianOrderEmployee(name: string, action: "hire" | "transfer" | "concurrent"): string | null {
+  const sourceName = russianEmployeeForOrder(name);
+  if (!sourceName) return null;
+  return action === "concurrent" ? `сотруднику ${sourceName}` : `сотрудника ${sourceName}`;
+}
+
+function russianOrderTarget(target: { position: string; unit: string }): string {
+  return russianOrderAssignment(target.position, target.unit);
+}
+
+function standardDocument(
+  key: ApprovedPersonnelOrderTemplateKey,
+  language: PersonnelOrderDocumentLanguage,
+  title: Record<PersonnelOrderDocumentLanguage, string>,
+  preamble: Record<PersonnelOrderDocumentLanguage, string>,
+  point: string,
+  basis: string[],
+): RenderedOrderDocument {
+  return { templateKey: key, templateVersion: APPROVED_PERSONNEL_ORDER_TEMPLATE_VERSIONS[key][language], title: title[language], preamble: preamble[language], directive: language === "kk" ? "БҰЙЫРАМЫН:" : "ПРИКАЗЫВАЮ:", points: [{ text: point, basis }], additionalInstructions: [] };
+}
+
+function hireForLanguage(detail: PersonnelOrderDetailResponse, language: PersonnelOrderDocumentLanguage): RenderedOrderDocument {
+  const item = primaryItem(detail, "HIRE"); const target = assignmentForItem(item, language); const name = employeeName(item); const when = effectiveDate(item.effective_date, language);
+  const russianEmployee = russianOrderEmployee(name, "hire");
+  const russianPoint = russianEmployee
+    ? `Принять ${russianEmployee} с ${when} на должность ${russianOrderTarget(target)} с оплатой ${target.rate} ставки.`
+    : `Принять ${name} с ${when} на должность ${target.position} ${target.unit} с оплатой ${target.rate} ставки.`;
+  return standardDocument("personnel.hire.standard", language, { kk: "Жұмысқа қабылдау туралы", ru: "О приеме на работу" }, { kk: "Қазақстан Республикасының Еңбек кодексіне сәйкес", ru: "В соответствии с Трудовым кодексом Республики Казахстан" }, language === "kk" ? `${name} ${when} бастап ${target.unit} ${target.position} лауазымына ${target.rate} мөлшерлемемен жұмысқа қабылдансын.` : russianPoint, renderBasis(detail, item, language));
+}
+
+function transferForLanguage(detail: PersonnelOrderDetailResponse, language: PersonnelOrderDocumentLanguage): RenderedOrderDocument {
+  const item = primaryItem(detail, "TRANSFER"); const target = assignmentForItem(item, language); const name = employeeName(item); const when = effectiveDate(item.effective_date, language);
+  const russianEmployee = russianOrderEmployee(name, "transfer");
+  const russianPoint = russianEmployee
+    ? `Перевести ${russianEmployee} с ${when} на должность ${russianOrderTarget(target)} с оплатой ${target.rate} ставки.`
+    : `Перевести ${name} с ${when} на должность ${target.position} ${target.unit} с оплатой ${target.rate} ставки.`;
+  return standardDocument("personnel.transfer.permanent", language, { kk: "Ауыстыру туралы", ru: "О постоянном переводе" }, { kk: "Қазақстан Республикасының Еңбек кодексінің 38-бабына сәйкес", ru: "В соответствии со статьей 38 Трудового кодекса Республики Казахстан" }, language === "kk" ? `${name} ${when} бастап ${target.unit} ${target.position} лауазымына ${target.rate} мөлшерлемемен ауыстырылсын.` : russianPoint, renderBasis(detail, item, language));
+}
+
+function concurrentDutyForLanguage(detail: PersonnelOrderDetailResponse, language: PersonnelOrderDocumentLanguage): RenderedOrderDocument {
+  const item = primaryItem(detail, "CONCURRENT_DUTY_START"); const target = assignmentForItem(item, language); const name = employeeName(item); const when = effectiveDate(item.effective_date, language);
+  const russianEmployee = russianOrderEmployee(name, "concurrent");
+  const russianPoint = russianEmployee
+    ? `Разрешить ${russianEmployee} с ${when} совмещение обязанностей по должности ${russianOrderTarget(target)} с оплатой ${target.rate} ставки.`
+    : `Разрешить ${name} с ${when} совмещение обязанностей по должности ${target.position} ${target.unit} с оплатой ${target.rate} ставки.`;
+  return standardDocument("personnel.concurrent-duty.start", language, { kk: "Қоса атқару туралы", ru: "О совмещении обязанностей" }, { kk: "Қазақстан Республикасының Еңбек кодексінің 111-бабына сәйкес", ru: "В соответствии со статьей 111 Трудового кодекса Республики Казахстан" }, language === "kk" ? `${name} ${when} бастап ${target.unit} ${target.position} міндеттерін ${target.rate} мөлшерлемемен қоса атқаруға рұқсат берілсін.` : russianPoint, renderBasis(detail, item, language));
 }
 
 function permanentTransferWithConcurrentDutyForLanguage(detail: PersonnelOrderDetailResponse, language: PersonnelOrderDocumentLanguage): RenderedOrderDocument {
   const transfer = detail.items.find((item) => String(item.item_type_code).toUpperCase() === "TRANSFER")!;
   const concurrent = detail.items.find((item) => String(item.item_type_code).toUpperCase() === "CONCURRENT_DUTY_START")!;
   const name = employeeName(transfer);
-  const target = assignment(payload(transfer).to_assignment, language);
+  const target = assignment(payload(transfer).to_assignment || payload(transfer).assignment, language);
   const concurrentAssignment = assignment(payload(concurrent).assignment, language);
   const date = effectiveDate(transfer.effective_date || concurrent.effective_date, language);
-  const sourceUnitKk = localized(record(payload(transfer).from_assignment).unit, "kk") || "";
-  const targetUnitKk = localized(record(payload(transfer).to_assignment).unit, "kk") || "";
-  const targetPositionKk = localized(record(payload(transfer).to_assignment).position, "kk") || "";
-  const isOrder104Vocabulary = /терапия.+паллиатив.+а\s*блог/i.test(sourceUnitKk)
-    && /қабылдау/i.test(targetUnitKk)
-    && /күндізгі\s+мейіргер/i.test(targetPositionKk);
-  const russianPoint = isOrder104Vocabulary
-    ? `Медицинскую сестру блока А отделения терапии и паллиативной помощи ${name} с ${date} перевести на должность медицинской сестры приёмного отделения на 1,0 ставки и разрешить ей совмещение должности медицинской сестры этого же отделения на 0,5 ставки.`
+  const russianPoint = russianEmployeeForOrder(name)
+    ? `Перевести сотрудника ${name} с ${date} на должность ${russianOrderTarget(target)} с оплатой ${target.rate} ставки и разрешить сотруднику ${name} совмещение обязанностей по должности ${russianOrderTarget(concurrentAssignment)} с оплатой ${concurrentAssignment.rate} ставки.`
     : `${name} с ${date} постоянно перевести на должность ${target.position} ${target.unit} с оплатой ${target.rate} ставки и разрешить совмещение обязанностей ${concurrentAssignment.position} ${concurrentAssignment.unit} с оплатой ${concurrentAssignment.rate} ставки.`;
   return {
     templateKey: "personnel.transfer.permanent-with-concurrent-duty",
@@ -193,7 +338,10 @@ function terminationByEmployeeInitiativeForLanguage(detail: PersonnelOrderDetail
   const termination = detail.items.find((item) => String(item.item_type_code).toUpperCase() === "TERMINATION")!;
   const name = employeeName(termination);
   const date = effectiveDate(termination.effective_date, language);
-  const unusedLeaveDays = scalarText(payload(termination).unused_leave_days) || "—";
+  const unusedLeaveDays = scalarText(payload(termination).unused_leave_days);
+  const russianLeaveInstruction = unusedLeaveDays
+    ? `Бухгалтерии произвести расчёт за ${unusedLeaveDays} календарных дней неиспользованного отпуска.`
+    : "Бухгалтерии произвести расчёт за неиспользованные дни отпуска.";
   return {
     templateKey: "personnel.termination.employee-initiative-unused-leave",
     templateVersion: 1,
@@ -204,7 +352,7 @@ function terminationByEmployeeInitiativeForLanguage(detail: PersonnelOrderDetail
       text: language === "kk" ? `${name} еңбек шарты ${date} бастап бұзылсын.` : `Расторгнуть трудовой договор с работником ${name} с ${date}.`,
       basis: renderBasis(detail, termination, language),
     }, {
-      text: language === "kk" ? `Бухгалтерлік есеп бөлімі пайдаланылмаған еңбек демалысының ${unusedLeaveDays} күнтізбелік күніне есеп айырысу жүргізсін.` : `Бухгалтерии произвести расчёт за ${unusedLeaveDays} календарных дней неиспользованного отпуска.`,
+      text: language === "kk" ? `Бухгалтерлік есеп бөлімі пайдаланылмаған еңбек демалысының ${unusedLeaveDays || "—"} күнтізбелік күніне есеп айырысу жүргізсін.` : russianLeaveInstruction,
       basis: [],
     }],
     additionalInstructions: [],

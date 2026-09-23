@@ -281,6 +281,21 @@ export default function PersonnelOrdersPageClient() {
         </div>
         <div>
           <label className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+            Качество записи
+          </label>
+          <select
+            data-testid="personnel-orders-reconstruction-quality"
+            value={filters.reconstruction_quality || ""}
+            onChange={(e) => updateFilters({ reconstruction_quality: e.target.value as PersonnelOrdersFilters["reconstruction_quality"] || undefined })}
+            className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+          >
+            <option value="">Все записи</option>
+            <option value="NEEDS_DOCX_REVIEW">Требуют сверки с DOCX</option>
+            <option value="RECONSTRUCTED_PILOT">Восстановленные из журнала</option>
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">
             Тип приказа
           </label>
           <select

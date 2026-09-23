@@ -106,6 +106,14 @@ describe("personnelOrder requisites pipeline", () => {
     expect(model.signatory?.fio).toBe("М. Тулеутаев");
   });
 
+  it("maps language-independent signatory role codes into both print languages", () => {
+    const director = buildPipelineModel({ signed_by_position: "DIRECTOR" });
+    const acting = buildPipelineModel({ signed_by_position: "ACTING_DIRECTOR" });
+    expect(director.signatory.position).toEqual({ kk: "Директоры", ru: "Директор" });
+    expect(acting.signatory.position).toEqual({ kk: "Директордың міндетін атқарушы", ru: "И. о. директора" });
+    expect(acting.signatory.fio).toBe("М. Тулеутаев");
+  });
+
   it("uses manual signatory override in view model instead of director defaults", () => {
     const model = buildPipelineModel({
       signed_by_position: "И. о. директора",
