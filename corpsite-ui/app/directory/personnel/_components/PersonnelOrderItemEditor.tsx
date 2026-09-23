@@ -72,7 +72,67 @@ type Props = {
   onChanged: (detail: PersonnelOrderDetailResponse) => void;
   /** Applicant person_id for HIRE without pre-existing employee. */
   hirePersonId?: number | null;
+  basisDocuments?: Array<{ basis_id?: unknown; document_type?: unknown; description?: unknown }>;
 };
+
+const BASIS_TYPE_LABELS: Record<string, string> = {
+  EMPLOYEE_APPLICATION: "Заявление работника / Қызметкердің жеке өтініші",
+  SERVICE_MEMO: "Служебная записка / Қызметтік хат",
+  REPORT_MEMO: "Докладная записка / Баяндау хат",
+  EMPLOYMENT_CONTRACT: "Трудовой договор / Еңбек шарты",
+  MEDICAL_CERTIFICATE: "Медицинская справка / Медициналық анықтама",
+  PREVIOUS_ORDER: "Предыдущий приказ / Алдыңғы бұйрық",
+  COLLECTIVE_AGREEMENT: "Коллективный договор / Ұжымдық шарт",
+};
+
+function basisTypeLabel(documentType: string): string {
+  return BASIS_TYPE_LABELS[documentType] || documentType;
+}
+
+function sourceEmployeeName(item: PersonnelOrderItem): string {
+  if (item.employee_name) return item.employee_name;
+  if (item.employee_id) return `#${item.employee_id}`;
+  const employee = item.payload?.employee;
+  if (employee && typeof employee === "object") {
+    const name = (employee as Record<string, unknown>).name;
+    if (name && typeof name === "object") {
+      const canonical = (name as Record<string, unknown>).canonical;
+      if (typeof canonical === "string" && canonical.trim()) return canonical.trim();
+    }
+  }
+  return "Не указан";
+}
+
+function assignmentSummary(value: unknown): string | null {
+  if (!value || typeof value !== "object") return null;
+  const assignment = value as Record<string, unknown>;
+  const label = (part: unknown): string | null => {
+    if (!part || typeof part !== "object") return null;
+    const item = part as Record<string, unknown>;
+    for (const key of ["kk", "ru", "text"]) {
+      const candidate = item[key];
+      if (typeof candidate === "string" && candidate.trim()) return candidate.trim();
+    }
+    return null;
+  };
+  const values = [label(assignment.unit), label(assignment.position)];
+  const rate = assignment.rate;
+  if (typeof rate === "string" && rate.trim()) values.push(`${rate.trim()} ставка`);
+  return values.filter(Boolean).join(" · ") || null;
+}
+
+function sourceItemSummary(item: PersonnelOrderItem): string {
+  const payload = item.payload || {};
+  const summaries = [
+    assignmentSummary(payload.assignment),
+    assignmentSummary(payload.to_assignment),
+    typeof payload.termination_reason === "string" ? payload.termination_reason : null,
+    typeof payload.concurrent_rate === "string" ? `Ставка: ${payload.concurrent_rate}` : null,
+    typeof payload.remaining_rate === "string" ? `Остающаяся ставка: ${payload.remaining_rate}` : null,
+    typeof payload.removed_rate === "string" ? `Снимаемая ставка: ${payload.removed_rate}` : null,
+  ].filter((value): value is string => Boolean(value && value.trim()));
+  return summaries.join("; ") || "—";
+}
 
 const ORG_SCOPE_BASE_PATH = "/directory/personnel/orders";
 
@@ -170,6 +230,7 @@ export default function PersonnelOrderItemEditor({
   disabled = false,
   onChanged,
   hirePersonId = null,
+  basisDocuments = [],
 }: Props) {
   const defaultItemType = resolveDefaultItemFormTypeForOrder(orderTypeCode);
   const itemTypeOptions = itemFormTypeOptionsForOrder(orderTypeCode);
@@ -393,6 +454,16 @@ export default function PersonnelOrderItemEditor({
     const uiType = detectUiItemTypeFromRecord(item);
     const normalizedUiType = normalizeItemFormType(uiType) ?? defaultItemType;
     const draft = itemPayloadDraftFromRecord(item.payload);
+    if (!draft.basis_entries?.length) {
+      draft.basis_entries = (draft.basis_ids || []).map((basisId) => ({
+        basis_id: basisId,
+        document_type: String(basisDocuments.find((basis) => basis.basis_id === basisId)?.document_type || ""),
+        other_text: "",
+      }));
+      if (draft.basis_other_text) {
+        draft.basis_entries.push({ document_type: "OTHER", basis_id: "", other_text: draft.basis_other_text });
+      }
+    }
     const savedEmployeeId =
       item.employee_id != null && Number(item.employee_id) > 0 ? Number(item.employee_id) : null;
     setEditingItemId(item.item_id);
@@ -512,7 +583,16 @@ export default function PersonnelOrderItemEditor({
       if (savedEmployeeIdBlocksPendingReset && resolvedEmployeeId == null) {
         resolvedEmployeeId = editingItemSavedEmployeeId;
       }
-      const payload = buildItemPayload(backendType, payloadDraft);
+      const savedItem = editingItemId == null ? null : items.find((item) => item.item_id === editingItemId);
+      const savedPayload = savedItem?.payload || {};
+      // Structured source attributes are not form controls. Keep them when an
+      // imported draft is edited, including its source employee identity.
+      const preservedSourcePayload = Object.fromEntries(
+        ["action_id", "employee", "assignment", "from_assignment", "to_assignment", "legal_basis"]
+          .filter((key) => savedPayload[key] !== undefined)
+          .map((key) => [key, savedPayload[key]]),
+      );
+      const payload = { ...preservedSourcePayload, ...buildItemPayload(backendType, payloadDraft) };
       if (isLeave && currentPlacement) {
         payload.org_unit_name = currentPlacement.org_unit_name || null;
         payload.position_name = currentPlacement.position_name || null;
@@ -928,6 +1008,55 @@ export default function PersonnelOrderItemEditor({
     );
   }
 
+  function renderBasisDocumentSection() {
+    const entries = payloadDraft.basis_entries || [];
+    const basisTypes = Array.from(new Set(basisDocuments
+      .map((basis) => typeof basis.document_type === "string" ? basis.document_type : "")
+      .filter(Boolean)));
+    const updateEntry = (index: number, next: Partial<{ document_type: string; basis_id: string; other_text: string }>) => {
+      setPayloadDraft((previous) => ({
+        ...previous,
+        basis_entries: (previous.basis_entries || []).map((entry, entryIndex) => entryIndex === index ? { ...entry, ...next } : entry),
+      }));
+    };
+    return (
+      <div className="space-y-3 rounded-lg border border-zinc-200 p-3 dark:border-zinc-800" data-testid="personnel-order-basis-selector">
+        <div className="text-sm font-medium">Основания</div>
+        {entries.map((entry, index) => {
+          const matchingDocuments = basisDocuments.filter((basis) => basis.document_type === entry.document_type);
+          return (
+            <div key={index} className="grid gap-3 rounded border border-zinc-200 p-3 dark:border-zinc-800" data-testid={`personnel-order-basis-entry-${index}`}>
+              <FormField label="Вид основания">
+                <select value={entry.document_type} onChange={(e) => updateEntry(index, { document_type: e.target.value, basis_id: "", other_text: "" })} className={FIELD_INPUT_CLASS}>
+                  <option value="">Не выбрано</option>
+                  {basisTypes.map((documentType) => <option key={documentType} value={documentType}>{basisTypeLabel(documentType)}</option>)}
+                  <option value="OTHER">Другое</option>
+                </select>
+              </FormField>
+              {entry.document_type && entry.document_type !== "OTHER" ? (
+                <FormField label="Связанный документ">
+                  <select value={entry.basis_id} onChange={(e) => updateEntry(index, { basis_id: e.target.value })} className={FIELD_INPUT_CLASS}>
+                    <option value="">Не выбрано</option>
+                    {matchingDocuments.map((basis, basisIndex) => {
+                      const basisId = typeof basis.basis_id === "string" ? basis.basis_id : "";
+                      const description = basis.description && typeof basis.description === "object" ? basis.description as Record<string, unknown> : {};
+                      const label = typeof description.kk === "string" ? description.kk : typeof description.ru === "string" ? description.ru : basisId;
+                      return basisId ? <option key={basisId || basisIndex} value={basisId}>{label}</option> : null;
+                    })}
+                  </select>
+                </FormField>
+              ) : null}
+              {entry.document_type === "OTHER" ? <FormField label="Текст основания"><textarea value={entry.other_text} onChange={(e) => updateEntry(index, { other_text: e.target.value })} className={FIELD_INPUT_CLASS} /></FormField> : null}
+              {entries.length > 1 ? <button type="button" onClick={() => setPayloadDraft((previous) => ({ ...previous, basis_entries: (previous.basis_entries || []).filter((_, entryIndex) => entryIndex !== index) }))} className="justify-self-start text-xs text-red-700 hover:underline dark:text-red-300">Удалить основание</button> : null}
+            </div>
+          );
+        })}
+        <button type="button" onClick={() => setPayloadDraft((previous) => ({ ...previous, basis_entries: [...(previous.basis_entries || []), { document_type: "", basis_id: "", other_text: "" }] }))} className="text-sm font-medium text-blue-700 hover:underline dark:text-blue-300">Добавить основание</button>
+        <p className={FIELD_HINT_CLASS}>Исходный текст импортированного основания не изменяется автоматически.</p>
+      </div>
+    );
+  }
+
   function renderFormSection(section: ItemFormSection) {
     switch (section) {
       case "item_type":
@@ -959,7 +1088,7 @@ export default function PersonnelOrderItemEditor({
         <table className="min-w-full text-sm">
           <thead className="bg-zinc-50 dark:bg-zinc-900/50">
             <tr>
-              {["№", "Тип пункта", "Сотрудник", "Дата", "Статус", ""].map((h) => (
+              {["№", "Тип пункта", "Сотрудник", "Дата", "Основные данные", "Статус", ""].map((h) => (
                 <th
                   key={h || "actions"}
                   className="px-3 py-2 text-left text-[11px] font-semibold uppercase text-zinc-500"
@@ -972,7 +1101,7 @@ export default function PersonnelOrderItemEditor({
           <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
             {items.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-3 py-3 text-sm text-zinc-500">
+                <td colSpan={7} className="px-3 py-3 text-sm text-zinc-500">
                   Пункты отсутствуют.
                 </td>
               </tr>
@@ -984,10 +1113,12 @@ export default function PersonnelOrderItemEditor({
                     {itemFormTypeLabel(detectUiItemTypeFromRecord(item))}
                   </td>
                   <td className="px-3 py-2">
-                    {item.employee_name ||
-                      (item.employee_id ? `#${item.employee_id}` : "Новый сотрудник")}
+                    {sourceEmployeeName(item)}
                   </td>
                   <td className="px-3 py-2">{item.effective_date || "—"}</td>
+                  <td className="max-w-[24rem] px-3 py-2 text-zinc-700 dark:text-zinc-300">
+                    {sourceItemSummary(item)}
+                  </td>
                   <td className="px-3 py-2">{item.item_status}</td>
                   <td className="px-3 py-2">
                     {!disabled && item.item_status === "ACTIVE" ? (
@@ -998,7 +1129,7 @@ export default function PersonnelOrderItemEditor({
                           onClick={() => void startEdit(item)}
                           disabled={deletingItemId === item.item_id}
                         >
-                          Изменить
+                          Редактировать
                         </button>
                         <button
                           type="button"
@@ -1035,6 +1166,7 @@ export default function PersonnelOrderItemEditor({
 
           <div className="space-y-4">
             {sectionOrder.map((section) => renderFormSection(section))}
+            {renderBasisDocumentSection()}
           </div>
 
           {error ? (

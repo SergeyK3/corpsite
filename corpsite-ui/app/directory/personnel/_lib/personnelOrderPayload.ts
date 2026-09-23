@@ -24,6 +24,10 @@ export type ItemPayloadDraft = {
   concurrent_rate?: string;
   total_rate?: string;
   remaining_rate?: string;
+  basis_id?: string;
+  basis_ids?: string[];
+  basis_other_text?: string;
+  basis_entries?: Array<{ document_type: string; basis_id: string; other_text: string }>;
 };
 
 function optionalNumber(raw: string | undefined): number | undefined {
@@ -47,6 +51,10 @@ export function emptyItemPayloadDraft(): ItemPayloadDraft {
     concurrent_rate: "0.5",
     total_rate: "",
     remaining_rate: "",
+    basis_id: "",
+    basis_ids: [],
+    basis_other_text: "",
+    basis_entries: [],
   };
 }
 
@@ -80,7 +88,48 @@ export function itemPayloadDraftFromRecord(payload: Record<string, unknown> | nu
     concurrent_rate: asString("concurrent_rate", "0.5"),
     total_rate: asString("total_rate"),
     remaining_rate: asString("remaining_rate"),
+    basis_id: Array.isArray(source.basis_ids) && typeof source.basis_ids[0] === "string" ? source.basis_ids[0] : "",
+    basis_ids: Array.isArray(source.basis_ids) ? source.basis_ids.filter((id): id is string => typeof id === "string" && Boolean(id.trim())) : [],
+    basis_other_text: asString("basis_other_text"),
+    basis_entries: Array.isArray(source.basis_entries)
+      ? source.basis_entries
+        .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object")
+        .map((entry) => ({
+          document_type: asStringFrom(entry, "document_type"),
+          basis_id: asStringFrom(entry, "basis_id"),
+          other_text: asStringFrom(entry, "other_text"),
+        }))
+      : [],
   };
+}
+
+function asStringFrom(source: Record<string, unknown>, key: string): string {
+  const value = source[key];
+  return value == null ? "" : String(value);
+}
+
+function appendBasisSelection(payload: Record<string, unknown>, draft: ItemPayloadDraft): void {
+  const entries = (draft.basis_entries || [])
+    .map((entry) => ({
+      document_type: String(entry.document_type || "").trim(),
+      basis_id: String(entry.basis_id || "").trim(),
+      other_text: String(entry.other_text || "").trim(),
+    }))
+    .filter((entry) => entry.document_type && (entry.basis_id || (entry.document_type === "OTHER" && entry.other_text)));
+  if (entries.length) {
+    payload.basis_entries = entries;
+    const linkedIds = entries.map((entry) => entry.basis_id).filter(Boolean);
+    if (linkedIds.length) payload.basis_ids = linkedIds;
+    const otherTexts = entries.filter((entry) => entry.document_type === "OTHER").map((entry) => entry.other_text).filter(Boolean);
+    if (otherTexts.length) payload.basis_other_text = otherTexts.join("\n");
+    return;
+  }
+  const basisId = String(draft.basis_id || "").trim();
+  const basisIds = (draft.basis_ids || []).map((id) => String(id).trim()).filter(Boolean);
+  if (basisIds.length) payload.basis_ids = basisIds;
+  else if (basisId && basisId !== "OTHER") payload.basis_ids = [basisId];
+  const otherText = String(draft.basis_other_text || "").trim();
+  if (basisId === "OTHER" && otherText) payload.basis_other_text = otherText;
 }
 
 /** Build apply-compatible payload. Does not enforce business rules — backend validates. */
@@ -113,6 +162,7 @@ export function buildItemPayload(
       payload.vacation_benefit_applicable = Boolean(draft.vacation_benefit_applicable);
       if (draft.vacation_benefit_applicable) payload.vacation_benefit_rule = String(draft.vacation_benefit_rule || "").trim();
     }
+    appendBasisSelection(payload, draft);
     return payload;
   }
 
@@ -125,6 +175,7 @@ export function buildItemPayload(
     if (rate != null) payload.employment_rate = rate;
     const personId = optionalNumber(draft.person_id);
     if (personId != null) payload.person_id = personId;
+    appendBasisSelection(payload, draft);
     return payload;
   }
 
@@ -135,12 +186,14 @@ export function buildItemPayload(
     if (toOrg != null) payload.to_org_unit_id = toOrg;
     if (toPos != null) payload.to_position_id = toPos;
     if (toRate != null) payload.to_rate = toRate;
+    appendBasisSelection(payload, draft);
     return payload;
   }
 
   if (type === "TERMINATION") {
     const reason = String(draft.termination_reason || "").trim();
     if (reason) payload.termination_reason = reason;
+    appendBasisSelection(payload, draft);
     return payload;
   }
 
@@ -149,6 +202,7 @@ export function buildItemPayload(
     const totalRate = optionalNumber(draft.total_rate);
     if (concurrentRate != null) payload.concurrent_rate = concurrentRate;
     if (totalRate != null) payload.total_rate = totalRate;
+    appendBasisSelection(payload, draft);
     return payload;
   }
 
@@ -159,8 +213,10 @@ export function buildItemPayload(
     if (remaining != null) payload.remaining_rate = remaining;
     if (concurrentRate != null) payload.concurrent_rate = concurrentRate;
     if (totalRate != null) payload.total_rate = totalRate;
+    appendBasisSelection(payload, draft);
     return payload;
   }
 
+  appendBasisSelection(payload, draft);
   return payload;
 }

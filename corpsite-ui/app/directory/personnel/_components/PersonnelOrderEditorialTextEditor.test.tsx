@@ -14,6 +14,7 @@ vi.mock("../_lib/personnelOrdersApi.client", async () => {
     generatePersonnelOrderEditorial: vi.fn(),
     patchPersonnelOrderEditorialBlock: vi.fn(),
     resetPersonnelOrderEditorialBlock: vi.fn(),
+    updatePersonnelOrderItem: vi.fn(),
   };
 });
 
@@ -22,6 +23,7 @@ import {
   getPersonnelOrderEditorial,
   patchPersonnelOrderEditorialBlock,
   resetPersonnelOrderEditorialBlock,
+  updatePersonnelOrderItem,
 } from "../_lib/personnelOrdersApi.client";
 
 const items: PersonnelOrderItem[] = [
@@ -32,6 +34,7 @@ const items: PersonnelOrderItem[] = [
     item_type_code: "HIRE",
     item_status: "ACTIVE",
     employee_name: "Петрова Анна",
+    payload: { basis_ids: ["application-1"] },
   },
 ];
 
@@ -215,7 +218,7 @@ describe("PersonnelOrderEditorialTextEditor", () => {
     expect(screen.getByText("Преамбула")).toBeInTheDocument();
     expect(screen.getByText("Пункт №1")).toBeInTheDocument();
     expect(screen.getByText("Петрова Анна")).toBeInTheDocument();
-    expect(screen.getByText("Основание")).toBeInTheDocument();
+    expect(screen.getByText("Негіз")).toBeInTheDocument();
     expect(screen.getByText("Заключительная часть")).toBeInTheDocument();
 
     expect(screen.queryByText(/fingerprint/i)).not.toBeInTheDocument();
@@ -306,6 +309,25 @@ describe("PersonnelOrderEditorialTextEditor", () => {
       expect(screen.getByText("О приёме на работу")).toBeInTheDocument();
     });
     expect(screen.queryByText("Жұмысқа қабылдау туралы")).not.toBeInTheDocument();
+  });
+
+  it("localizes the structured basis editor without changing its shared document code", async () => {
+    vi.mocked(getPersonnelOrderEditorial).mockResolvedValue(sampleState());
+    vi.mocked(updatePersonnelOrderItem).mockResolvedValue({} as never);
+    render(<PersonnelOrderEditorialTextEditor orderId={42} order={sampleOrder} items={items} editable basisDocuments={[{ basis_id: "application-1", document_type: "EMPLOYEE_APPLICATION", description: { kk: "Қызметкердің өтініші", ru: "Заявление работника" }, source_text: "Негіз: жеке өтініш." }]} />);
+
+    const kkEdit = await screen.findByTestId("personnel-order-editorial-basis-edit");
+    fireEvent.click(kkEdit);
+    expect(screen.getByTestId("personnel-order-editorial-basis-editor")).toHaveTextContent("Негіз түрі");
+    expect(screen.getByTestId("personnel-order-editorial-basis-editor")).toHaveTextContent("Қызметкердің өтініші");
+    expect(screen.getByTestId("personnel-order-editorial-basis-editor")).toHaveTextContent("Негіз қосу");
+
+    fireEvent.click(screen.getByTestId("personnel-order-editorial-locale-ru"));
+    const ruEdit = await screen.findByTestId("personnel-order-editorial-basis-edit");
+    fireEvent.click(ruEdit);
+    expect(screen.getByTestId("personnel-order-editorial-basis-editor")).toHaveTextContent("Вид основания");
+    expect(screen.getByTestId("personnel-order-editorial-basis-editor")).toHaveTextContent("Заявление работника");
+    expect(screen.getByTestId("personnel-order-editorial-basis-editor")).toHaveTextContent("Добавить основание");
   });
 
   it("saves Russian override with expected revision", async () => {

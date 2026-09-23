@@ -62,6 +62,38 @@
 | `MISSING_NUMBER_AND_DATE` | `null` | `null` |
 | `UNVERIFIED` / `CONFLICT` | значение или `null` | значение или `null` |
 
+### Шаблон и языковые снимки
+
+Для стандартизированного представления приказа отдельно фиксируются выбор
+сценария и применённый шаблон; исходное архивное название при этом не
+нормализуется и остаётся самостоятельным фактом. Минимальный служебный блок
+`storage_json` имеет вид:
+
+```json
+{
+  "template_key": "personnel.transfer.permanent-with-concurrent-duty",
+  "template_version": 1,
+  "scenario": "PERMANENT_TRANSFER_WITH_CONCURRENT_DUTY",
+  "language_policy": {
+    "primary_order_language": "kk",
+    "secondary_order_language": "ru",
+    "generate_bilingual": true
+  },
+  "registered_language_snapshots": {
+    "kk": null,
+    "ru": null
+  }
+}
+```
+
+Для текущего ММЦ первичный язык — `kk`, дополнительный — `ru`; формируются
+обе версии по самостоятельным языковым шаблонам, а не переводом одной версии в
+другую. До регистрации `registered_language_snapshots` остаются `null`. После
+регистрации в них записывается окончательный текст на каждом сформированном
+языке вместе с уже выбранными `template_key` и `template_version`; последующая
+смена шаблона не меняет этот снимок. Если данных недостаточно для выбора
+сценария, `template_key` и `scenario` не угадываются и остаются `null`.
+
 ## 3. Пункты `actions` и ФИО
 
 ```json

@@ -8,6 +8,8 @@ import {
   mapPersonnelOrdersApiError,
   patchPersonnelOrderEditorialBlock,
   resetPersonnelOrderEditorialBlock,
+  updatePersonnelOrderItem,
+  type PersonnelOrderDetailResponse,
   type PersonnelOrderEditorialBlock,
   type PersonnelOrderEditorialState,
   type PersonnelOrderHeader,
@@ -42,7 +44,65 @@ type Props = {
   items: PersonnelOrderItem[];
   /** Structured DRAFT write permission from order status. */
   editable: boolean;
+  basisDocuments?: Array<{ basis_id?: unknown; document_type?: unknown; description?: unknown; source_text?: unknown }>;
+  onOrderChanged?: (detail: PersonnelOrderDetailResponse) => void;
 };
+
+type BasisEntry = { document_type: string; basis_id: string; other_text: string };
+
+const BASIS_EDITOR_LABELS = {
+  ru: { basis: "Основание", imported: "Импортированный текст", kind: "Вид основания", empty: "Не выбрано", application: "Заявление работника", other: "Другое", add: "Добавить основание", manual: "Ручная корректировка", linked: "Связанный документ", save: "Сохранить", cancel: "Отмена", edit: "Редактировать", memo: "Служебная записка", report: "Докладная записка" },
+  kk: { basis: "Негіз", imported: "Импортталған мәтін", kind: "Негіз түрі", empty: "Таңдалмаған", application: "Қызметкердің өтініші", other: "Басқа", add: "Негіз қосу", manual: "Қолмен түзету", linked: "Байланысты құжат", save: "Сақтау", cancel: "Болдырмау", edit: "Өңдеу", memo: "Қызметтік хат", report: "Баяндау хат" },
+} as const;
+
+function basisEntriesForItem(item: PersonnelOrderItem, documents: Props["basisDocuments"]): BasisEntry[] {
+  const payload = item.payload || {};
+  const stored = Array.isArray(payload.basis_entries) ? payload.basis_entries : [];
+  const entries = stored
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object")
+    .map((entry) => ({ document_type: String(entry.document_type || ""), basis_id: String(entry.basis_id || ""), other_text: String(entry.other_text || "") }));
+  if (entries.length) return entries;
+  const ids = Array.isArray(payload.basis_ids) ? payload.basis_ids.filter((id): id is string => typeof id === "string") : [];
+  const derived = ids.map((basisId) => ({
+    basis_id: basisId,
+    document_type: String(documents?.find((document) => document.basis_id === basisId)?.document_type || ""),
+    other_text: "",
+  }));
+  const manual = typeof payload.basis_other_text === "string" ? payload.basis_other_text : "";
+  if (manual) derived.push({ document_type: "OTHER", basis_id: "", other_text: manual });
+  return derived;
+}
+
+function basisTypeLabel(type: string, locale: PersonnelOrderEditorialUiLocale): string {
+  const labels = BASIS_EDITOR_LABELS[locale];
+  return ({ EMPLOYEE_APPLICATION: labels.application, SERVICE_MEMO: labels.memo, REPORT_MEMO: labels.report } as Record<string, string>)[type] || type;
+}
+
+function StructuredBasisBlockEditor({ item, block, editable, documents = [], onChanged, locale }: { item: PersonnelOrderItem; block: PersonnelOrderEditorialBlock | null; editable: boolean; documents?: Props["basisDocuments"]; onChanged?: Props["onOrderChanged"]; locale: PersonnelOrderEditorialUiLocale }) {
+  const [editing, setEditing] = React.useState(false);
+  const [entries, setEntries] = React.useState<BasisEntry[]>(() => basisEntriesForItem(item, documents));
+  const [manualCorrection, setManualCorrection] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
+  const imported = documents.find((document) => typeof document.basis_id === "string" && (item.payload?.basis_ids as unknown[] || []).includes(document.basis_id));
+  const types = Array.from(new Set(documents.map((document) => String(document.document_type || "")).filter(Boolean)));
+  const ui = BASIS_EDITOR_LABELS[locale];
+  React.useEffect(() => { if (!editing) setEntries(basisEntriesForItem(item, documents)); }, [item, documents, editing]);
+  const update = (index: number, next: Partial<BasisEntry>) => setEntries((previous) => previous.map((entry, entryIndex) => entryIndex === index ? { ...entry, ...next } : entry));
+  async function save() {
+    setSaving(true);
+    try {
+      const valid = entries.filter((entry) => entry.document_type && (entry.basis_id || (entry.document_type === "OTHER" && entry.other_text.trim())));
+      const linkedIds = valid.map((entry) => entry.basis_id).filter(Boolean);
+      const otherText = valid.filter((entry) => entry.document_type === "OTHER").map((entry) => entry.other_text.trim()).filter(Boolean).join("\n");
+      const payload = { ...(item.payload || {}), basis_entries: valid, basis_ids: linkedIds, ...(otherText ? { basis_other_text: otherText } : {}) };
+      const detail = await updatePersonnelOrderItem(item.order_id, item.item_id, { item_type_code: item.item_type_code, employee_id: item.employee_id ?? null, effective_date: item.effective_date ?? null, period_start: item.period_start ?? null, period_end: item.period_end ?? null, item_number: item.item_number, payload });
+      onChanged?.(detail);
+      setEditing(false);
+    } finally { setSaving(false); }
+  }
+  if (!editing) return <div className="space-y-2" data-testid="personnel-order-editorial-basis-block"><h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{ui.basis}</h4><div className="min-h-[2.5rem] whitespace-pre-wrap rounded-lg border border-zinc-200 bg-zinc-50/80 px-3 py-2 text-sm leading-relaxed text-zinc-800 dark:border-zinc-800 dark:bg-zinc-900/50 dark:text-zinc-200">{displayPersonnelOrderEditorialBlockText(block).trim() || "—"}</div>{editable ? <button type="button" onClick={() => setEditing(true)} className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm dark:border-zinc-700" data-testid="personnel-order-editorial-basis-edit">{ui.edit}</button> : null}</div>;
+  return <div className="space-y-3" data-testid="personnel-order-editorial-basis-editor"><h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{ui.basis}</h4>{typeof imported?.source_text === "string" ? <p className="text-xs text-zinc-500">{ui.imported}: {imported.source_text}</p> : null}{entries.map((entry, index) => <div key={index} className="grid gap-2 rounded-lg border border-zinc-200 p-3 dark:border-zinc-800"><label className="text-sm">{ui.kind}<select value={entry.document_type} onChange={(e) => update(index, { document_type: e.target.value, basis_id: "", other_text: "" })} className="mt-1 w-full rounded border p-2"><option value="">{ui.empty}</option>{types.map((type) => <option key={type} value={type}>{basisTypeLabel(type, locale)}</option>)}<option value="OTHER">{ui.other}</option></select></label>{entry.document_type && entry.document_type !== "OTHER" ? <label className="text-sm">{ui.linked}<select value={entry.basis_id} onChange={(e) => update(index, { basis_id: e.target.value })} className="mt-1 w-full rounded border p-2"><option value="">{ui.empty}</option>{documents.filter((document) => document.document_type === entry.document_type && typeof document.basis_id === "string").map((document) => <option key={String(document.basis_id)} value={String(document.basis_id)}>{String((document.description as Record<string, unknown> | undefined)?.[locale] || (document.description as Record<string, unknown> | undefined)?.ru || (document.description as Record<string, unknown> | undefined)?.kk || document.basis_id)}</option>)}</select></label> : null}{(entry.document_type === "OTHER" || manualCorrection) ? <label className="text-sm">{ui.basis}<textarea value={entry.other_text} onChange={(e) => update(index, { other_text: e.target.value })} className="mt-1 w-full rounded border p-2" /></label> : null}</div>)}<div className="flex flex-wrap gap-2"><button type="button" onClick={() => setEntries((previous) => [...previous, { document_type: "", basis_id: "", other_text: "" }])} className="rounded border px-3 py-1.5 text-sm">{ui.add}</button><button type="button" onClick={() => setManualCorrection((value) => !value)} className="rounded border px-3 py-1.5 text-sm">{ui.manual}</button><button type="button" onClick={() => void save()} disabled={saving} className="rounded bg-zinc-900 px-3 py-1.5 text-sm text-white">{saving ? `${ui.save}…` : ui.save}</button><button type="button" onClick={() => setEditing(false)} className="rounded border px-3 py-1.5 text-sm">{ui.cancel}</button></div></div>;
+}
 
 function StatusBadge({ status }: { status: PersonnelOrderEditorialUiStatus }) {
   const label = PERSONNEL_ORDER_EDITORIAL_UI_STATUS_LABELS[status];
@@ -223,6 +283,8 @@ export default function PersonnelOrderEditorialTextEditor({
   order,
   items,
   editable,
+  basisDocuments = [],
+  onOrderChanged,
 }: Props) {
   const [state, setState] = React.useState<PersonnelOrderEditorialState | null>(null);
   const [activeLocale, setActiveLocale] = React.useState<PersonnelOrderEditorialUiLocale>("kk");
@@ -426,14 +488,7 @@ export default function PersonnelOrderEditorialTextEditor({
                   onSave={handleSave}
                   onReset={handleReset}
                 />
-                <BlockEditor
-                  label="Основание"
-                  block={section.basis}
-                  editable={canWrite}
-                  busy={busy}
-                  onSave={handleSave}
-                  onReset={handleReset}
-                />
+                <StructuredBasisBlockEditor item={items.find((item) => item.item_id === section.orderItemId)!} block={section.basis} editable={canWrite} documents={basisDocuments} onChanged={onOrderChanged} locale={activeLocale} />
               </div>
             );
           })}

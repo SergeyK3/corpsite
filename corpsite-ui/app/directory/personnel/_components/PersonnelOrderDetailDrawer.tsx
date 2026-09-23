@@ -7,7 +7,6 @@ import {
   formatPersonnelOrderDateTime,
   formatPersonnelOrderNumber,
   getPersonnelOrder,
-  isEditablePersonnelOrderStatus,
   isWritablePersonnelOrder,
   isPersonnelOrderApplied,
   mapPersonnelOrdersApiError,
@@ -29,6 +28,10 @@ import PersonnelOrderItemEditor from "./PersonnelOrderItemEditor";
 import PersonnelOrderLifecycleActions from "./PersonnelOrderLifecycleActions";
 import PersonnelOrderStatusBadge from "./PersonnelOrderStatusBadge";
 import PersonnelOrderTypeBadge from "./PersonnelOrderTypeBadge";
+import PersonnelOrderDocumentView, {
+  personnelOrderDocumentAvailable,
+  type PersonnelOrderDocumentLanguage,
+} from "./PersonnelOrderDocumentView";
 import PersonnelOrderPrintLanguageDialog, {
   type PersonnelOrderPrintDialogAction,
 } from "./print/PersonnelOrderPrintLanguageDialog";
@@ -118,6 +121,8 @@ export default function PersonnelOrderDetailDrawer({
   const [printError, setPrintError] = React.useState<string | null>(null);
   const [headerRequisitesDraft, setHeaderRequisitesDraft] =
     React.useState<PersonnelOrderRequisitesSnapshot | null>(null);
+  const [activeTab, setActiveTab] = React.useState<"document" | "data">("document");
+  const [documentLanguage, setDocumentLanguage] = React.useState<PersonnelOrderDocumentLanguage>("kk");
 
   React.useEffect(() => {
     if (!open) return;
@@ -150,6 +155,8 @@ export default function PersonnelOrderDetailDrawer({
       setError(null);
       setToast(null);
       setHeaderRequisitesDraft(null);
+      setActiveTab("document");
+      setDocumentLanguage("kk");
       return;
     }
     let cancelled = false;
@@ -190,6 +197,12 @@ export default function PersonnelOrderDetailDrawer({
   const linkedEventCount = detail?.events.length || 0;
   const applied = isPersonnelOrderApplied(linkedEventCount);
   const editable = order ? isWritablePersonnelOrder(order.status, order.is_archived) : false;
+  const sourceTitle = detail?.localized_texts.find((text) => text.title?.trim())?.title?.trim() || "—";
+  const documentAvailable = personnelOrderDocumentAvailable(detail, documentLanguage);
+  const basisDocuments = Array.isArray(order?.storage_json?.basis_documents)
+    ? order.storage_json.basis_documents
+        .filter((basis): basis is Record<string, unknown> => Boolean(basis) && typeof basis === "object")
+    : [];
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end" data-testid="personnel-order-detail-drawer">
@@ -211,7 +224,11 @@ export default function PersonnelOrderDetailDrawer({
               <button
                 type="button"
                 data-testid="personnel-order-drawer-print"
-                onClick={() => setPrintOpen(true)}
+                onClick={() => {
+                  setActiveTab("document");
+                  window.setTimeout(() => window.print(), 50);
+                }}
+                disabled={!documentAvailable}
                 className="rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
               >
                 Печать
@@ -227,7 +244,29 @@ export default function PersonnelOrderDetailDrawer({
           </div>
         </div>
 
+        <div className="flex gap-1 border-b border-zinc-200 px-4 pt-3 dark:border-zinc-800" role="tablist" aria-label="Карточка приказа">
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "document"}
+            onClick={() => setActiveTab("document")}
+            className={`rounded-t-lg px-3 py-2 text-sm font-medium ${activeTab === "document" ? "bg-zinc-100 text-zinc-950 dark:bg-zinc-800 dark:text-zinc-50" : "text-zinc-500"}`}
+          >
+            Документ
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === "data"}
+            onClick={() => setActiveTab("data")}
+            className={`rounded-t-lg px-3 py-2 text-sm font-medium ${activeTab === "data" ? "bg-zinc-100 text-zinc-950 dark:bg-zinc-800 dark:text-zinc-50" : "text-zinc-500"}`}
+          >
+            Данные
+          </button>
+        </div>
+
         <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-4 py-4">
+          <style>{`@media print { body * { visibility: hidden !important; } #personnel-order-document-print, #personnel-order-document-print * { visibility: visible !important; } #personnel-order-document-print { position: absolute; left: 0; top: 0; width: 100%; max-width: none; border: 0; box-shadow: none; } }`}</style>
           {toast ? (
             <div
               className={
@@ -248,7 +287,17 @@ export default function PersonnelOrderDetailDrawer({
             </div>
           ) : null}
 
-          {order ? (
+          {order && activeTab === "document" ? (
+            <>
+              <div className="flex items-center justify-end gap-1" role="group" aria-label="Язык документа">
+                <button type="button" onClick={() => setDocumentLanguage("kk")} className={`rounded px-2 py-1 text-sm ${documentLanguage === "kk" ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900" : "text-zinc-600 dark:text-zinc-300"}`}>Қазақша</button>
+                <button type="button" onClick={() => setDocumentLanguage("ru")} className={`rounded px-2 py-1 text-sm ${documentLanguage === "ru" ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900" : "text-zinc-600 dark:text-zinc-300"}`}>Русский</button>
+              </div>
+              <PersonnelOrderDocumentView detail={detail} language={documentLanguage} />
+            </>
+          ) : null}
+
+          {order && activeTab === "data" ? (
             <>
               <section>
                 <h3 className="mb-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100">Действия</h3>
@@ -263,6 +312,9 @@ export default function PersonnelOrderDetailDrawer({
 
               <section>
                 <h3 className="mb-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100">Заголовок</h3>
+                <div className="mb-3">
+                  <Field label="Исходное название" value={sourceTitle} />
+                </div>
                 {editable ? (
                   <PersonnelOrderHeaderEditor
                     order={order}
@@ -327,6 +379,7 @@ export default function PersonnelOrderDetailDrawer({
                   disabled={!editable}
                   onChanged={handleChanged}
                   hirePersonId={hirePersonId}
+                  basisDocuments={basisDocuments}
                 />
               </section>
 
@@ -369,6 +422,8 @@ export default function PersonnelOrderDetailDrawer({
                   order={previewRequisites ?? order}
                   items={detail?.items || []}
                   editable={editable}
+                  basisDocuments={basisDocuments}
+                  onOrderChanged={handleChanged}
                 />
               </section>
 
