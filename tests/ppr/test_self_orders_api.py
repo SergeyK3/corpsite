@@ -59,6 +59,69 @@ def test_my_order_confirmation_uses_status_and_existing_review_signal(monkeypatc
     assert "ещё не подтверждён" in review.json()["warning"]
 
 
+def test_my_orders_composite_title_uses_only_current_employee_item_types(monkeypatch) -> None:
+    row = _row(status="REGISTERED")
+    row["title"] = "COMPOSITE"
+    row["item_text"] = None
+    row["employee_item_types"] = ["HIRE", "CONCURRENT_DUTY_START"]
+    app.dependency_overrides[get_current_user] = lambda: {"user_id": 1}
+    monkeypatch.setattr(subject, "_employee_for_user", lambda user: ("READY", 42))
+    monkeypatch.setattr(subject, "_safe_rows", lambda employee_id, **kwargs: [row])
+    try:
+        response = TestClient(app).get("/api/ppr/me/orders/11")
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+    assert response.status_code == 200
+    assert response.json()["title"] == "Приём на работу; Совмещение (начало)"
+    assert response.json()["confirmation_status"] == "CONFIRMED"
+    assert response.json()["item_text"] is None
+    assert "COMPOSITE" not in response.text
+
+
+@pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
+def test_my_orders_use_session_employee_when_person_link_is_missing(seed) -> None:
+    """An Employee-only account remains safe: items are still Employee-scoped."""
+    require_ppr_schema()
+    with engine.begin() as conn:
+        if not table_exists(conn, "personnel_orders"):
+            pytest.skip("personnel order schema missing")
+        user_id = int(seed["initiator_user_id"])
+        previous_employee_id = conn.execute(
+            text("SELECT employee_id FROM public.users WHERE user_id=:id"), {"id": user_id}
+        ).scalar_one()
+        suffix = uuid4().hex[:8]
+        own_employee = insert_employee(conn, full_name=f"Employee only {suffix}")
+        other_employee = insert_employee(conn, full_name=f"Other employee {suffix}")
+        conn.execute(text("UPDATE public.users SET employee_id=:employee WHERE user_id=:user"), {"employee": own_employee, "user": user_id})
+        order_id = int(conn.execute(text("""INSERT INTO public.personnel_orders(order_number,order_date,order_type_code,status,source_mode,created_by)
+            VALUES(:number,:date,'COMPOSITE','DRAFT','PAPER',:user) RETURNING order_id"""), {"number": f"NO-PERSON-{suffix}", "date": date(2026, 9, 2), "user": user_id}).scalar_one())
+        own_item = int(conn.execute(text("""INSERT INTO public.personnel_order_items(order_id,item_number,item_type_code,employee_id,payload)
+            VALUES(:order,1,'HIRE',:employee,'{}'::jsonb) RETURNING item_id"""), {"order": order_id, "employee": own_employee}).scalar_one())
+        other_item = int(conn.execute(text("""INSERT INTO public.personnel_order_items(order_id,item_number,item_type_code,employee_id,payload)
+            VALUES(:order,2,'HIRE',:employee,'{}'::jsonb) RETURNING item_id"""), {"order": order_id, "employee": other_employee}).scalar_one())
+        conn.execute(text("INSERT INTO public.personnel_order_item_editorial_blocks(order_item_id,locale,block_type,generated_text) VALUES(:item,'ru','body',:body)"), {"item": own_item, "body": "Только собственный пункт."})
+        conn.execute(text("INSERT INTO public.personnel_order_item_editorial_blocks(order_item_id,locale,block_type,generated_text) VALUES(:item,'ru','body',:body)"), {"item": other_item, "body": "Чужой пункт."})
+    try:
+        app.dependency_overrides[get_current_user] = lambda: {"user_id": user_id}
+        client = TestClient(app)
+        listing = client.get("/api/ppr/me/orders?employee_id=999999")
+        detail = client.get(f"/api/ppr/me/orders/{order_id}")
+        for response in (listing, detail):
+            assert response.status_code == 200
+            assert "Только собственный пункт." in response.text
+            assert "Чужой пункт." not in response.text
+            for forbidden in ("employee_id", "payload", "evidence", "assumptions", "editorial"):
+                assert forbidden not in response.text
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+        with engine.begin() as conn:
+            conn.execute(text("DELETE FROM public.personnel_order_item_editorial_blocks WHERE order_item_id IN (:own,:other)"), {"own": own_item, "other": other_item})
+            conn.execute(text("DELETE FROM public.personnel_order_items WHERE order_id=:id"), {"id": order_id})
+            conn.execute(text("DELETE FROM public.personnel_orders WHERE order_id=:id"), {"id": order_id})
+            conn.execute(text("UPDATE public.users SET employee_id=:employee WHERE user_id=:user"), {"employee": previous_employee_id, "user": user_id})
+            conn.execute(text("DELETE FROM public.employees WHERE employee_id IN (:own,:other)"), {"own": own_employee, "other": other_employee})
+
+
 @pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
 def test_my_orders_integration_isolates_two_users_and_multi_item_order(seed) -> None:
     """The database query, rather than a mocked service, enforces item isolation."""

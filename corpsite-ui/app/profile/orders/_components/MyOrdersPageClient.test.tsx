@@ -28,4 +28,11 @@ describe("MyOrdersPageClient", () => {
     expect(await screen.findByRole("button", { name: "Распечатать" })).toBeInTheDocument();
     expect(screen.queryByTestId("my-order-unconfirmed-watermark")).not.toBeInTheDocument();
   });
+  it("uses the neutral electronic-version fallback when an item body is unavailable", async () => {
+    const order = { order_id: 1, order_number: "125-к", order_date: "2026-07-10", title: "Приём на работу; Совмещение (начало)", item_text: null, confirmation_status: "CONFIRMED" as const };
+    list.mockResolvedValue({ status: "READY", orders: [order] }); detail.mockResolvedValue({ ...order, warning: null });
+    render(<MyOrdersPageClient />); fireEvent.click(await screen.findByRole("button", { name: "Открыть" }));
+    expect(await screen.findByText("Текст пункта приказа отсутствует в электронной версии")).toBeInTheDocument();
+    expect(screen.getAllByText("Подтверждено кадровой службой")).toHaveLength(2);
+  });
 });

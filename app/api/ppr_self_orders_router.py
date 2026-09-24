@@ -22,6 +22,16 @@ _UNCONFIRMED_WARNING = (
     "Приказ ещё не подтверждён кадровой службой. Сведения могут быть уточнены после сверки с оригиналом."
 )
 _CONFIRMED_STATUSES = {"SIGNED", "REGISTERED", "VOIDED"}
+_SELF_ITEM_TYPE_LABELS = {
+    "HIRE": "Приём на работу",
+    "TRANSFER": "Перевод",
+    "TERMINATION": "Увольнение",
+    "CONCURRENT_DUTY_START": "Совмещение (начало)",
+    "CONCURRENT_DUTY_END": "Совмещение (окончание)",
+    "SUPPLEMENTARY_PAY": "Дополнительная оплата",
+    "LEAVE.ANNUAL.GRANT": "Ежегодный трудовой отпуск",
+    "LEAVE.UNPAID.GRANT": "Отпуск без сохранения заработной платы",
+}
 
 
 def _employee_for_user(user: dict[str, Any]) -> tuple[Literal["READY", "NO_EMPLOYEE_LINK", "PERSON_NOT_LINKED", "IDENTITY_AMBIGUOUS"], int | None]:
@@ -36,8 +46,11 @@ def _employee_for_user(user: dict[str, Any]) -> tuple[Literal["READY", "NO_EMPLO
         """), {"user_id": int(user["user_id"])}).mappings().one_or_none()
         if row is None or row["employee_id"] is None:
             return "NO_EMPLOYEE_LINK", None
+        # Personnel orders are scoped by Employee, not Person.  An Employee
+        # without a materialized Person card can therefore still safely read
+        # only items bound to their session-resolved employee_id.
         if row["person_id"] is None:
-            return "PERSON_NOT_LINKED", None
+            return "READY", int(row["employee_id"])
         count = int(conn.execute(text("""
             SELECT COUNT(*) FROM public.employees
             WHERE COALESCE(is_active, FALSE) IS TRUE AND person_id = :person_id
@@ -71,6 +84,13 @@ def _safe_rows(employee_id: int, *, order_id: int | None = None, year: int | Non
                COALESCE(NULLIF(BTRIM(title.override_text), ''), NULLIF(BTRIM(title.generated_text), ''),
                         NULLIF(BTRIM(localized.title), ''), po.order_type_code) AS title,
                COALESCE(NULLIF(BTRIM(body.override_text), ''), NULLIF(BTRIM(body.generated_text), '')) AS item_text,
+               ARRAY(
+                 SELECT own_item.item_type_code
+                 FROM public.personnel_order_items own_item
+                 WHERE own_item.order_id = po.order_id
+                   AND own_item.employee_id = :employee_id
+                 ORDER BY own_item.item_number ASC
+               ) AS employee_item_types,
                (
                  COALESCE(po.storage_json ->> 'reconstruction_status', '') = 'NEEDS_DOCX_REVIEW'
                  OR EXISTS (
@@ -99,9 +119,17 @@ def _safe_rows(employee_id: int, *, order_id: int | None = None, year: int | Non
 
 def _serialize(row: Any, *, detail: bool = False) -> dict[str, Any]:
     confirmed = _confirmed(str(row["status"]), bool(row["needs_review"]))
+    title = str(row["title"])
+    if title == "COMPOSITE":
+        labels = [
+            _SELF_ITEM_TYPE_LABELS.get(str(item_type), str(item_type))
+            for item_type in (row.get("employee_item_types") or [])
+        ]
+        if labels:
+            title = "; ".join(dict.fromkeys(labels))
     result = {
         "order_id": int(row["order_id"]), "order_number": row["order_number"], "order_date": row["order_date"],
-        "title": str(row["title"]), "item_text": row["item_text"],
+        "title": title, "item_text": row["item_text"],
         "confirmation_status": "CONFIRMED" if confirmed else "UNCONFIRMED",
     }
     if detail:
