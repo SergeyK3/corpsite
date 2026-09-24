@@ -92,12 +92,17 @@ function renderItem(
   item: PersonnelOrderPrintItemViewModel,
   language: PersonnelOrderPrintLanguage,
 ): string {
-  // Prefer editorial effective body; fall back to deterministic templates.
-  const editorialLines = item.body ? resolveLocalizedLines(item.body, language) : [];
-  const lines =
-    editorialLines.length > 0
-      ? editorialLines
-      : renderPersonnelOrderPrintItemText(item.context, language);
+  // An editorial override belongs only to its own locale.  Do not fall back
+  // from a Kazakh override to a Russian print (or the reverse).
+  const manual = (locale: "kk" | "ru") => String(item.body?.[locale] || "").trim() || null;
+  const lines = language === "kk"
+    ? (manual("kk") ? [manual("kk")!] : renderPersonnelOrderPrintItemText(item.context, "kk"))
+    : language === "ru"
+      ? (manual("ru") ? [manual("ru")!] : renderPersonnelOrderPrintItemText(item.context, "ru"))
+      : [
+        ...(manual("kk") ? [manual("kk")!] : renderPersonnelOrderPrintItemText(item.context, "kk")),
+        ...(manual("ru") ? [manual("ru")!] : renderPersonnelOrderPrintItemText(item.context, "ru")),
+      ];
   const body = lines
     .map((line) => `<p class="m-0">${escapePersonnelOrderPrintHtml(line)}</p>`)
     .join("");

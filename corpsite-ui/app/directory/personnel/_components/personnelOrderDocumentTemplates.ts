@@ -231,22 +231,26 @@ export function renderPersonnelOrderDocument(
       : templateKey === "personnel.concurrent-duty.start" ? concurrentDutyForLanguage(detail, language)
         : templateKey === "personnel.termination.employee-initiative-unused-leave" ? terminationByEmployeeInitiativeForLanguage(detail, language)
           : permanentTransferWithConcurrentDutyForLanguage(detail, language);
-  const orderBlock = (blockType: string) => editorial?.order_blocks.find(
+  const manualBlockText = (block: { override_text?: string | null; generated_text?: string | null; effective_text?: string | null } | undefined) =>
+    block?.override_text?.trim() || (!block?.generated_text?.trim() ? block?.effective_text?.trim() : null) || null;
+  const orderBlockOverride = (blockType: string) => manualBlockText(editorial?.order_blocks.find(
     (block) => block.block_type === blockType && block.locale === language,
-  )?.effective_text?.trim() || null;
+  ));
   const items = detail.items.filter((item) => String(item.item_status).toUpperCase() !== "VOIDED");
   const points = rendered.points.map((point, index) => {
     const item = items[index];
     const group = editorial?.items.find((entry) => entry.order_item_id === item?.item_id);
-    const body = group?.blocks.find((block) => block.block_type === "body" && block.locale === language)?.effective_text?.trim();
-    const basis = group?.blocks.find((block) => block.block_type === "basis" && block.locale === language)?.effective_text?.trim();
+    const body = manualBlockText(group?.blocks.find((block) => block.block_type === "body" && block.locale === language));
+    const basis = manualBlockText(group?.blocks.find((block) => block.block_type === "basis" && block.locale === language));
     return { ...point, text: body || point.text, basis: basis ? [basis] : point.basis };
   });
-  const closing = orderBlock("closing");
+  const closing = orderBlockOverride("closing");
   return {
     ...rendered,
-    title: orderBlock("title") || titleFor(templateKey, language),
-    preamble: orderBlock("preamble") || rendered.preamble,
+    // Generated editorial snapshots are diagnostic/editing material.  The
+    // approved bilingual renderer remains the automatic source of truth.
+    title: orderBlockOverride("title") || titleFor(templateKey, language),
+    preamble: orderBlockOverride("preamble") || rendered.preamble,
     points,
     additionalInstructions: closing ? [...rendered.additionalInstructions, closing] : rendered.additionalInstructions,
   };

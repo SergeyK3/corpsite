@@ -50,7 +50,7 @@ vi.mock("../_lib/personnelOrdersApi.client", async () => {
   };
 });
 
-import { getPersonnelOrder } from "../_lib/personnelOrdersApi.client";
+import { getPersonnelOrder, getPersonnelOrderEditorial } from "../_lib/personnelOrdersApi.client";
 
 const detail: PersonnelOrderDetailResponse = {
   order: {
@@ -124,6 +124,71 @@ describe("PersonnelOrderDetailDrawer document tab", () => {
     fireEvent.click(screen.getByTestId("personnel-order-drawer-print"));
     await waitFor(() => {
       expect(screen.getByTestId("personnel-order-active-print-root")).toHaveTextContent("БҰЙЫРАМЫН:");
+    });
+  });
+
+  it("rehydrates the production-shaped top-level position override into Russian document and print", async () => {
+    const productionDetail: PersonnelOrderDetailResponse = {
+      ...detail,
+      order: {
+        ...detail.order,
+        order_id: 405,
+        order_number: "1336-ж",
+        order_type_code: "TRANSFER",
+      },
+      items: [{
+        item_id: 399,
+        order_id: 405,
+        item_number: 1,
+        item_type_code: "TRANSFER",
+        item_status: "ACTIVE",
+        employee_id: 77,
+        employee_name: "Иванов Иван",
+        effective_date: "2026-02-01",
+        payload: {
+          to_assignment: {
+            unit: { ru: "Приемное отделение", kk: "Қабылдау бөлімшесі" },
+            position: { ru: "Медсестра", kk: "мейіргер" },
+            rate: "1.0",
+          },
+          position_text_override: { kk: "", ru: "медбрат" },
+        },
+      }],
+    };
+    vi.mocked(getPersonnelOrder).mockResolvedValue(productionDetail);
+    vi.mocked(getPersonnelOrderEditorial).mockResolvedValue({
+      order_id: 405,
+      order_status: "DRAFT",
+      editable: true,
+      order_blocks: [],
+      items: [{
+        order_item_id: 399,
+        item_number: 1,
+        item_type_code: "TRANSFER",
+        basis_required: true,
+        blocks: [
+          { block_id: 1, scope: "item", order_item_id: 399, locale: "ru", block_type: "body", generated_text: "Перевести Иванова на должность медсестра.", override_text: null, effective_text: "Перевести Иванова на должность медсестра.", review_status: "CURRENT", editable: true, revision: 1 },
+          { block_id: 2, scope: "item", order_item_id: 399, locale: "kk", block_type: "body", generated_text: "Автоматты мәтін", override_text: "мейіргер", effective_text: "мейіргер", review_status: "CURRENT", editable: true, revision: 1 },
+        ],
+      }],
+    });
+    const print = vi.spyOn(window, "print").mockImplementation(() => undefined);
+
+    const { rerender } = render(<PersonnelOrderDetailDrawer orderId={405} open onClose={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Русский" }));
+    await waitFor(() => {
+      expect(screen.getByTestId("personnel-order-document")).toHaveTextContent("медбрат");
+    });
+    fireEvent.click(screen.getByTestId("personnel-order-drawer-print"));
+    await waitFor(() => expect(print).toHaveBeenCalled());
+    expect(screen.getByTestId("personnel-order-active-print-root")).toHaveTextContent("медбрат");
+    fireEvent(window, new Event("afterprint"));
+
+    rerender(<PersonnelOrderDetailDrawer orderId={405} open={false} onClose={vi.fn()} />);
+    rerender(<PersonnelOrderDetailDrawer orderId={405} open onClose={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: "Русский" }));
+    await waitFor(() => {
+      expect(screen.getByTestId("personnel-order-document")).toHaveTextContent("медбрат");
     });
   });
 

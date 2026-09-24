@@ -144,19 +144,20 @@ function documentTitleFallback(typeCode: string | null | undefined): LocalizedTe
   );
 }
 
-function pickEffectiveByLocale(
+function pickManualOverrideByLocale(
   blocks: PersonnelOrderEditorialBlock[] | undefined,
   blockType: string,
 ): LocalizedText | null {
   if (!blocks?.length) return null;
-  const kk = optionalString(
-    blocks.find((b) => b.block_type === blockType && String(b.locale).toLowerCase() === "kk")
-      ?.effective_text,
-  );
-  const ru = optionalString(
-    blocks.find((b) => b.block_type === blockType && String(b.locale).toLowerCase() === "ru")
-      ?.effective_text,
-  );
+  const manual = (locale: "kk" | "ru") => {
+    const block = blocks.find((b) => b.block_type === blockType && String(b.locale).toLowerCase() === locale);
+    return optionalString(block?.override_text)
+      // Compatibility with pre-editorial API responses that did not expose
+      // generated_text/override_text separately.
+      || (!optionalString(block?.generated_text) ? optionalString(block?.effective_text) : null);
+  };
+  const kk = manual("kk");
+  const ru = manual("ru");
   if (!kk && !ru) return null;
   return localizedText(kk, ru);
 }
@@ -173,9 +174,9 @@ function pickLocalizedTexts(
   preamble: LocalizedText | null;
   closing: LocalizedText | null;
 } {
-  const editorialTitle = pickEffectiveByLocale(editorial?.order_blocks, "title");
-  const editorialPreamble = pickEffectiveByLocale(editorial?.order_blocks, "preamble");
-  const editorialClosing = pickEffectiveByLocale(editorial?.order_blocks, "closing");
+  const editorialTitle = pickManualOverrideByLocale(editorial?.order_blocks, "title");
+  const editorialPreamble = pickManualOverrideByLocale(editorial?.order_blocks, "preamble");
+  const editorialClosing = pickManualOverrideByLocale(editorial?.order_blocks, "closing");
 
   const rows = detail.localized_texts || [];
   const kk = rows.find((row) => String(row.locale).toLowerCase() === "kk");
@@ -274,8 +275,8 @@ function itemEditorialTexts(
 ): { body: LocalizedText | null; basis: LocalizedText | null } {
   const group = editorial?.items?.find((row) => row.order_item_id === itemId);
   return {
-    body: pickEffectiveByLocale(group?.blocks, "body"),
-    basis: pickEffectiveByLocale(group?.blocks, "basis"),
+    body: pickManualOverrideByLocale(group?.blocks, "body"),
+    basis: pickManualOverrideByLocale(group?.blocks, "basis"),
   };
 }
 

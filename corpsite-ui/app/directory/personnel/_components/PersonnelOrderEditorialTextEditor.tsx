@@ -105,7 +105,7 @@ function StructuredBasisBlockEditor({ item, block, editable, documents = [], onC
   return <div className="space-y-3" data-testid="personnel-order-editorial-basis-editor"><h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{ui.basis}</h4>{typeof imported?.source_text === "string" ? <p className="text-xs text-zinc-500">{ui.imported}: {imported.source_text}</p> : null}{entries.map((entry, index) => <div key={index} className="grid gap-2 rounded-lg border border-zinc-200 p-3 dark:border-zinc-800"><label className="text-sm">{ui.kind}<select value={entry.document_type} onChange={(e) => update(index, { document_type: e.target.value, basis_id: "", other_text: "" })} className="mt-1 w-full rounded border p-2"><option value="">{ui.empty}</option>{types.map((type) => <option key={type} value={type}>{basisTypeLabel(type, locale)}</option>)}<option value="OTHER">{ui.other}</option></select></label>{entry.document_type && entry.document_type !== "OTHER" ? <label className="text-sm">{ui.linked}<select value={entry.basis_id} onChange={(e) => update(index, { basis_id: e.target.value })} className="mt-1 w-full rounded border p-2"><option value="">{ui.empty}</option>{documents.filter((document) => document.document_type === entry.document_type && typeof document.basis_id === "string").map((document) => <option key={String(document.basis_id)} value={String(document.basis_id)}>{String((document.description as Record<string, unknown> | undefined)?.[locale] || (document.description as Record<string, unknown> | undefined)?.ru || (document.description as Record<string, unknown> | undefined)?.kk || document.basis_id)}</option>)}</select></label> : null}{(entry.document_type === "OTHER" || manualCorrection) ? <label className="text-sm">{ui.basis}<textarea value={entry.other_text} onChange={(e) => update(index, { other_text: e.target.value })} className="mt-1 w-full rounded border p-2" /></label> : null}</div>)}<div className="flex flex-wrap gap-2"><button type="button" onClick={() => setEntries((previous) => [...previous, { document_type: "", basis_id: "", other_text: "" }])} className="rounded border px-3 py-1.5 text-sm">{ui.add}</button><button type="button" onClick={() => setManualCorrection((value) => !value)} className="rounded border px-3 py-1.5 text-sm">{ui.manual}</button><button type="button" onClick={() => void save()} disabled={saving} className="rounded bg-zinc-900 px-3 py-1.5 text-sm text-white">{saving ? `${ui.save}…` : ui.save}</button><button type="button" onClick={() => setEditing(false)} className="rounded border px-3 py-1.5 text-sm">{ui.cancel}</button></div></div>;
 }
 
-function PositionTextOverrideEditor({ item, editable, onChanged }: { item: PersonnelOrderItem; editable: boolean; onChanged?: Props["onOrderChanged"] }) {
+function PositionTextOverrideEditor({ item, editable, onChanged, manualBody }: { item: PersonnelOrderItem; editable: boolean; onChanged?: Props["onOrderChanged"]; manualBody: boolean }) {
   const stored = (item.payload?.position_text_override || {}) as Record<string, unknown>;
   const [ru, setRu] = React.useState(String(stored.ru || ""));
   const [kk, setKk] = React.useState(String(stored.kk || ""));
@@ -129,6 +129,7 @@ function PositionTextOverrideEditor({ item, editable, onChanged }: { item: Perso
     <label className="mt-2 block text-sm">Русский<input list={`personnel-position-ru-options-${item.item_id}`} value={ru} onChange={(event) => setRu(event.target.value)} className="mt-1 w-full rounded border p-2" /></label>
     <datalist id={`personnel-position-ru-options-${item.item_id}`}><option value="медицинская сестра" /><option value="медицинский брат" /><option value="Другое" /></datalist>
     <label className="mt-2 block text-sm">Қазақша<input value={kk} onChange={(event) => setKk(event.target.value)} className="mt-1 w-full rounded border p-2" /></label>
+    {manualBody ? <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">Ручной текст пункта имеет приоритет; чтобы применить название должности, верните автоматически сформированный текст.</p> : null}
     <button type="button" onClick={() => void save()} disabled={saving} className="mt-3 rounded border px-3 py-1.5 text-sm">{saving ? "Сохранение…" : "Сохранить"}</button>
   </div>;
 }
@@ -522,7 +523,7 @@ export default function PersonnelOrderEditorialTextEditor({
                   onSave={handleSave}
                   onReset={handleReset}
                 />
-                <PositionTextOverrideEditor item={items.find((item) => item.item_id === section.orderItemId)!} editable={canWrite} onChanged={onOrderChanged} />
+                <PositionTextOverrideEditor item={items.find((item) => item.item_id === section.orderItemId)!} editable={canWrite} onChanged={onOrderChanged} manualBody={Boolean(section.body?.override_text?.trim())} />
                 <StructuredBasisBlockEditor item={items.find((item) => item.item_id === section.orderItemId)!} block={section.basis} editable={canWrite} documents={basisDocuments} onChanged={onOrderChanged} locale={activeLocale} />
               </div>
             );

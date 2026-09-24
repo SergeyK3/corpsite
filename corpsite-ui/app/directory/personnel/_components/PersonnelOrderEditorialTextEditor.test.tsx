@@ -617,6 +617,7 @@ describe("PersonnelOrderEditorialTextEditor", () => {
     fireEvent.click(screen.getByTestId("personnel-order-editorial-locale-ru"));
     const item = await screen.findByTestId("personnel-order-editorial-item-10");
     expect(item).toHaveTextContent("РУЧНОЙ RU");
+    expect(item).toHaveTextContent("Ручной текст пункта имеет приоритет; чтобы применить название должности, верните автоматически сформированный текст.");
     fireEvent.click(item.querySelector('[data-testid="personnel-order-editorial-reset"]')!);
 
     await waitFor(() => {
