@@ -61,8 +61,8 @@ def _employee_for_user(user: dict[str, Any]) -> tuple[Literal["READY", "NO_EMPLO
     return "READY", int(row["employee_id"])
 
 
-def _confirmed(status: str, needs_review: bool) -> bool:
-    return status in _CONFIRMED_STATUSES and not needs_review
+def _confirmed(status: str, needs_review: bool, needs_docx_review: bool = False) -> bool:
+    return status in _CONFIRMED_STATUSES and not needs_review and not needs_docx_review
 
 
 def _safe_rows(employee_id: int, *, order_id: int | None = None, year: int | None = None):
@@ -102,7 +102,17 @@ def _safe_rows(employee_id: int, *, order_id: int | None = None, year: int | Non
                    SELECT 1 FROM public.personnel_order_item_editorial_blocks ib
                    WHERE ib.order_item_id = poi.item_id AND ib.review_status <> 'CURRENT'
                  )
-               ) AS needs_review
+               ) AS needs_review,
+               (
+                 po.source_mode = 'PAPER'
+                 AND EXISTS (
+                   SELECT 1
+                   FROM public.personnel_order_items own_return_item
+                   WHERE own_return_item.order_id = po.order_id
+                     AND own_return_item.employee_id = :employee_id
+                     AND own_return_item.item_type_code = 'RETURN_FROM_CHILDCARE_LEAVE'
+                 )
+               ) AS needs_docx_review
         FROM public.personnel_order_items poi
         JOIN public.personnel_orders po ON po.order_id = poi.order_id
         LEFT JOIN public.personnel_order_editorial_blocks title
@@ -119,7 +129,11 @@ def _safe_rows(employee_id: int, *, order_id: int | None = None, year: int | Non
 
 
 def _serialize(row: Any, *, detail: bool = False) -> dict[str, Any]:
-    confirmed = _confirmed(str(row["status"]), bool(row["needs_review"]))
+    confirmed = _confirmed(
+        str(row["status"]),
+        bool(row["needs_review"]),
+        bool(row.get("needs_docx_review")),
+    )
     title = str(row["title"])
     if title == "COMPOSITE":
         labels = [

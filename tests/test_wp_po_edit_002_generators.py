@@ -75,17 +75,29 @@ def test_return_from_childcare_leave_is_bilingual_fail_closed_and_does_not_inven
         "position_name": "Не включать",
         "rate": "9.99",
         "basis": {"number": "999"},
+        "education": "Тестовое образование",
+        "certificate": "Тестовый сертификат",
+        "tenure": "Тестовый стаж",
     }
     ru = generate_item_body("ru", ctx)["generated_text"]
     kk = generate_item_body("kk", ctx)["generated_text"]
 
     assert DOCUMENT_TITLES["RETURN_FROM_CHILDCARE_LEAVE"] == {
-        "ru": "О выходе из отпуска по уходу за ребёнком",
-        "kk": "Бала күтіміне байланысты демалыстан шығу туралы",
+        "ru": "О выходе на работу из отпуска по уходу за ребёнком",
+        "kk": "Бала күтіміне байланысты демалыстан жұмысқа шығу туралы",
     }
+    assert generate_order_block(
+        "preamble", "ru", {"order_type_code": "RETURN_FROM_CHILDCARE_LEAVE", "legal_basis_article": "999"}
+    )["generated_text"] == "В соответствии с пунктом 3 статьи 100 Трудового кодекса Республики Казахстан ПРИКАЗЫВАЮ:"
+    assert generate_order_block(
+        "preamble", "kk", {"order_type_code": "RETURN_FROM_CHILDCARE_LEAVE"}
+    )["generated_text"] == "Қазақстан Республикасының Еңбек кодексінің 100-бабы 3-тармағына сәйкес БҰЙЫРАМЫН:"
     assert "выходом из отпуска по уходу за ребёнком" in ru
     assert "бала күтіміне байланысты демалыстан" in kk
-    for forbidden in ("2099", "9.99", "Не включать", "999"):
+    for forbidden in (
+        "2099", "9.99", "Не включать", "999",
+        "Тестовое образование", "Тестовый сертификат", "Тестовый стаж",
+    ):
         assert forbidden not in ru
         assert forbidden not in kk
 

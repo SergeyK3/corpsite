@@ -67,7 +67,7 @@ export type PersonnelOrderPrintNameMaps = {
 /** Official document titles — not technical type labels (HIRE / Составной). */
 export const PERSONNEL_ORDER_PRINT_DOCUMENT_TITLES: Record<string, LocalizedText> = {
   HIRE: localizedText("Жұмысқа қабылдау туралы", "О приёме на работу"),
-  RETURN_FROM_CHILDCARE_LEAVE: localizedText("Бала күтіміне байланысты демалыстан шығу", "О выходе из отпуска по уходу за ребёнком"),
+  RETURN_FROM_CHILDCARE_LEAVE: localizedText("Бала күтіміне байланысты демалыстан жұмысқа шығу туралы", "О выходе на работу из отпуска по уходу за ребёнком"),
   TRANSFER: localizedText("Ауыстыру туралы", "О переводе"),
   TERMINATION: localizedText("Жұмыстан босату туралы", "Об увольнении"),
   CONCURRENT_DUTY_START: localizedText("Қоса атқаруды белгілеу туралы", "Об установлении совмещения"),

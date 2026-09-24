@@ -32,6 +32,14 @@ describe("personnelOrderPrint characterization", () => {
     expect(model.title.ru).not.toBe(model.title.kk);
   });
 
+  it("uses the approved return-from-childcare-leave titles", () => {
+    const model = buildPersonnelOrderPrintViewModel(
+      sampleDetail({ order_type_code: "RETURN_FROM_CHILDCARE_LEAVE" }),
+    );
+    expect(model.title.ru).toBe("О выходе на работу из отпуска по уходу за ребёнком");
+    expect(model.title.kk).toBe("Бала күтіміне байланысты демалыстан жұмысқа шығу туралы");
+  });
+
   it("maps voided status to cancelled print mark", () => {
     const model = buildPersonnelOrderPrintViewModel(sampleDetail({ status: "VOIDED" }));
     expect(model.statusMark).toBe("cancelled");

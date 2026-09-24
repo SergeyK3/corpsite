@@ -79,9 +79,10 @@ def test_my_orders_composite_title_uses_only_current_employee_item_types(monkeyp
 
 
 def test_my_orders_return_from_childcare_composite_is_unconfirmed_and_hides_codes(monkeypatch) -> None:
-    row = _row(status="REGISTERED", review=True)
+    row = _row(status="REGISTERED", review=False)
     row["title"] = "COMPOSITE"
     row["employee_item_types"] = ["RETURN_FROM_CHILDCARE_LEAVE", "CONCURRENT_DUTY_START"]
+    row["needs_docx_review"] = True
     app.dependency_overrides[get_current_user] = lambda: {"user_id": 1}
     monkeypatch.setattr(subject, "_employee_for_user", lambda user: ("READY", 42))
     monkeypatch.setattr(subject, "_safe_rows", lambda employee_id, **kwargs: [row])
@@ -96,6 +97,11 @@ def test_my_orders_return_from_childcare_composite_is_unconfirmed_and_hides_code
     assert "ещё не подтверждён кадровой службой" in body["warning"]
     assert "RETURN_FROM_CHILDCARE_LEAVE" not in response.text
     assert "COMPOSITE" not in response.text
+
+
+def test_registered_return_from_childcare_requires_docx_review() -> None:
+    assert subject._confirmed("REGISTERED", False, needs_docx_review=True) is False
+    assert subject._confirmed("REGISTERED", False, needs_docx_review=False) is True
 
 
 @pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")

@@ -44,8 +44,8 @@ DOCUMENT_TITLES: Dict[str, Dict[str, str]] = {
         "ru": "О приёме на работу",
     },
     ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE: {
-        "kk": "Бала күтіміне байланысты демалыстан шығу туралы",
-        "ru": "О выходе из отпуска по уходу за ребёнком",
+        "kk": "Бала күтіміне байланысты демалыстан жұмысқа шығу туралы",
+        "ru": "О выходе на работу из отпуска по уходу за ребёнком",
     },
     ORDER_TYPE_TRANSFER: {
         "kk": "Ауыстыру туралы",
@@ -269,6 +269,22 @@ def generate_order_block(
         )
 
     if normalized_type == ORDER_BLOCK_TYPE_PREAMBLE:
+        if order_type == ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE:
+            text = (
+                "Қазақстан Республикасының Еңбек кодексінің 100-бабы 3-тармағына сәйкес БҰЙЫРАМЫН:"
+                if lang == "kk"
+                else "В соответствии с пунктом 3 статьи 100 Трудового кодекса Республики Казахстан ПРИКАЗЫВАЮ:"
+            )
+            return _result(
+                generated_text=text,
+                generator_key=GENERATOR_KEY_ORDER_PREAMBLE,
+                fingerprint_payload={
+                    "block_type": ORDER_BLOCK_TYPE_PREAMBLE,
+                    "locale": lang,
+                    "order_type_code": order_type,
+                    "legal_basis_article": "100.3",
+                },
+            )
         if order_type == ORDER_TYPE_SUPPLEMENTARY_PAY:
             text = (
                 "Қосымша ақының шарттары DOCX-пен салыстырылғаннан кейін нақтыланады."
