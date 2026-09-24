@@ -43,6 +43,32 @@ def test_my_orders_api_returns_only_safe_personal_projection(monkeypatch) -> Non
     assert "payload" not in response.text
 
 
+def test_my_orders_default_to_kazakh_and_reject_an_invalid_locale(monkeypatch) -> None:
+    row = _row(status="REGISTERED")
+    row["title"] = "RETURN_FROM_CHILDCARE_LEAVE"
+    row["preamble"] = "Қазақша преамбула"
+    row["basis"] = "Қазақша негіздеме"
+    seen: list[str] = []
+    app.dependency_overrides[get_current_user] = lambda: {"user_id": 1}
+    monkeypatch.setattr(subject, "_employee_for_user", lambda user: ("READY", 42))
+    monkeypatch.setattr(subject, "_safe_rows", lambda employee_id, **kwargs: (seen.append(kwargs["locale"]) or [row]))
+    try:
+        client = TestClient(app)
+        default_response = client.get("/api/ppr/me/orders")
+        default_detail = client.get("/api/ppr/me/orders/11")
+        ru_response = client.get("/api/ppr/me/orders?locale=ru")
+        invalid_response = client.get("/api/ppr/me/orders?locale=en")
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+    assert default_response.status_code == 200
+    assert default_response.json()["orders"][0]["title"] == "Бала күтіміне байланысты демалыстан жұмысқа шығу туралы"
+    assert default_detail.json()["preamble"] == "Қазақша преамбула"
+    assert default_detail.json()["basis"] == "Қазақша негіздеме"
+    assert ru_response.json()["orders"][0]["title"] == "О выходе на работу из отпуска по уходу за ребёнком"
+    assert seen == ["kk", "kk", "ru"]
+    assert invalid_response.status_code == 422
+
+
 def test_my_order_confirmation_uses_status_and_existing_review_signal(monkeypatch) -> None:
     app.dependency_overrides[get_current_user] = lambda: {"user_id": 1}
     monkeypatch.setattr(subject, "_employee_for_user", lambda user: ("READY", 42))
@@ -68,11 +94,11 @@ def test_my_orders_composite_title_uses_only_current_employee_item_types(monkeyp
     monkeypatch.setattr(subject, "_employee_for_user", lambda user: ("READY", 42))
     monkeypatch.setattr(subject, "_safe_rows", lambda employee_id, **kwargs: [row])
     try:
-        response = TestClient(app).get("/api/ppr/me/orders/11")
+        response = TestClient(app).get("/api/ppr/me/orders/11?locale=ru")
     finally:
         app.dependency_overrides.pop(get_current_user, None)
     assert response.status_code == 200
-    assert response.json()["title"] == "Выход из отпуска по уходу за ребёнком; Совмещение (начало)"
+    assert response.json()["title"] == "О выходе на работу из отпуска по уходу за ребёнком; Совмещение (начало)"
     assert response.json()["confirmation_status"] == "CONFIRMED"
     assert response.json()["item_text"] is None
     assert "COMPOSITE" not in response.text
@@ -87,12 +113,12 @@ def test_my_orders_return_from_childcare_composite_is_unconfirmed_and_hides_code
     monkeypatch.setattr(subject, "_employee_for_user", lambda user: ("READY", 42))
     monkeypatch.setattr(subject, "_safe_rows", lambda employee_id, **kwargs: [row])
     try:
-        response = TestClient(app).get("/api/ppr/me/orders/125")
+        response = TestClient(app).get("/api/ppr/me/orders/125?locale=ru")
     finally:
         app.dependency_overrides.pop(get_current_user, None)
     assert response.status_code == 200
     body = response.json()
-    assert body["title"] == "Выход из отпуска по уходу за ребёнком; Совмещение (начало)"
+    assert body["title"] == "О выходе на работу из отпуска по уходу за ребёнком; Совмещение (начало)"
     assert body["confirmation_status"] == "UNCONFIRMED"
     assert "ещё не подтверждён кадровой службой" in body["warning"]
     assert "RETURN_FROM_CHILDCARE_LEAVE" not in response.text
@@ -130,8 +156,8 @@ def test_my_orders_use_session_employee_when_person_link_is_missing(seed) -> Non
     try:
         app.dependency_overrides[get_current_user] = lambda: {"user_id": user_id}
         client = TestClient(app)
-        listing = client.get("/api/ppr/me/orders?employee_id=999999")
-        detail = client.get(f"/api/ppr/me/orders/{order_id}")
+        listing = client.get("/api/ppr/me/orders?employee_id=999999&locale=ru")
+        detail = client.get(f"/api/ppr/me/orders/{order_id}?locale=ru")
         for response in (listing, detail):
             assert response.status_code == 200
             assert "Только собственный пункт." in response.text
@@ -178,9 +204,9 @@ def test_my_orders_integration_isolates_two_users_and_multi_item_order(seed) -> 
     try:
         client = TestClient(app)
         app.dependency_overrides[get_current_user] = lambda: {"user_id": owner_user}
-        owner_list = client.get("/api/ppr/me/orders"); owner_detail = client.get(f"/api/ppr/me/orders/{order_id}")
+        owner_list = client.get("/api/ppr/me/orders?locale=ru"); owner_detail = client.get(f"/api/ppr/me/orders/{order_id}?locale=ru")
         app.dependency_overrides[get_current_user] = lambda: {"user_id": other_user}
-        other_list = client.get("/api/ppr/me/orders"); other_detail = client.get(f"/api/ppr/me/orders/{order_id}")
+        other_list = client.get("/api/ppr/me/orders?locale=ru"); other_detail = client.get(f"/api/ppr/me/orders/{order_id}?locale=ru")
         for response, own, foreign in ((owner_list, "Alice", "Bob"), (owner_detail, "Alice", "Bob"), (other_list, "Bob", "Alice"), (other_detail, "Bob", "Alice")):
             assert response.status_code == 200
             assert own in response.text and foreign not in response.text
