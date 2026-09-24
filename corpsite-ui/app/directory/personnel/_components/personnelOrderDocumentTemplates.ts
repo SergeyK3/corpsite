@@ -33,6 +33,7 @@ export const APPROVED_PERSONNEL_ORDER_TEMPLATE_VERSIONS = {
   "personnel.transfer.permanent": { kk: 1, ru: 1 },
   "personnel.concurrent-duty.start": { kk: 1, ru: 1 },
   "personnel.termination.employee-initiative-unused-leave": { kk: 1, ru: 1 },
+  "personnel.supplementary-pay.review": { kk: 1, ru: 1 },
   "personnel.transfer.permanent-with-concurrent-duty": { kk: 1, ru: 1 },
 } as const;
 
@@ -44,17 +45,21 @@ export const PERSONNEL_ORDER_TITLE_DICTIONARY = {
   TRANSFER: { kk: "Ауыстыру туралы", ru: "О переводе" },
   CONCURRENT_DUTY_START: { kk: "Қоса атқару туралы", ru: "О совмещении должностей" },
   TERMINATION: { kk: "Еңбек шартын бұзу туралы", ru: "О расторжении трудового договора" },
+  SUPPLEMENTARY_PAY: { kk: "Қосымша ақы туралы", ru: "О дополнительной оплате" },
   TRANSFER_WITH_CONCURRENT_DUTY: { kk: "Ауыстыру туралы", ru: "О переводе и совмещении должностей" },
 } as const;
 
 // Runtime projection of the existing bilingual position and unit dictionaries.
 const POSITION_KK_BY_RU: Record<string, string> = {
   "медсестра": "мейіргер", "медицинская сестра": "мейіргер", "врач": "дәрігер",
+  "главная медицинская сестра": "Бас мейіргер", "главная медсестра": "Бас мейіргер",
   "санитар": "санитар", "сестра хозяйка": "шаруашылық мейіргері",
 };
 const UNIT_KK_BY_RU: Record<string, string> = {
   "химиотерапия 1": "№1 химиялық терапия бөлімшесі", "химиотерапия 2": "№2 химиялық терапия бөлімшесі",
   "цсо": "Залалсыздандыру орталығы", "диспансер": "Диспансер бөлімшесі",
+  // PROPOSED; alternative source wording: «Жалпы аурухана персоналы».
+  "общебольничный персонал": "Жалпы ауруханалық персонал",
   "реанимация": "Жансақтау бөлімі", "лучевая диагностика": "Сәулелік диагностика бөлімшесі",
   "инсультный": "Инсульт орталығы", "приемное": "Қабылдау бөлімшесі",
 };
@@ -78,6 +83,7 @@ function titleFor(key: ApprovedPersonnelOrderTemplateKey, language: PersonnelOrd
     "personnel.transfer.permanent": "TRANSFER",
     "personnel.concurrent-duty.start": "CONCURRENT_DUTY_START",
     "personnel.termination.employee-initiative-unused-leave": "TERMINATION",
+    "personnel.supplementary-pay.review": "SUPPLEMENTARY_PAY",
     "personnel.transfer.permanent-with-concurrent-duty": "TRANSFER_WITH_CONCURRENT_DUTY",
   } as const)[key];
   return PERSONNEL_ORDER_TITLE_DICTIONARY[code][language];
@@ -229,6 +235,7 @@ export function renderPersonnelOrderDocument(
   const rendered = templateKey === "personnel.hire.standard" ? hireForLanguage(detail, language)
     : templateKey === "personnel.transfer.permanent" ? transferForLanguage(detail, language)
       : templateKey === "personnel.concurrent-duty.start" ? concurrentDutyForLanguage(detail, language)
+        : templateKey === "personnel.supplementary-pay.review" ? supplementaryPayForLanguage(detail, language)
         : templateKey === "personnel.termination.employee-initiative-unused-leave" ? terminationByEmployeeInitiativeForLanguage(detail, language)
           : permanentTransferWithConcurrentDutyForLanguage(detail, language);
   const manualBlockText = (block: { override_text?: string | null; generated_text?: string | null; effective_text?: string | null } | undefined) =>
@@ -244,6 +251,7 @@ export function renderPersonnelOrderDocument(
     return templateKey === "personnel.hire.standard" ? hireForLanguage(oneItemDetail, language)
       : templateKey === "personnel.transfer.permanent" ? transferForLanguage(oneItemDetail, language)
         : templateKey === "personnel.concurrent-duty.start" ? concurrentDutyForLanguage(oneItemDetail, language)
+          : templateKey === "personnel.supplementary-pay.review" ? supplementaryPayForLanguage(oneItemDetail, language)
           : templateKey === "personnel.termination.employee-initiative-unused-leave"
             ? terminationByEmployeeInitiativeForLanguage(oneItemDetail, language)
             : rendered;
@@ -294,6 +302,7 @@ export function resolvePersonnelOrderTemplateKey(
       TRANSFER: "personnel.transfer.permanent",
       CONCURRENT_DUTY_START: "personnel.concurrent-duty.start",
       TERMINATION: "personnel.termination.employee-initiative-unused-leave",
+      SUPPLEMENTARY_PAY: "personnel.supplementary-pay.review",
     } as Record<string, ApprovedPersonnelOrderTemplateKey | undefined>)[type] || null;
   }
   return ({
@@ -301,6 +310,7 @@ export function resolvePersonnelOrderTemplateKey(
     TRANSFER: "personnel.transfer.permanent",
     CONCURRENT_DUTY_START: "personnel.concurrent-duty.start",
     TERMINATION: "personnel.termination.employee-initiative-unused-leave",
+    SUPPLEMENTARY_PAY: "personnel.supplementary-pay.review",
   } as Record<string, ApprovedPersonnelOrderTemplateKey | undefined>)[String(detail.order.order_type_code).toUpperCase()] || null;
 }
 
@@ -362,6 +372,22 @@ function concurrentDutyForLanguage(detail: PersonnelOrderDetailResponse, languag
     ? `Разрешить ${russianEmployee} с ${when} совмещение обязанностей по должности ${russianOrderTarget(target)} с оплатой ${target.rate} ставки.`
     : `Разрешить ${name} с ${when} совмещение обязанностей по должности ${target.position} ${target.unit} с оплатой ${target.rate} ставки.`;
   return standardDocument("personnel.concurrent-duty.start", language, { kk: "Қоса атқару туралы", ru: "О совмещении обязанностей" }, { kk: "Қазақстан Республикасының Еңбек кодексінің 111-бабына сәйкес", ru: "В соответствии со статьей 111 Трудового кодекса Республики Казахстан" }, language === "kk" ? `${name} ${when} бастап ${target.unit} ${target.position} міндеттерін ${target.rate} мөлшерлемемен қоса атқаруға рұқсат берілсін.` : russianPoint, renderBasis(detail, item, language));
+}
+
+function supplementaryPayForLanguage(detail: PersonnelOrderDetailResponse, language: PersonnelOrderDocumentLanguage): RenderedOrderDocument {
+  const item = primaryItem(detail, "SUPPLEMENTARY_PAY");
+  const name = employeeName(item);
+  const point = language === "kk"
+    ? `${name} үшін қосымша ақы: мөлшері, кезеңі, негізі және шарттары DOCX-пен салыстыруды талап етеді.`
+    : `Дополнительная оплата для ${name}: размер, период, основание и условия требуют сверки с DOCX.`;
+  return standardDocument(
+    "personnel.supplementary-pay.review",
+    language,
+    { kk: "Қосымша ақы туралы", ru: "О дополнительной оплате" },
+    { kk: "Қосымша ақының шарттары DOCX-пен салыстырылғаннан кейін нақтыланады.", ru: "Условия дополнительной оплаты уточняются после сверки с DOCX." },
+    point,
+    renderBasis(detail, item, language),
+  );
 }
 
 function permanentTransferWithConcurrentDutyForLanguage(detail: PersonnelOrderDetailResponse, language: PersonnelOrderDocumentLanguage): RenderedOrderDocument {

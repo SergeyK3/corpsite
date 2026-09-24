@@ -46,6 +46,24 @@ describe("PersonnelOrderDocumentView", () => {
     }
   });
 
+  it("renders supplementary pay as a DOCX-review draft without invented terms", () => {
+    const order = detail([{
+      item_id: 1, order_id: 1, item_number: 1, item_type_code: "SUPPLEMENTARY_PAY", item_status: "ACTIVE",
+      employee_id: null, employee_name: null, effective_date: null,
+      payload: { source_employee_name: "Иванов И.И." },
+    }], []);
+    order.order.order_type_code = "SUPPLEMENTARY_PAY";
+
+    const ru = renderPersonnelOrderDocument(order, "ru");
+    const kk = renderPersonnelOrderDocument(order, "kk");
+    expect(resolvePersonnelOrderTemplateKey(order)).toBe("personnel.supplementary-pay.review");
+    expect(ru?.title).toBe("О дополнительной оплате");
+    expect(ru?.points[0].text).toContain("требуют сверки с DOCX");
+    expect(kk?.points[0].text).toContain("DOCX-пен салыстыруды");
+    expect(ru?.points[0].text).not.toContain("ставк");
+    expect(ru?.points[0].text).not.toContain("должност");
+  });
+
   it("renders both independent language templates and combines transfer with concurrent duty in one point", () => {
     const order = detail([
       {

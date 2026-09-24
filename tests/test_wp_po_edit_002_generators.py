@@ -42,6 +42,25 @@ def test_preamble_includes_legal_basis() -> None:
     assert "ПРИКАЗЫВАЮ" in out["generated_text"]
 
 
+def test_supplementary_pay_generated_text_is_bilingual_and_does_not_invent_terms() -> None:
+    ctx = {
+        "item_type_code": "SUPPLEMENTARY_PAY",
+        "employee_name": "Иванов И.И.",
+        "effective_date": "2026-07-07",
+        "org_unit_name": "Кардиология",
+        "position_name": "Врач",
+        "rate": "0.75",
+    }
+    ru = generate_item_body("ru", ctx)["generated_text"]
+    kk = generate_item_body("kk", ctx)["generated_text"]
+
+    assert "сверки с DOCX" in ru
+    assert "DOCX-пен салыстыруды" in kk
+    for forbidden in ("0.75", "2026", "Кардиология", "Врач"):
+        assert forbidden not in ru
+        assert forbidden not in kk
+
+
 def test_hire_body_kk_ru() -> None:
     ctx = {
         "item_type_code": "HIRE",

@@ -129,6 +129,13 @@ function renderConcurrentEnd(ctx: PersonnelOrderPrintItemContext, lang: "kk" | "
   return `Прекратить совмещение для ${fio} с ${date}.${rem}${remConcurrent}`;
 }
 
+function renderSupplementaryPay(ctx: PersonnelOrderPrintItemContext, lang: "kk" | "ru"): string {
+  const fio = dash(ctx.employeeName);
+  return lang === "kk"
+    ? `${fio} үшін қосымша ақы: мөлшері, кезеңі, негізі және шарттары DOCX-пен салыстыруды талап етеді.`
+    : `Дополнительная оплата для ${fio}: размер, период, основание и условия требуют сверки с DOCX.`;
+}
+
 function renderGeneric(ctx: PersonnelOrderPrintItemContext, lang: "kk" | "ru"): string {
   const fio = dash(ctx.employeeName);
   const date = formatPersonnelOrderPrintDate(ctx.effectiveDate, lang);
@@ -155,6 +162,8 @@ export function renderPersonnelOrderPrintItemText(
         return renderConcurrentStart(ctx, lang);
       case "CONCURRENT_DUTY_END":
         return renderConcurrentEnd(ctx, lang);
+      case "SUPPLEMENTARY_PAY":
+        return renderSupplementaryPay(ctx, lang);
       default:
         return renderGeneric(ctx, lang);
     }

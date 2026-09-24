@@ -43,8 +43,8 @@ def editorial_tables_available(conn: Optional[Connection] = None) -> bool:
         return _check(owned)
 
 
-def require_available() -> None:
-    if not personnel_orders_available():
+def require_available(conn: Optional[Connection] = None) -> None:
+    if not personnel_orders_available(conn):
         raise PersonnelOrderValidationError("Personnel orders schema is not available.")
-    if not editorial_tables_available():
+    if not editorial_tables_available(conn):
         raise PersonnelOrderValidationError("Personnel order editorial schema is not available.")

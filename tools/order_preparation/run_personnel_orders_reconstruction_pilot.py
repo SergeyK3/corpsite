@@ -13,6 +13,7 @@ import hashlib
 import json
 import re
 import sys
+from contextlib import nullcontext
 from functools import lru_cache
 from datetime import date, datetime
 from pathlib import Path
@@ -29,6 +30,7 @@ from sqlalchemy import create_engine, text
 
 
 PILOT = "personnel-orders-reconstruction-pilot-01"
+REQUIRE_SOURCE_INITIALS = False
 SOURCE_FILE = Path(r"D:\ТОО\4 dept\4A soft\10A soft\27 Corpsite ММЦ\order_samples\Журнал кадровых приказов\Ручное распознавание журналов.xlsx")
 SHEET = "Лист1"
 DOCX_ROOT = Path(r"D:\ТОО\4 dept\4A soft\10A soft\27 Corpsite ММЦ\order_samples\2026 ПРИКАЗ")
@@ -39,6 +41,12 @@ TITLE_TYPES = {
     "ауыстыру туралы": "TRANSFER",
     "қоса атқару туралы": "CONCURRENT_DUTY_START",
     "еңбек шартын бұзу туралы": "TERMINATION",
+    # The latter two are the three unambiguous source-recorded variants.  The
+    # similarly worded withdrawal title is deliberately not classified here.
+    "қосымша ақы туралы": "SUPPLEMENTARY_PAY",
+    "қосымша ақы төлеу туралы": "SUPPLEMENTARY_PAY",
+    "жұмысқа қосымша ақы туралы": "SUPPLEMENTARY_PAY",
+    "жұмысқа қосымша ақы төлеу туралы": "SUPPLEMENTARY_PAY",
 }
 PLACEHOLDERS = {"[название отсутствует]", "", "-", "n/a"}
 
@@ -82,6 +90,8 @@ def initials_match(source: str, employee_name: str) -> bool:
     source_parts = clean(source).replace(".", " ").split()
     employee_parts = clean(employee_name).split()
     if not source_parts or not employee_parts or norm(source_parts[0]) != norm(employee_parts[0]):
+        return False
+    if REQUIRE_SOURCE_INITIALS and len(source_parts) < 2:
         return False
     initials = [norm(part)[:1] for part in source_parts[1:] if norm(part)]
     candidate = [norm(part)[:1] for part in employee_parts[1:] if norm(part)]
@@ -193,6 +203,7 @@ def template_key_for(action: str) -> str:
         "TRANSFER": "personnel.transfer.permanent",
         "CONCURRENT_DUTY_START": "personnel.concurrent-duty.start",
         "TERMINATION": "personnel.termination.employee-initiative-unused-leave",
+        "SUPPLEMENTARY_PAY": "personnel.supplementary-pay.review",
     }[action]
 
 
@@ -201,10 +212,10 @@ def load_manifest(path: Path | None) -> dict[str, dict[str, Any]] | None:
         return None
     payload = json.loads(path.read_text(encoding="utf-8"))
     rows = payload.get("orders")
-    if not isinstance(rows, list) or len(rows) != 20:
-        raise RuntimeError("Manifest must contain exactly 20 orders")
+    if not isinstance(rows, list) or not rows:
+        raise RuntimeError("Manifest must contain at least one order")
     indexed = {str(row.get("source_identifier")): row for row in rows}
-    if len(indexed) != 20 or "None" in indexed:
+    if len(indexed) != len(rows) or "None" in indexed:
         raise RuntimeError("Manifest has missing or duplicate source_identifier values")
     return indexed
 
@@ -316,6 +327,10 @@ def duplicate_check(conn, candidates: list[dict[str, Any]]) -> list[dict[str, An
     """Report every requested collision before an apply; it never changes data."""
     findings: list[dict[str, Any]] = []
     for candidate in candidates:
+        number_only = conn.execute(text("""
+            SELECT order_id FROM public.personnel_orders
+            WHERE order_number = :number
+        """), {"number": candidate["order_number"]}).scalars().all()
         number_date = conn.execute(text("""
             SELECT order_id FROM public.personnel_orders
             WHERE order_number = :number AND order_date = :order_date
@@ -337,6 +352,7 @@ def duplicate_check(conn, candidates: list[dict[str, Any]]) -> list[dict[str, An
         findings.append({
             "source_identifier": candidate["source_identifier"],
             "blocking_duplicates": {
+                "order_number": sorted(set(map(int, number_only))),
                 "order_number_and_date": sorted(set(map(int, number_date))),
                 "source_excel_row": sorted(set(map(int, source_row))),
                 "employee_and_action": blocking_employee_action,
@@ -399,7 +415,7 @@ def resume_result(conn, manifest: dict[str, dict[str, Any]], rows: list[dict[str
             "template_key": storage.get("template_key") or manifest_row.get("template_key"),
             "employee_match_review_required": bool(storage.get("employee_match_review_required")),
             "duplicate_checks": {"source_identifier": source_identifier, "blocking_duplicates": {
-                "order_number_and_date": [], "source_excel_row": [], "employee_and_action": [],
+                "order_number": [], "order_number_and_date": [], "source_excel_row": [], "employee_and_action": [],
             }, "legacy_technical_matches": storage.get("reconstruction", {}).get("legacy_technical_order_ids", [])},
         })
     return {
@@ -410,17 +426,34 @@ def resume_result(conn, manifest: dict[str, dict[str, Any]], rows: list[dict[str
     }
 
 
-def run(database_url: str, *, dry_run: bool, manifest_path: Path | None = None) -> dict[str, Any]:
-    engine = create_engine(database_url)
+def run(
+    database_url: str,
+    *,
+    dry_run: bool,
+    manifest_path: Path | None = None,
+    conn=None,
+) -> dict[str, Any]:
+    """Build the reconstruction result using an optional caller-owned connection.
+
+    ``conn`` is used by the apply CLI to keep inserts and generated
+    presentations in one database transaction. Dry-runs intentionally retain
+    their independent read-only connection.
+    """
+    if dry_run and conn is not None:
+        raise RuntimeError("dry-run must not receive a write transaction connection")
+    engine = None if conn is not None else create_engine(database_url)
     manifest = load_manifest(manifest_path)
     # A dry run deliberately uses a non-transactional read-only connection:
     # no repair, audit, scope, or report database writes are possible here.
-    with (engine.connect() if dry_run else engine.begin()) as conn:
+    connection_context = nullcontext(conn) if conn is not None else (
+        engine.connect() if dry_run else engine.begin()
+    )
+    with connection_context as active_conn:
         if manifest is not None:
-            existing_manifest_rows = manifest_resume_rows(conn, manifest)
+            existing_manifest_rows = manifest_resume_rows(active_conn, manifest)
             if existing_manifest_rows is not None:
-                return resume_result(conn, manifest, existing_manifest_rows, dry_run=dry_run)
-        existing_count = int(conn.execute(text("""
+                return resume_result(active_conn, manifest, existing_manifest_rows, dry_run=dry_run)
+        existing_count = int(active_conn.execute(text("""
             SELECT COUNT(*) FROM public.personnel_orders
             WHERE storage_json ->> 'reconstruction_pilot' = :pilot
         """), {"pilot": PILOT}).scalar_one())
@@ -431,7 +464,7 @@ def run(database_url: str, *, dry_run: bool, manifest_path: Path | None = None) 
             if not archived.is_file():
                 raise RuntimeError("Pilot drafts exist but their local PII audit JSON is missing")
             if not dry_run:
-                conn.execute(text("""
+                active_conn.execute(text("""
                     INSERT INTO public.personnel_order_evidence_scopes(order_id)
                     SELECT po.order_id
                     FROM public.personnel_orders po
@@ -444,22 +477,24 @@ def run(database_url: str, *, dry_run: bool, manifest_path: Path | None = None) 
             result["dry_run"] = dry_run
             result["rerun_noop"] = True
             return result
-        selected, skipped = load_candidates(conn, manifest)
-        if len(selected) != 20:
-            raise RuntimeError(f"Expected 20 eligible rows; found {len(selected)}")
-        duplicates = duplicate_check(conn, selected)
+        selected, skipped = load_candidates(active_conn, manifest)
+        expected_count = len(manifest) if manifest is not None else 20
+        if len(selected) != expected_count:
+            raise RuntimeError(f"Expected {expected_count} eligible rows; found {len(selected)}")
+        duplicates = duplicate_check(active_conn, selected)
         duplicates_by_source = {row["source_identifier"]: row for row in duplicates}
         if not dry_run and any(has_blocking_duplicates(row) for row in duplicates):
             raise RuntimeError("Potential duplicates found; inspect a --dry-run report before apply")
-        creator = None if dry_run else conn.execute(text("SELECT user_id FROM public.users ORDER BY user_id LIMIT 1")).scalar_one()
+        creator = None if dry_run else active_conn.execute(text("SELECT user_id FROM public.users ORDER BY user_id LIMIT 1")).scalar_one()
         report_rows: list[dict[str, Any]] = []
         for candidate in selected:
             docx = find_docx(candidate["order_number"].removesuffix("-ж"), candidate["order_date"])
-            auto_fields = ["effective_date=order_date", "rate=1.0", "basis=personal_application"]
+            supplementary_pay = candidate["action"] == "SUPPLEMENTARY_PAY"
+            auto_fields = [] if supplementary_pay else ["effective_date=order_date", "rate=1.0", "basis=personal_application"]
             duplicate_result = duplicates_by_source.get(candidate["source_identifier"], {
                 "source_identifier": candidate["source_identifier"],
                 "blocking_duplicates": {
-                    "order_number_and_date": [], "source_excel_row": [], "employee_and_action": [],
+                    "order_number": [], "order_number_and_date": [], "source_excel_row": [], "employee_and_action": [],
                 },
                 "legacy_technical_matches": [],
             })
@@ -484,31 +519,31 @@ def run(database_url: str, *, dry_run: bool, manifest_path: Path | None = None) 
                     "legacy_technical_order_ids": duplicate_result["legacy_technical_matches"],
                 },
                 "auto_filled_fields": auto_fields, "docx_found": bool(docx), "docx_path": docx,
-                "basis_documents": [{"basis_id": "application", "document_type": "EMPLOYEE_APPLICATION",
+                "basis_documents": [] if supplementary_pay else [{"basis_id": "application", "document_type": "EMPLOYEE_APPLICATION",
                                       "description": {"ru": "Личное заявление работника", "kk": "Қызметкердің жеке өтініші"}}],
             }
             order_id = None
             if not dry_run:
-                order_id = conn.execute(text("""
+                order_id = active_conn.execute(text("""
                     INSERT INTO public.personnel_orders
                     (order_number, order_date, order_type_code, status, source_mode, basis_summary, storage_json, created_by)
                     VALUES (:number, :order_date, :action, 'DRAFT', 'PAPER', :basis, CAST(:storage AS jsonb), :creator)
                     RETURNING order_id
                 """), {"number": candidate["order_number"], "order_date": candidate["order_date"], "action": candidate["action"],
-                          "basis": "Личное заявление работника", "storage": json.dumps(storage, ensure_ascii=False), "creator": creator}).scalar_one()
-                conn.execute(text("INSERT INTO public.personnel_order_evidence_scopes(order_id) VALUES (:order_id)"), {"order_id": order_id})
+                          "basis": None if supplementary_pay else "Личное заявление работника", "storage": json.dumps(storage, ensure_ascii=False), "creator": creator}).scalar_one()
+                active_conn.execute(text("INSERT INTO public.personnel_order_evidence_scopes(order_id) VALUES (:order_id)"), {"order_id": order_id})
                 for item_number, match in enumerate(candidate["matches"], start=1):
-                    payload, assumptions = assignment_payload(match["employee"])
-                    payload.update({"source_employee_name": match["source_name"], "rate": 1.0, "basis_ids": ["application"],
+                    payload, assumptions = ({}, []) if supplementary_pay else assignment_payload(match["employee"])
+                    payload.update({"source_employee_name": match["source_name"],
                                     "employee_match_status": match["match_status"],
                                     "employee_match_review_required": match["match_status"] != "AUTO_MATCH",
                                     "reconstruction_assumptions": assumptions})
-                    conn.execute(text("""
+                    active_conn.execute(text("""
                         INSERT INTO public.personnel_order_items
                         (order_id, item_number, item_type_code, employee_id, effective_date, payload, item_status)
                         VALUES (:order_id, :item_number, :action, :employee_id, :effective_date, CAST(:payload AS jsonb), 'ACTIVE')
                     """), {"order_id": order_id, "item_number": item_number, "action": candidate["action"],
-                              "employee_id": match["employee_id"], "effective_date": candidate["order_date"],
+                              "employee_id": match["employee_id"], "effective_date": None if supplementary_pay else candidate["order_date"],
                               "payload": json.dumps(payload, ensure_ascii=False)})
             report_rows.append({**candidate, "order_id": order_id, "docx_path": docx,
                                 "template_key": template_key_for(candidate["action"]),
@@ -524,6 +559,7 @@ def write_outputs(result: dict[str, Any], *, write_repository_report: bool = Tru
     ARCHIVE.mkdir(parents=True, exist_ok=True)
     (ARCHIVE / "run-report.json").write_text(json.dumps(result, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
     lines = ["# Personnel orders reconstruction pilot 01", "", "Local-only draft reconstruction. No employee events or assignments were created or changed.", "", f"Source: `{SOURCE_FILE}` · sheet `{SHEET}`.", "", "## Imported drafts", "", "| Excel row | Order | Date | template_key | order_id | DOCX | Visual check |", "|---:|---|---|---|---:|---|---|"]
+    lines[0] = f"# Personnel orders reconstruction {PILOT}"
     for row in result["orders"]:
         oid = row["order_id"] or "dry-run"
         link = f"/directory/personnel/orders?order_id={oid}" if row["order_id"] else "—"
@@ -541,12 +577,23 @@ def write_outputs(result: dict[str, Any], *, write_repository_report: bool = Tru
     else:
         lines.append("- None before the first 20 eligible records.")
     lines += ["", "## Russian automatic wording", "", "- When unused leave days are not confirmed, the accounting point is `Бухгалтерии произвести расчёт за неиспользованные дни отпуска.`; no dash, count, or `календарных дней` is rendered.", "- Russian automatic position/unit wording is `должность (подразделение)`. The added order-text form is `Приемное` → `приемное отделение` (PROPOSED); an unknown unit is only normalized to lower case and remains marked for dictionary review."]
+    (ARCHIVE / "report.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
     if write_repository_report:
         REPORT.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
-def ensure_bilingual_presentations(database_url: str, result: dict[str, Any]) -> dict[int, str | None]:
-    """Use the existing editorial generators, then expose both draft locales."""
+def ensure_bilingual_presentations(
+    database_url: str,
+    result: dict[str, Any],
+    *,
+    conn=None,
+) -> dict[int, str | None]:
+    """Use the existing editorial generators, then expose both draft locales.
+
+    A caller-owned connection keeps batch reconstruction atomically coupled to
+    its generated evidence/editorial records. The default remains compatible
+    with ordinary callers that expect this function to own transactions.
+    """
     from app.services.personnel_orders_editorial_service import generate_editorial
     from app.services.personnel_order_signatory_resolver import resolve_default_personnel_order_signatory
 
@@ -556,12 +603,14 @@ def ensure_bilingual_presentations(database_url: str, result: dict[str, Any]) ->
         "personnel.concurrent-duty.start",
         "personnel.termination.employee-initiative-unused-leave",
         "personnel.transfer.permanent-with-concurrent-duty",
+        "personnel.supplementary-pay.review",
     }
     by_type = {
         "HIRE": "personnel.hire.standard",
         "TRANSFER": "personnel.transfer.permanent",
         "CONCURRENT_DUTY_START": "personnel.concurrent-duty.start",
         "TERMINATION": "personnel.termination.employee-initiative-unused-leave",
+        "SUPPLEMENTARY_PAY": "personnel.supplementary-pay.review",
     }
     order_ids = [int(row["order_id"]) for row in result["orders"] if row.get("order_id")]
     pilot_signatory_roles = {
@@ -569,11 +618,12 @@ def ensure_bilingual_presentations(database_url: str, result: dict[str, Any]) ->
         for row in result["orders"] if row.get("order_id")
     }
     selected: dict[int, str | None] = {}
-    engine = create_engine(database_url)
-    with engine.begin() as conn:
-        signatory = resolve_default_personnel_order_signatory(conn)
+    engine = None if conn is not None else create_engine(database_url)
+    first_context = nullcontext(conn) if conn is not None else engine.begin()
+    with first_context as active_conn:
+        signatory = resolve_default_personnel_order_signatory(active_conn)
         if signatory.resolved:
-            conn.execute(text("""
+            active_conn.execute(text("""
                 UPDATE public.personnel_orders
                 SET signed_by_employee_id = :employee_id,
                     signed_by_name = :name,
@@ -595,7 +645,7 @@ def ensure_bilingual_presentations(database_url: str, result: dict[str, Any]) ->
                 }),
             })
         for order_id, role in pilot_signatory_roles.items():
-            conn.execute(text("""
+            active_conn.execute(text("""
                 UPDATE public.personnel_orders
                 SET signed_by_position = :role,
                     storage_json = jsonb_set(
@@ -620,7 +670,7 @@ def ensure_bilingual_presentations(database_url: str, result: dict[str, Any]) ->
                 }),
                 "marker": json.dumps({"signatory_role_reconstruction_initialized": True}),
             })
-        source_rows = conn.execute(text("""
+        source_rows = active_conn.execute(text("""
             SELECT po.order_id, po.order_type_code, po.storage_json,
                    array_agg(DISTINCT poi.item_type_code) FILTER (WHERE poi.item_type_code IS NOT NULL) AS item_types
             FROM public.personnel_orders po
@@ -639,7 +689,7 @@ def ensure_bilingual_presentations(database_url: str, result: dict[str, Any]) ->
             )
             selected[int(source["order_id"])] = key
             if key:
-                conn.execute(text("""
+                active_conn.execute(text("""
                     UPDATE public.personnel_orders
                     SET storage_json = storage_json || CAST(:template AS jsonb), updated_at = transaction_timestamp()
                     WHERE order_id = :order_id
@@ -649,9 +699,10 @@ def ensure_bilingual_presentations(database_url: str, result: dict[str, Any]) ->
                     "template_resolution": "AUTO_BY_PERSONNEL_ORDER_ITEMS",
                 })})
     for order_id in order_ids:
-        generate_editorial(order_id, user_id=1)
-    with engine.begin() as conn:
-        conn.execute(text("""
+        generate_editorial(order_id, user_id=1, conn=conn)
+    second_context = nullcontext(conn) if conn is not None else engine.begin()
+    with second_context as active_conn:
+        active_conn.execute(text("""
             INSERT INTO public.personnel_order_localized_texts
                 (order_id, locale, title, preamble, body_text, is_authoritative)
             SELECT po.order_id, block.locale,
@@ -677,6 +728,23 @@ def ensure_bilingual_presentations(database_url: str, result: dict[str, Any]) ->
     return selected
 
 
+def apply_with_presentations(database_url: str, *, manifest_path: Path | None = None) -> dict[str, Any]:
+    """Atomically create (or resume) a batch and all required presentations."""
+    apply_engine = create_engine(database_url)
+    with apply_engine.begin() as apply_conn:
+        result = run(
+            database_url,
+            dry_run=False,
+            manifest_path=manifest_path,
+            conn=apply_conn,
+        )
+        if result.get("needs_presentation_repair", True):
+            templates = ensure_bilingual_presentations(database_url, result, conn=apply_conn)
+            for row in result["orders"]:
+                row["template_key"] = templates.get(int(row["order_id"])) if row.get("order_id") else None
+        return result
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--database-url", required=True)
@@ -686,8 +754,14 @@ def main() -> int:
     parser.add_argument("--docx-root", type=Path, help="Portable directory containing only source DOCX files")
     parser.add_argument("--archive", type=Path, help="Local output directory; never add it to Git")
     parser.add_argument("--manifest", type=Path, help="Pinned 20-row manifest to validate before processing")
+    parser.add_argument("--pilot-key", help="Separate reconstruction pilot identifier")
+    parser.add_argument("--strict-source-initials", action="store_true", help="Require source initials for automatic employee matching")
+    parser.add_argument("--no-repository-report", action="store_true", help="Keep the report only in --archive")
     args = parser.parse_args()
-    global SOURCE_FILE, SHEET, DOCX_ROOT, ARCHIVE
+    global PILOT, REQUIRE_SOURCE_INITIALS, SOURCE_FILE, SHEET, DOCX_ROOT, ARCHIVE
+    if args.pilot_key:
+        PILOT = args.pilot_key
+    REQUIRE_SOURCE_INITIALS = args.strict_source_initials
     if args.source_file:
         SOURCE_FILE = args.source_file
     if args.sheet:
@@ -703,12 +777,11 @@ def main() -> int:
         parser.error(f"DOCX root does not exist: {DOCX_ROOT}")
     if args.manifest:
         verify_manifest_files(args.manifest, SOURCE_FILE)
-    result = run(args.database_url, dry_run=args.dry_run, manifest_path=args.manifest)
-    if not args.dry_run and result.get("needs_presentation_repair", True):
-        templates = ensure_bilingual_presentations(args.database_url, result)
-        for row in result["orders"]:
-            row["template_key"] = templates.get(int(row["order_id"])) if row.get("order_id") else None
-    write_outputs(result, write_repository_report=not args.dry_run)
+    if args.dry_run:
+        result = run(args.database_url, dry_run=True, manifest_path=args.manifest)
+    else:
+        result = apply_with_presentations(args.database_url, manifest_path=args.manifest)
+    write_outputs(result, write_repository_report=not args.dry_run and not args.no_repository_report)
     print(json.dumps({"orders": len(result["orders"]), "skipped": len(result["skipped"]), "dry_run": args.dry_run}))
     return 0
 

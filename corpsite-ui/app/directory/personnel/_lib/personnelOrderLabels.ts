@@ -11,6 +11,7 @@ export type PersonnelOrderType =
   | "TERMINATION"
   | "CONCURRENT_DUTY_START"
   | "CONCURRENT_DUTY_END"
+  | "SUPPLEMENTARY_PAY"
   | "LEAVE.ANNUAL.GRANT"
   | "LEAVE.UNPAID.GRANT"
   | "COMPOSITE";
@@ -29,6 +30,7 @@ export const PERSONNEL_ORDER_TYPES: readonly PersonnelOrderType[] = [
   "TERMINATION",
   "CONCURRENT_DUTY_START",
   "CONCURRENT_DUTY_END",
+  "SUPPLEMENTARY_PAY",
   "LEAVE.ANNUAL.GRANT",
   "LEAVE.UNPAID.GRANT",
   "COMPOSITE",
@@ -48,6 +50,7 @@ export const PERSONNEL_ORDER_TYPE_LABELS: Record<PersonnelOrderType, string> = {
   TERMINATION: "Увольнение",
   CONCURRENT_DUTY_START: "Совмещение (начало)",
   CONCURRENT_DUTY_END: "Совмещение (окончание)",
+  SUPPLEMENTARY_PAY: "Дополнительная оплата",
   "LEAVE.ANNUAL.GRANT": "Ежегодный трудовой отпуск",
   "LEAVE.UNPAID.GRANT": "Отпуск без сохранения заработной платы",
   COMPOSITE: "Составной",
@@ -129,6 +132,8 @@ export function personnelOrderTypeBadgeClass(typeCode: string | null | undefined
     case "CONCURRENT_DUTY_START":
     case "CONCURRENT_DUTY_END":
       return "border-cyan-200 bg-cyan-100 text-cyan-900 dark:border-cyan-800 dark:bg-cyan-950/50 dark:text-cyan-200";
+    case "SUPPLEMENTARY_PAY":
+      return "border-amber-200 bg-amber-100 text-amber-900 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-200";
     case "COMPOSITE":
       return "border-violet-200 bg-violet-100 text-violet-900 dark:border-violet-800 dark:bg-violet-950/50 dark:text-violet-200";
     default:

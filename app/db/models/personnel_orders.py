@@ -11,6 +11,7 @@ from typing import Any, Optional
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    CheckConstraint,
     Date,
     DateTime,
     ForeignKey,
@@ -33,7 +34,12 @@ ORDER_TYPE_TRANSFER = "TRANSFER"
 ORDER_TYPE_TERMINATION = "TERMINATION"
 ORDER_TYPE_CONCURRENT_DUTY_START = "CONCURRENT_DUTY_START"
 ORDER_TYPE_CONCURRENT_DUTY_END = "CONCURRENT_DUTY_END"
+ORDER_TYPE_SUPPLEMENTARY_PAY = "SUPPLEMENTARY_PAY"
 ORDER_TYPE_COMPOSITE = "COMPOSITE"
+
+# This draft-only reconstruction code is intentionally separate from the MVP
+# event-producing types.  It has no employee-event or assignment semantics.
+RECONSTRUCTION_DRAFT_ITEM_TYPE_CODES = (ORDER_TYPE_SUPPLEMENTARY_PAY,)
 
 MVP_ORDER_TYPE_CODES = (
     ORDER_TYPE_HIRE,
@@ -49,7 +55,12 @@ LEAVE_DRAFT_ITEM_TYPE_CODES = (
     "LEAVE.UNPAID.GRANT",
 )
 MVP_HEADER_ORDER_TYPE_CODES = MVP_ORDER_TYPE_CODES + (ORDER_TYPE_COMPOSITE,) + LEAVE_DRAFT_ITEM_TYPE_CODES
-PERSONNEL_ORDER_ITEM_TYPE_CODES = MVP_ITEM_TYPE_CODES + LEAVE_DRAFT_ITEM_TYPE_CODES
+PERSONNEL_ORDER_HEADER_TYPE_CODES = (
+    MVP_HEADER_ORDER_TYPE_CODES + RECONSTRUCTION_DRAFT_ITEM_TYPE_CODES
+)
+PERSONNEL_ORDER_ITEM_TYPE_CODES = (
+    MVP_ITEM_TYPE_CODES + LEAVE_DRAFT_ITEM_TYPE_CODES + RECONSTRUCTION_DRAFT_ITEM_TYPE_CODES
+)
 
 ORDER_STATUS_DRAFT = "DRAFT"
 ORDER_STATUS_READY_FOR_SIGNATURE = "READY_FOR_SIGNATURE"
@@ -157,6 +168,13 @@ class PersonnelOrder(Base):
     __tablename__ = "personnel_orders"
     __table_args__ = (
         UniqueConstraint("order_number", name="uq_personnel_orders_order_number"),
+        CheckConstraint(
+            "order_type_code IN "
+            "('HIRE', 'TRANSFER', 'TERMINATION', 'CONCURRENT_DUTY_START', "
+            "'CONCURRENT_DUTY_END', 'COMPOSITE', 'LEAVE.ANNUAL.GRANT', "
+            "'LEAVE.UNPAID.GRANT', 'SUPPLEMENTARY_PAY')",
+            name="chk_personnel_orders_order_type_code",
+        ),
         Index("ix_personnel_orders_status", "status"),
         Index("ix_personnel_orders_order_date", "order_date"),
         Index("ix_personnel_orders_type_code", "order_type_code"),
@@ -229,6 +247,13 @@ class PersonnelOrderItem(Base):
     __tablename__ = "personnel_order_items"
     __table_args__ = (
         UniqueConstraint("order_id", "item_number", name="uq_personnel_order_items_order_item_number"),
+        CheckConstraint(
+            "item_type_code IN "
+            "('HIRE', 'TRANSFER', 'TERMINATION', 'CONCURRENT_DUTY_START', "
+            "'CONCURRENT_DUTY_END', 'LEAVE.ANNUAL.GRANT', "
+            "'LEAVE.UNPAID.GRANT', 'SUPPLEMENTARY_PAY')",
+            name="chk_personnel_order_items_item_type_code",
+        ),
         Index("ix_personnel_order_items_order_id", "order_id"),
         Index("ix_personnel_order_items_employee_id", "employee_id"),
         Index("ix_personnel_order_items_type_code", "item_type_code"),

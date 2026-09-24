@@ -5,6 +5,7 @@ from app.db.models.personnel_orders import (
     ORDER_TYPE_CONCURRENT_DUTY_END,
     ORDER_TYPE_CONCURRENT_DUTY_START,
     ORDER_TYPE_HIRE,
+    ORDER_TYPE_SUPPLEMENTARY_PAY,
     ORDER_TYPE_TERMINATION,
     ORDER_TYPE_TRANSFER,
 )
@@ -27,6 +28,10 @@ def resolve_basis_required(item_type_code: str) -> tuple[bool, str | None]:
     treat as required AND unsupported so callers mark REVIEW_REQUIRED.
     """
     normalized = str(item_type_code or "").strip().upper()
+    if normalized == ORDER_TYPE_SUPPLEMENTARY_PAY:
+        # The journal title carries no reliable basis.  A reconstruction draft
+        # must not invent one from the usual personnel-order default.
+        return False, None
     if normalized in _BASIS_REQUIRED_TYPES:
         return True, None
     return True, "UNSUPPORTED_ITEM_TYPE"

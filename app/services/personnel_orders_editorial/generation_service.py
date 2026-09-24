@@ -6,7 +6,10 @@ transaction. Overrides are never cleared on regenerate.
 """
 from __future__ import annotations
 
+from contextlib import nullcontext
 from typing import Any, Dict, Mapping, Optional
+
+from sqlalchemy.engine import Connection
 
 from app.db.engine import engine
 from app.db.models.personnel_orders import (
@@ -17,6 +20,7 @@ from app.db.models.personnel_orders import (
     ORDER_BLOCK_TYPE_TITLE,
     ORDER_BLOCK_TYPES,
     REVIEW_STATUS_GENERATION_FAILED,
+    ORDER_TYPE_SUPPLEMENTARY_PAY,
 )
 from app.services.personnel_orders_editorial.audit import write_editorial_audit
 from app.services.personnel_order_archive_guard import assert_order_not_archived
@@ -32,6 +36,7 @@ from app.services.personnel_orders_editorial.generators import (
     generate_basis_text,
     generate_item_body,
     generate_order_block,
+    generate_supplementary_pay_basis,
 )
 from app.services.personnel_orders_editorial.mapper import build_item_ctx, iso_date
 from app.services.personnel_orders_editorial.repository import (
@@ -84,6 +89,7 @@ def generate_editorial(
     *,
     user_id: Optional[int],
     scope: Optional[Dict[str, Any]] = None,
+    conn: Optional[Connection] = None,
 ) -> Dict[str, Any]:
     """Create missing blocks and regenerate generated_text; never clears overrides.
 
@@ -91,16 +97,18 @@ def generate_editorial(
     block is persisted as GENERATION_FAILED; other successful blocks in the same
     call remain committed in the same transaction.
     """
-    require_available()
+    require_available(conn)
     scope = dict(scope) if scope else None
 
-    with engine.begin() as conn:
-        scope_tokens = lock_personnel_order_evidence_scopes_tx(conn, order_ids=[order_id])
-        order = fetch_order(conn, order_id)
+    # Batch reconstruction passes its outer transaction here so headers, items,
+    # evidence and generated presentations commit (or roll back) together.
+    with (nullcontext(conn) if conn is not None else engine.begin()) as active_conn:
+        scope_tokens = lock_personnel_order_evidence_scopes_tx(active_conn, order_ids=[order_id])
+        order = fetch_order(active_conn, order_id)
         assert_order_not_archived(order)
         ensure_draft_writable(order)
 
-        items = load_items(conn, order_id)
+        items = load_items(active_conn, order_id)
         employee_ids = [
             int(i["employee_id"]) for i in items if i.get("employee_id") is not None
         ]
@@ -108,16 +116,17 @@ def generate_editorial(
         for item in items:
             if scope and scope.get("item_id") is not None and int(scope["item_id"]) != int(item["item_id"]):
                 continue
-            bases[int(item["item_id"])] = ensure_default_basis(conn, item)
+            if str(item["item_type_code"]).strip().upper() != ORDER_TYPE_SUPPLEMENTARY_PAY:
+                bases[int(item["item_id"])] = ensure_default_basis(active_conn, item)
 
         for basis in bases.values():
             if basis.get("subject_employee_id") is not None:
                 employee_ids.append(int(basis["subject_employee_id"]))
-        names = load_employee_names(conn, employee_ids)
-        legacy = load_legacy_localized(conn, order_id)
+        names = load_employee_names(active_conn, employee_ids)
+        legacy = load_legacy_localized(active_conn, order_id)
 
         existing_order_blocks = {
-            (b["locale"], b["block_type"]): b for b in load_order_blocks(conn, order_id)
+            (b["locale"], b["block_type"]): b for b in load_order_blocks(active_conn, order_id)
         }
         is_first_generate = len(existing_order_blocks) == 0
 
@@ -145,7 +154,7 @@ def generate_editorial(
                     if block_type in (ORDER_BLOCK_TYPE_TITLE, ORDER_BLOCK_TYPE_PREAMBLE):
                         legacy_field = (legacy.get(locale) or {}).get(block_type)
                     old_status, new_status = upsert_order_block(
-                        conn,
+                        active_conn,
                         order_id=int(order_id),
                         locale=locale,
                         block_type=block_type,
@@ -169,11 +178,11 @@ def generate_editorial(
                             "old_review_status": old_status or None,
                             "new_review_status": new_status,
                         },
-                        conn=conn,
+                        conn=active_conn,
                     )
                 except Exception:
                     mark_order_block_failed(
-                        conn,
+                        active_conn,
                         order_id=int(order_id),
                         locale=locale,
                         block_type=block_type,
@@ -192,12 +201,12 @@ def generate_editorial(
                             "old_review_status": None,
                             "new_review_status": REVIEW_STATUS_GENERATION_FAILED,
                         },
-                        conn=conn,
+                        conn=active_conn,
                     )
 
         existing_item_blocks = {
             (int(b["order_item_id"]), b["locale"], b["block_type"]): b
-            for b in load_item_blocks(conn, order_id=order_id)
+            for b in load_item_blocks(active_conn, order_id=order_id)
         }
 
         for item in items:
@@ -207,20 +216,20 @@ def generate_editorial(
             employee_name = names.get(int(item["employee_id"])) if item.get("employee_id") else None
             item_ctx = build_item_ctx(item, employee_name)
             basis = bases.get(item_id)
-            if basis is None:
+            if basis is None and str(item["item_type_code"]).strip().upper() != ORDER_TYPE_SUPPLEMENTARY_PAY:
                 if scope and scope.get("item_id") is not None and int(scope["item_id"]) != item_id:
                     continue
-                basis = ensure_default_basis(conn, item)
+                basis = ensure_default_basis(active_conn, item)
                 bases[item_id] = basis
-            subject_id = basis.get("subject_employee_id")
+            subject_id = basis.get("subject_employee_id") if basis else None
             subject_name = names.get(int(subject_id)) if subject_id is not None else employee_name
             basis_fact = {
-                "basis_type": basis.get("basis_type"),
+                "basis_type": basis.get("basis_type") if basis else None,
                 "subject_employee_id": subject_id,
                 "subject_employee_name": subject_name,
-                "document_date": iso_date(basis.get("document_date")),
-                "document_number": basis.get("document_number"),
-                "free_text": basis.get("free_text"),
+                "document_date": iso_date(basis.get("document_date")) if basis else None,
+                "document_number": basis.get("document_number") if basis else None,
+                "free_text": basis.get("free_text") if basis else None,
             }
 
             for locale in ALLOWED_LOCALES:
@@ -241,9 +250,12 @@ def generate_editorial(
                         if block_type == ITEM_BLOCK_TYPE_BODY:
                             generated = generate_item_body(locale, item_ctx)
                         else:
-                            generated = generate_basis_text(locale, basis_fact)
+                            if str(item["item_type_code"]).strip().upper() == ORDER_TYPE_SUPPLEMENTARY_PAY:
+                                generated = generate_supplementary_pay_basis(locale)
+                            else:
+                                generated = generate_basis_text(locale, basis_fact)
                         old_status, new_status = upsert_item_block(
-                            conn,
+                            active_conn,
                             order_item_id=item_id,
                             locale=locale,
                             block_type=block_type,
@@ -273,11 +285,11 @@ def generate_editorial(
                                 "old_review_status": old_status or None,
                                 "new_review_status": new_status,
                             },
-                            conn=conn,
+                            conn=active_conn,
                         )
                     except Exception:
                         mark_item_block_failed(
-                            conn,
+                            active_conn,
                             order_item_id=item_id,
                             locale=locale,
                             block_type=block_type,
@@ -300,13 +312,15 @@ def generate_editorial(
                                 "old_review_status": None,
                                 "new_review_status": REVIEW_STATUS_GENERATION_FAILED,
                             },
-                            conn=conn,
+                            conn=active_conn,
                         )
 
-        touch_order_updated_at(conn, int(order_id))
-        advance_personnel_order_evidence_scopes_tx(conn, tokens=scope_tokens)
+        touch_order_updated_at(active_conn, int(order_id))
+        advance_personnel_order_evidence_scopes_tx(active_conn, tokens=scope_tokens)
 
     # Lazy import avoids cycle with service (which does not import this module).
+    if conn is not None:
+        return {"order_id": int(order_id), "generated_in_existing_transaction": True}
+    # Lazy import avoids cycle with service (which does not import this module).
     from app.services.personnel_orders_editorial.service import get_editorial_state
-
     return get_editorial_state(int(order_id))

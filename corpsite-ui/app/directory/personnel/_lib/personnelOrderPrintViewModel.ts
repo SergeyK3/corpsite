@@ -71,6 +71,7 @@ export const PERSONNEL_ORDER_PRINT_DOCUMENT_TITLES: Record<string, LocalizedText
   TERMINATION: localizedText("Жұмыстан босату туралы", "Об увольнении"),
   CONCURRENT_DUTY_START: localizedText("Қоса атқаруды белгілеу туралы", "Об установлении совмещения"),
   CONCURRENT_DUTY_END: localizedText("Қоса атқаруды тоқтату туралы", "О прекращении совмещения"),
+  SUPPLEMENTARY_PAY: localizedText("Қосымша ақы туралы", "О дополнительной оплате"),
   COMPOSITE: localizedText("Кадрлық өзгерістер туралы", "О кадровых изменениях"),
 };
 
@@ -132,6 +133,7 @@ function isTechnicalTitle(value: string | null | undefined): boolean {
       "TERMINATION",
       "CONCURRENT_DUTY_START",
       "CONCURRENT_DUTY_END",
+      "SUPPLEMENTARY_PAY",
       "COMPOSITE",
     ].includes(upper)
   ) {

@@ -23,6 +23,7 @@ from app.db.models.personnel_orders import (
     ORDER_TYPE_CONCURRENT_DUTY_END,
     ORDER_TYPE_CONCURRENT_DUTY_START,
     ORDER_TYPE_HIRE,
+    ORDER_TYPE_SUPPLEMENTARY_PAY,
     ORDER_TYPE_TERMINATION,
     ORDER_TYPE_TRANSFER,
 )
@@ -56,6 +57,10 @@ DOCUMENT_TITLES: Dict[str, Dict[str, str]] = {
     ORDER_TYPE_CONCURRENT_DUTY_END: {
         "kk": "Қоса атқаруды тоқтату туралы",
         "ru": "О прекращении совмещения",
+    },
+    ORDER_TYPE_SUPPLEMENTARY_PAY: {
+        "kk": "Қосымша ақы туралы",
+        "ru": "О дополнительной оплате",
     },
     ORDER_TYPE_COMPOSITE: {
         "kk": "Кадрлық өзгерістер туралы",
@@ -259,6 +264,21 @@ def generate_order_block(
         )
 
     if normalized_type == ORDER_BLOCK_TYPE_PREAMBLE:
+        if order_type == ORDER_TYPE_SUPPLEMENTARY_PAY:
+            text = (
+                "Қосымша ақының шарттары DOCX-пен салыстырылғаннан кейін нақтыланады."
+                if lang == "kk"
+                else "Условия дополнительной оплаты уточняются после сверки с DOCX."
+            )
+            return _result(
+                generated_text=text,
+                generator_key=GENERATOR_KEY_ORDER_PREAMBLE,
+                fingerprint_payload={
+                    "block_type": ORDER_BLOCK_TYPE_PREAMBLE,
+                    "locale": lang,
+                    "order_type_code": order_type,
+                },
+            )
         if lang == "kk":
             if legal_basis:
                 text = (
@@ -469,6 +489,20 @@ def generate_item_body(locale: str, item_ctx: Mapping[str, Any]) -> Dict[str, st
             rem = f" Остающаяся ставка: {remaining}." if remaining else ""
             rem_concurrent = f" Снимаемая ставка: {concurrent}." if concurrent else ""
             text = f"Прекратить совмещение для {fio} с {date}.{rem}{rem_concurrent}"
+    elif item_type == ORDER_TYPE_SUPPLEMENTARY_PAY:
+        # The journal gives neither the amount nor the period, basis,
+        # position or unit.  Keep this deliberately non-assertive until the
+        # individual DOCX is reviewed.
+        if lang == "kk":
+            text = (
+                f"{fio} үшін қосымша ақы: мөлшері, кезеңі, негізі және шарттары "
+                "DOCX-пен салыстыруды талап етеді."
+            )
+        else:
+            text = (
+                f"Дополнительная оплата для {fio}: размер, период, основание и условия "
+                "требуют сверки с DOCX."
+            )
     else:
         if lang == "kk":
             text = f"{fio}, күні {date}."
@@ -600,5 +634,24 @@ def generate_basis_text(locale: str, basis_fact: Mapping[str, Any]) -> Dict[str,
             "document_date": document_date or None,
             "document_number": document_number or None,
             "free_text": free_text or None,
+        },
+    )
+
+
+def generate_supplementary_pay_basis(locale: str) -> Dict[str, str]:
+    """State the DOCX review requirement without inventing a basis."""
+    lang = _locale(locale)
+    text = (
+        "Негізі мен шарттары DOCX-пен салыстыруды талап етеді."
+        if lang == "kk"
+        else "Основание и условия требуют сверки с DOCX."
+    )
+    return _result(
+        generated_text=text,
+        generator_key=GENERATOR_KEY_ITEM_BASIS,
+        fingerprint_payload={
+            "block_type": ITEM_BLOCK_TYPE_BASIS,
+            "locale": lang,
+            "item_type_code": ORDER_TYPE_SUPPLEMENTARY_PAY,
         },
     )
