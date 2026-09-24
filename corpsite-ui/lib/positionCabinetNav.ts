@@ -4,7 +4,7 @@ import { isOperationalOrdersRoute } from "./operationalOrdersNav";
 import { isHrProcessesRoute } from "./personnelNav";
 
 /** Position Cabinet section identifiers (UI shell only — no backend binding yet). */
-export type PositionCabinetSection = "tasks" | "dashboards" | "personal_card";
+export type PositionCabinetSection = "tasks" | "dashboards" | "personal_card" | "orders";
 
 export type PositionCabinetNavItem = {
   id: PositionCabinetSection;
@@ -26,6 +26,7 @@ export const POSITION_CABINET_TAB_LABELS: Record<PositionCabinetSection, string>
   tasks: "Мои задачи",
   dashboards: "Дашборды",
   personal_card: "Личная карточка",
+  orders: "Приказы",
 };
 
 export function getPositionCabinetTabLabel(section: PositionCabinetSection): string {
@@ -45,12 +46,14 @@ export const POSITION_CABINET_NAV_ITEMS: PositionCabinetNavItem[] = [
   buildNavItem("tasks", "/tasks", "existing"),
   buildNavItem("dashboards", "/dashboards", "position_cabinet"),
   buildNavItem("personal_card", "/profile/personal-card", "employee"),
+  buildNavItem("orders", "/profile/orders", "employee"),
 ];
 
 const SECTION_BY_PATH: Array<{ prefix: string; section: PositionCabinetSection }> = [
   { prefix: "/tasks", section: "tasks" },
   { prefix: "/dashboards", section: "dashboards" },
   { prefix: "/profile/personal-card", section: "personal_card" },
+  { prefix: "/profile/orders", section: "orders" },
 ];
 
 export function isPositionCabinetRoute(pathname: string): boolean {

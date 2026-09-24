@@ -15,24 +15,29 @@ describe("positionCabinetNav", () => {
       "tasks",
       "dashboards",
       "personal_card",
+      "orders",
     ]);
     expect(POSITION_CABINET_NAV_ITEMS.map((item) => item.label)).toEqual([
       "Мои задачи",
       "Дашборды",
       "Личная карточка",
+      "Приказы",
     ]);
     expect(POSITION_CABINET_NAV_ITEMS.map((item) => item.title)).toEqual([
       "Мои задачи",
       "Дашборды",
       "Личная карточка",
+      "Приказы",
     ]);
     expect(POSITION_CABINET_TAB_LABELS).toEqual({
       tasks: "Мои задачи",
       dashboards: "Дашборды",
       personal_card: "Личная карточка",
+      orders: "Приказы",
     });
     expect(getPositionCabinetTabLabel("dashboards")).toBe("Дашборды");
     expect(getPositionCabinetTabLabel("personal_card")).toBe("Личная карточка");
+    expect(getPositionCabinetTabLabel("orders")).toBe("Приказы");
   });
 
   it("detects position cabinet routes", () => {
@@ -85,6 +90,13 @@ describe("positionCabinetNav", () => {
     expect(resolvePositionCabinetSection("/tasks")).toBe("tasks");
     expect(resolvePositionCabinetSection("/dashboards")).toBe("dashboards");
     expect(resolvePositionCabinetSection("/profile/personal-card")).toBe("personal_card");
+    expect(resolvePositionCabinetSection("/profile/orders")).toBe("orders");
     expect(resolvePositionCabinetSection("/profile")).toBeNull();
+  });
+
+  it("places orders directly after the personal card", () => {
+    const ids = POSITION_CABINET_NAV_ITEMS.map((item) => item.id);
+    expect(ids.indexOf("orders")).toBe(ids.indexOf("personal_card") + 1);
+    expect(POSITION_CABINET_NAV_ITEMS.find((item) => item.id === "orders")?.label).toBe("Приказы");
   });
 });
