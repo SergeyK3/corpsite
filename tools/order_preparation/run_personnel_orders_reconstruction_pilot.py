@@ -9,6 +9,7 @@ Running it again is idempotent by ``Excel file + sheet + row``.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import re
 from functools import lru_cache
@@ -164,7 +165,52 @@ def source_key(row_number: int) -> str:
     return f"{SOURCE_FILE.name}|{SHEET}|{row_number}"
 
 
-def load_candidates(conn) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+def template_key_for(action: str) -> str:
+    return {
+        "HIRE": "personnel.hire.standard",
+        "TRANSFER": "personnel.transfer.permanent",
+        "CONCURRENT_DUTY_START": "personnel.concurrent-duty.start",
+        "TERMINATION": "personnel.termination.employee-initiative-unused-leave",
+    }[action]
+
+
+def load_manifest(path: Path | None) -> dict[str, dict[str, Any]] | None:
+    if path is None:
+        return None
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    rows = payload.get("orders")
+    if not isinstance(rows, list) or len(rows) != 20:
+        raise RuntimeError("Manifest must contain exactly 20 orders")
+    indexed = {str(row.get("source_identifier")): row for row in rows}
+    if len(indexed) != 20 or "None" in indexed:
+        raise RuntimeError("Manifest has missing or duplicate source_identifier values")
+    return indexed
+
+
+def sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def verify_manifest_files(path: Path, source_file: Path) -> None:
+    """Reject a moved/tampered package before it is allowed to query or write."""
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    source = payload.get("source_excel", {})
+    if source.get("path") != source_file.name or source.get("sha256") != sha256(source_file):
+        raise RuntimeError("Excel source does not match the package manifest SHA-256")
+    package_root = path.parent.resolve()
+    for item in payload.get("docx_files", []):
+        file_path = (package_root / str(item.get("path", ""))).resolve()
+        if package_root not in file_path.parents or not file_path.is_file():
+            raise RuntimeError(f"Manifest DOCX is outside package or missing: {item.get('path')}")
+        if item.get("sha256") != sha256(file_path):
+            raise RuntimeError(f"Manifest DOCX SHA-256 mismatch: {item.get('path')}")
+
+
+def load_candidates(conn, manifest: dict[str, dict[str, Any]] | None = None) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     employees = [dict(row) for row in conn.execute(text("""
         SELECT e.employee_id, e.full_name, e.org_unit_id, e.position_id,
                ou.name AS unit_name, p.name AS position_name
@@ -185,7 +231,7 @@ def load_candidates(conn) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     for row_number, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
         pdf, page, number, title, raw_date, _, figures, note, *_ = row
         key = source_key(row_number)
-        if key in existing:
+        if key in existing and manifest is None:
             continue
         action = title_type(clean(title))
         if action is None:
@@ -202,46 +248,97 @@ def load_candidates(conn) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         if not people or unresolved:
             skipped.append({"excel_row": row_number, "order_number": clean(number), "reason": "UNRESOLVABLE_SURNAME", "unresolved": unresolved})
             continue
-        selected.append({
+        candidate = {
             "excel_row": row_number, "source_identifier": key, "pdf": clean(pdf), "pdf_page": clean(page),
             "order_number": f"{clean(number)}-ж", "order_date": order_date, "source_title": clean(title),
             "figures": clean(figures), "source_note": clean(note), "action": action, "matches": matches,
-        })
-        if len(selected) == 20:
+        }
+        if manifest is not None:
+            expected = manifest.get(key)
+            if expected is None:
+                continue
+            if (clean(expected.get("order_number")) != candidate["order_number"]
+                    or clean(expected.get("order_date")) != candidate["order_date"].isoformat()
+                    or expected.get("template_key") != template_key_for(action)):
+                raise RuntimeError(f"Manifest does not match Excel source row {key}")
+        selected.append(candidate)
+        if manifest is None and len(selected) == 20:
             break
+    if manifest is not None:
+        actual = {row["source_identifier"] for row in selected}
+        missing = set(manifest) - actual
+        if missing:
+            raise RuntimeError(f"Manifest rows not selected from Excel: {sorted(missing)}")
     return selected, skipped
 
 
-def run(database_url: str, *, dry_run: bool) -> dict[str, Any]:
+def duplicate_check(conn, candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Report every requested collision before an apply; it never changes data."""
+    findings: list[dict[str, Any]] = []
+    for candidate in candidates:
+        number_date = conn.execute(text("""
+            SELECT order_id FROM public.personnel_orders
+            WHERE order_number = :number AND order_date = :order_date
+        """), {"number": candidate["order_number"], "order_date": candidate["order_date"]}).scalars().all()
+        source_row = conn.execute(text("""
+            SELECT order_id FROM public.personnel_orders
+            WHERE storage_json ->> 'source_identifier' = :source_identifier
+        """), {"source_identifier": candidate["source_identifier"]}).scalars().all()
+        employee_action: list[int] = []
+        for match in candidate["matches"]:
+            if match["employee_id"] is not None:
+                employee_action.extend(conn.execute(text("""
+                    SELECT DISTINCT po.order_id
+                    FROM public.personnel_orders po
+                    JOIN public.personnel_order_items poi ON poi.order_id = po.order_id
+                    WHERE poi.employee_id = :employee_id AND poi.item_type_code = :action
+                """), {"employee_id": match["employee_id"], "action": candidate["action"]}).scalars().all())
+        findings.append({
+            "source_identifier": candidate["source_identifier"],
+            "order_number_and_date": sorted(set(map(int, number_date))),
+            "source_excel_row": sorted(set(map(int, source_row))),
+            "employee_and_action": sorted(set(map(int, employee_action))),
+        })
+    return findings
+
+
+def run(database_url: str, *, dry_run: bool, manifest_path: Path | None = None) -> dict[str, Any]:
     engine = create_engine(database_url)
-    with engine.begin() as conn:
+    manifest = load_manifest(manifest_path)
+    # A dry run deliberately uses a non-transactional read-only connection:
+    # no repair, audit, scope, or report database writes are possible here.
+    with (engine.connect() if dry_run else engine.begin()) as conn:
         existing_count = int(conn.execute(text("""
             SELECT COUNT(*) FROM public.personnel_orders
             WHERE storage_json ->> 'reconstruction_pilot' = :pilot
         """), {"pilot": PILOT}).scalar_one())
-        if existing_count:
+        if existing_count and manifest is None:
             if existing_count != 20:
                 raise RuntimeError(f"Pilot is incomplete: expected 20 existing drafts, found {existing_count}")
             archived = ARCHIVE / "run-report.json"
             if not archived.is_file():
                 raise RuntimeError("Pilot drafts exist but their local PII audit JSON is missing")
-            conn.execute(text("""
-                INSERT INTO public.personnel_order_evidence_scopes(order_id)
-                SELECT po.order_id
-                FROM public.personnel_orders po
-                LEFT JOIN public.personnel_order_evidence_scopes scope ON scope.order_id = po.order_id
-                WHERE po.storage_json ->> 'reconstruction_pilot' = :pilot
-                  AND scope.order_id IS NULL
-                ON CONFLICT (order_id) DO NOTHING
-            """), {"pilot": PILOT})
+            if not dry_run:
+                conn.execute(text("""
+                    INSERT INTO public.personnel_order_evidence_scopes(order_id)
+                    SELECT po.order_id
+                    FROM public.personnel_orders po
+                    LEFT JOIN public.personnel_order_evidence_scopes scope ON scope.order_id = po.order_id
+                    WHERE po.storage_json ->> 'reconstruction_pilot' = :pilot
+                      AND scope.order_id IS NULL
+                    ON CONFLICT (order_id) DO NOTHING
+                """), {"pilot": PILOT})
             result = json.loads(archived.read_text(encoding="utf-8"))
             result["dry_run"] = dry_run
             result["rerun_noop"] = True
             return result
-        selected, skipped = load_candidates(conn)
+        selected, skipped = load_candidates(conn, manifest)
         if len(selected) != 20:
             raise RuntimeError(f"Expected 20 eligible rows; found {len(selected)}")
-        creator = conn.execute(text("SELECT user_id FROM public.users ORDER BY user_id LIMIT 1")).scalar_one()
+        duplicates = duplicate_check(conn, selected)
+        if not dry_run and any(any(values for key, values in row.items() if key != "source_identifier") for row in duplicates):
+            raise RuntimeError("Potential duplicates found; inspect a --dry-run report before apply")
+        creator = None if dry_run else conn.execute(text("SELECT user_id FROM public.users ORDER BY user_id LIMIT 1")).scalar_one()
         report_rows: list[dict[str, Any]] = []
         for candidate in selected:
             docx = find_docx(candidate["order_number"].removesuffix("-ж"), candidate["order_date"])
@@ -278,11 +375,13 @@ def run(database_url: str, *, dry_run: bool) -> dict[str, Any]:
                     """), {"order_id": order_id, "item_number": item_number, "action": candidate["action"],
                               "employee_id": match["employee_id"], "effective_date": candidate["order_date"],
                               "payload": json.dumps(payload, ensure_ascii=False)})
-            report_rows.append({**candidate, "order_id": order_id, "docx_path": docx})
-    return {"pilot": PILOT, "dry_run": dry_run, "orders": report_rows, "skipped": skipped}
+            report_rows.append({**candidate, "order_id": order_id, "docx_path": docx,
+                                "template_key": template_key_for(candidate["action"])})
+    return {"pilot": PILOT, "dry_run": dry_run, "orders": report_rows, "skipped": skipped,
+            "duplicate_check": duplicates}
 
 
-def write_outputs(result: dict[str, Any]) -> None:
+def write_outputs(result: dict[str, Any], *, write_repository_report: bool = True) -> None:
     ARCHIVE.mkdir(parents=True, exist_ok=True)
     (ARCHIVE / "run-report.json").write_text(json.dumps(result, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
     lines = ["# Personnel orders reconstruction pilot 01", "", "Local-only draft reconstruction. No employee events or assignments were created or changed.", "", f"Source: `{SOURCE_FILE}` · sheet `{SHEET}`.", "", "## Imported drafts", "", "| Excel row | Order | Date | template_key | order_id | DOCX | Visual check |", "|---:|---|---|---|---:|---|---|"]
@@ -301,7 +400,8 @@ def write_outputs(result: dict[str, Any]) -> None:
     else:
         lines.append("- None before the first 20 eligible records.")
     lines += ["", "## Russian automatic wording", "", "- When unused leave days are not confirmed, the accounting point is `Бухгалтерии произвести расчёт за неиспользованные дни отпуска.`; no dash, count, or `календарных дней` is rendered.", "- Russian automatic position/unit wording is `должность (подразделение)`. The added order-text form is `Приемное` → `приемное отделение` (PROPOSED); an unknown unit is only normalized to lower case and remains marked for dictionary review."]
-    REPORT.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    if write_repository_report:
+        REPORT.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def ensure_bilingual_presentations(database_url: str, result: dict[str, Any]) -> dict[int, str | None]:
@@ -440,13 +540,34 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--database-url", required=True)
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--source-file", type=Path, help="Portable Excel source path (defaults to the local research source)")
+    parser.add_argument("--sheet", help="Excel sheet name")
+    parser.add_argument("--docx-root", type=Path, help="Portable directory containing only source DOCX files")
+    parser.add_argument("--archive", type=Path, help="Local output directory; never add it to Git")
+    parser.add_argument("--manifest", type=Path, help="Pinned 20-row manifest to validate before processing")
     args = parser.parse_args()
-    result = run(args.database_url, dry_run=args.dry_run)
+    global SOURCE_FILE, SHEET, DOCX_ROOT, ARCHIVE
+    if args.source_file:
+        SOURCE_FILE = args.source_file
+    if args.sheet:
+        SHEET = args.sheet
+    if args.docx_root:
+        DOCX_ROOT = args.docx_root
+    if args.archive:
+        ARCHIVE = args.archive
+    docx_index.cache_clear()
+    if not SOURCE_FILE.is_file():
+        parser.error(f"Excel source file does not exist: {SOURCE_FILE}")
+    if not DOCX_ROOT.is_dir():
+        parser.error(f"DOCX root does not exist: {DOCX_ROOT}")
+    if args.manifest:
+        verify_manifest_files(args.manifest, SOURCE_FILE)
+    result = run(args.database_url, dry_run=args.dry_run, manifest_path=args.manifest)
     if not args.dry_run:
         templates = ensure_bilingual_presentations(args.database_url, result)
         for row in result["orders"]:
             row["template_key"] = templates.get(int(row["order_id"])) if row.get("order_id") else None
-    write_outputs(result)
+    write_outputs(result, write_repository_report=not args.dry_run)
     print(json.dumps({"orders": len(result["orders"]), "skipped": len(result["skipped"]), "dry_run": args.dry_run}))
     return 0
 
