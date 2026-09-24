@@ -3,6 +3,9 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
+import subprocess
+import sys
 from contextlib import AbstractContextManager
 from datetime import date
 from pathlib import Path
@@ -38,6 +41,19 @@ class _Engine:
 
     def begin(self):  # pragma: no cover - a dry run must not select this path
         raise AssertionError("dry run must not open a write transaction")
+
+
+def test_direct_script_bootstrap_exposes_app_services(tmp_path):
+    code = (
+        "import runpy; "
+        f"runpy.run_path({str(SCRIPT)!r}, run_name='pilot_test'); "
+        "import app.services.personnel_orders_editorial_service"
+    )
+    completed = subprocess.run(
+        [sys.executable, "-c", code], cwd=tmp_path, text=True, capture_output=True, check=False,
+        env={**os.environ, "DATABASE_URL": "postgresql://user:pass@localhost/corpsite_test"},
+    )
+    assert completed.returncode == 0, completed.stderr
 
 
 def test_match_people_marks_unique_ambiguous_and_unresolved():
@@ -240,6 +256,101 @@ def test_apply_creates_only_draft_order_rows_not_events_or_assignments(monkeypat
     stored_orders = [json.loads(params["storage"]) for params in conn.params if "storage" in params]
     assert all(order["employee_match_review_required"] for order in stored_orders)
     assert stored_orders[0]["reconstruction"]["legacy_technical_order_ids"] == [125]
+
+
+class _ResumeResult:
+    def __init__(self, *, rows=None, scalar=None):
+        self.rows = rows or []
+        self.scalar = scalar
+
+    def mappings(self):
+        return self.rows
+
+    def scalar_one(self):
+        return self.scalar
+
+
+class _ResumeConnection(AbstractContextManager):
+    def __init__(self, rows, *, scopes, locales):
+        self.rows = rows
+        self.scopes = scopes
+        self.locales = locales
+        self.sql: list[str] = []
+
+    def execute(self, statement, _params=None):
+        sql = str(statement)
+        self.sql.append(sql)
+        if "FROM public.personnel_orders" in sql and "source_identifiers" in str(_params):
+            return _ResumeResult(rows=self.rows)
+        if "FROM public.personnel_order_evidence_scopes" in sql and "COUNT(*)" in sql:
+            return _ResumeResult(scalar=self.scopes)
+        if "FROM public.personnel_order_localized_texts" in sql:
+            return _ResumeResult(scalar=self.locales)
+        return _ResumeResult()
+
+
+class _ResumeEngine:
+    def __init__(self, conn):
+        self.conn = conn
+
+    def connect(self):
+        return self.conn
+
+    def begin(self):
+        return self.conn
+
+
+def _manifest_and_existing_rows(count=20):
+    manifest = {}
+    rows = []
+    for number in range(1, count + 1):
+        source = f"source.xlsx|Лист1|{number}"
+        manifest[source] = {
+            "source_identifier": source, "excel_row": number,
+            "order_number": f"{number}-ж", "order_date": "2026-01-01",
+            "template_key": "personnel.hire.standard",
+        }
+        rows.append({
+            "order_id": 399 + number, "order_number": f"{number}-ж",
+            "order_date": date(2026, 1, 1), "order_type_code": "HIRE",
+            "storage_json": {"source_identifier": source, "employee_matches": [], "reconstruction": {}},
+        })
+    return manifest, rows
+
+
+def test_full_manifest_resume_creates_no_new_orders_and_second_run_is_noop(monkeypatch):
+    manifest, rows = _manifest_and_existing_rows()
+    first = _ResumeConnection(rows, scopes=0, locales=0)
+    monkeypatch.setattr(pilot, "create_engine", lambda _url: _ResumeEngine(first))
+    monkeypatch.setattr(pilot, "load_manifest", lambda _path: manifest)
+    monkeypatch.setattr(pilot, "find_docx", lambda *_args: None)
+
+    resumed = pilot.run("postgresql://unused", dry_run=False, manifest_path=Path("manifest.json"))
+
+    assert resumed["resumed"] is True
+    assert resumed["needs_presentation_repair"] is True
+    assert "INSERT INTO public.personnel_orders" not in "\n".join(first.sql)
+    assert any("INSERT INTO public.personnel_order_evidence_scopes" in sql for sql in first.sql)
+
+    second = _ResumeConnection(rows, scopes=20, locales=40)
+    monkeypatch.setattr(pilot, "create_engine", lambda _url: _ResumeEngine(second))
+    noop = pilot.run("postgresql://unused", dry_run=False, manifest_path=Path("manifest.json"))
+    assert noop["rerun_noop"] is True
+    assert not any("INSERT" in sql.upper() for sql in second.sql)
+
+
+def test_partial_manifest_state_is_blocked(monkeypatch):
+    manifest, rows = _manifest_and_existing_rows()
+    conn = _ResumeConnection(rows[:1], scopes=0, locales=0)
+    monkeypatch.setattr(pilot, "create_engine", lambda _url: _ResumeEngine(conn))
+    monkeypatch.setattr(pilot, "load_manifest", lambda _path: manifest)
+
+    try:
+        pilot.run("postgresql://unused", dry_run=False, manifest_path=Path("manifest.json"))
+    except RuntimeError as exc:
+        assert "PARTIAL_PILOT_STATE: found 1 of 20" in str(exc)
+    else:  # pragma: no cover
+        raise AssertionError("partial pilot state was allowed")
 
 
 def test_cli_exposes_portable_sources_and_pinned_manifest():

@@ -12,10 +12,16 @@ import argparse
 import hashlib
 import json
 import re
+import sys
 from functools import lru_cache
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any
+
+
+REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
+if str(REPOSITORY_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPOSITORY_ROOT))
 
 from docx import Document
 from openpyxl import load_workbook
@@ -330,12 +336,80 @@ def duplicate_check(conn, candidates: list[dict[str, Any]]) -> list[dict[str, An
     return findings
 
 
+def manifest_resume_rows(conn, manifest: dict[str, dict[str, Any]]) -> list[dict[str, Any]] | None:
+    """Return all pre-existing manifest drafts, or reject a dangerous partial pilot."""
+    rows = [dict(row) for row in conn.execute(text("""
+        SELECT order_id, order_number, order_date, order_type_code, storage_json
+        FROM public.personnel_orders
+        WHERE storage_json ->> 'reconstruction_pilot' = :pilot
+          AND storage_json ->> 'source_identifier' = ANY(:source_identifiers)
+        ORDER BY order_id
+    """), {"pilot": PILOT, "source_identifiers": list(manifest)}).mappings()]
+    present = {str((row.get("storage_json") or {}).get("source_identifier")) for row in rows}
+    if not present:
+        return None
+    if len(present) != len(manifest):
+        raise RuntimeError(f"PARTIAL_PILOT_STATE: found {len(present)} of {len(manifest)} manifest orders")
+    return rows
+
+
+def resume_result(conn, manifest: dict[str, dict[str, Any]], rows: list[dict[str, Any]], *, dry_run: bool) -> dict[str, Any]:
+    order_ids = [int(row["order_id"]) for row in rows]
+    scope_count = int(conn.execute(text("""
+        SELECT COUNT(*) FROM public.personnel_order_evidence_scopes
+        WHERE order_id = ANY(:order_ids)
+    """), {"order_ids": order_ids}).scalar_one())
+    locale_count = int(conn.execute(text("""
+        SELECT COUNT(*) FROM public.personnel_order_localized_texts
+        WHERE order_id = ANY(:order_ids) AND locale IN ('kk', 'ru')
+    """), {"order_ids": order_ids}).scalar_one())
+    needs_repair = scope_count != len(order_ids) or locale_count != len(order_ids) * 2
+    if needs_repair and not dry_run:
+        conn.execute(text("""
+            INSERT INTO public.personnel_order_evidence_scopes(order_id)
+            SELECT po.order_id
+            FROM public.personnel_orders po
+            LEFT JOIN public.personnel_order_evidence_scopes scope ON scope.order_id = po.order_id
+            WHERE po.order_id = ANY(:order_ids) AND scope.order_id IS NULL
+            ON CONFLICT (order_id) DO NOTHING
+        """), {"order_ids": order_ids})
+    orders: list[dict[str, Any]] = []
+    for row in rows:
+        storage = row["storage_json"] if isinstance(row["storage_json"], dict) else {}
+        source_identifier = str(storage["source_identifier"])
+        manifest_row = manifest[source_identifier]
+        order_number = str(row["order_number"])
+        order_date = row["order_date"]
+        orders.append({
+            "order_id": int(row["order_id"]), "source_identifier": source_identifier,
+            "excel_row": manifest_row["excel_row"], "order_number": order_number,
+            "order_date": order_date, "action": str(row["order_type_code"]),
+            "matches": storage.get("employee_matches", []),
+            "docx_path": find_docx(order_number.removesuffix("-ж"), order_date),
+            "template_key": storage.get("template_key") or manifest_row.get("template_key"),
+            "employee_match_review_required": bool(storage.get("employee_match_review_required")),
+            "duplicate_checks": {"source_identifier": source_identifier, "blocking_duplicates": {
+                "order_number_and_date": [], "source_excel_row": [], "employee_and_action": [],
+            }, "legacy_technical_matches": storage.get("reconstruction", {}).get("legacy_technical_order_ids", [])},
+        })
+    return {
+        "pilot": PILOT, "dry_run": dry_run, "orders": orders, "skipped": [],
+        "duplicate_check": [], "blocking_duplicates": [], "legacy_technical_matches": [],
+        "resumed": needs_repair, "rerun_noop": not needs_repair,
+        "needs_presentation_repair": needs_repair,
+    }
+
+
 def run(database_url: str, *, dry_run: bool, manifest_path: Path | None = None) -> dict[str, Any]:
     engine = create_engine(database_url)
     manifest = load_manifest(manifest_path)
     # A dry run deliberately uses a non-transactional read-only connection:
     # no repair, audit, scope, or report database writes are possible here.
     with (engine.connect() if dry_run else engine.begin()) as conn:
+        if manifest is not None:
+            existing_manifest_rows = manifest_resume_rows(conn, manifest)
+            if existing_manifest_rows is not None:
+                return resume_result(conn, manifest, existing_manifest_rows, dry_run=dry_run)
         existing_count = int(conn.execute(text("""
             SELECT COUNT(*) FROM public.personnel_orders
             WHERE storage_json ->> 'reconstruction_pilot' = :pilot
@@ -620,7 +694,7 @@ def main() -> int:
     if args.manifest:
         verify_manifest_files(args.manifest, SOURCE_FILE)
     result = run(args.database_url, dry_run=args.dry_run, manifest_path=args.manifest)
-    if not args.dry_run:
+    if not args.dry_run and result.get("needs_presentation_repair", True):
         templates = ensure_bilingual_presentations(args.database_url, result)
         for row in result["orders"]:
             row["template_key"] = templates.get(int(row["order_id"])) if row.get("order_id") else None
