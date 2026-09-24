@@ -82,13 +82,19 @@ def initials_match(source: str, employee_name: str) -> bool:
     return not initials or candidate[: len(initials)] == initials
 
 
-def match_people(source_people: list[str], employees: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[str]]:
+def match_people(source_people: list[str], employees: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Retain every Excel figure, including ones requiring manual review."""
     matches: list[dict[str, Any]] = []
-    unresolved: list[str] = []
     for source_name in source_people:
         candidates = [employee for employee in employees if initials_match(source_name, employee["full_name"])]
         if not candidates:
-            unresolved.append(source_name)
+            matches.append({
+                "source_name": source_name,
+                "employee_id": None,
+                "match_status": "UNRESOLVED",
+                "candidate_ids": [],
+                "employee": None,
+            })
             continue
         matches.append({
             "source_name": source_name,
@@ -97,7 +103,7 @@ def match_people(source_people: list[str], employees: list[dict[str, Any]]) -> t
             "candidate_ids": [int(candidate["employee_id"]) for candidate in candidates],
             "employee": candidates[0] if len(candidates) == 1 else None,
         })
-    return matches, unresolved
+    return matches
 
 
 @lru_cache(maxsize=1)
@@ -244,10 +250,10 @@ def load_candidates(conn, manifest: dict[str, dict[str, Any]] | None = None) -> 
             skipped.append({"excel_row": row_number, "order_number": clean(number), "reason": "PLACEHOLDER_TITLE"})
             continue
         people = parse_people(figures)
-        matches, unresolved = match_people(people, employees)
-        if not people or unresolved:
-            skipped.append({"excel_row": row_number, "order_number": clean(number), "reason": "UNRESOLVABLE_SURNAME", "unresolved": unresolved})
+        if not people:
+            skipped.append({"excel_row": row_number, "order_number": clean(number), "reason": "EMPTY_FIGURES"})
             continue
+        matches = match_people(people, employees)
         candidate = {
             "excel_row": row_number, "source_identifier": key, "pdf": clean(pdf), "pdf_page": clean(page),
             "order_number": f"{clean(number)}-ж", "order_date": order_date, "source_title": clean(title),
@@ -336,6 +342,7 @@ def run(database_url: str, *, dry_run: bool, manifest_path: Path | None = None) 
         if len(selected) != 20:
             raise RuntimeError(f"Expected 20 eligible rows; found {len(selected)}")
         duplicates = duplicate_check(conn, selected)
+        duplicates_by_source = {row["source_identifier"]: row for row in duplicates}
         if not dry_run and any(any(values for key, values in row.items() if key != "source_identifier") for row in duplicates):
             raise RuntimeError("Potential duplicates found; inspect a --dry-run report before apply")
         creator = None if dry_run else conn.execute(text("SELECT user_id FROM public.users ORDER BY user_id LIMIT 1")).scalar_one()
@@ -350,6 +357,15 @@ def run(database_url: str, *, dry_run: bool, manifest_path: Path | None = None) 
                 "source_excel": {"file": str(SOURCE_FILE), "sheet": SHEET, "row": candidate["excel_row"]},
                 "source_pdf": {"file": candidate["pdf"], "page": candidate["pdf_page"]},
                 "source_title": candidate["source_title"], "source_figures": candidate["figures"],
+                "employee_matches": [{
+                    "source_name": match["source_name"],
+                    "employee_id": match["employee_id"],
+                    "match_status": match["match_status"],
+                    "candidate_ids": match["candidate_ids"],
+                } for match in candidate["matches"]],
+                "employee_match_review_required": any(
+                    match["match_status"] != "AUTO_MATCH" for match in candidate["matches"]
+                ),
                 "auto_filled_fields": auto_fields, "docx_found": bool(docx), "docx_path": docx,
                 "basis_documents": [{"basis_id": "application", "document_type": "EMPLOYEE_APPLICATION",
                                       "description": {"ru": "Личное заявление работника", "kk": "Қызметкердің жеке өтініші"}}],
@@ -367,6 +383,8 @@ def run(database_url: str, *, dry_run: bool, manifest_path: Path | None = None) 
                 for item_number, match in enumerate(candidate["matches"], start=1):
                     payload, assumptions = assignment_payload(match["employee"])
                     payload.update({"source_employee_name": match["source_name"], "rate": 1.0, "basis_ids": ["application"],
+                                    "employee_match_status": match["match_status"],
+                                    "employee_match_review_required": match["match_status"] != "AUTO_MATCH",
                                     "reconstruction_assumptions": assumptions})
                     conn.execute(text("""
                         INSERT INTO public.personnel_order_items
@@ -376,7 +394,12 @@ def run(database_url: str, *, dry_run: bool, manifest_path: Path | None = None) 
                               "employee_id": match["employee_id"], "effective_date": candidate["order_date"],
                               "payload": json.dumps(payload, ensure_ascii=False)})
             report_rows.append({**candidate, "order_id": order_id, "docx_path": docx,
-                                "template_key": template_key_for(candidate["action"])})
+                                "template_key": template_key_for(candidate["action"]),
+                                "duplicate_checks": duplicates_by_source.get(candidate["source_identifier"], {
+                                    "source_identifier": candidate["source_identifier"],
+                                    "order_number_and_date": [], "source_excel_row": [],
+                                    "employee_and_action": [],
+                                })})
     return {"pilot": PILOT, "dry_run": dry_run, "orders": report_rows, "skipped": skipped,
             "duplicate_check": duplicates}
 
@@ -393,7 +416,9 @@ def write_outputs(result: dict[str, Any], *, write_repository_report: bool = Tru
     lines += ["", "## Template resolution", "", "- No pilot order is without an approved template." if not absent_templates else f"- Approved template absent: {', '.join(absent_templates)}."]
     auto_matches = sum(1 for row in result["orders"] for match in row["matches"] if match["match_status"] == "AUTO_MATCH")
     ambiguous_matches = sum(1 for row in result["orders"] for match in row["matches"] if match["match_status"] == "AMBIGUOUS")
+    unresolved_matches = sum(1 for row in result["orders"] for match in row["matches"] if match["match_status"] == "UNRESOLVED")
     lines += ["", "## Matching and assumptions", "", f"- Matched people: {auto_matches} automatic, {ambiguous_matches} ambiguous (their source FIO is retained without employee_id); no unresolved people were imported.", "- employee_id is written only for an unambiguous surname-and-initials match; ambiguous matches retain source FIO in the item payload.", "- The database has no historical assignment table. Current primary employee position/unit was copied when available and is marked `CURRENT_PRIMARY_ASSIGNMENT_USED_NO_HISTORICAL_ASSIGNMENT`.", "- Effective date defaults to order date; rate defaults to 1.0; basis defaults to the bilingual personal application.", "- The current default signatory is filled only when all signatory fields of a pilot draft are empty; the storage assumption is `CURRENT_DEFAULT_SIGNATORY_USED`.", "", "## Bilingual template corrections", "", "- Approved titles are selected by action type, including `О переводе` (not `О постоянном переводе`); see `personnel-order-titles-bilingual-dictionary.md`.", "- The general renderer maps `медсестра` and `медицинская сестра` to `мейіргер` before rendering Kazakh. Proposed pilot position/unit values are listed in the existing bilingual dictionaries.", "- Template limitations: the generic wording remains a reconstruction and must be checked against DOCX; no native imported text or editorial overrides are overwritten.", "", "## Skipped rows", ""]
+    lines.append(f"- Unresolved figures retained for manual review: {unresolved_matches}; no employee_id or assignment is copied for them.")
     if result["skipped"]:
         for row in result["skipped"]:
             lines.append(f"- Excel row {row['excel_row']}: {row['reason']}.")

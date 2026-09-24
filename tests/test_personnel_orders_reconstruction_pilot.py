@@ -40,6 +40,81 @@ class _Engine:
         raise AssertionError("dry run must not open a write transaction")
 
 
+def test_match_people_marks_unique_ambiguous_and_unresolved():
+    employees = [
+        {"employee_id": 10, "full_name": "Ivanov Ivan Ivanovich"},
+        {"employee_id": 20, "full_name": "Petrov Petr Petrovich"},
+        {"employee_id": 21, "full_name": "Petrov Pavel Petrovich"},
+    ]
+
+    unique = pilot.match_people(["Ivanov I.I."], employees)[0]
+    ambiguous = pilot.match_people(["Petrov"], employees)[0]
+    unresolved = pilot.match_people(["Missing M."], employees)[0]
+
+    assert unique == {
+        "source_name": "Ivanov I.I.", "employee_id": 10,
+        "match_status": "AUTO_MATCH", "candidate_ids": [10], "employee": employees[0],
+    }
+    assert ambiguous["employee_id"] is None
+    assert ambiguous["match_status"] == "AMBIGUOUS"
+    assert ambiguous["candidate_ids"] == [20, 21]
+    assert ambiguous["employee"] is None
+    assert unresolved == {
+        "source_name": "Missing M.", "employee_id": None,
+        "match_status": "UNRESOLVED", "candidate_ids": [], "employee": None,
+    }
+
+
+class _CandidateResult:
+    def __init__(self, values):
+        self.values = values
+
+    def mappings(self):
+        return self.values
+
+    def scalars(self):
+        return self.values
+
+
+class _CandidateConnection:
+    def __init__(self):
+        self.calls = 0
+
+    def execute(self, *_args, **_kwargs):
+        self.calls += 1
+        return _CandidateResult([])
+
+
+def test_manifest_rows_are_retained_when_people_are_unresolved(monkeypatch):
+    class _Sheet:
+        def iter_rows(self, **_kwargs):
+            for number in range(20):
+                yield ("", "", str(number), "title", date(2026, 1, 1), "", "Missing M.", "")
+
+    class _Workbook:
+        def __getitem__(self, _sheet):
+            return _Sheet()
+
+    monkeypatch.setattr(pilot, "load_workbook", lambda *_args, **_kwargs: _Workbook())
+    monkeypatch.setattr(pilot, "title_type", lambda _title: "HIRE")
+    manifest = {
+        pilot.source_key(row): {
+            "source_identifier": pilot.source_key(row),
+            "order_number": f"{row - 2}-ж",
+            "order_date": "2026-01-01",
+            "template_key": pilot.template_key_for("HIRE"),
+        }
+        for row in range(2, 22)
+    }
+
+    selected, skipped = pilot.load_candidates(_CandidateConnection(), manifest)
+
+    assert len(selected) == 20
+    assert not skipped
+    assert {match["match_status"] for row in selected for match in row["matches"]} == {"UNRESOLVED"}
+    assert all(match["employee_id"] is None for row in selected for match in row["matches"])
+
+
 def test_dry_run_uses_read_connection_and_never_emits_insert(monkeypatch):
     conn = _Connection()
     selected = [{
@@ -65,6 +140,63 @@ def test_dry_run_uses_read_connection_and_never_emits_insert(monkeypatch):
     assert len(result["orders"]) == 20
     assert result["orders"][0]["template_key"] == "personnel.termination.employee-initiative-unused-leave"
     assert all("INSERT" not in sql.upper() for sql in conn.sql)
+
+
+class _WriteResult:
+    def __init__(self, sql):
+        self.sql = sql
+
+    def scalar_one(self):
+        if "COUNT(*)" in self.sql:
+            return 0
+        if "SELECT user_id" in self.sql:
+            return 1
+        if "RETURNING order_id" in self.sql:
+            return 100
+        raise AssertionError(f"unexpected scalar query: {self.sql}")
+
+
+class _WriteConnection(_Connection):
+    def __init__(self):
+        super().__init__()
+        self.params: list[dict] = []
+
+    def execute(self, statement, _params=None):
+        sql = str(statement)
+        self.sql.append(sql)
+        self.params.append(_params or {})
+        return _WriteResult(sql)
+
+
+class _WriteEngine(_Engine):
+    def begin(self):
+        return self.conn
+
+
+def test_apply_creates_only_draft_order_rows_not_events_or_assignments(monkeypatch):
+    conn = _WriteConnection()
+    selected = [{
+        "excel_row": row, "source_identifier": f"source|Лист1|{row}",
+        "pdf": "", "pdf_page": "", "order_number": f"{row}-ж",
+        "order_date": date(2026, 7, 22), "source_title": "", "figures": "Missing M.",
+        "source_note": "", "action": "TERMINATION",
+        "matches": [{"source_name": "Missing M.", "employee_id": None,
+                     "match_status": "UNRESOLVED", "candidate_ids": [], "employee": None}],
+    } for row in range(1, 21)]
+    monkeypatch.setattr(pilot, "create_engine", lambda _url: _WriteEngine(conn))
+    monkeypatch.setattr(pilot, "load_candidates", lambda _conn, _manifest: (selected, []))
+    monkeypatch.setattr(pilot, "duplicate_check", lambda _conn, _rows: [])
+    monkeypatch.setattr(pilot, "find_docx", lambda *_args: None)
+
+    result = pilot.run("postgresql://unused", dry_run=False)
+
+    statements = "\n".join(conn.sql).lower()
+    assert len(result["orders"]) == 20
+    assert "'draft'" in statements
+    assert "personnel_events" not in statements
+    assert "insert into public.assignments" not in statements
+    stored_orders = [json.loads(params["storage"]) for params in conn.params if "storage" in params]
+    assert all(order["employee_match_review_required"] for order in stored_orders)
 
 
 def test_cli_exposes_portable_sources_and_pinned_manifest():
