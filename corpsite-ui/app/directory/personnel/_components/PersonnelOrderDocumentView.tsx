@@ -3,6 +3,7 @@
 import {
   formatPersonnelOrderDate,
   formatPersonnelOrderNumber,
+  type PersonnelOrderEditorialState,
   type PersonnelOrderDetailResponse,
 } from "../_lib/personnelOrdersApi.client";
 import {
@@ -43,22 +44,25 @@ function signatoryPosition(position: string, language: PersonnelOrderDocumentLan
 export function personnelOrderDocumentAvailable(
   detail: PersonnelOrderDetailResponse | null,
   language: PersonnelOrderDocumentLanguage,
+  editorial?: PersonnelOrderEditorialState | null,
 ): boolean {
-  return Boolean(detail && renderPersonnelOrderDocument(detail, language));
+  return Boolean(detail && renderPersonnelOrderDocument(detail, language, editorial));
 }
 
 export default function PersonnelOrderDocumentView({
   detail,
   language,
+  editorial = null,
   printRoot = false,
 }: {
   detail: PersonnelOrderDetailResponse;
   language: PersonnelOrderDocumentLanguage;
+  editorial?: PersonnelOrderEditorialState | null;
   /** The sole direct-body document included in an in-place browser print. */
   printRoot?: boolean;
 }) {
   const ui = labels[language];
-  const document = renderPersonnelOrderDocument(detail, language);
+  const document = renderPersonnelOrderDocument(detail, language, editorial);
   if (!document) {
     return (
       <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/35 dark:text-amber-100" data-testid="personnel-order-document-missing-template">

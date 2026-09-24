@@ -1,5 +1,6 @@
 import type {
   PersonnelOrderDetailResponse,
+  PersonnelOrderEditorialState,
   PersonnelOrderItem,
 } from "../_lib/personnelOrdersApi.client";
 import { russianEmployeeForOrder, russianOrderAssignment } from "../_lib/personnelOrderRussianWording";
@@ -59,6 +60,9 @@ const UNIT_KK_BY_RU: Record<string, string> = {
 };
 const POSITION_RU_BY_KK: Record<string, string> = {
   "мейіргер": "Медицинская сестра", "күндізгі мейіргері": "Медицинская сестра",
+};
+const POSITION_RU_BY_SOURCE: Record<string, string> = {
+  "медсестра": "медицинская сестра",
 };
 const UNIT_RU_BY_KK: Record<string, string> = {
   "қабылдау бөлімшесі": "Приемное",
@@ -142,9 +146,14 @@ function assignment(value: unknown, language: PersonnelOrderDocumentLanguage): {
   rate: string;
 } {
   const source = record(value);
+  const positionOverride = text(record(source.position_text_override)[language]);
+  const sourceRuPosition = localized(source.position, "ru");
+  const dictionaryPosition = language === "ru" && sourceRuPosition
+    ? POSITION_RU_BY_SOURCE[sourceRuPosition.toLocaleLowerCase("ru-RU").trim()] || sourceRuPosition
+    : dictionaryValue(source.position, language, POSITION_KK_BY_RU, POSITION_RU_BY_KK);
   return {
     unit: dictionaryValue(source.unit, language, UNIT_KK_BY_RU, UNIT_RU_BY_KK) || "—",
-    position: dictionaryValue(source.position, language, POSITION_KK_BY_RU, POSITION_RU_BY_KK) || "—",
+    position: positionOverride || dictionaryPosition || "—",
     rate: text(source.rate) || "—",
   };
 }
@@ -212,6 +221,7 @@ function renderBasis(
 export function renderPersonnelOrderDocument(
   detail: PersonnelOrderDetailResponse,
   language: PersonnelOrderDocumentLanguage,
+  editorial?: PersonnelOrderEditorialState | null,
 ): RenderedOrderDocument | null {
   if (!detail.items.length) return null;
   const templateKey = resolvePersonnelOrderTemplateKey(detail);
@@ -221,7 +231,25 @@ export function renderPersonnelOrderDocument(
       : templateKey === "personnel.concurrent-duty.start" ? concurrentDutyForLanguage(detail, language)
         : templateKey === "personnel.termination.employee-initiative-unused-leave" ? terminationByEmployeeInitiativeForLanguage(detail, language)
           : permanentTransferWithConcurrentDutyForLanguage(detail, language);
-  return { ...rendered, title: titleFor(templateKey, language) };
+  const orderBlock = (blockType: string) => editorial?.order_blocks.find(
+    (block) => block.block_type === blockType && block.locale === language,
+  )?.effective_text?.trim() || null;
+  const items = detail.items.filter((item) => String(item.item_status).toUpperCase() !== "VOIDED");
+  const points = rendered.points.map((point, index) => {
+    const item = items[index];
+    const group = editorial?.items.find((entry) => entry.order_item_id === item?.item_id);
+    const body = group?.blocks.find((block) => block.block_type === "body" && block.locale === language)?.effective_text?.trim();
+    const basis = group?.blocks.find((block) => block.block_type === "basis" && block.locale === language)?.effective_text?.trim();
+    return { ...point, text: body || point.text, basis: basis ? [basis] : point.basis };
+  });
+  const closing = orderBlock("closing");
+  return {
+    ...rendered,
+    title: orderBlock("title") || titleFor(templateKey, language),
+    preamble: orderBlock("preamble") || rendered.preamble,
+    points,
+    additionalInstructions: closing ? [...rendered.additionalInstructions, closing] : rendered.additionalInstructions,
+  };
 }
 
 /** Resolve only catalogued approved templates.  Order number is deliberately absent. */
@@ -257,7 +285,10 @@ function primaryItem(detail: PersonnelOrderDetailResponse, type: string): Person
 
 function assignmentForItem(item: PersonnelOrderItem, language: PersonnelOrderDocumentLanguage) {
   const source = payload(item);
-  return assignment(source.to_assignment || source.assignment, language);
+  const target = record(source.to_assignment || source.assignment);
+  // The editor keeps the wording override on the item payload.  Preserve the
+  // structured assignment as-is and project that wording only while rendering.
+  return assignment({ ...target, position_text_override: source.position_text_override || target.position_text_override }, language);
 }
 
 function russianOrderEmployee(name: string, action: "hire" | "transfer" | "concurrent"): string | null {
@@ -312,8 +343,8 @@ function permanentTransferWithConcurrentDutyForLanguage(detail: PersonnelOrderDe
   const transfer = detail.items.find((item) => String(item.item_type_code).toUpperCase() === "TRANSFER")!;
   const concurrent = detail.items.find((item) => String(item.item_type_code).toUpperCase() === "CONCURRENT_DUTY_START")!;
   const name = employeeName(transfer);
-  const target = assignment(payload(transfer).to_assignment || payload(transfer).assignment, language);
-  const concurrentAssignment = assignment(payload(concurrent).assignment, language);
+  const target = assignmentForItem(transfer, language);
+  const concurrentAssignment = assignmentForItem(concurrent, language);
   const date = effectiveDate(transfer.effective_date || concurrent.effective_date, language);
   const russianPoint = russianEmployeeForOrder(name)
     ? `Перевести сотрудника ${name} с ${date} на должность ${russianOrderTarget(target)} с оплатой ${target.rate} ставки и разрешить сотруднику ${name} совмещение обязанностей по должности ${russianOrderTarget(concurrentAssignment)} с оплатой ${concurrentAssignment.rate} ставки.`

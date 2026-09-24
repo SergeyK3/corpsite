@@ -8,11 +8,13 @@ import {
   formatPersonnelOrderDateTime,
   formatPersonnelOrderNumber,
   getPersonnelOrder,
+  getPersonnelOrderEditorial,
   isWritablePersonnelOrder,
   isPersonnelOrderApplied,
   mapPersonnelOrdersApiError,
   personnelOrderSourceModeLabel,
   type PersonnelOrderDetailResponse,
+  type PersonnelOrderEditorialState,
   type PersonnelOrderLinkedEvent,
 } from "../_lib/personnelOrdersApi.client";
 import {
@@ -118,6 +120,7 @@ export default function PersonnelOrderDetailDrawer({
   hirePersonId = null,
 }: Props) {
   const [detail, setDetail] = React.useState<PersonnelOrderDetailResponse | null>(null);
+  const [editorial, setEditorial] = React.useState<PersonnelOrderEditorialState | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [toast, setToast] = React.useState<{ message: string; kind: "success" | "error" } | null>(null);
@@ -150,11 +153,15 @@ export default function PersonnelOrderDetailDrawer({
     setLoading(true);
     setError(null);
     try {
-      const body = await getPersonnelOrder(id);
+      const [body, editorialState] = await Promise.all([
+        getPersonnelOrder(id), getPersonnelOrderEditorial(id).catch(() => null),
+      ]);
       setDetail(body);
+      setEditorial(editorialState);
       return body;
     } catch (e) {
       setDetail(null);
+      setEditorial(null);
       setError(mapPersonnelOrdersApiError(e, "Не удалось загрузить приказ."));
       return null;
     } finally {
@@ -187,6 +194,11 @@ export default function PersonnelOrderDetailDrawer({
     onChanged?.(next);
   }
 
+  const handleEditorialChanged = React.useCallback((next: PersonnelOrderEditorialState) => {
+    setEditorial(next);
+    void reload(next.order_id);
+  }, [reload]);
+
   const handleHeaderRequisitesChange = React.useCallback(
     (snapshot: PersonnelOrderRequisitesSnapshot) => {
       setHeaderRequisitesDraft(snapshot);
@@ -211,7 +223,7 @@ export default function PersonnelOrderDetailDrawer({
   const applied = isPersonnelOrderApplied(linkedEventCount);
   const editable = order ? isWritablePersonnelOrder(order.status, order.is_archived) : false;
   const sourceTitle = detail?.localized_texts.find((text) => text.title?.trim())?.title?.trim() || "—";
-  const documentAvailable = personnelOrderDocumentAvailable(detail, documentLanguage);
+  const documentAvailable = personnelOrderDocumentAvailable(detail, documentLanguage, editorial);
   const basisDocuments = Array.isArray(order?.storage_json?.basis_documents)
     ? order.storage_json.basis_documents
         .filter((basis): basis is Record<string, unknown> => Boolean(basis) && typeof basis === "object")
@@ -319,7 +331,7 @@ export default function PersonnelOrderDetailDrawer({
                 <button type="button" onClick={() => setDocumentLanguage("kk")} className={`rounded px-2 py-1 text-sm ${documentLanguage === "kk" ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900" : "text-zinc-600 dark:text-zinc-300"}`}>Қазақша</button>
                 <button type="button" onClick={() => setDocumentLanguage("ru")} className={`rounded px-2 py-1 text-sm ${documentLanguage === "ru" ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900" : "text-zinc-600 dark:text-zinc-300"}`}>Русский</button>
               </div>
-              <PersonnelOrderDocumentView detail={detail} language={documentLanguage} />
+              <PersonnelOrderDocumentView detail={detail} language={documentLanguage} editorial={editorial} />
             </>
           ) : null}
 
@@ -450,6 +462,7 @@ export default function PersonnelOrderDetailDrawer({
                   editable={editable}
                   basisDocuments={basisDocuments}
                   onOrderChanged={handleChanged}
+                  onEditorialChanged={handleEditorialChanged}
                 />
               </section>
 
@@ -551,7 +564,7 @@ export default function PersonnelOrderDetailDrawer({
       ) : null}
       {printLanguage && detail
         ? createPortal(
-            <PersonnelOrderDocumentView detail={detail} language={printLanguage} printRoot />,
+            <PersonnelOrderDocumentView detail={detail} language={printLanguage} editorial={editorial} printRoot />,
             document.body,
           )
         : null}

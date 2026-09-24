@@ -600,4 +600,73 @@ describe("PersonnelOrderEditorialTextEditor", () => {
     expect(screen.getByTestId("personnel-order-requisites-date")).toHaveTextContent("18 июля 2026 года");
     expect(screen.getByTestId("personnel-order-requisites-signatory")).toHaveTextContent("М. Тулеутаев");
   });
+
+  it("resets only the Russian item body to its generated Russian text", async () => {
+    const withRussianOverride = sampleState();
+    withRussianOverride.items[0]!.blocks = withRussianOverride.items[0]!.blocks.map((block) =>
+      block.block_id === 111
+        ? { ...block, override_text: "РУЧНОЙ RU", effective_text: "РУЧНОЙ RU", revision: 2 }
+        : block,
+    );
+    vi.mocked(getPersonnelOrderEditorial).mockResolvedValue(withRussianOverride);
+    vi.mocked(resetPersonnelOrderEditorialBlock).mockResolvedValue(sampleState());
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+
+    render(<PersonnelOrderEditorialTextEditor orderId={42} order={sampleOrder} items={items} editable />);
+    await screen.findByTestId("personnel-order-editorial-locale-ru");
+    fireEvent.click(screen.getByTestId("personnel-order-editorial-locale-ru"));
+    const item = await screen.findByTestId("personnel-order-editorial-item-10");
+    expect(item).toHaveTextContent("РУЧНОЙ RU");
+    fireEvent.click(item.querySelector('[data-testid="personnel-order-editorial-reset"]')!);
+
+    await waitFor(() => {
+      expect(resetPersonnelOrderEditorialBlock).toHaveBeenCalledWith(42, 111);
+      expect(item).toHaveTextContent("Принять Петрову Анну");
+    });
+    expect(sampleState().items[0]!.blocks.find((block) => block.block_id === 11)?.effective_text).toBe("Петрова Аннаны қабылдау");
+  });
+
+  it("persists separate position text overrides without changing the item employee or position", async () => {
+    const itemWithAssignment: PersonnelOrderItem = {
+      ...items[0]!,
+      employee_id: 77,
+      payload: { ...items[0]!.payload, position_id: 20, assignment: { position: { ru: "Медсестра", kk: "мейіргер" } } },
+    };
+    const returnedDetail = {} as PersonnelOrderDetailResponse;
+    vi.mocked(getPersonnelOrderEditorial).mockResolvedValue(sampleState());
+    vi.mocked(updatePersonnelOrderItem).mockResolvedValue(returnedDetail);
+    const changed = vi.fn();
+
+    const { rerender } = render(
+      <PersonnelOrderEditorialTextEditor orderId={42} order={sampleOrder} items={[itemWithAssignment]} editable onOrderChanged={changed} />,
+    );
+    const editor = await screen.findByTestId("personnel-order-position-text-override");
+    const fields = editor.querySelectorAll("input");
+    fireEvent.change(fields[0]!, { target: { value: "медицинский брат" } });
+    fireEvent.change(fields[1]!, { target: { value: "мейіргер" } });
+    fireEvent.click(editor.querySelector("button")!);
+
+    await waitFor(() => {
+      expect(updatePersonnelOrderItem).toHaveBeenCalledWith(42, 10, expect.objectContaining({
+        employee_id: 77,
+        payload: expect.objectContaining({
+          position_id: 20,
+          position_text_override: { ru: "медицинский брат", kk: "мейіргер" },
+        }),
+      }));
+      expect(changed).toHaveBeenCalledWith(returnedDetail);
+    });
+
+    const rereadItem: PersonnelOrderItem = {
+      ...itemWithAssignment,
+      payload: {
+        ...itemWithAssignment.payload,
+        position_text_override: { ru: "медицинский брат", kk: "мейіргер" },
+      },
+    };
+    rerender(<PersonnelOrderEditorialTextEditor orderId={42} order={sampleOrder} items={[rereadItem]} editable />);
+    const reread = await screen.findByTestId("personnel-order-position-text-override");
+    expect(reread.querySelectorAll("input")[0]).toHaveValue("медицинский брат");
+    expect(reread.querySelectorAll("input")[1]).toHaveValue("мейіргер");
+  });
 });

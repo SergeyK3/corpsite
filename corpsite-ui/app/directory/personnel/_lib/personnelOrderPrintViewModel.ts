@@ -85,6 +85,14 @@ function optionalString(value: unknown): string | null {
   return text || null;
 }
 
+function localizedOverride(value: unknown): LocalizedText | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const source = value as Record<string, unknown>;
+  const kk = optionalString(source.kk);
+  const ru = optionalString(source.ru);
+  return kk || ru ? localizedText(kk, ru) : null;
+}
+
 function nameFromMap(map: Record<number, string> | undefined, id: number | null): LocalizedText | null {
   if (id == null || !map) return null;
   const name = optionalString(map[id]);
@@ -231,6 +239,10 @@ function buildItemContext(
   const positionId = optionalNumber(payload.position_id);
   const toOrgUnitId = optionalNumber(payload.to_org_unit_id);
   const toPositionId = optionalNumber(payload.to_position_id);
+  const assignment = payload.assignment && typeof payload.assignment === "object"
+    ? payload.assignment as Record<string, unknown>
+    : {};
+  const positionOverride = localizedOverride(payload.position_text_override) || localizedOverride(assignment.position_text_override);
 
   return {
     itemNumber: item.item_number,
@@ -240,7 +252,7 @@ function buildItemContext(
     orgUnitName:
       nameFromMap(maps.orgUnitNames, orgUnitId) ||
       (optionalString(item.org_unit_name) ? localizedFromSingle(item.org_unit_name) : null),
-    positionName: nameFromMap(maps.positionNames, positionId),
+    positionName: positionOverride || nameFromMap(maps.positionNames, positionId),
     toOrgUnitName: nameFromMap(maps.orgUnitNames, toOrgUnitId),
     toPositionName: nameFromMap(maps.positionNames, toPositionId),
     rate: (payload.employment_rate as number | string | null | undefined) ?? null,
