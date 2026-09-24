@@ -23,12 +23,21 @@ from app.services.personnel_orders_summary_report_service import (
     PersonnelOrdersSummaryFilterError,
     build_personnel_orders_summary,
 )
+from app.services.personnel_staffing_report_service import build_staffing_report
 
 from .common import as_http500
 from .rbac import compute_scope, require_personnel_admin_or_403, require_personnel_visibility_or_403
 
 
 router = APIRouter(prefix="/personnel/reports", tags=["personnel-reports"])
+
+@router.get("/staffing")
+def personnel_staffing_report(date_from: date = Query(...), date_to: date = Query(...), group_id: int | None = Query(None, ge=1), org_unit_id: int | None = Query(None, ge=1), breakdown: str = Query("total"), user: dict[str, Any] = Depends(get_current_user)) -> dict[str, Any]:
+    scope = _scope(user)
+    try:
+        return build_staffing_report(engine, scope_unit_ids=scope["scope_unit_ids"], date_from=date_from, date_to=date_to, group_id=group_id, org_unit_id=org_unit_id, breakdown=breakdown)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/orders-summary")

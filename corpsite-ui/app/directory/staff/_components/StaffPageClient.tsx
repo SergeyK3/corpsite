@@ -7,11 +7,11 @@ import WorkspaceSectionTabs from "@/components/WorkspaceSectionTabs";
 import EmployeesPageClient from "../../employees/_components/EmployeesPageClient";
 import type { EmployeesFilters } from "../../employees/_lib/query";
 import type { Department, EmployeesResponse, Position } from "../../employees/_lib/types";
-import PersonnelRosterReportPanel from "../../personnel/_components/PersonnelRosterReport";
+import PersonnelStaffingReport from "../../personnel/_components/PersonnelStaffingReport";
 
 const SECTIONS = [
   { id: "personnel", label: "Персонал" },
-  { id: "reports", label: "Отчёты" },
+  { id: "reports", label: "Отчёты по кадровому составу" },
 ] as const;
 
 const INITIAL_FILTERS: EmployeesFilters = {
@@ -57,7 +57,7 @@ export default function StaffPageClient() {
             onSelect={selectSection}
           />
           {activeSectionId === "reports" ? (
-            <PersonnelRosterReportPanel />
+            <PersonnelStaffingReport />
           ) : (
             <EmployeesPageClient
               pageTitle="Персонал"

@@ -17,8 +17,8 @@ vi.mock("../../employees/_components/EmployeesPageClient", () => ({
   default: () => <div>Рабочий список персонала</div>,
 }));
 
-vi.mock("../../personnel/_components/PersonnelRosterReport", () => ({
-  default: () => <div>Отчёт «Личный состав»</div>,
+vi.mock("../../personnel/_components/PersonnelStaffingReport", () => ({
+  default: () => <div>Панель кадровой отчётности</div>,
 }));
 
 afterEach(() => {
@@ -34,12 +34,12 @@ describe("StaffPageClient", () => {
 
     expect(screen.getByRole("button", { name: "Персонал" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByText("Рабочий список персонала")).toBeInTheDocument();
-    expect(screen.queryByText("Отчёт «Личный состав»")).not.toBeInTheDocument();
+    expect(screen.queryByText("Панель кадровой отчётности")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Отчёты" }));
+    fireEvent.click(screen.getByRole("button", { name: "Отчёты по кадровому составу" }));
 
-    expect(screen.getByRole("button", { name: "Отчёты" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByText("Отчёт «Личный состав»")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Отчёты по кадровому составу" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("Панель кадровой отчётности")).toBeInTheDocument();
     expect(screen.queryByText("Рабочий список персонала")).not.toBeInTheDocument();
     expect(navigation.replace).toHaveBeenCalledWith("/directory/staff?q=%D0%98%D0%B2%D0%B0%D0%BD%D0%BE%D0%B2&view=reports");
   });
@@ -48,7 +48,7 @@ describe("StaffPageClient", () => {
     navigation.params = "view=reports";
     render(<StaffPageClient />);
 
-    expect(screen.getByRole("button", { name: "Отчёты" })).toHaveAttribute("aria-pressed", "true");
-    expect(screen.getByText("Отчёт «Личный состав»")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Отчёты по кадровому составу" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("Панель кадровой отчётности")).toBeInTheDocument();
   });
 });

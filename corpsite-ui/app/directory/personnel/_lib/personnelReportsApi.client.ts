@@ -97,6 +97,16 @@ export type PersonnelOrdersSummaryFilters = {
   dateTo?: string;
 };
 
+export type StaffingReport = { data_quality: { requires_review: boolean; message: string | null }; metrics: { current_headcount: number; hired: number; terminated: number; average_headcount: number; average_formula: string; turnover_numerator: number; turnover_percent: number; turnover_reasons: Array<{ reason: string; count: number }> }; hired_items: Array<{ full_name: string; date: string; group_name?: string; unit_name?: string }>; terminated_items: Array<{ full_name: string; date: string; reason: string; group_name?: string; unit_name?: string }>; breakdown: Array<{ label: string; group_name?: string; current_headcount: number; average_headcount: number; hired: number; terminated: number; turnover_terminated: number; turnover_percent: number }> };
+export type StaffingReportFilters = { dateFrom: string; dateTo: string; groupId?: number; orgUnitId?: number; breakdown: "total" | "groups" | "units" };
+
+export function getStaffingReport(filters: StaffingReportFilters): Promise<StaffingReport> {
+  const params = new URLSearchParams({ date_from: filters.dateFrom, date_to: filters.dateTo, breakdown: filters.breakdown });
+  if (filters.groupId) params.set("group_id", String(filters.groupId));
+  if (filters.orgUnitId) params.set("org_unit_id", String(filters.orgUnitId));
+  return apiFetchJson<StaffingReport>(`/directory/personnel/reports/staffing?${params}`);
+}
+
 function rosterPath(filters: PersonnelRosterFilters, suffix = ""): string {
   const params = new URLSearchParams();
   if (filters.groupId) params.set("group_id", String(filters.groupId));
