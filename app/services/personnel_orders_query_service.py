@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException
 from sqlalchemy import text
+from sqlalchemy.engine import Connection
 
 from app.db.engine import engine
 from app.db.models.personnel_orders import (
@@ -35,10 +36,10 @@ class PersonnelOrderNotFoundError(LookupError):
     """Personnel order not found."""
 
 
-def personnel_orders_available() -> bool:
-    with engine.begin() as conn:
+def personnel_orders_available(conn: Optional[Connection] = None) -> bool:
+    def _check(connection: Connection) -> bool:
         for table in PERSONNEL_ORDERS_TABLES:
-            row = conn.execute(
+            row = connection.execute(
                 text(
                     """
                     SELECT 1
@@ -53,7 +54,7 @@ def personnel_orders_available() -> bool:
                 return False
         cols = {
             r[0]
-            for r in conn.execute(
+            for r in connection.execute(
                 text(
                     """
                     SELECT column_name
@@ -64,6 +65,11 @@ def personnel_orders_available() -> bool:
             ).all()
         }
         return "order_id" in cols and "order_item_id" in cols
+
+    if conn is not None:
+        return _check(conn)
+    with engine.begin() as owned:
+        return _check(owned)
 
 
 def _iso_date(value: Any) -> Optional[str]:
