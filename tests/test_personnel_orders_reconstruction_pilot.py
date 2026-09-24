@@ -142,6 +142,42 @@ def test_dry_run_uses_read_connection_and_never_emits_insert(monkeypatch):
     assert all("INSERT" not in sql.upper() for sql in conn.sql)
 
 
+def test_legacy_technical_employee_action_match_does_not_block_apply():
+    blocking, legacy = pilot.classify_employee_action_matches([
+        {"order_id": 125, "order_number": "PERSONNEL-IMPORT-2026-211"},
+        {"order_id": 253, "order_number": "CSV-PILOT-2026-419"},
+    ])
+
+    finding = {
+        "source_identifier": "source|Лист1|264",
+        "blocking_duplicates": {
+            "order_number_and_date": [], "source_excel_row": [], "employee_and_action": blocking,
+        },
+        "legacy_technical_matches": legacy,
+    }
+
+    assert not pilot.has_blocking_duplicates(finding)
+    assert finding["legacy_technical_matches"] == [125, 253]
+
+
+def test_regular_employee_action_number_date_and_source_matches_block_apply():
+    blocking, legacy = pilot.classify_employee_action_matches([
+        {"order_id": 99, "order_number": "27-ж"},
+    ])
+    assert blocking == [99]
+    assert not legacy
+    for blocking_duplicates in (
+        {"order_number_and_date": [], "source_excel_row": [], "employee_and_action": [99]},
+        {"order_number_and_date": [98], "source_excel_row": [], "employee_and_action": []},
+        {"order_number_and_date": [], "source_excel_row": [97], "employee_and_action": []},
+    ):
+        assert pilot.has_blocking_duplicates({
+            "source_identifier": "source|Лист1|264",
+            "blocking_duplicates": blocking_duplicates,
+            "legacy_technical_matches": [],
+        })
+
+
 class _WriteResult:
     def __init__(self, sql):
         self.sql = sql
@@ -185,7 +221,13 @@ def test_apply_creates_only_draft_order_rows_not_events_or_assignments(monkeypat
     } for row in range(1, 21)]
     monkeypatch.setattr(pilot, "create_engine", lambda _url: _WriteEngine(conn))
     monkeypatch.setattr(pilot, "load_candidates", lambda _conn, _manifest: (selected, []))
-    monkeypatch.setattr(pilot, "duplicate_check", lambda _conn, _rows: [])
+    monkeypatch.setattr(pilot, "duplicate_check", lambda _conn, rows: [{
+        "source_identifier": row["source_identifier"],
+        "blocking_duplicates": {
+            "order_number_and_date": [], "source_excel_row": [], "employee_and_action": [],
+        },
+        "legacy_technical_matches": [125] if row["excel_row"] == 1 else [],
+    } for row in rows])
     monkeypatch.setattr(pilot, "find_docx", lambda *_args: None)
 
     result = pilot.run("postgresql://unused", dry_run=False)
@@ -197,6 +239,7 @@ def test_apply_creates_only_draft_order_rows_not_events_or_assignments(monkeypat
     assert "insert into public.assignments" not in statements
     stored_orders = [json.loads(params["storage"]) for params in conn.params if "storage" in params]
     assert all(order["employee_match_review_required"] for order in stored_orders)
+    assert stored_orders[0]["reconstruction"]["legacy_technical_order_ids"] == [125]
 
 
 def test_cli_exposes_portable_sources_and_pinned_manifest():

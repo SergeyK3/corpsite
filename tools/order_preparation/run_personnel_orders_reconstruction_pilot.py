@@ -278,6 +278,24 @@ def load_candidates(conn, manifest: dict[str, dict[str, Any]] | None = None) -> 
     return selected, skipped
 
 
+LEGACY_TECHNICAL_PREFIXES = ("PERSONNEL-IMPORT-", "CSV-PILOT-")
+
+
+def classify_employee_action_matches(rows: list[dict[str, Any]]) -> tuple[list[int], list[int]]:
+    """Separate technical predecessor orders from blocking business duplicates."""
+    legacy: list[int] = []
+    blocking: list[int] = []
+    for row in rows:
+        order_id = int(row["order_id"])
+        order_number = clean(row.get("order_number")).upper()
+        (legacy if order_number.startswith(LEGACY_TECHNICAL_PREFIXES) else blocking).append(order_id)
+    return sorted(set(blocking)), sorted(set(legacy))
+
+
+def has_blocking_duplicates(finding: dict[str, Any]) -> bool:
+    return any(finding["blocking_duplicates"].values())
+
+
 def duplicate_check(conn, candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Report every requested collision before an apply; it never changes data."""
     findings: list[dict[str, Any]] = []
@@ -290,20 +308,24 @@ def duplicate_check(conn, candidates: list[dict[str, Any]]) -> list[dict[str, An
             SELECT order_id FROM public.personnel_orders
             WHERE storage_json ->> 'source_identifier' = :source_identifier
         """), {"source_identifier": candidate["source_identifier"]}).scalars().all()
-        employee_action: list[int] = []
+        employee_action_rows: list[dict[str, Any]] = []
         for match in candidate["matches"]:
             if match["employee_id"] is not None:
-                employee_action.extend(conn.execute(text("""
-                    SELECT DISTINCT po.order_id
+                employee_action_rows.extend(dict(row) for row in conn.execute(text("""
+                    SELECT DISTINCT po.order_id, po.order_number
                     FROM public.personnel_orders po
                     JOIN public.personnel_order_items poi ON poi.order_id = po.order_id
                     WHERE poi.employee_id = :employee_id AND poi.item_type_code = :action
-                """), {"employee_id": match["employee_id"], "action": candidate["action"]}).scalars().all())
+                """), {"employee_id": match["employee_id"], "action": candidate["action"]}).mappings())
+        blocking_employee_action, legacy_technical = classify_employee_action_matches(employee_action_rows)
         findings.append({
             "source_identifier": candidate["source_identifier"],
-            "order_number_and_date": sorted(set(map(int, number_date))),
-            "source_excel_row": sorted(set(map(int, source_row))),
-            "employee_and_action": sorted(set(map(int, employee_action))),
+            "blocking_duplicates": {
+                "order_number_and_date": sorted(set(map(int, number_date))),
+                "source_excel_row": sorted(set(map(int, source_row))),
+                "employee_and_action": blocking_employee_action,
+            },
+            "legacy_technical_matches": legacy_technical,
         })
     return findings
 
@@ -343,13 +365,23 @@ def run(database_url: str, *, dry_run: bool, manifest_path: Path | None = None) 
             raise RuntimeError(f"Expected 20 eligible rows; found {len(selected)}")
         duplicates = duplicate_check(conn, selected)
         duplicates_by_source = {row["source_identifier"]: row for row in duplicates}
-        if not dry_run and any(any(values for key, values in row.items() if key != "source_identifier") for row in duplicates):
+        if not dry_run and any(has_blocking_duplicates(row) for row in duplicates):
             raise RuntimeError("Potential duplicates found; inspect a --dry-run report before apply")
         creator = None if dry_run else conn.execute(text("SELECT user_id FROM public.users ORDER BY user_id LIMIT 1")).scalar_one()
         report_rows: list[dict[str, Any]] = []
         for candidate in selected:
             docx = find_docx(candidate["order_number"].removesuffix("-ж"), candidate["order_date"])
             auto_fields = ["effective_date=order_date", "rate=1.0", "basis=personal_application"]
+            duplicate_result = duplicates_by_source.get(candidate["source_identifier"], {
+                "source_identifier": candidate["source_identifier"],
+                "blocking_duplicates": {
+                    "order_number_and_date": [], "source_excel_row": [], "employee_and_action": [],
+                },
+                "legacy_technical_matches": [],
+            })
+            review_required = any(
+                match["match_status"] != "AUTO_MATCH" for match in candidate["matches"]
+            ) or bool(duplicate_result["legacy_technical_matches"])
             storage = {
                 "reconstruction_pilot": PILOT,
                 "reconstruction_status": "NEEDS_DOCX_REVIEW",
@@ -363,9 +395,10 @@ def run(database_url: str, *, dry_run: bool, manifest_path: Path | None = None) 
                     "match_status": match["match_status"],
                     "candidate_ids": match["candidate_ids"],
                 } for match in candidate["matches"]],
-                "employee_match_review_required": any(
-                    match["match_status"] != "AUTO_MATCH" for match in candidate["matches"]
-                ),
+                "employee_match_review_required": review_required,
+                "reconstruction": {
+                    "legacy_technical_order_ids": duplicate_result["legacy_technical_matches"],
+                },
                 "auto_filled_fields": auto_fields, "docx_found": bool(docx), "docx_path": docx,
                 "basis_documents": [{"basis_id": "application", "document_type": "EMPLOYEE_APPLICATION",
                                       "description": {"ru": "Личное заявление работника", "kk": "Қызметкердің жеке өтініші"}}],
@@ -395,13 +428,12 @@ def run(database_url: str, *, dry_run: bool, manifest_path: Path | None = None) 
                               "payload": json.dumps(payload, ensure_ascii=False)})
             report_rows.append({**candidate, "order_id": order_id, "docx_path": docx,
                                 "template_key": template_key_for(candidate["action"]),
-                                "duplicate_checks": duplicates_by_source.get(candidate["source_identifier"], {
-                                    "source_identifier": candidate["source_identifier"],
-                                    "order_number_and_date": [], "source_excel_row": [],
-                                    "employee_and_action": [],
-                                })})
+                                "employee_match_review_required": review_required,
+                                "duplicate_checks": duplicate_result})
     return {"pilot": PILOT, "dry_run": dry_run, "orders": report_rows, "skipped": skipped,
-            "duplicate_check": duplicates}
+            "duplicate_check": duplicates,
+            "blocking_duplicates": [row for row in duplicates if has_blocking_duplicates(row)],
+            "legacy_technical_matches": [row for row in duplicates if row["legacy_technical_matches"]]}
 
 
 def write_outputs(result: dict[str, Any], *, write_repository_report: bool = True) -> None:
