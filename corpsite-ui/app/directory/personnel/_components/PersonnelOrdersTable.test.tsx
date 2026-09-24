@@ -15,7 +15,7 @@ const sampleRow: PersonnelOrderListItem = {
   created_by: 1,
   item_count: 2,
   employee_ids: [55],
-  employee_names: ["Петрова Анна"],
+  employee_names: ["Петрова Анна", "Исходное имя без employee_id"],
 };
 
 describe("PersonnelOrdersTable", () => {
@@ -29,7 +29,7 @@ describe("PersonnelOrdersTable", () => {
     expect(screen.getByTestId("personnel-orders-loading")).toBeInTheDocument();
   });
 
-  it("renders table rows and handles click", () => {
+  it("renders every personnel-item name in the employees column", () => {
     const onRowClick = vi.fn();
     const onPrintClick = vi.fn();
     render(
@@ -44,7 +44,9 @@ describe("PersonnelOrdersTable", () => {
     expect(screen.queryByText("PRINT TABLE V2")).not.toBeInTheDocument();
     expect(screen.getByText("WPPO-101")).toBeInTheDocument();
     expect(screen.getByText("Действия")).toBeInTheDocument();
-    expect(screen.getByText("Петрова Анна")).toBeInTheDocument();
+    expect(screen.getByTestId("personnel-order-row-101").children[5]).toHaveTextContent(
+      "Петрова Анна, Исходное имя без employee_id",
+    );
     expect(screen.getByTestId("personnel-order-print-101")).toHaveTextContent("Печать");
 
     screen.getByTestId("personnel-order-row-101").click();

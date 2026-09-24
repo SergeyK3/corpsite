@@ -503,12 +503,24 @@ def list_personnel_orders(
             ) AS employee_ids,
             (
                 SELECT COALESCE(
-                    array_agg(DISTINCT e.full_name ORDER BY e.full_name),
+                    array_agg(personnel_name ORDER BY item_number, item_id),
                     ARRAY[]::text[]
                 )
-                FROM public.personnel_order_items poi_name
-                JOIN public.employees e ON e.employee_id = poi_name.employee_id
-                WHERE poi_name.order_id = po.order_id
+                FROM (
+                    SELECT DISTINCT ON (personnel_name)
+                           personnel_name, poi_name.item_number, poi_name.item_id
+                    FROM public.personnel_order_items poi_name
+                    LEFT JOIN public.employees e ON e.employee_id = poi_name.employee_id
+                    CROSS JOIN LATERAL (
+                        SELECT COALESCE(
+                            NULLIF(BTRIM(poi_name.payload ->> 'source_employee_name'), ''),
+                            NULLIF(BTRIM(e.full_name), '')
+                        ) AS personnel_name
+                    ) resolved_name
+                    WHERE poi_name.order_id = po.order_id
+                      AND resolved_name.personnel_name IS NOT NULL
+                    ORDER BY personnel_name, poi_name.item_number, poi_name.item_id
+                ) personnel_names
             ) AS employee_names
         FROM public.personnel_orders po
         WHERE {where_sql}
