@@ -130,7 +130,7 @@ export default function PersonnelOrderDetailDrawer({
   const [headerRequisitesDraft, setHeaderRequisitesDraft] =
     React.useState<PersonnelOrderRequisitesSnapshot | null>(null);
   const [activeTab, setActiveTab] = React.useState<"document" | "data">("document");
-  const [documentLanguage, setDocumentLanguage] = React.useState<PersonnelOrderDocumentLanguage>("kk");
+  const [orderLanguage, setOrderLanguage] = React.useState<PersonnelOrderDocumentLanguage>("kk");
   const [printLanguage, setPrintLanguage] = React.useState<PersonnelOrderDocumentLanguage | null>(null);
 
   React.useEffect(() => {
@@ -176,7 +176,7 @@ export default function PersonnelOrderDetailDrawer({
       setToast(null);
       setHeaderRequisitesDraft(null);
       setActiveTab("document");
-      setDocumentLanguage("kk");
+      setOrderLanguage("kk");
       return;
     }
     let cancelled = false;
@@ -223,7 +223,7 @@ export default function PersonnelOrderDetailDrawer({
   const applied = isPersonnelOrderApplied(linkedEventCount);
   const editable = order ? isWritablePersonnelOrder(order.status, order.is_archived) : false;
   const sourceTitle = detail?.localized_texts.find((text) => text.title?.trim())?.title?.trim() || "—";
-  const documentAvailable = personnelOrderDocumentAvailable(detail, documentLanguage, editorial);
+  const documentAvailable = personnelOrderDocumentAvailable(detail, orderLanguage, editorial);
   const basisDocuments = Array.isArray(order?.storage_json?.basis_documents)
     ? order.storage_json.basis_documents
         .filter((basis): basis is Record<string, unknown> => Boolean(basis) && typeof basis === "object")
@@ -256,7 +256,7 @@ export default function PersonnelOrderDetailDrawer({
                 data-testid="personnel-order-drawer-print"
                 onClick={() => {
                   setActiveTab("document");
-                  setPrintLanguage(documentLanguage);
+                  setPrintLanguage(orderLanguage);
                   window.setTimeout(() => window.print(), 50);
                 }}
                 disabled={!documentAvailable}
@@ -297,6 +297,20 @@ export default function PersonnelOrderDetailDrawer({
         </div>
 
         <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-4 py-4">
+          {order ? (
+            <div
+              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-zinc-200 px-3 py-2 dark:border-zinc-800"
+              role="group"
+              aria-label="Язык приказа"
+              data-testid="personnel-order-language-switcher"
+            >
+              <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">Язык приказа</span>
+              <div className="flex gap-1">
+                <button type="button" onClick={() => setOrderLanguage("kk")} aria-pressed={orderLanguage === "kk"} className={`rounded px-2 py-1 text-sm ${orderLanguage === "kk" ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900" : "text-zinc-600 dark:text-zinc-300"}`}>Қазақша</button>
+                <button type="button" onClick={() => setOrderLanguage("ru")} aria-pressed={orderLanguage === "ru"} className={`rounded px-2 py-1 text-sm ${orderLanguage === "ru" ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900" : "text-zinc-600 dark:text-zinc-300"}`}>Русский</button>
+              </div>
+            </div>
+          ) : null}
           {reconstructedForReview ? (
             <div
               data-testid="personnel-order-reconstruction-warning"
@@ -326,13 +340,7 @@ export default function PersonnelOrderDetailDrawer({
           ) : null}
 
           {order && activeTab === "document" ? (
-            <>
-              <div className="flex items-center justify-end gap-1" role="group" aria-label="Язык документа">
-                <button type="button" onClick={() => setDocumentLanguage("kk")} className={`rounded px-2 py-1 text-sm ${documentLanguage === "kk" ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900" : "text-zinc-600 dark:text-zinc-300"}`}>Қазақша</button>
-                <button type="button" onClick={() => setDocumentLanguage("ru")} className={`rounded px-2 py-1 text-sm ${documentLanguage === "ru" ? "bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900" : "text-zinc-600 dark:text-zinc-300"}`}>Русский</button>
-              </div>
-              <PersonnelOrderDocumentView detail={detail} language={documentLanguage} editorial={editorial} />
-            </>
+            <PersonnelOrderDocumentView detail={detail} language={orderLanguage} editorial={editorial} />
           ) : null}
 
           {order && activeTab === "data" ? (
@@ -463,6 +471,7 @@ export default function PersonnelOrderDetailDrawer({
                   basisDocuments={basisDocuments}
                   onOrderChanged={handleChanged}
                   onEditorialChanged={handleEditorialChanged}
+                  locale={orderLanguage}
                 />
               </section>
 

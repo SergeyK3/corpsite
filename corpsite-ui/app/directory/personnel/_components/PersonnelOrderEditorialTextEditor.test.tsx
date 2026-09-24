@@ -206,7 +206,7 @@ describe("PersonnelOrderEditorialTextEditor", () => {
 
     expect(screen.getByText("Текст приказа")).toBeInTheDocument();
     expect(
-      screen.getByText(/Редактирование казахского текста приказа/),
+      screen.getByText("Редактирование казахской версии приказа"),
     ).toBeInTheDocument();
     expect(screen.getByTestId("personnel-order-editorial-locale-tabs")).toBeInTheDocument();
     expect(screen.getByTestId("personnel-order-editorial-locale-kk")).toBeInTheDocument();

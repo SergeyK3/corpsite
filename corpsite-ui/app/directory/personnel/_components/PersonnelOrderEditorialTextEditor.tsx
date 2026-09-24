@@ -21,7 +21,6 @@ import {
   PERSONNEL_ORDER_EDITORIAL_UI_STATUS_LABELS,
   buildEditorialDocumentSections,
   displayPersonnelOrderEditorialBlockText,
-  editorialLocaleHint,
   hasRequiredEditorialLocales,
   mapEditorialConflictMessage,
   resolvePersonnelOrderEditorialUiStatus,
@@ -47,6 +46,8 @@ type Props = {
   basisDocuments?: Array<{ basis_id?: unknown; document_type?: unknown; description?: unknown; source_text?: unknown }>;
   onOrderChanged?: (detail: PersonnelOrderDetailResponse) => void;
   onEditorialChanged?: (state: PersonnelOrderEditorialState) => void;
+  /** Drawer-supplied locale keeps document and editorial editing synchronized. */
+  locale?: PersonnelOrderEditorialUiLocale;
 };
 
 type BasisEntry = { document_type: string; basis_id: string; other_text: string };
@@ -316,9 +317,11 @@ export default function PersonnelOrderEditorialTextEditor({
   basisDocuments = [],
   onOrderChanged,
   onEditorialChanged,
+  locale,
 }: Props) {
   const [state, setState] = React.useState<PersonnelOrderEditorialState | null>(null);
-  const [activeLocale, setActiveLocale] = React.useState<PersonnelOrderEditorialUiLocale>("kk");
+  const [uncontrolledLocale, setUncontrolledLocale] = React.useState<PersonnelOrderEditorialUiLocale>("kk");
+  const activeLocale = locale ?? uncontrolledLocale;
   const [loading, setLoading] = React.useState(true);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -400,11 +403,13 @@ export default function PersonnelOrderEditorialTextEditor({
   const sections = buildEditorialDocumentSections(state, items, activeLocale);
 
   return (
-    <section data-testid="personnel-order-editorial-editor" className="space-y-4">
+    <section data-testid="personnel-order-editorial-editor" data-active-locale={activeLocale} className="space-y-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Текст приказа</h3>
-          <p className="mt-1 text-xs text-zinc-500">{editorialLocaleHint(activeLocale)}</p>
+          <p className="mt-1 text-xs text-zinc-500">
+            {activeLocale === "kk" ? "Редактирование казахской версии приказа" : "Редактирование русской версии приказа"}
+          </p>
         </div>
         {canWrite ? (
           <button
@@ -419,33 +424,35 @@ export default function PersonnelOrderEditorialTextEditor({
         ) : null}
       </div>
 
-      <div
+      {locale === undefined ? <div
         className="flex flex-wrap gap-2"
         role="tablist"
         aria-label="Язык редакции приказа"
         data-testid="personnel-order-editorial-locale-tabs"
       >
-        {PERSONNEL_ORDER_EDITORIAL_UI_LOCALES.map((locale) => {
-          const selected = activeLocale === locale;
+        {PERSONNEL_ORDER_EDITORIAL_UI_LOCALES.map((nextLocale) => {
+          const selected = activeLocale === nextLocale;
           return (
             <button
-              key={locale}
+              key={nextLocale}
               type="button"
               role="tab"
               aria-selected={selected}
-              data-testid={`personnel-order-editorial-locale-${locale}`}
-              onClick={() => setActiveLocale(locale)}
+              data-testid={`personnel-order-editorial-locale-${nextLocale}`}
+              onClick={() => {
+                setUncontrolledLocale(nextLocale);
+              }}
               className={
                 selected
                   ? "rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
                   : "rounded-lg border border-zinc-300 px-3 py-1.5 text-sm text-zinc-700 dark:border-zinc-700 dark:text-zinc-300"
               }
             >
-              {PERSONNEL_ORDER_EDITORIAL_LOCALE_LABELS[locale]}
+              {PERSONNEL_ORDER_EDITORIAL_LOCALE_LABELS[nextLocale]}
             </button>
           );
         })}
-      </div>
+      </div> : null}
 
       {!editable ? (
         <p className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-sm text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900/40 dark:text-zinc-300">

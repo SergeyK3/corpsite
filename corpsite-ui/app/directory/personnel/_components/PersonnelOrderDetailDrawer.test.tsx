@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import PersonnelOrderDetailDrawer from "./PersonnelOrderDetailDrawer";
@@ -76,6 +76,49 @@ afterEach(() => {
 });
 
 describe("PersonnelOrderDetailDrawer document tab", () => {
+  it("uses one drawer language switch before actions and keeps it across document, data, and print", async () => {
+    vi.mocked(getPersonnelOrder).mockResolvedValue({
+      ...detail,
+      order: { ...detail.order, order_type_code: "TRANSFER" },
+      items: [{
+        item_id: 1, order_id: 42, item_number: 1, item_type_code: "TRANSFER", item_status: "ACTIVE", employee_id: 1,
+        employee_name: "Иванов Иван", effective_date: "2026-02-01",
+        payload: { to_assignment: { unit: { ru: "Отдел", kk: "Бөлім" }, position: { ru: "Медсестра", kk: "мейіргер" }, rate: "1" } },
+      }],
+    });
+    const print = vi.spyOn(window, "print").mockImplementation(() => undefined);
+
+    render(<PersonnelOrderDetailDrawer orderId={42} open onClose={vi.fn()} />);
+
+    const switcher = await screen.findByTestId("personnel-order-language-switcher");
+    expect(screen.getAllByTestId("personnel-order-language-switcher")).toHaveLength(1);
+    expect(screen.queryByTestId("personnel-order-editorial-locale-tabs")).not.toBeInTheDocument();
+
+    fireEvent.click(within(switcher).getByRole("button", { name: "Русский" }));
+    expect(screen.getByTestId("personnel-order-document")).toHaveTextContent("ПРИКАЗЫВАЮ:");
+
+    fireEvent.click(screen.getByRole("tab", { name: "Данные" }));
+    const editor = await screen.findByTestId("personnel-order-editorial-editor");
+    expect(editor).toHaveAttribute("data-active-locale", "ru");
+    expect(editor).toHaveTextContent("Редактирование русской версии приказа");
+    expect(screen.queryByTestId("personnel-order-editorial-locale-tabs")).not.toBeInTheDocument();
+    const actions = screen.getByText("Действия");
+    expect(switcher.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Документ" }));
+    expect(screen.getByTestId("personnel-order-document")).toHaveTextContent("ПРИКАЗЫВАЮ:");
+    fireEvent.click(screen.getByTestId("personnel-order-drawer-print"));
+    await waitFor(() => expect(print).toHaveBeenCalled());
+    expect(screen.getByTestId("personnel-order-active-print-root")).toHaveTextContent("ПРИКАЗЫВАЮ:");
+    fireEvent(window, new Event("afterprint"));
+
+    fireEvent.click(within(switcher).getByRole("button", { name: "Қазақша" }));
+    expect(screen.getByTestId("personnel-order-document")).toHaveTextContent("БҰЙЫРАМЫН:");
+    fireEvent.click(screen.getByRole("tab", { name: "Данные" }));
+    expect(await screen.findByTestId("personnel-order-editorial-editor")).toHaveAttribute("data-active-locale", "kk");
+    expect(screen.getByTestId("personnel-order-editorial-editor")).toHaveTextContent("Редактирование казахской версии приказа");
+  });
+
   it("opens the standardized document by default, switches language, and prints it directly", async () => {
     vi.mocked(getPersonnelOrder).mockResolvedValue({
       ...detail,
