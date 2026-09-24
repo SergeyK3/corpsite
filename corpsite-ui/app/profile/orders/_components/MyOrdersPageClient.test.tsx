@@ -15,9 +15,12 @@ describe("MyOrdersPageClient", () => {
     await waitFor(() => expect(list).toHaveBeenLastCalledWith(undefined, "unconfirmed"));
   });
   it("marks a draft document as unconfirmed, including the printable watermark", async () => {
-    const order = { order_id: 1, order_number: "1-К", order_date: "2026-01-01", title: "О приёме", item_text: "Только мой пункт", confirmation_status: "UNCONFIRMED" as const };
+    const order = { order_id: 1, order_number: "125-к", order_date: "2026-07-10", title: "Выход из отпуска по уходу за ребёнком; Совмещение (начало)", item_text: "Только мой пункт", confirmation_status: "UNCONFIRMED" as const };
     list.mockResolvedValue({ status: "READY", orders: [order] }); detail.mockResolvedValue({ ...order, warning: "Приказ ещё не подтверждён кадровой службой. Сведения могут быть уточнены после сверки с оригиналом." });
     render(<MyOrdersPageClient />); fireEvent.click(await screen.findByRole("button", { name: "Открыть" }));
+    expect(screen.getAllByText(order.title)).not.toHaveLength(0);
+    expect(screen.queryByText("RETURN_FROM_CHILDCARE_LEAVE")).not.toBeInTheDocument();
+    expect(screen.queryByText("COMPOSITE")).not.toBeInTheDocument();
     expect(await screen.findByTestId("my-order-unconfirmed-watermark")).toHaveTextContent("НЕ ПОДТВЕРЖДЕНО");
     expect(screen.getByRole("button", { name: "Распечатать предварительную версию" })).toBeInTheDocument();
   });

@@ -12,6 +12,7 @@ from app.services.personnel_orders_editorial.generators import (
 )
 from app.services.personnel_orders_editorial.mapper import build_item_ctx
 from app.services.personnel_orders_editorial.repository import load_items
+from app.services.personnel_order_action_classifier import classify_personnel_order_action
 
 
 def test_document_titles_kk_ru() -> None:
@@ -57,6 +58,34 @@ def test_supplementary_pay_generated_text_is_bilingual_and_does_not_invent_terms
     assert "сверки с DOCX" in ru
     assert "DOCX-пен салыстыруды" in kk
     for forbidden in ("0.75", "2026", "Кардиология", "Врач"):
+        assert forbidden not in ru
+        assert forbidden not in kk
+
+
+def test_return_from_childcare_leave_is_bilingual_fail_closed_and_does_not_invent_terms() -> None:
+    assert classify_personnel_order_action("Выход из отпуска по уходу за ребёнком") == "RETURN_FROM_CHILDCARE_LEAVE"
+    assert classify_personnel_order_action("Бала күтіміне байланысты демалыстан шығу") == "RETURN_FROM_CHILDCARE_LEAVE"
+    assert classify_personnel_order_action("Вышла на работу") is None
+
+    ctx = {
+        "item_type_code": "RETURN_FROM_CHILDCARE_LEAVE",
+        "employee_name": "Иванова И.И.",
+        "effective_date": "2099-01-02",
+        "org_unit_name": "Не включать",
+        "position_name": "Не включать",
+        "rate": "9.99",
+        "basis": {"number": "999"},
+    }
+    ru = generate_item_body("ru", ctx)["generated_text"]
+    kk = generate_item_body("kk", ctx)["generated_text"]
+
+    assert DOCUMENT_TITLES["RETURN_FROM_CHILDCARE_LEAVE"] == {
+        "ru": "О выходе из отпуска по уходу за ребёнком",
+        "kk": "Бала күтіміне байланысты демалыстан шығу туралы",
+    }
+    assert "выходом из отпуска по уходу за ребёнком" in ru
+    assert "бала күтіміне байланысты демалыстан" in kk
+    for forbidden in ("2099", "9.99", "Не включать", "999"):
         assert forbidden not in ru
         assert forbidden not in kk
 

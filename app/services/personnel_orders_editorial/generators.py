@@ -23,6 +23,7 @@ from app.db.models.personnel_orders import (
     ORDER_TYPE_CONCURRENT_DUTY_END,
     ORDER_TYPE_CONCURRENT_DUTY_START,
     ORDER_TYPE_HIRE,
+    ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE,
     ORDER_TYPE_SUPPLEMENTARY_PAY,
     ORDER_TYPE_TERMINATION,
     ORDER_TYPE_TRANSFER,
@@ -41,6 +42,10 @@ DOCUMENT_TITLES: Dict[str, Dict[str, str]] = {
     ORDER_TYPE_HIRE: {
         "kk": "Жұмысқа қабылдау туралы",
         "ru": "О приёме на работу",
+    },
+    ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE: {
+        "kk": "Бала күтіміне байланысты демалыстан шығу туралы",
+        "ru": "О выходе из отпуска по уходу за ребёнком",
     },
     ORDER_TYPE_TRANSFER: {
         "kk": "Ауыстыру туралы",
@@ -419,6 +424,17 @@ def generate_item_body(locale: str, item_ctx: Mapping[str, Any]) -> Dict[str, st
             text = (
                 f"Принять на работу {fio} в подразделение «{org}» на должность "
                 f"«{position}» со ставкой {rate_value} с {date}."
+            )
+    elif item_type == ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE:
+        if lang == "kk":
+            text = (
+                f"{fio} бала күтіміне байланысты демалыстан шығуына байланысты жұмысқа кіріссін. "
+                "Шығу күні, негізі және өзге шарттары түпнұсқа бұйрықпен (DOCX) салыстырылуы тиіс."
+            )
+        else:
+            text = (
+                f"{fio} приступить к работе в связи с выходом из отпуска по уходу за ребёнком. "
+                "Дата выхода, основание и иные условия подлежат сверке с оригиналом приказа (DOCX)."
             )
     elif item_type == ORDER_TYPE_TRANSFER:
         org = _localized_name(to_org_unit_name or org_unit_name, lang)

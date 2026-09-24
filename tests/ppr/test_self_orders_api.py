@@ -63,7 +63,7 @@ def test_my_orders_composite_title_uses_only_current_employee_item_types(monkeyp
     row = _row(status="REGISTERED")
     row["title"] = "COMPOSITE"
     row["item_text"] = None
-    row["employee_item_types"] = ["HIRE", "CONCURRENT_DUTY_START"]
+    row["employee_item_types"] = ["RETURN_FROM_CHILDCARE_LEAVE", "CONCURRENT_DUTY_START"]
     app.dependency_overrides[get_current_user] = lambda: {"user_id": 1}
     monkeypatch.setattr(subject, "_employee_for_user", lambda user: ("READY", 42))
     monkeypatch.setattr(subject, "_safe_rows", lambda employee_id, **kwargs: [row])
@@ -72,9 +72,29 @@ def test_my_orders_composite_title_uses_only_current_employee_item_types(monkeyp
     finally:
         app.dependency_overrides.pop(get_current_user, None)
     assert response.status_code == 200
-    assert response.json()["title"] == "Приём на работу; Совмещение (начало)"
+    assert response.json()["title"] == "Выход из отпуска по уходу за ребёнком; Совмещение (начало)"
     assert response.json()["confirmation_status"] == "CONFIRMED"
     assert response.json()["item_text"] is None
+    assert "COMPOSITE" not in response.text
+
+
+def test_my_orders_return_from_childcare_composite_is_unconfirmed_and_hides_codes(monkeypatch) -> None:
+    row = _row(status="REGISTERED", review=True)
+    row["title"] = "COMPOSITE"
+    row["employee_item_types"] = ["RETURN_FROM_CHILDCARE_LEAVE", "CONCURRENT_DUTY_START"]
+    app.dependency_overrides[get_current_user] = lambda: {"user_id": 1}
+    monkeypatch.setattr(subject, "_employee_for_user", lambda user: ("READY", 42))
+    monkeypatch.setattr(subject, "_safe_rows", lambda employee_id, **kwargs: [row])
+    try:
+        response = TestClient(app).get("/api/ppr/me/orders/125")
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+    assert response.status_code == 200
+    body = response.json()
+    assert body["title"] == "Выход из отпуска по уходу за ребёнком; Совмещение (начало)"
+    assert body["confirmation_status"] == "UNCONFIRMED"
+    assert "ещё не подтверждён кадровой службой" in body["warning"]
+    assert "RETURN_FROM_CHILDCARE_LEAVE" not in response.text
     assert "COMPOSITE" not in response.text
 
 

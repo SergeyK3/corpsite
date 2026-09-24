@@ -24,6 +24,7 @@ _UNCONFIRMED_WARNING = (
 _CONFIRMED_STATUSES = {"SIGNED", "REGISTERED", "VOIDED"}
 _SELF_ITEM_TYPE_LABELS = {
     "HIRE": "Приём на работу",
+    "RETURN_FROM_CHILDCARE_LEAVE": "Выход из отпуска по уходу за ребёнком",
     "TRANSFER": "Перевод",
     "TERMINATION": "Увольнение",
     "CONCURRENT_DUTY_START": "Совмещение (начало)",

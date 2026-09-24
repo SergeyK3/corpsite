@@ -7,6 +7,7 @@ export type PersonnelOrderStatus =
 
 export type PersonnelOrderType =
   | "HIRE"
+  | "RETURN_FROM_CHILDCARE_LEAVE"
   | "TRANSFER"
   | "TERMINATION"
   | "CONCURRENT_DUTY_START"
@@ -26,6 +27,7 @@ export const PERSONNEL_ORDER_STATUSES: readonly PersonnelOrderStatus[] = [
 
 export const PERSONNEL_ORDER_TYPES: readonly PersonnelOrderType[] = [
   "HIRE",
+  "RETURN_FROM_CHILDCARE_LEAVE",
   "TRANSFER",
   "TERMINATION",
   "CONCURRENT_DUTY_START",
@@ -46,6 +48,7 @@ export const PERSONNEL_ORDER_STATUS_LABELS: Record<PersonnelOrderStatus, string>
 
 export const PERSONNEL_ORDER_TYPE_LABELS: Record<PersonnelOrderType, string> = {
   HIRE: "Приём",
+  RETURN_FROM_CHILDCARE_LEAVE: "Выход из отпуска по уходу за ребёнком",
   TRANSFER: "Перевод",
   TERMINATION: "Увольнение",
   CONCURRENT_DUTY_START: "Совмещение (начало)",

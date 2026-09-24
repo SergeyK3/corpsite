@@ -35,11 +35,15 @@ ORDER_TYPE_TERMINATION = "TERMINATION"
 ORDER_TYPE_CONCURRENT_DUTY_START = "CONCURRENT_DUTY_START"
 ORDER_TYPE_CONCURRENT_DUTY_END = "CONCURRENT_DUTY_END"
 ORDER_TYPE_SUPPLEMENTARY_PAY = "SUPPLEMENTARY_PAY"
+ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE = "RETURN_FROM_CHILDCARE_LEAVE"
 ORDER_TYPE_COMPOSITE = "COMPOSITE"
 
 # This draft-only reconstruction code is intentionally separate from the MVP
 # event-producing types.  It has no employee-event or assignment semantics.
-RECONSTRUCTION_DRAFT_ITEM_TYPE_CODES = (ORDER_TYPE_SUPPLEMENTARY_PAY,)
+RECONSTRUCTION_DRAFT_ITEM_TYPE_CODES = (
+    ORDER_TYPE_SUPPLEMENTARY_PAY,
+    ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE,
+)
 
 MVP_ORDER_TYPE_CODES = (
     ORDER_TYPE_HIRE,
@@ -170,7 +174,7 @@ class PersonnelOrder(Base):
         UniqueConstraint("order_number", name="uq_personnel_orders_order_number"),
         CheckConstraint(
             "order_type_code IN "
-            "('HIRE', 'TRANSFER', 'TERMINATION', 'CONCURRENT_DUTY_START', "
+            "('HIRE', 'TRANSFER', 'TERMINATION', 'RETURN_FROM_CHILDCARE_LEAVE', 'CONCURRENT_DUTY_START', "
             "'CONCURRENT_DUTY_END', 'COMPOSITE', 'LEAVE.ANNUAL.GRANT', "
             "'LEAVE.UNPAID.GRANT', 'SUPPLEMENTARY_PAY')",
             name="chk_personnel_orders_order_type_code",
@@ -249,7 +253,7 @@ class PersonnelOrderItem(Base):
         UniqueConstraint("order_id", "item_number", name="uq_personnel_order_items_order_item_number"),
         CheckConstraint(
             "item_type_code IN "
-            "('HIRE', 'TRANSFER', 'TERMINATION', 'CONCURRENT_DUTY_START', "
+            "('HIRE', 'TRANSFER', 'TERMINATION', 'RETURN_FROM_CHILDCARE_LEAVE', 'CONCURRENT_DUTY_START', "
             "'CONCURRENT_DUTY_END', 'LEAVE.ANNUAL.GRANT', "
             "'LEAVE.UNPAID.GRANT', 'SUPPLEMENTARY_PAY')",
             name="chk_personnel_order_items_item_type_code",

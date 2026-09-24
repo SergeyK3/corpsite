@@ -18,6 +18,7 @@ from app.db.models.personnel_orders import (
     LOCALE_RU,
     MVP_HEADER_ORDER_TYPE_CODES,
     MVP_ITEM_TYPE_CODES,
+    RECONSTRUCTION_DRAFT_ITEM_TYPE_CODES,
     LEAVE_DRAFT_ITEM_TYPE_CODES,
     ORDER_STATUS_DRAFT,
     ORDER_STATUS_READY_FOR_SIGNATURE,
@@ -97,7 +98,7 @@ def _normalize_header_type(order_type_code: str) -> str:
 
 def _normalize_item_type(item_type_code: str) -> str:
     normalized = str(item_type_code or "").strip().upper()
-    if normalized not in MVP_ITEM_TYPE_CODES + LEAVE_DRAFT_ITEM_TYPE_CODES:
+    if normalized not in MVP_ITEM_TYPE_CODES + LEAVE_DRAFT_ITEM_TYPE_CODES + RECONSTRUCTION_DRAFT_ITEM_TYPE_CODES:
         raise PersonnelOrderValidationError(f"Invalid item_type_code: {item_type_code}")
     if normalized in LEAVE_DRAFT_ITEM_TYPE_CODES:
         definition = get_event_def(normalized)
