@@ -15,6 +15,7 @@ describe("PersonnelStaffingReport", () => {
     expect(screen.getByRole("combobox", { name: "Период" })).toHaveValue("ytd");
     expect(await screen.findByText("Данные требуют проверки")).toBeInTheDocument();
     expect(screen.getByText(/1 \/ 3.5 × 100% = 28.57%/)).toBeInTheDocument();
+    expect(screen.queryByText("Увольнение в связи с переводом к другому работодателю")).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Дата с"), { target: { value: "2026-01-02" } });
     await waitFor(() => expect(screen.getByRole("combobox", { name: "Период" })).toHaveValue("custom"));
     fireEvent.click(screen.getAllByRole("button", { name: "Открыть список" })[0]);

@@ -14,7 +14,6 @@ from app.services.personnel_reports_service import _load_report_org_options, _se
 TURNOVER_CODES = {
     "VOLUNTARY": "Увольнение по собственному желанию",
     "DISCIPLINARY": "Увольнение за нарушение трудовой дисциплины",
-    "TRANSFER_TO_OTHER_EMPLOYER": "Увольнение в связи с переводом к другому работодателю",
 }
 
 

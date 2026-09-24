@@ -24,4 +24,5 @@ def test_transfer_is_attributed_to_the_unit_for_each_calendar_day():
 
 def test_turnover_only_uses_explicit_structured_reason_codes():
     assert [_classify(code) for code in TURNOVER_CODES] == list(TURNOVER_CODES.values())
+    assert _classify("TRANSFER_TO_OTHER_EMPLOYER") is None
     assert _classify("вольное увольнение") is None
