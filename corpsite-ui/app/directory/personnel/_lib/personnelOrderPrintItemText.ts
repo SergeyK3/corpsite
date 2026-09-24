@@ -77,14 +77,7 @@ function renderTermination(ctx: PersonnelOrderPrintItemContext, lang: "kk" | "ru
     return `${fio} ${date} бастап жұмыстан босатылсын.${reasonPart}`;
   }
   const reasonPart = reason ? ` Основание: ${reason}.` : "";
-  const unusedLeaveDays = ctx.payload.unused_leave_days;
-  const confirmedDays = typeof unusedLeaveDays === "number"
-    ? String(unusedLeaveDays)
-    : optionalReason(typeof unusedLeaveDays === "string" ? unusedLeaveDays : null);
-  const accountingInstruction = confirmedDays
-    ? ` Бухгалтерии произвести расчёт за ${confirmedDays} календарных дней неиспользованного отпуска.`
-    : " Бухгалтерии произвести расчёт за неиспользованные дни отпуска.";
-  return `Уволить ${fio} с ${date}.${reasonPart}${accountingInstruction}`;
+  return `Уволить ${fio} с ${date}.${reasonPart}`;
 }
 
 function optionalReason(value: string | null | undefined): string | null {

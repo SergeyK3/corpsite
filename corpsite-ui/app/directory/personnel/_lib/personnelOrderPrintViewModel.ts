@@ -85,6 +85,20 @@ function optionalString(value: unknown): string | null {
   return text || null;
 }
 
+function itemDisplayName(item: PersonnelOrderItem): string | null {
+  const payload = item.payload || {};
+  const employee = payload.employee && typeof payload.employee === "object"
+    ? payload.employee as Record<string, unknown> : {};
+  const name = employee.name && typeof employee.name === "object"
+    ? employee.name as Record<string, unknown> : {};
+  return optionalString(item.employee_name) || optionalString(name.canonical) || optionalString(payload.source_employee_name);
+}
+
+function assignmentText(value: unknown): LocalizedText | null {
+  if (typeof value === "string") return localizedFromSingle(value);
+  return localizedOverride(value);
+}
+
 function localizedOverride(value: unknown): LocalizedText | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const source = value as Record<string, unknown>;
@@ -248,15 +262,15 @@ function buildItemContext(
   return {
     itemNumber: item.item_number,
     itemTypeCode: item.item_type_code,
-    employeeName: optionalString(item.employee_name),
+    employeeName: itemDisplayName(item),
     effectiveDate: optionalString(item.effective_date),
-    orgUnitName:
+    orgUnitName: assignmentText(assignment.unit) ||
       nameFromMap(maps.orgUnitNames, orgUnitId) ||
       (optionalString(item.org_unit_name) ? localizedFromSingle(item.org_unit_name) : null),
-    positionName: positionOverride || nameFromMap(maps.positionNames, positionId),
-    toOrgUnitName: nameFromMap(maps.orgUnitNames, toOrgUnitId),
-    toPositionName: nameFromMap(maps.positionNames, toPositionId),
-    rate: (payload.employment_rate as number | string | null | undefined) ?? null,
+    positionName: positionOverride || assignmentText(assignment.position) || nameFromMap(maps.positionNames, positionId),
+    toOrgUnitName: assignmentText(assignment.unit) || nameFromMap(maps.orgUnitNames, toOrgUnitId),
+    toPositionName: positionOverride || assignmentText(assignment.position) || nameFromMap(maps.positionNames, toPositionId),
+    rate: (payload.employment_rate as number | string | null | undefined) ?? (payload.rate as number | string | null | undefined) ?? (assignment.rate as number | string | null | undefined) ?? null,
     toRate:
       (payload.to_rate as number | string | null | undefined) ??
       (payload.to_employment_rate as number | string | null | undefined) ??
@@ -296,7 +310,7 @@ export function buildPersonnelOrderPrintViewModel(
 
   const activeItems = (detail.items || []).filter(
     (item) => String(item.item_status || "").toUpperCase() !== "VOIDED",
-  );
+  ).sort((left, right) => left.item_number - right.item_number || left.item_id - right.item_id);
 
   const items: PersonnelOrderPrintItemViewModel[] = activeItems.map((item) => {
     const editorialTexts = itemEditorialTexts(editorial, item.item_id);
@@ -313,13 +327,28 @@ export function buildPersonnelOrderPrintViewModel(
       itemNumber: item.item_number,
       itemTypeCode: item.item_type_code,
       employeeId: item.employee_id ?? null,
-      employeeName: optionalString(item.employee_name),
+      employeeName: itemDisplayName(item),
       effectiveDate: optionalString(item.effective_date),
       context: buildItemContext(item, maps),
       body: editorialTexts.body,
       basis: editorialTexts.basis,
     };
   });
+  if (items.length && items.every((item) => item.itemTypeCode === "TERMINATION")) {
+    const last = items[items.length - 1];
+    items.push({
+      ...last,
+      itemId: -Math.abs(order.order_id),
+      itemNumber: last.itemNumber + 1,
+      employeeId: null,
+      employeeName: null,
+      body: localizedText(
+        "Бухгалтерлік есеп бөлімі жұмыстан босатылатын қызметкерлердің пайдаланылмаған еңбек демалысы күндері үшін есеп айырысу жүргізсін.",
+        "Бухгалтерии произвести расчёт за неиспользованные дни отпуска увольняемых работников.",
+      ),
+      basis: null,
+    });
+  }
 
   const seenEmployees = new Set<string>();
   const acknowledgements: PersonnelOrderPrintViewModel["acknowledgements"] = [];

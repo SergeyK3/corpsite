@@ -129,6 +129,12 @@ def find_docx(order_number: str, order_date: date) -> str | None:
     needle = re.sub(r"\s+", "", order_number).casefold()
     indexed = docx_index()
     for path, _ in indexed:
+        if "2025-2026" in path.stem:
+            continue
+        # Consolidated registers (for example the vacation collection) are not
+        # evidence for an individual personnel order.
+        if "РїСЂРёРєР°Р·С‹ 2025-2026 РЅР° РѕС‚РїСѓСЃРє" in path.stem.casefold():
+            continue
         compact = re.sub(r"\s+", "", path.stem).casefold()
         if needle and needle in compact:
             return str(path)
@@ -136,6 +142,10 @@ def find_docx(order_number: str, order_date: date) -> str | None:
     # as a DOCX-presence marker and never changes reconstructed fields.
     date_tokens = {order_date.strftime("%d.%m.%Y"), order_date.isoformat()}
     for path, content in indexed:
+        if "2025-2026" in path.stem:
+            continue
+        if "РїСЂРёРєР°Р·С‹ 2025-2026 РЅР° РѕС‚РїСѓСЃРє" in path.stem.casefold():
+            continue
         if order_number in content and any(token in content for token in date_tokens):
             return str(path)
     return None

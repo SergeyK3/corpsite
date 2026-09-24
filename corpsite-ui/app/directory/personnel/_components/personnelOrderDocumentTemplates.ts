@@ -236,9 +236,30 @@ export function renderPersonnelOrderDocument(
   const orderBlockOverride = (blockType: string) => manualBlockText(editorial?.order_blocks.find(
     (block) => block.block_type === blockType && block.locale === language,
   ));
-  const items = detail.items.filter((item) => String(item.item_status).toUpperCase() !== "VOIDED");
-  const points = rendered.points.map((point, index) => {
+  const items = detail.items
+    .filter((item) => String(item.item_status).toUpperCase() !== "VOIDED")
+    .sort((left, right) => left.item_number - right.item_number || left.item_id - right.item_id);
+  const oneItemDocument = (item: PersonnelOrderItem) => {
+    const oneItemDetail = { ...detail, items: [item] };
+    return templateKey === "personnel.hire.standard" ? hireForLanguage(oneItemDetail, language)
+      : templateKey === "personnel.transfer.permanent" ? transferForLanguage(oneItemDetail, language)
+        : templateKey === "personnel.concurrent-duty.start" ? concurrentDutyForLanguage(oneItemDetail, language)
+          : templateKey === "personnel.termination.employee-initiative-unused-leave"
+            ? terminationByEmployeeInitiativeForLanguage(oneItemDetail, language)
+            : rendered;
+  };
+  const automaticPoints = items.map((item) => oneItemDocument(item).points[0]);
+  if (templateKey === "personnel.termination.employee-initiative-unused-leave") {
+    automaticPoints.push({
+      text: language === "kk"
+        ? "Бухгалтерлік есеп бөлімі жұмыстан босатылатын қызметкерлердің пайдаланылмаған еңбек демалысы күндері үшін есеп айырысу жүргізсін."
+        : "Бухгалтерии произвести расчёт за неиспользованные дни отпуска увольняемых работников.",
+      basis: [],
+    });
+  }
+  const points = automaticPoints.map((point, index) => {
     const item = items[index];
+    if (!item) return point;
     const group = editorial?.items.find((entry) => entry.order_item_id === item?.item_id);
     const body = manualBlockText(group?.blocks.find((block) => block.block_type === "body" && block.locale === language));
     const basis = manualBlockText(group?.blocks.find((block) => block.block_type === "basis" && block.locale === language));

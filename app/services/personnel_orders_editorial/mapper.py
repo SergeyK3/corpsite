@@ -51,26 +51,27 @@ def pick_payload_value(payload: Mapping[str, Any], *keys: str) -> Any:
 
 def build_item_ctx(item: Mapping[str, Any], employee_name: Optional[str]) -> Dict[str, Any]:
     payload = payload_dict(item.get("payload"))
+    assignment = payload_dict(payload.get("to_assignment") or payload.get("assignment"))
     org_unit_name = pick_payload_value(
         payload, "org_unit_name", "orgUnitName", "from_org_unit_name"
-    ) or item.get("snapshot_org_unit_name")
+    ) or assignment.get("unit") or item.get("snapshot_org_unit_name")
     position_name = pick_payload_value(
         payload, "position_name", "positionName", "from_position_name"
-    ) or item.get("snapshot_position_name")
+    ) or assignment.get("position") or item.get("snapshot_position_name")
     return {
         "item_type_code": item.get("item_type_code"),
-        "employee_name": employee_name,
+        "employee_name": employee_name or pick_payload_value(payload, "source_employee_name"),
         "effective_date": iso_date(item.get("effective_date")),
         "org_unit_name": org_unit_name,
         "position_name": position_name,
         "to_org_unit_name": pick_payload_value(
             payload, "to_org_unit_name", "toOrgUnitName"
-        ),
+        ) or assignment.get("unit"),
         "to_position_name": pick_payload_value(
             payload, "to_position_name", "toPositionName"
-        ),
-        "rate": pick_payload_value(payload, "employment_rate", "rate", "from_rate"),
-        "to_rate": pick_payload_value(payload, "to_rate", "toRate", "employment_rate"),
+        ) or assignment.get("position"),
+        "rate": pick_payload_value(payload, "employment_rate", "rate", "from_rate") or assignment.get("rate"),
+        "to_rate": pick_payload_value(payload, "to_rate", "toRate", "employment_rate") or assignment.get("rate"),
         "concurrent_rate": pick_payload_value(
             payload, "concurrent_rate", "concurrentRate"
         ),

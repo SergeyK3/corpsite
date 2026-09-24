@@ -31,6 +31,9 @@ class _Connection(AbstractContextManager):
         self.sql.append(str(statement))
         return _Scalar()
 
+    def __exit__(self, exc_type, exc_value, traceback):
+        return False
+
 
 class _Engine:
     def __init__(self, conn):
@@ -136,9 +139,13 @@ def test_dry_run_uses_read_connection_and_never_emits_insert(monkeypatch):
     selected = [{
         "excel_row": 113,
         "source_identifier": "Ручное распознавание журналов.xlsx|Лист1|113",
-        "order_number": "1262-ж",
-        "order_date": date(2026, 7, 22),
-        "action": "TERMINATION",
+            "order_number": "1262-ж",
+            "order_date": date(2026, 7, 22),
+            "pdf": "",
+            "pdf_page": "",
+            "source_title": "",
+            "figures": "",
+            "action": "TERMINATION",
         "matches": [],
     } for _ in range(20)]
     # Each source identifier must be distinct for a valid real manifest.
@@ -258,6 +265,41 @@ def test_apply_creates_only_draft_order_rows_not_events_or_assignments(monkeypat
     assert stored_orders[0]["reconstruction"]["legacy_technical_order_ids"] == [125]
 
 
+def test_apply_keeps_one_multi_person_order_with_sequential_items(monkeypatch):
+    conn = _WriteConnection()
+    matches = [
+        {"source_name": "Auto A.", "employee_id": 7, "match_status": "AUTO_MATCH", "candidate_ids": [7],
+         "employee": {"employee_id": 7, "full_name": "Auto Anna", "unit_name": "Unit A", "position_name": "Position A"}},
+        {"source_name": "Ambiguous B.", "employee_id": None, "match_status": "AMBIGUOUS", "candidate_ids": [8, 9], "employee": None},
+        {"source_name": "Unresolved C.", "employee_id": None, "match_status": "UNRESOLVED", "candidate_ids": [], "employee": None},
+    ]
+    selected = [{
+        "excel_row": row, "source_identifier": f"source|Лист1|{row}", "pdf": "", "pdf_page": "",
+        "order_number": f"{row}-ж", "order_date": date(2026, 7, 22), "source_title": "", "figures": "",
+        "source_note": "", "action": "HIRE", "matches": matches,
+    } for row in range(1, 21)]
+    monkeypatch.setattr(pilot, "create_engine", lambda _url: _WriteEngine(conn))
+    monkeypatch.setattr(pilot, "load_candidates", lambda _conn, _manifest: (selected, []))
+    monkeypatch.setattr(pilot, "duplicate_check", lambda _conn, rows: [{"source_identifier": row["source_identifier"], "blocking_duplicates": {"order_number_and_date": [], "source_excel_row": [], "employee_and_action": []}, "legacy_technical_matches": []} for row in rows])
+    monkeypatch.setattr(pilot, "find_docx", lambda *_args: None)
+    pilot.run("postgresql://unused", dry_run=False)
+    item_params = [params for params in conn.params if "item_number" in params]
+    assert [params["item_number"] for params in item_params[:3]] == [1, 2, 3]
+    assert [params["employee_id"] for params in item_params[:3]] == [7, None, None]
+    payloads = [json.loads(params["payload"]) for params in item_params[:3]]
+    assert [payload["source_employee_name"] for payload in payloads] == ["Auto A.", "Ambiguous B.", "Unresolved C."]
+    assert [payload["employee_match_status"] for payload in payloads] == ["AUTO_MATCH", "AMBIGUOUS", "UNRESOLVED"]
+
+
+def test_docx_matcher_rejects_collection_but_accepts_individual_file(monkeypatch, tmp_path):
+    collection = tmp_path / "Приказы 2025-2026 на отпуск.docx"
+    individual = tmp_path / "Приказ 891-ж 16.04.2026.docx"
+    monkeypatch.setattr(pilot, "docx_index", lambda: ((collection, "891 16.04.2026"),))
+    assert pilot.find_docx("891", date(2026, 4, 16)) is None
+    monkeypatch.setattr(pilot, "docx_index", lambda: ((individual, ""),))
+    assert pilot.find_docx("891", date(2026, 4, 16)) == str(individual)
+
+
 class _ResumeResult:
     def __init__(self, *, rows=None, scalar=None):
         self.rows = rows or []
@@ -287,6 +329,9 @@ class _ResumeConnection(AbstractContextManager):
         if "FROM public.personnel_order_localized_texts" in sql:
             return _ResumeResult(scalar=self.locales)
         return _ResumeResult()
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        return False
 
 
 class _ResumeEngine:

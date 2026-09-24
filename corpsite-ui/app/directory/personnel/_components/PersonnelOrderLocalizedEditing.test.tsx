@@ -139,4 +139,22 @@ describe("localized personnel order editing", () => {
     expect(printHtml).toContain("РУЧНОЙ ТЕКСТ ВЫШЕ ДОЛЖНОСТИ");
   });
 
+  it("renders every termination item in item order and adds one shared accounting point", () => {
+    const order = detailWithPositionOverride();
+    order.order.order_type_code = "TERMINATION";
+    order.items = [1, 2, 3].map((number) => ({
+      ...order.items[0]!, item_id: 500 + number, item_number: number,
+      item_type_code: "TERMINATION", employee_id: number,
+      employee_name: `Сотрудник ${number}`, effective_date: "2026-02-01",
+      payload: { source_employee_name: `Сотрудник ${number}`, basis_ids: ["application"] },
+    }));
+    const screen = renderPersonnelOrderDocument(order, "ru");
+    expect(screen?.points).toHaveLength(4);
+    expect(screen?.points.map((point) => point.text).join(" ")).toContain("Сотрудник 3");
+    expect(screen?.points[3]?.text).toBe("Бухгалтерии произвести расчёт за неиспользованные дни отпуска увольняемых работников.");
+    const print = buildPersonnelOrderPrintViewModel(order);
+    expect(print.items.map((item) => item.itemNumber)).toEqual([1, 2, 3, 4]);
+    expect(buildPersonnelOrderPrintDocumentHtml(print, "ru")).toContain("увольняемых работников");
+  });
+
 });
