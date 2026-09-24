@@ -244,7 +244,12 @@ def _build_list_filters(
     if reconstruction_quality:
         normalized_quality = str(reconstruction_quality).strip().upper()
         if normalized_quality == "RECONSTRUCTED_PILOT":
-            where_parts.append("po.storage_json ->> 'reconstruction_pilot' = 'personnel-orders-reconstruction-pilot-01'")
+            where_parts.append(
+                """
+                po.storage_json ->> 'reconstruction_pilot' IS NOT NULL
+                AND BTRIM(po.storage_json ->> 'reconstruction_pilot') <> ''
+                """.strip()
+            )
         elif normalized_quality == "NEEDS_DOCX_REVIEW":
             where_parts.append("po.storage_json ->> 'reconstruction_status' = 'NEEDS_DOCX_REVIEW'")
         else:
