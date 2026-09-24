@@ -35,6 +35,35 @@ beforeEach(() => { search = ""; window.print = vi.fn(); });
 afterEach(() => { cleanup(); list.mockReset(); detail.mockReset(); replace.mockReset(); });
 
 describe("MyOrdersPageClient", () => {
+  it("fully localizes the list, detail, and preliminary print chrome in Kazakh", async () => {
+    list.mockResolvedValue({ status: "READY", orders: [kkOrder] });
+    detail.mockResolvedValue({ ...kkOrder, preamble: null, basis: null, warning: null });
+    render(<MyOrdersPageClient />);
+
+    expect(await screen.findByRole("heading", { name: "Менің бұйрықтарым" })).toBeInTheDocument();
+    expect(screen.getByText("Сіз қызметкер ретінде көрсетілген кадрлық бұйрықтар")).toBeInTheDocument();
+    expect(screen.getByText("Жыл")).toBeInTheDocument();
+    expect(screen.getByText("Мәртебе")).toBeInTheDocument();
+    expect(screen.getAllByText("Барлығы")).toHaveLength(2);
+    expect(screen.getByText("Кадр қызметімен расталмаған")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Ашу" }));
+    expect(await screen.findByText("Бұйрық кадр қызметімен әлі расталмаған. Мәліметтер түпнұсқамен салыстырып тексерілгеннен кейін нақтылануы мүмкін.")).toBeInTheDocument();
+    expect(screen.getByTestId("my-order-unconfirmed-watermark")).toHaveTextContent("РАСТАЛМАҒАН");
+    expect(screen.getByRole("button", { name: "Жабу" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Алдын ала нұсқаны басып шығару" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Алдын ала нұсқаны басып шығару" }));
+    expect(window.print).toHaveBeenCalledOnce();
+
+    for (const russianServiceText of [
+      "Мои приказы", "Год", "Статус", "Все", "Открыть", "Закрыть",
+      "Распечатать предварительную версию", "Не подтверждено кадровой службой",
+      "Подтверждено кадровой службой", "НЕ ПОДТВЕРЖДЕНО",
+      "Приказ ещё не подтверждён кадровой службой. Сведения могут быть уточнены после сверки с оригиналом.",
+    ]) {
+      expect(screen.queryByText(russianServiceText, { exact: true })).not.toBeInTheDocument();
+    }
+  });
+
   it("defaults to Kazakh, normalizes the URL, and keeps year/status filters", async () => {
     list.mockResolvedValue({ status: "READY", orders: [] });
     render(<MyOrdersPageClient />);
@@ -80,7 +109,7 @@ describe("MyOrdersPageClient", () => {
     list.mockResolvedValue({ status: "READY", orders: [{ ...kkOrder, item_text: null }] });
     detail.mockResolvedValue({ ...kkOrder, item_text: null, preamble: null, basis: null, warning: null });
     render(<MyOrdersPageClient />);
-    fireEvent.click(await screen.findByRole("button", { name: "Открыть" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Ашу" }));
     expect(await screen.findByText("Бұйрық тармағының мәтіні электрондық нұсқада жоқ")).toBeInTheDocument();
     expect(screen.getByText("Бұйрықтың кіріспе мәтіні электрондық нұсқада жоқ")).toBeInTheDocument();
     expect(screen.queryByText("RETURN_FROM_CHILDCARE_LEAVE")).not.toBeInTheDocument();
