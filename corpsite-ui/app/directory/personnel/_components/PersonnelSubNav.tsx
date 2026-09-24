@@ -32,6 +32,11 @@ const BASE_ITEMS = [
     title: "Реестр документов",
     prefixes: ["/directory/personnel/documents"],
   },
+  {
+    href: "/directory/personnel/hiring-document-checklist",
+    title: "Разное",
+    prefixes: ["/directory/personnel/hiring-document-checklist"],
+  },
 ] as const;
 
 function isBaseItemActive(pathname: string, prefixes: readonly string[], href: string): boolean {

@@ -10,6 +10,8 @@ import {
   type HiringDocumentChecklistUpdate,
 } from "../_lib/hiringDocumentChecklistApi.client";
 
+const PAGE_TITLE = "Перечень документов при приеме на работу";
+
 function toUpdate(value: HiringDocumentChecklist): HiringDocumentChecklistUpdate {
   const { can_edit: _canEdit, ...update } = value;
   return update;
@@ -75,7 +77,7 @@ export default function HiringDocumentChecklistClient() {
         </>}
       </div>
 
-      {editing ? <input aria-label="Заголовок" value={displayed.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} className="mb-6 w-full border-b border-zinc-400 text-2xl font-bold" /> : <h1 className="mb-6 text-2xl font-bold">{displayed.title}</h1>}
+      {editing ? <input aria-label="Заголовок" value={displayed.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} className="mb-6 w-full border-b border-zinc-400 text-2xl font-bold" /> : <h1 className="mb-6 text-2xl font-bold">{PAGE_TITLE}</h1>}
       <ol className="space-y-3">
         {displayed.items.map((item, index) => <li key={index} className="flex gap-3"><span className="mt-1 h-4 w-4 shrink-0 border border-zinc-900" />
           {editing ? <div className="flex flex-1 gap-2"><textarea aria-label={`Пункт ${index + 1}`} value={item} onChange={(e) => setItem(index, e.target.value)} className="min-h-16 flex-1 rounded border border-zinc-300 p-2" /><div className="flex flex-col gap-1"><button type="button" onClick={() => moveItem(index, -1)} disabled={index === 0}>↑</button><button type="button" onClick={() => moveItem(index, 1)} disabled={index === displayed.items.length - 1}>↓</button><button type="button" onClick={() => setDraft({ ...draft, items: draft.items.filter((_, i) => i !== index) })} disabled={displayed.items.length === 1}>×</button></div></div> : <span>{item}</span>}
