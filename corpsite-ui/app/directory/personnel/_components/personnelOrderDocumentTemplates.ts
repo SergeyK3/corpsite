@@ -30,6 +30,19 @@ export type RenderedOrderDocument = {
   additionalInstructions: string[];
 };
 
+function orderVerb(language: PersonnelOrderDocumentLanguage): string {
+  return language === "kk" ? "БҰЙЫРАМЫН:" : "ПРИКАЗЫВАЮ:";
+}
+
+function preambleWithoutOrderVerb(value: string, language: PersonnelOrderDocumentLanguage): string {
+  const verb = orderVerb(language).replace(/:$/, "");
+  return value
+    .split(/\r?\n/)
+    .filter((line) => line.trim().toUpperCase().replace(/:$/, "") !== verb)
+    .join("\n")
+    .trim();
+}
+
 export const APPROVED_PERSONNEL_ORDER_TEMPLATE_VERSIONS = {
   "personnel.hire.standard": { kk: 1, ru: 1 },
   "personnel.transfer.permanent": { kk: 1, ru: 1 },
@@ -237,8 +250,33 @@ function renderBasis(
       || sourceText
       || kind;
   });
+  if (String(item.item_type_code).toUpperCase() === "RETURN_FROM_CHILDCARE_LEAVE") {
+    const hasPersonalApplication = selected.some((basis) => {
+      const kind = String(basis.document_type || "").toUpperCase();
+      return kind === "EMPLOYEE_APPLICATION" || kind === "PERSONAL_APPLICATION";
+    });
+    if (hasPersonalApplication) return [language === "kk" ? "Жеке өтініші." : "Личное заявление."];
+  }
   if (manual) entries.push(manual);
   return entries;
+}
+
+/**
+ * A childcare-return order has a prescribed personal-application basis.
+ * Older editorial blocks may contain the display label and/or the employee's
+ * name already; keep the label in the view layer and never repeat either.
+ */
+function normalizeChildcareReturnBasis(
+  basis: string[],
+  language: PersonnelOrderDocumentLanguage,
+): string[] {
+  const normalized = basis.join(" ").toLocaleLowerCase(language === "kk" ? "kk-KZ" : "ru-RU");
+  const isPersonalApplication = language === "kk"
+    ? normalized.includes("жеке") && normalized.includes("өтініш")
+    : normalized.includes("личн") && normalized.includes("заявлен");
+  return isPersonalApplication
+    ? [language === "kk" ? "Жеке өтініші." : "Личное заявление."]
+    : basis;
 }
 
 export function renderPersonnelOrderDocument(
@@ -256,8 +294,12 @@ export function renderPersonnelOrderDocument(
         : templateKey === "personnel.termination.employee-initiative-unused-leave" ? terminationByEmployeeInitiativeForLanguage(detail, language)
           : templateKey === "personnel.return-from-childcare-leave.standard" ? returnFromChildcareLeaveForLanguage(detail, language)
             : permanentTransferWithConcurrentDutyForLanguage(detail, language);
+  // The editorial endpoint is the document projection after a document
+  // correction.  Prefer its effective/current text over an old payload-based
+  // template whenever it is available; deterministic templates are only a
+  // fallback for legacy orders without editorial blocks.
   const manualBlockText = (block: { override_text?: string | null; generated_text?: string | null; effective_text?: string | null } | undefined) =>
-    block?.override_text?.trim() || (!block?.generated_text?.trim() ? block?.effective_text?.trim() : null) || null;
+    block?.override_text?.trim() || block?.generated_text?.trim() || block?.effective_text?.trim() || null;
   const orderBlockOverride = (blockType: string) => manualBlockText(editorial?.order_blocks.find(
     (block) => block.block_type === blockType && block.locale === language,
   ));
@@ -291,17 +333,28 @@ export function renderPersonnelOrderDocument(
     const group = editorial?.items.find((entry) => entry.order_item_id === item?.item_id);
     const body = manualBlockText(group?.blocks.find((block) => block.block_type === "body" && block.locale === language));
     const basis = manualBlockText(group?.blocks.find((block) => block.block_type === "basis" && block.locale === language));
-    return { ...point, text: body || point.text, basis: basis ? [basis] : point.basis };
+    const effectiveBasis = basis ? [basis] : point.basis;
+    return {
+      ...point,
+      text: body || point.text,
+      basis: String(item.item_type_code).toUpperCase() === "RETURN_FROM_CHILDCARE_LEAVE"
+        ? normalizeChildcareReturnBasis(effectiveBasis, language)
+        : effectiveBasis,
+    };
   });
   const closing = orderBlockOverride("closing");
+  const isChildcareReturn = String(detail.order.order_type_code).toUpperCase() === "RETURN_FROM_CHILDCARE_LEAVE";
   return {
     ...rendered,
-    // Generated editorial snapshots are diagnostic/editing material.  The
-    // approved bilingual renderer remains the automatic source of truth.
+    // A saved current editorial block is the effective document text.  The
+    // type renderer above remains the safe fallback for legacy records.
     title: orderBlockOverride("title") || titleFor(templateKey, language),
-    preamble: orderBlockOverride("preamble") || rendered.preamble,
+    preamble: preambleWithoutOrderVerb(orderBlockOverride("preamble") || rendered.preamble, language),
+    directive: orderVerb(language),
     points,
-    additionalInstructions: closing ? [...rendered.additionalInstructions, closing] : rendered.additionalInstructions,
+    additionalInstructions: isChildcareReturn
+      ? []
+      : closing ? [...rendered.additionalInstructions, closing] : rendered.additionalInstructions,
   };
 }
 
@@ -417,8 +470,7 @@ function returnFromChildcareLeaveForLanguage(detail: PersonnelOrderDetailRespons
   const name = employeeName(item);
   const target = returnFromChildcarePresentation(item, language);
   const date = effectiveStartDate(item.effective_date, language);
-  const complete = name !== "—" && date !== "—" && target.position !== "—" && target.unit !== "—";
-  const point = complete
+  const point = name !== "—" && date !== "—" && target.position !== "—" && target.unit !== "—"
     ? language === "kk"
       ? `Қызметкер ${name}, лауазымы: ${target.position} (${target.unit}), ${date} бала күтіміне байланысты демалыстан жұмысқа шығуға рұқсат берілсін.`
       : `Разрешить сотруднику ${name}, должность: ${target.position} (${target.unit}) приступить к работе в связи с выходом из отпуска по уходу за ребёнком с ${date}.`
@@ -434,10 +486,10 @@ function returnFromChildcareLeaveForLanguage(detail: PersonnelOrderDetailRespons
       : "В соответствии с Трудовым кодексом Республики Казахстан",
     directive: language === "kk" ? "БҰЙЫРАМЫН:" : "ПРИКАЗЫВАЮ:",
     points: [{ text: point, basis: renderBasis(detail, item, language) }],
-    informationLines: [language === "kk" ? "Жұмыс өтілі әлі анықталмаған." : "Стаж работы ещё не определён."],
-    additionalInstructions: complete ? [] : [language === "kk"
-      ? "Шығу күні, лауазымы және бөлімшесі түпнұсқа DOCX-пен салыстыруды талап етеді."
-      : "Дата выхода, должность и подразделение требуют сверки с оригиналом приказа (DOCX)."],
+    // This approved type does not carry a tenure, a generic review warning,
+    // or an execution-control clause in its document presentation.
+    informationLines: [],
+    additionalInstructions: [],
   };
 }
 

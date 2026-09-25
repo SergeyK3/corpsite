@@ -883,7 +883,7 @@ def patch_personnel_order_document_header_route(payload: PersonnelOrderDocumentH
 def patch_personnel_order_document_item_route(payload: PersonnelOrderDocumentItemPatchIn, order_id: int = Path(..., ge=1), item_id: int = Path(..., ge=1), user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
     try:
         require_personnel_admin_or_403(user)
-        return call_service(patch_document_item, order_id=order_id,item_id=item_id,expected_document_revision=payload.expected_document_revision,item_type_code=payload.item_type_code,employee_id=payload.employee_id,effective_date=payload.effective_date,reason_code=payload.reason_code,reason_text=payload.reason_text,actor_user_id=_require_user_id(user))
+        return call_service(patch_document_item, order_id=order_id,item_id=item_id,expected_document_revision=payload.expected_document_revision,item_type_code=payload.item_type_code,employee_id=payload.employee_id,effective_date=payload.effective_date,document_subject_context=payload.document_subject_context.model_dump() if payload.document_subject_context else None,reason_code=payload.reason_code,reason_text=payload.reason_text,actor_user_id=_require_user_id(user))
     except PersonnelOrderDocumentReviewConflictError as exc: raise HTTPException(status_code=409,detail={"code":str(exc)})
     except ValueError as exc: raise HTTPException(status_code=422,detail={"code":str(exc)})
 

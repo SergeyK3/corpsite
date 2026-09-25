@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import date
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class PersonnelOrderHeaderOut(BaseModel):
@@ -412,12 +412,25 @@ class PersonnelOrderDocumentHeaderPatchIn(PersonnelOrderHeaderDuplicatePreviewIn
     reason_code: Optional[str] = Field(default=None, max_length=80)
     reason_text: Optional[str] = Field(default=None, max_length=2000)
 
+
+class PersonnelOrderDocumentSubjectContextIn(BaseModel):
+    """Document-only overrides for a selected employee; never an assignment mutation."""
+
+    model_config = {"extra": "forbid"}
+    org_unit_name: Optional[str] = Field(default=None, max_length=300)
+    position_name: Optional[str] = Field(default=None, max_length=300)
+    specialty: Optional[str] = Field(default=None, max_length=300)
+    rate: Optional[str] = Field(default=None, max_length=40)
+    basis_type: Optional[Literal["PERSONAL_APPLICATION", "OTHER"]] = None
+
+
 class PersonnelOrderDocumentItemPatchIn(BaseModel):
     model_config = {"extra": "forbid"}
     expected_document_revision: int = Field(..., ge=1)
     item_type_code: str = Field(..., min_length=1, max_length=80)
     employee_id: Optional[int] = Field(default=None, ge=1)
     effective_date: Optional[date] = None
+    document_subject_context: Optional[PersonnelOrderDocumentSubjectContextIn] = None
     reason_code: Optional[str] = Field(default=None, max_length=80)
     reason_text: Optional[str] = Field(default=None, max_length=2000)
 
@@ -429,12 +442,27 @@ class PersonnelOrderDocumentItemOut(BaseModel):
     item_type_code: str
     employee_id: Optional[int] = None
     employee_name: Optional[str] = None
+    org_unit_name: Optional[str] = None
+    position_name: Optional[str] = None
+    specialty: Optional[str] = None
+    rate: Optional[str] = None
+    needs_employee_link: bool = False
     effective_date: Optional[str] = None
 
 
 class PersonnelOrderDocumentItemListResponse(BaseModel):
     document_revision: int
     items: List[PersonnelOrderDocumentItemOut]
+
+
+class PersonnelOrderUnresolvedSubjectIn(BaseModel):
+    """Typed, unlinked subject supplied by HR when the employee is not in the directory."""
+
+    model_config = {"extra": "forbid"}
+    full_name: str = Field(..., min_length=1, max_length=300)
+    org_unit_name: str = Field(..., min_length=1, max_length=300)
+    position_name: str = Field(..., min_length=1, max_length=300)
+    specialty: str = Field(..., min_length=1, max_length=300)
 
 
 class PersonnelOrderManualDraftCreateIn(BaseModel):
@@ -444,8 +472,16 @@ class PersonnelOrderManualDraftCreateIn(BaseModel):
     source_title: str = Field(..., min_length=1, max_length=2000)
     source_title_locale: Literal["kk", "ru"]
     item_type_code: str = Field(..., min_length=1, max_length=80)
-    employee_id: int = Field(..., ge=1)
+    employee_id: Optional[int] = Field(default=None, ge=1)
+    unresolved_subject: Optional[PersonnelOrderUnresolvedSubjectIn] = None
+    document_subject_context: Optional[PersonnelOrderDocumentSubjectContextIn] = None
     effective_date: date
+
+    @model_validator(mode="after")
+    def require_exactly_one_subject(self) -> "PersonnelOrderManualDraftCreateIn":
+        if (self.employee_id is None) == (self.unresolved_subject is None):
+            raise ValueError("Specify either employee_id or unresolved_subject.")
+        return self
 
 
 class PersonnelOrderManualDraftCreateOut(BaseModel):

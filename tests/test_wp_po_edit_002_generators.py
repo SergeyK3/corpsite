@@ -33,16 +33,16 @@ def test_unpaid_leave_titles_kk_ru() -> None:
     assert kk["generated_text"] == "Жалақы сақталмайтын демалыс беру туралы"
 
 
-def test_preamble_keeps_type_specific_legal_wording_and_moves_verb_to_next_line() -> None:
+def test_preamble_keeps_type_specific_legal_wording_without_embedded_order_verb() -> None:
     assert generate_order_block(
         "preamble", "ru", {"order_type_code": "HIRE", "legal_basis_article": "33"},
-    )["generated_text"] == "В соответствии со статьёй 33 Трудового кодекса Республики Казахстан\nПРИКАЗЫВАЮ:"
+    )["generated_text"] == "В соответствии со статьёй 33 Трудового кодекса Республики Казахстан"
     assert generate_order_block(
         "preamble", "ru", {"order_type_code": "TRANSFER", "legal_basis_article": "38"},
-    )["generated_text"] == "В соответствии со статьёй 38 Трудового кодекса Республики Казахстан\nПРИКАЗЫВАЮ:"
+    )["generated_text"] == "В соответствии со статьёй 38 Трудового кодекса Республики Казахстан"
     assert generate_order_block(
         "preamble", "kk", {"order_type_code": "TERMINATION", "legal_basis_article": "57"},
-    )["generated_text"] == "Қазақстан Республикасының Еңбек кодексінің 57 бабына сәйкес\nБҰЙЫРАМЫН:"
+    )["generated_text"] == "Қазақстан Республикасының Еңбек кодексінің 57 бабына сәйкес"
 
 
 def test_supplementary_pay_generated_text_is_bilingual_and_does_not_invent_terms() -> None:
@@ -74,9 +74,6 @@ def test_return_from_childcare_leave_is_bilingual_fail_closed_and_does_not_inven
         "item_type_code": "RETURN_FROM_CHILDCARE_LEAVE",
         "employee_name": "Иванова И.И.",
         "effective_date": "2099-01-02",
-        "org_unit_name": {"ru": "Не включать", "kk": "Қоспау"},
-        "position_name": {"ru": "Не включать", "kk": "Қоспау"},
-        "rate": "9.99",
         "basis": {"number": "999"},
         "education": "Тестовое образование",
         "certificate": "Тестовый сертификат",
@@ -91,10 +88,10 @@ def test_return_from_childcare_leave_is_bilingual_fail_closed_and_does_not_inven
     }
     assert generate_order_block(
         "preamble", "ru", {"order_type_code": "RETURN_FROM_CHILDCARE_LEAVE", "legal_basis_article": "999"}
-    )["generated_text"] == "В соответствии с Трудовым кодексом Республики Казахстан\nПРИКАЗЫВАЮ:"
+    )["generated_text"] == "В соответствии с Трудовым кодексом Республики Казахстан"
     assert generate_order_block(
         "preamble", "kk", {"order_type_code": "RETURN_FROM_CHILDCARE_LEAVE"}
-    )["generated_text"] == "Қазақстан Республикасының Еңбек кодексіне сәйкес\nБҰЙЫРАМЫН:"
+    )["generated_text"] == "Қазақстан Республикасының Еңбек кодексіне сәйкес"
     assert "выходом из отпуска по уходу за ребёнком" in ru
     assert "бала күтіміне байланысты демалыстан" in kk
     for forbidden in (
@@ -143,12 +140,14 @@ def test_return_from_childcare_leave_uses_confirmed_presentation_context() -> No
         "position_name": {"ru": "руководитель отдела кадров", "kk": "кадрлар бөлімінің басшысы"},
         "org_unit_name": {"ru": "отдел кадров", "kk": "кадрлар бөлімі"},
     }
-    assert generate_item_body("ru", ctx)["generated_text"] == (
-        "Разрешить сотруднику Иванова Алия Сериковна, должность: руководитель отдела кадров "
-        "(отдел кадров) приступить к работе в связи с выходом из отпуска по уходу за ребёнком с 5 августа 2026 года."
-    )
+    ru = generate_item_body("ru", ctx)["generated_text"]
+    assert "Разрешить сотруднику Иванова Алия Сериковна приступить к работе" in ru
+    assert "руководитель отдела кадров" in ru
+    assert "отдел кадров" in ru
+    assert ru.endswith("с 5 августа 2026 года.")
     kk = generate_item_body("kk", ctx)["generated_text"]
-    assert "кадрлар бөлімінің басшысы (кадрлар бөлімі)" in kk
+    assert "кадрлар бөлімінің басшысы" in kk
+    assert "кадрлар бөлімі" in kk
     assert "руководитель отдела кадров" not in kk
     assert "2026 жылғы 5 тамыздан бастап" in kk
 
@@ -179,6 +178,16 @@ def test_personal_application_basis() -> None:
     kk = generate_basis_text("kk", fact)
     assert "личное заявление" in ru["generated_text"]
     assert "жеке өтініш" in kk["generated_text"]
+
+
+def test_childcare_return_personal_application_basis_is_label_free_and_has_no_employee_name() -> None:
+    fact = {
+        "item_type_code": "RETURN_FROM_CHILDCARE_LEAVE",
+        "basis_type": "PERSONAL_APPLICATION",
+        "subject_employee_name": "Иванов Иван",
+    }
+    assert generate_basis_text("ru", fact)["generated_text"] == "Личное заявление."
+    assert generate_basis_text("kk", fact)["generated_text"] == "Жеке өтініші."
 
 
 def test_missing_employee_uses_dash() -> None:

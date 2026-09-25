@@ -54,10 +54,10 @@ def build_item_ctx(item: Mapping[str, Any], employee_name: Optional[str]) -> Dic
     assignment = payload_dict(payload.get("to_assignment") or payload.get("assignment"))
     presentation = payload_dict(payload.get("presentation_context"))
     org_unit_name = pick_payload_value(
-        payload, "org_unit_name", "orgUnitName", "from_org_unit_name"
+        payload, "source_org_unit_name", "org_unit_name", "orgUnitName", "from_org_unit_name"
     ) or presentation.get("org_unit_name") or assignment.get("unit") or item.get("snapshot_org_unit_name")
     position_name = pick_payload_value(
-        payload, "position_name", "positionName", "from_position_name"
+        payload, "source_position_name", "position_name", "positionName", "from_position_name"
     ) or presentation.get("position_name") or assignment.get("position") or item.get("snapshot_position_name")
     return {
         "item_type_code": item.get("item_type_code"),
@@ -71,7 +71,8 @@ def build_item_ctx(item: Mapping[str, Any], employee_name: Optional[str]) -> Dic
         "to_position_name": pick_payload_value(
             payload, "to_position_name", "toPositionName"
         ) or assignment.get("position"),
-        "rate": pick_payload_value(payload, "employment_rate", "rate", "from_rate") or assignment.get("rate"),
+        "rate": pick_payload_value(payload, "document_rate", "employment_rate", "rate", "from_rate") or assignment.get("rate"),
+        "specialty": pick_payload_value(payload, "document_specialty"),
         "to_rate": pick_payload_value(payload, "to_rate", "toRate", "employment_rate") or assignment.get("rate"),
         "concurrent_rate": pick_payload_value(
             payload, "concurrent_rate", "concurrentRate"

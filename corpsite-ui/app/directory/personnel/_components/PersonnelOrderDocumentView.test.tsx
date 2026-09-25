@@ -44,6 +44,7 @@ describe("PersonnelOrderDocumentView", () => {
       employee_name: "Тестовый сотрудник",
       effective_date: "2026-08-05",
       payload: {
+        basis_ids: ["application"],
         presentation_context: {
           position_name: { ru: "руководитель отдела кадров", kk: "кадрлар бөлімінің басшысы" },
           org_unit_name: { ru: "отдел кадров", kk: "кадрлар бөлімі" },
@@ -61,14 +62,14 @@ describe("PersonnelOrderDocumentView", () => {
       title: "О выходе на работу из отпуска по уходу за ребёнком",
       preamble: "В соответствии с Трудовым кодексом Республики Казахстан",
       directive: "ПРИКАЗЫВАЮ:",
-      informationLines: ["Стаж работы ещё не определён."],
+      informationLines: [],
     });
     expect(ru?.points[0]?.text).toBe("Разрешить сотруднику Тестовый сотрудник, должность: руководитель отдела кадров (отдел кадров) приступить к работе в связи с выходом из отпуска по уходу за ребёнком с 5 августа 2026 года.");
     expect(kk).toMatchObject({
       title: "Бала күтіміне байланысты демалыстан жұмысқа шығу туралы",
       preamble: "Қазақстан Республикасының Еңбек кодексіне сәйкес",
       directive: "БҰЙЫРАМЫН:",
-      informationLines: ["Жұмыс өтілі әлі анықталмаған."],
+      informationLines: [],
     });
     expect(kk?.points[0]?.text).toBe("Қызметкер Тестовый сотрудник, лауазымы: кадрлар бөлімінің басшысы (кадрлар бөлімі), 2026 жылғы 5 тамыздан бастап бала күтіміне байланысты демалыстан жұмысқа шығуға рұқсат берілсін.");
 
@@ -76,7 +77,51 @@ describe("PersonnelOrderDocumentView", () => {
     const document = screen.getByTestId("personnel-order-document");
     expect(document).not.toHaveTextContent("утверждённый шаблон пока отсутствует");
     expect(document).toHaveTextContent("ПРИКАЗЫВАЮ:");
-    expect(screen.getByTestId("personnel-order-document-information")).toHaveTextContent("Стаж работы ещё не определён.");
+    expect(document.querySelectorAll(".text-center.font-semibold")).toHaveLength(1);
+    expect(document).not.toHaveTextContent("Стаж работы ещё не определён.");
+    expect(document).not.toHaveTextContent("Дополнительные распоряжения");
+    expect(document).not.toHaveTextContent("требуют сверки с оригиналом приказа");
+    expect(document).not.toHaveTextContent("Контроль за исполнением приказа");
+    expect(document).toHaveTextContent("Основание: Личное заявление.");
+    expect(document).not.toHaveTextContent("Основание: Основание:");
+    expect(screen.getByTestId("personnel-order-document-footer")).toHaveTextContent("Исполнитель: М. Умерзакова");
+    expect(screen.getByTestId("personnel-order-document-acknowledgement")).toHaveTextContent("С приказом ознакомлен(а):");
+  });
+
+  it("normalizes legacy labelled personal-application blocks for childcare return in RU and KK", () => {
+    const order = detail([{
+      item_id: 1, order_id: 42, item_number: 1, item_type_code: "RETURN_FROM_CHILDCARE_LEAVE", item_status: "ACTIVE",
+      employee_id: 7, employee_name: "Тестов Сотрудник", effective_date: "2026-08-05", payload: {},
+    }], []);
+    order.order.order_type_code = "RETURN_FROM_CHILDCARE_LEAVE";
+    const editorial = {
+      order_blocks: [
+        { block_type: "closing", locale: "ru", effective_text: "Контроль за исполнением приказа оставляю за собой." },
+        { block_type: "closing", locale: "kk", effective_text: "Бұйрықтың орындалуын бақылауды өзіме қалдырамын." },
+      ],
+      items: [{
+        order_item_id: 1,
+        blocks: [
+          { block_type: "basis", locale: "ru", effective_text: "Основание: личное заявление Тестов Сотрудник." },
+          { block_type: "basis", locale: "kk", effective_text: "Негіз: Тестов Сотрудниктің жеке өтініші." },
+        ],
+      }],
+    } as never;
+
+    const ru = renderPersonnelOrderDocument(order, "ru", editorial);
+    const kk = renderPersonnelOrderDocument(order, "kk", editorial);
+    expect(ru?.points[0]?.basis).toEqual(["Личное заявление."]);
+    expect(kk?.points[0]?.basis).toEqual(["Жеке өтініші."]);
+    expect(ru?.additionalInstructions).toEqual([]);
+    expect(kk?.additionalInstructions).toEqual([]);
+
+    render(<PersonnelOrderDocumentView detail={order} language="ru" editorial={editorial} />);
+    const document = screen.getByTestId("personnel-order-document");
+    expect(document.textContent?.match(/Основание:/g)).toHaveLength(1);
+    expect(document).toHaveTextContent("Основание: Личное заявление.");
+    expect(document).not.toHaveTextContent("Основание: личное заявление Тестов");
+    expect(document).not.toHaveTextContent("Дополнительные распоряжения");
+    expect(document).not.toHaveTextContent("Контроль за исполнением приказа");
   });
 
   it("keeps the template available when a return-from-childcare-leave item needs DOCX review", () => {
@@ -87,7 +132,7 @@ describe("PersonnelOrderDocumentView", () => {
     order.order.order_type_code = "RETURN_FROM_CHILDCARE_LEAVE";
     const document = renderPersonnelOrderDocument(order, "ru");
     expect(personnelOrderDocumentAvailable(order, "ru")).toBe(true);
-    expect(document?.additionalInstructions).toEqual(["Дата выхода, должность и подразделение требуют сверки с оригиналом приказа (DOCX)."]);
+    expect(document?.additionalInstructions).toEqual([]);
   });
 
   it("resolves approved templates from actions, not control-order numbers", () => {

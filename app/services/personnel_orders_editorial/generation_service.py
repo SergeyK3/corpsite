@@ -90,6 +90,7 @@ def generate_editorial(
     user_id: Optional[int],
     scope: Optional[Dict[str, Any]] = None,
     conn: Optional[Connection] = None,
+    allow_document_correction: bool = False,
 ) -> Dict[str, Any]:
     """Create missing blocks and regenerate generated_text; never clears overrides.
 
@@ -106,7 +107,8 @@ def generate_editorial(
         scope_tokens = lock_personnel_order_evidence_scopes_tx(active_conn, order_ids=[order_id])
         order = fetch_order(active_conn, order_id)
         assert_order_not_archived(order)
-        ensure_draft_writable(order)
+        if not allow_document_correction:
+            ensure_draft_writable(order)
 
         items = load_items(active_conn, order_id)
         employee_ids = [
@@ -224,6 +226,7 @@ def generate_editorial(
             subject_id = basis.get("subject_employee_id") if basis else None
             subject_name = names.get(int(subject_id)) if subject_id is not None else employee_name
             basis_fact = {
+                "item_type_code": item["item_type_code"],
                 "basis_type": basis.get("basis_type") if basis else None,
                 "subject_employee_id": subject_id,
                 "subject_employee_name": subject_name,

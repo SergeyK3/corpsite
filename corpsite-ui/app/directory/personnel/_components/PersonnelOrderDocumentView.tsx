@@ -14,6 +14,7 @@ import {
   normalizePersonnelOrderSignatoryRole,
   personnelOrderSignatoryRoleLabel,
 } from "../_lib/personnelOrderSignatoryRole";
+import { buildPersonnelOrderPrintViewModel } from "../_lib/personnelOrderPrintViewModel";
 
 export type { PersonnelOrderDocumentLanguage } from "./personnelOrderDocumentTemplates";
 
@@ -41,6 +42,17 @@ function signatoryPosition(position: string, language: PersonnelOrderDocumentLan
   return role ? personnelOrderSignatoryRoleLabel(role, language) : position;
 }
 
+function acknowledgementName(fullName: string | null, language: PersonnelOrderDocumentLanguage): string {
+  const parts = String(fullName || "").trim().split(/\s+/).filter(Boolean);
+  if (parts.length < 2) return "";
+  return language === "kk" ? `${parts[1][0]}. ${parts[0]}` : `${parts[0]} ${parts[1][0]}.`;
+}
+
+function acknowledgementDate(value: string | null, language: PersonnelOrderDocumentLanguage): string {
+  if (value) return new Date(`${value}T00:00:00`).toLocaleDateString("ru-RU");
+  return language === "kk" ? "«___» ______________ 20___ ж." : "«___» ______________ 20___ г.";
+}
+
 export function personnelOrderDocumentAvailable(
   detail: PersonnelOrderDetailResponse | null,
   language: PersonnelOrderDocumentLanguage,
@@ -63,6 +75,7 @@ export default function PersonnelOrderDocumentView({
 }) {
   const ui = labels[language];
   const document = renderPersonnelOrderDocument(detail, language, editorial);
+  const printModel = buildPersonnelOrderPrintViewModel(detail, { editorial });
   if (!document) {
     return (
       <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/35 dark:text-amber-100" data-testid="personnel-order-document-missing-template">
@@ -88,7 +101,7 @@ export default function PersonnelOrderDocumentView({
       </header>
 
       <p className="whitespace-pre-wrap text-sm leading-6">{document.preamble}</p>
-      <div className="font-semibold">{document.directive}</div>
+      <div className="text-center font-semibold">{document.directive}</div>
 
       <ol className="list-decimal space-y-4 pl-6">
         {document.points.map((point, index) => (
@@ -114,16 +127,25 @@ export default function PersonnelOrderDocumentView({
         </section>
       ) : null}
 
-      {detail.order.signed_by_position && detail.order.signed_by_name ? (
-        <footer className="grid gap-3 pt-6 text-sm sm:grid-cols-[1fr_auto]">
-          <div className="font-medium">{signatoryPosition(detail.order.signed_by_position, language)}</div>
-          <div className="text-right">{detail.order.signed_by_name}</div>
-        </footer>
-      ) : (
-        <p className="print:hidden rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950 dark:border-amber-900/60 dark:bg-amber-950/35 dark:text-amber-100" role="alert">
-          {language === "kk" ? "Басшының қолы анықталмады: құжат DOCX-пен тексерілген деп саналмайды." : "Подпись руководителя не установлена: документ не считается проверенным по DOCX."}
-        </p>
-      )}
+      <footer className="space-y-5 pt-6 text-sm" data-testid="personnel-order-document-footer">
+        <div className="grid gap-3 sm:grid-cols-[1fr_auto_auto]">
+          <div className="font-medium">
+            {printModel.signatory.position?.[language]
+              || (detail.order.signed_by_position ? signatoryPosition(detail.order.signed_by_position, language) : "Директор")}
+          </div>
+          <div className="border-b border-zinc-500 px-12" aria-label="Подпись директора" />
+          <div>{printModel.signatory.fio || detail.order.signed_by_name || ""}</div>
+        </div>
+        <section className="space-y-4" data-testid="personnel-order-document-acknowledgement">
+          {(printModel.acknowledgements.length ? printModel.acknowledgements : [{ employeeId: null, employeeName: null, acknowledgedOn: null }]).map((row, index) => (
+            <div key={`${row.employeeId ?? "unresolved"}-${index}`} className="space-y-1">
+              <p>{language === "kk" ? "Бұйрықпен таныстым:" : "С приказом ознакомлен(а):"} <span className="inline-block min-w-48 border-b border-zinc-500" />&nbsp;&nbsp;{acknowledgementName(row.employeeName, language)}</p>
+              <p>{acknowledgementDate(row.acknowledgedOn, language)}</p>
+            </div>
+          ))}
+        </section>
+        <p data-testid="personnel-order-document-executor">{language === "kk" ? "Орындаушы" : "Исполнитель"}: {printModel.executorName}</p>
+      </footer>
     </article>
   );
 }

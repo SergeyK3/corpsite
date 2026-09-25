@@ -92,8 +92,8 @@ export const PERSONNEL_ORDER_PRINT_DOCUMENT_TITLES: Record<string, LocalizedText
  */
 const PERSONNEL_ORDER_PRINT_PREAMBLE_FALLBACKS: Record<string, LocalizedText> = {
   RETURN_FROM_CHILDCARE_LEAVE: localizedText(
-    "Қазақстан Республикасының Еңбек кодексіне сәйкес\nБҰЙЫРАМЫН:",
-    "В соответствии с Трудовым кодексом Республики Казахстан\nПРИКАЗЫВАЮ:",
+    "Қазақстан Республикасының Еңбек кодексіне сәйкес",
+    "В соответствии с Трудовым кодексом Республики Казахстан",
   ),
 };
 
@@ -189,10 +189,12 @@ function pickManualOverrideByLocale(
   if (!blocks?.length) return null;
   const manual = (locale: "kk" | "ru") => {
     const block = blocks.find((b) => b.block_type === blockType && String(b.locale).toLowerCase() === locale);
+    // The same effective/current block must power both the HR drawer and the
+    // official print.  Only orders without a current editorial block fall
+    // back to legacy localized text or a deterministic type template.
     return optionalString(block?.override_text)
-      // Compatibility with pre-editorial API responses that did not expose
-      // generated_text/override_text separately.
-      || (!optionalString(block?.generated_text) ? optionalString(block?.effective_text) : null);
+      || optionalString(block?.generated_text)
+      || optionalString(block?.effective_text);
   };
   const kk = manual("kk");
   const ru = manual("ru");
@@ -239,7 +241,8 @@ function pickLocalizedTexts(
     editorialPreamble?.ru || legacyPreamble.ru || fallbackPreamble.ru,
   );
   const hasPreamble = Boolean(preambleMerged.kk || preambleMerged.ru);
-  const hasClosing = Boolean(editorialClosing?.kk || editorialClosing?.ru);
+  const hasClosing = String(detail.order.order_type_code || "").toUpperCase() !== "RETURN_FROM_CHILDCARE_LEAVE"
+    && Boolean(editorialClosing?.kk || editorialClosing?.ru);
   return {
     title,
     preamble: hasPreamble ? preambleMerged : null,

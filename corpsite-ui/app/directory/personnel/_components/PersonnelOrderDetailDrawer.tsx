@@ -21,6 +21,7 @@ import {
   isWritablePersonnelOrder,
   isPersonnelOrderApplied,
   mapPersonnelOrdersApiError,
+  personnelOrderTypeLabel,
   personnelOrderSourceModeLabel,
   type PersonnelOrderDetailResponse,
   type PersonnelOrderEditorialState,
@@ -28,6 +29,10 @@ import {
   type PersonnelOrderDocumentReview,
   type PersonnelOrderDocumentItem,
 } from "../_lib/personnelOrdersApi.client";
+import { getEmployees } from "@/app/directory/employees/_lib/api.client";
+import type { EmployeeDTO } from "@/app/directory/employees/_lib/types";
+import PersonnelOrderDocumentItemsForm from "./PersonnelOrderDocumentItemsForm";
+import PersonnelOrderBasisForm from "./PersonnelOrderBasisForm";
 import {
   hasPersonnelOrderSignatory,
   mergePersonnelOrderRequisitesForPreview,
@@ -143,7 +148,7 @@ const DOCUMENT_ITEM_TYPES = [
   "LEAVE.UNPAID.GRANT", "LEAVE.CHILDCARE.GRANT",
 ];
 
-function PersonnelOrderDocumentItemsForm({ detail, onSaved }: { detail: PersonnelOrderDetailResponse; onSaved: () => Promise<void> }) {
+function LegacyPersonnelOrderDocumentItemsForm({ detail, onSaved }: { detail: PersonnelOrderDetailResponse; onSaved: () => Promise<void> }) {
   const order = detail.order;
   const [items, setItems] = React.useState<PersonnelOrderDocumentItem[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -199,6 +204,31 @@ function PersonnelOrderDocumentItemsForm({ detail, onSaved }: { detail: Personne
       <button type="button" onClick={() => void save(item)} className="rounded bg-blue-600 px-3 py-2 text-sm text-white">Сохранить пункт</button>
     </article>)}
   </section>;
+}
+
+function LegacyTypedPersonnelOrderDocumentItemsForm({ detail, onSaved }: { detail: PersonnelOrderDetailResponse; onSaved: () => Promise<void> }) {
+  const order = detail.order;
+  const [items, setItems] = React.useState<PersonnelOrderDocumentItem[]>([]);
+  const [documentRevision, setDocumentRevision] = React.useState(order.document_revision ?? 1);
+  const [loading, setLoading] = React.useState(true);
+  const [message, setMessage] = React.useState<string | null>(null);
+  const [reasonCode, setReasonCode] = React.useState("");
+  const [reasonText, setReasonText] = React.useState("");
+  const [queries, setQueries] = React.useState<Record<number, string>>({});
+  const [matches, setMatches] = React.useState<Record<number, EmployeeDTO[]>>({});
+  const registered = ["REGISTERED", "SIGNED"].includes(order.status);
+  const load = React.useCallback(async () => { setLoading(true); try { const result = await listPersonnelOrderDocumentItems(order.order_id); setItems(result.items); setDocumentRevision(result.document_revision); } catch { setMessage("Не удалось загрузить пункты приказа."); } finally { setLoading(false); } }, [order.order_id]);
+  React.useEffect(() => { void load(); }, [load]);
+  const change = (itemId: number, patch: Partial<PersonnelOrderDocumentItem>) => setItems((old) => old.map((item) => item.item_id === itemId ? { ...item, ...patch } : item));
+  async function search(itemId: number, query: string) { setQueries((old) => ({ ...old, [itemId]: query })); if (query.trim().length < 2) { setMatches((old) => ({ ...old, [itemId]: [] })); return; } try { const result = await getEmployees({ q: query.trim(), status: "active", limit: 10, offset: 0 }); setMatches((old) => ({ ...old, [itemId]: result.items })); } catch { setMatches((old) => ({ ...old, [itemId]: [] })); } }
+  async function save(item: PersonnelOrderDocumentItem) {
+    if (registered && (!reasonCode.trim() || !reasonText.trim())) { setMessage("Для зарегистрированного приказа укажите причину и пояснение."); return; }
+    try {
+      const result = await patchPersonnelOrderDocumentItem(order.order_id, item.item_id, { expected_document_revision: documentRevision, item_type_code: item.item_type_code, employee_id: item.employee_id ?? null, effective_date: item.effective_date || null, document_subject_context: { position_name: item.position_name || null, org_unit_name: item.org_unit_name || null, specialty: item.specialty || null, rate: item.rate || null }, reason_code: reasonCode || null, reason_text: reasonText || null });
+      setMessage(result.no_op ? "Изменений нет." : "Пункт сохранён."); await onSaved(); await load();
+    } catch (error) { setMessage(String(error).includes("409") || String(error).includes("CONFLICT") ? "Приказ был изменён другим пользователем. Обновите данные и повторите действие." : "Не удалось сохранить пункт."); }
+  }
+  return <section data-testid="personnel-order-document-items" className="space-y-4"><h3 className="text-sm font-semibold">Пункты</h3><p className="text-xs text-zinc-500">Редактируются документные реквизиты; кадровые данные и служебный JSON не отображаются.</p>{registered ? <><label className="block text-sm">Причина исправления<input aria-label="Причина исправления пункта" value={reasonCode} onChange={(e) => setReasonCode(e.target.value)} className="mt-1 w-full rounded border p-2" /></label><label className="block text-sm">Пояснение<textarea aria-label="Пояснение исправления пункта" value={reasonText} onChange={(e) => setReasonText(e.target.value)} className="mt-1 w-full rounded border p-2" /></label></> : null}{message ? <p role="alert">{message}</p> : null}{loading ? <p className="text-sm text-zinc-500">Загрузка пунктов…</p> : null}{items.map((item) => <article key={item.item_id} className="space-y-2 rounded border border-zinc-200 p-3 dark:border-zinc-800" data-testid={`personnel-order-document-item-${item.item_id}`}><div className="text-sm font-medium">Пункт {item.item_number}</div><label className="block text-sm">Тип пункта<select aria-label={`Тип пункта ${item.item_id}`} value={item.item_type_code} onChange={(e) => change(item.item_id, { item_type_code: e.target.value })} className="mt-1 w-full rounded border p-2">{DOCUMENT_ITEM_TYPES.map((code) => <option key={code} value={code}>{personnelOrderTypeLabel(code)}</option>)}</select></label><label className="block text-sm">Сотрудник<input aria-label={`Сотрудник ${item.item_id}`} value={queries[item.item_id] ?? item.employee_name ?? ""} onChange={(e) => void search(item.item_id, e.target.value)} placeholder="Начните вводить ФИО" className="mt-1 w-full rounded border p-2" /></label>{(matches[item.item_id] || []).map((employee) => <button key={employee.id} type="button" className="block w-full rounded border px-2 py-1 text-left text-sm" onClick={() => { change(item.item_id, { employee_id: Number(employee.id), employee_name: employee.fio || null, position_name: employee.position?.name || null, org_unit_name: employee.org_unit?.name || null, specialty: null }); setQueries((old) => ({ ...old, [item.item_id]: employee.fio || "" })); setMatches((old) => ({ ...old, [item.item_id]: [] })); }}>{employee.fio} · {employee.position?.name || "Должность не указана"} · {employee.org_unit?.name || "Отделение не указано"}</button>)}<label className="block text-sm">Должность в приказе<input aria-label={`Должность в приказе ${item.item_id}`} value={item.position_name || ""} onChange={(e) => change(item.item_id, { position_name: e.target.value || null })} className="mt-1 w-full rounded border p-2" /></label><label className="block text-sm">Отделение в приказе<input aria-label={`Отделение в приказе ${item.item_id}`} value={item.org_unit_name || ""} onChange={(e) => change(item.item_id, { org_unit_name: e.target.value || null })} className="mt-1 w-full rounded border p-2" /></label><label className="block text-sm">Специальность<input aria-label={`Специальность ${item.item_id}`} value={item.specialty || ""} onChange={(e) => change(item.item_id, { specialty: e.target.value || null })} className="mt-1 w-full rounded border p-2" /></label><label className="block text-sm">Дата действия<input aria-label={`Дата действия ${item.item_id}`} type="date" value={item.effective_date || ""} onChange={(e) => change(item.item_id, { effective_date: e.target.value || null })} className="mt-1 w-full rounded border p-2" /></label><button type="button" onClick={() => void save(item)} className="rounded bg-blue-600 px-3 py-2 text-sm text-white">Сохранить пункт</button></article>)}</section>;
 }
 
 function renderFileLink(path?: string | null, url?: string | null): React.ReactNode {
@@ -648,6 +678,15 @@ export default function PersonnelOrderDetailDrawer({
                   </div>
                 ) : null}
               </section>
+              {detail ? (
+                <PersonnelOrderBasisForm
+                  detail={detail}
+                  onSaved={async () => {
+                    const next = await reload(order.order_id);
+                    if (next) onChanged?.(next);
+                  }}
+                />
+              ) : null}
             </>
           ) : null}
         </div>

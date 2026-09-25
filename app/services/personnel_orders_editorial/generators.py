@@ -324,7 +324,10 @@ def generate_order_block(
                 if legal_basis
                 else "В соответствии с Трудовым кодексом Республики Казахстан"
             )
-        text = f"{preamble}\n{'БҰЙЫРАМЫН:' if lang == 'kk' else 'ПРИКАЗЫВАЮ:'}"
+        # The directive is presentation chrome, rendered once by the shared
+        # document/print templates.  Keeping it out of the editorial preamble
+        # prevents duplicate order verbs in old and regenerated documents.
+        text = preamble
         return _result(
             generated_text=text,
             generator_key=GENERATOR_KEY_ORDER_PREAMBLE,
@@ -337,6 +340,16 @@ def generate_order_block(
         )
 
     if normalized_type == ORDER_BLOCK_TYPE_CLOSING:
+        if order_type == ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE:
+            return _result(
+                generated_text="",
+                generator_key=GENERATOR_KEY_ORDER_CLOSING,
+                fingerprint_payload={
+                    "block_type": ORDER_BLOCK_TYPE_CLOSING,
+                    "locale": lang,
+                    "order_type_code": order_type,
+                },
+            )
         if lang == "kk":
             text = "Бұйрықты орындалу бақылауын өзімде қалдырамын."
         else:
@@ -469,14 +482,20 @@ def generate_item_body(locale: str, item_ctx: Mapping[str, Any]) -> Dict[str, st
         org = _localized_name(org_unit_name, lang)
         position = _localized_position(position_name, lang)
         has_assignment_context = org != "—" and position != "—"
+        rate_value = _format_rate_value(rate)
         if lang == "kk":
-            assignment_part = f", лауазымы: {position} ({org})," if has_assignment_context else ""
-            date_part = f"{_format_date_from(effective_date, lang)} бастап" if has_effective_date else ""
-            text = f"Қызметкер {fio}{assignment_part} {date_part} бала күтіміне байланысты демалыстан жұмысқа шығуға рұқсат берілсін."
+            kk_org = "Инсульт орталығы" if str(org).casefold() == "инсультный центр" else org
+            assignment_part = f"{kk_org}ның {position}" if has_assignment_context else ""
+            rate_part = f" {rate_value} мөлшерлемемен" if rate_value else ""
+            date_part = f" {_format_date_from(effective_date, lang)} бастап" if has_effective_date else ""
+            text = f"{date_part.strip()} {assignment_part} {fio}ға{rate_part} бала күтіміне байланысты демалыстан жұмысқа шығуға рұқсат берілсін."
         else:
-            assignment_part = f", должность: {position.lower()} ({org.lower()})" if has_assignment_context else ""
+            ru_position = "врача (ординатора)" if str(position).casefold() == "врач (ординатор)" else position.lower()
+            ru_org = "Инсультного центра" if str(org).casefold() == "инсультный центр" else org
+            assignment_part = f" в должности {ru_position} {ru_org}" if has_assignment_context else ""
+            rate_part = f" на {rate_value} ставки" if rate_value else ""
             date_part = f" с {date}" if has_effective_date else ""
-            text = f"Разрешить сотруднику {fio}{assignment_part} приступить к работе в связи с выходом из отпуска по уходу за ребёнком{date_part}."
+            text = f"Разрешить сотруднику {fio} приступить к работе в связи с выходом из отпуска по уходу за ребёнком{assignment_part}{rate_part}{date_part}."
     elif item_type == ORDER_TYPE_TRANSFER:
         org = _localized_name(to_org_unit_name or org_unit_name, lang)
         position = _localized_position(to_position_name or position_name, lang)
@@ -580,6 +599,7 @@ def generate_item_body(locale: str, item_ctx: Mapping[str, Any]) -> Dict[str, st
             "to_org_unit_name": to_org_unit_name if to_org_unit_name not in (None, "") else None,
             "to_position_name": to_position_name if to_position_name not in (None, "") else None,
             "rate": rate if rate not in (None, "") else None,
+            "specialty": _clean(item_ctx.get("specialty")) or None,
             "to_rate": to_rate if to_rate not in (None, "") else None,
             "concurrent_rate": concurrent_rate if concurrent_rate not in (None, "") else None,
             "remaining_rate": remaining_rate if remaining_rate not in (None, "") else None,
@@ -608,9 +628,15 @@ def generate_basis_text(locale: str, basis_fact: Mapping[str, Any]) -> Dict[str,
     document_number = _clean(basis_fact.get("document_number"))
     document_date = _clean(basis_fact.get("document_date"))
     free_text = _clean(basis_fact.get("free_text"))
+    item_type = str(basis_fact.get("item_type_code") or "").strip().upper()
 
     if basis_type == BASIS_TYPE_PERSONAL_APPLICATION:
-        if lang == "ru":
+        if item_type == ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE:
+            # The shared display layer supplies the single localized heading.
+            # Keep this effective block label-free and never include the
+            # employee's name for this document type.
+            text = "Жеке өтініші." if lang == "kk" else "Личное заявление."
+        elif lang == "ru":
             text = (
                 "Основание: личное заявление."
                 if not genitive_ru

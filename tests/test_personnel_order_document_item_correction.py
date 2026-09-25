@@ -46,6 +46,8 @@ def _clean(order_id):
         conn.execute(text("DELETE FROM personnel_order_lifecycle_audit WHERE order_id=:id"), {"id": order_id})
         conn.execute(text("DELETE FROM personnel_order_editorial_blocks WHERE order_id=:id"), {"id": order_id})
         conn.execute(text("DELETE FROM personnel_order_item_editorial_blocks WHERE order_item_id IN (SELECT item_id FROM personnel_order_items WHERE order_id=:id)"), {"id": order_id})
+        conn.execute(text("DELETE FROM personnel_order_item_bases WHERE order_item_id IN (SELECT item_id FROM personnel_order_items WHERE order_id=:id)"), {"id": order_id})
+        conn.execute(text("DELETE FROM personnel_order_evidence_scopes WHERE order_id=:id"), {"id": order_id})
         conn.execute(text("DELETE FROM personnel_order_items WHERE order_id=:id"), {"id": order_id})
         conn.execute(text("DELETE FROM personnel_orders WHERE order_id=:id"), {"id": order_id})
 
@@ -55,7 +57,8 @@ def _patch(order_id, item_id, current_employee_id, actor, **overrides):
         order_id=order_id, item_id=item_id, expected_document_revision=overrides.pop("revision", 1),
         item_type_code=overrides.pop("item_type", "TRANSFER"), employee_id=overrides.pop("employee_id", current_employee_id),
         effective_date=overrides.pop("effective_date", date(2026, 9, 3)), reason_code=overrides.pop("reason_code", None),
-        reason_text=overrides.pop("reason_text", None), actor_user_id=actor,
+        reason_text=overrides.pop("reason_text", None),
+        document_subject_context=overrides.pop("document_subject_context", None), actor_user_id=actor,
     )
 
 
@@ -66,8 +69,39 @@ def test_item_change_recalculates_single_header_and_safe_projection(seed):
         assert result["no_op"] is False
         assert result["header_type_code"] == "TRANSFER"
         safe = list_document_items(order_id=order_id)
-        assert safe["items"] == [{"item_id": item_id, "item_number": 1, "item_type_code": "TRANSFER", "employee_id": alternate_employee_id, "employee_name": safe["items"][0]["employee_name"], "effective_date": "2026-09-03"}]
+        assert safe["items"][0] == {"item_id": item_id, "item_number": 1, "item_type_code": "TRANSFER", "employee_id": alternate_employee_id, "employee_name": safe["items"][0]["employee_name"], "org_unit_name": safe["items"][0]["org_unit_name"], "position_name": safe["items"][0]["position_name"], "specialty": None, "rate": None, "needs_employee_link": False, "effective_date": "2026-09-03"}
         assert "payload" not in safe["items"][0]
+    finally:
+        _clean(order_id)
+
+
+def test_document_context_is_typed_and_regenerates_bilingual_item_blocks(seed):
+    order_id, item_id, employee_id, _alternate_employee_id, actor = _create_order(seed)
+    try:
+        result = _patch(
+            order_id, item_id, employee_id, actor,
+            item_type="RETURN_FROM_CHILDCARE_LEAVE",
+            effective_date=date(2026, 8, 5),
+            document_subject_context={
+                "position_name": "врач (ординатор)",
+                "org_unit_name": "Инсультный центр",
+                "specialty": "невропатолог",
+            },
+        )
+        assert result["no_op"] is False
+        with engine.connect() as conn:
+            payload = conn.execute(text("SELECT payload FROM personnel_order_items WHERE item_id=:id"), {"id": item_id}).scalar_one()
+            blocks = conn.execute(text("SELECT locale, generated_text FROM personnel_order_item_editorial_blocks WHERE order_item_id=:id AND block_type='body' ORDER BY locale"), {"id": item_id}).mappings().all()
+        assert payload["source_position_name"] == "врач (ординатор)"
+        assert payload["source_org_unit_name"] == "Инсультный центр"
+        assert payload["document_specialty"] == "невропатолог"
+        assert {row["locale"] for row in blocks} == {"kk", "ru"}
+        assert all("2026" in row["generated_text"] for row in blocks)
+        safe = list_document_items(order_id=order_id)["items"][0]
+        assert safe["position_name"] == "врач (ординатор)"
+        assert safe["org_unit_name"] == "Инсультный центр"
+        assert safe["specialty"] == "невропатолог"
+        assert "payload" not in safe
     finally:
         _clean(order_id)
 

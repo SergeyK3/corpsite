@@ -15,6 +15,7 @@ export type PersonnelOrderType =
   | "SUPPLEMENTARY_PAY"
   | "LEAVE.ANNUAL.GRANT"
   | "LEAVE.UNPAID.GRANT"
+  | "LEAVE.CHILDCARE.GRANT"
   | "COMPOSITE";
 
 export const PERSONNEL_ORDER_STATUSES: readonly PersonnelOrderStatus[] = [
@@ -35,6 +36,7 @@ export const PERSONNEL_ORDER_TYPES: readonly PersonnelOrderType[] = [
   "SUPPLEMENTARY_PAY",
   "LEAVE.ANNUAL.GRANT",
   "LEAVE.UNPAID.GRANT",
+  "LEAVE.CHILDCARE.GRANT",
   "COMPOSITE",
 ] as const;
 
@@ -56,6 +58,7 @@ export const PERSONNEL_ORDER_TYPE_LABELS: Record<PersonnelOrderType, string> = {
   SUPPLEMENTARY_PAY: "Дополнительная оплата",
   "LEAVE.ANNUAL.GRANT": "Ежегодный трудовой отпуск",
   "LEAVE.UNPAID.GRANT": "Отпуск без сохранения заработной платы",
+  "LEAVE.CHILDCARE.GRANT": "Отпуск без сохранения заработной платы по уходу за ребёнком",
   COMPOSITE: "Составной",
 };
 

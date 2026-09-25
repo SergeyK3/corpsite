@@ -11,7 +11,7 @@ describe("EmployeeStatusCorrectionDrawer", () => {
     render(
       <EmployeeStatusCorrectionDrawer
         open
-        fullName="?????????? ????"
+        fullName="Иванова Анна"
         currentStatus="working"
         onClose={vi.fn()}
         onSubmit={onSubmit}
@@ -22,17 +22,17 @@ describe("EmployeeStatusCorrectionDrawer", () => {
       target: { value: "not_working" },
     });
     fireEvent.change(screen.getByTestId("employee-status-correction-reason"), {
-      target: { value: "??????" },
+      target: { value: "Сверка" },
     });
     fireEvent.click(screen.getByTestId("employee-status-correction-submit"));
 
     expect(onSubmit).toHaveBeenCalledWith({
       status: "not_working",
-      reason: "??????",
+      reason: "Сверка",
       comment: undefined,
     });
-    expect(screen.getByTestId("employee-status-correction-fio")).toHaveTextContent("?????????? ????");
-    expect(screen.getByTestId("employee-status-correction-current")).toHaveTextContent("????????");
+    expect(screen.getByTestId("employee-status-correction-fio")).toHaveTextContent("Иванова Анна");
+    expect(screen.getByTestId("employee-status-correction-current")).toHaveTextContent("Работает");
   });
 
   it("shows a clear instruction instead of a disabled submit for the current status", () => {
@@ -40,15 +40,15 @@ describe("EmployeeStatusCorrectionDrawer", () => {
     render(
       <EmployeeStatusCorrectionDrawer
         open
-        fullName="?????????"
+        fullName="Иванова"
         currentStatus="not_working"
         onClose={onClose}
         onSubmit={vi.fn()}
       />,
     );
 
-    expect(screen.getByTestId("employee-status-correction-close-top")).toHaveTextContent("???????");
-    expect(screen.getByTestId("employee-status-correction-select-other-status")).toHaveTextContent("???????? ?????? ??????");
+    expect(screen.getByTestId("employee-status-correction-close-top")).toHaveTextContent("Закрыть");
+    expect(screen.getByTestId("employee-status-correction-select-other-status")).toHaveTextContent("Выберите другой статус");
     expect(screen.queryByTestId("employee-status-correction-submit")).not.toBeInTheDocument();
     fireEvent.click(screen.getByTestId("employee-status-correction-close-top"));
     expect(onClose).toHaveBeenCalledOnce();

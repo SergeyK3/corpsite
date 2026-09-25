@@ -32,7 +32,7 @@ function linesHtml(lines: string[], className?: string): string {
     .join("");
 }
 
-/** Editorial preamble often embeds the order verb; avoid duplicating the centered verb block. */
+/** Legacy editorial preambles may embed a directive; render it once below. */
 export function preambleIncludesOrderVerb(
   preamble: LocalizedText,
   language: PersonnelOrderPrintLanguage,
@@ -103,11 +103,13 @@ function renderItem(
         ...(manual("kk") ? [manual("kk")!] : renderPersonnelOrderPrintItemText(item.context, "kk")),
         ...(manual("ru") ? [manual("ru")!] : renderPersonnelOrderPrintItemText(item.context, "ru")),
       ];
-  const tenure = language === "kk"
-    ? ["Жұмыс өтілі әлі анықталмаған."]
-    : language === "ru"
-      ? ["Стаж работы ещё не определён."]
-      : ["Жұмыс өтілі әлі анықталмаған.", "Стаж работы ещё не определён."];
+  const tenure = item.itemTypeCode === "RETURN_FROM_CHILDCARE_LEAVE"
+    ? []
+    : language === "kk"
+      ? ["Жұмыс өтілі әлі анықталмаған."]
+      : language === "ru"
+        ? ["Стаж работы ещё не определён."]
+        : ["Жұмыс өтілі әлі анықталмаған.", "Стаж работы ещё не определён."];
   const body = [...lines, ...tenure]
     .map((line) => `<p class="m-0">${escapePersonnelOrderPrintHtml(line)}</p>`)
     .join("");
@@ -124,7 +126,9 @@ function renderItems(
   language: PersonnelOrderPrintLanguage,
 ): string {
   const dictionaries = printDictionariesForLanguage(language);
-  const preambleLines = model.preamble ? resolveLocalizedLines(model.preamble, language) : [];
+  const preambleLines = model.preamble
+    ? resolveLocalizedLines(model.preamble, language).filter((line) => !isOrderVerbLine(line))
+    : [];
   const preamble =
     preambleLines.length > 0
       ? `<div class="personnel-order-print-block personnel-order-print-preamble">${preambleLines
@@ -132,13 +136,9 @@ function renderItems(
           .join("")}</div>`
       : "";
 
-  const showOrderVerb =
-    !model.preamble || !preambleIncludesOrderVerb(model.preamble, language);
-  const verb = showOrderVerb
-    ? `<div class="personnel-order-print-block personnel-order-print-order-verb">${dictionaries
-        .map((dict) => `<div>${escapePersonnelOrderPrintHtml(dict.orderVerb)}</div>`)
-        .join("")}</div>`
-    : "";
+  const verb = `<div class="personnel-order-print-block personnel-order-print-order-verb">${dictionaries
+    .map((dict) => `<div>${escapePersonnelOrderPrintHtml(dict.orderVerb)}</div>`)
+    .join("")}</div>`;
 
   const items =
     model.items.length === 0
@@ -156,11 +156,23 @@ function renderBasis(
 ): string {
   if (!model.basis.length) return "";
   const dictionaries = printDictionariesForLanguage(language);
-  const lines = model.basis.flatMap((entry) => resolveLocalizedLines(entry, language));
+  const rawLines = model.basis.flatMap((entry) => resolveLocalizedLines(entry, language));
+  const isChildcareReturn = String(model.documentTypeCode).toUpperCase() === "RETURN_FROM_CHILDCARE_LEAVE";
+  const joined = rawLines.join(" ").toLocaleLowerCase(language === "kk" ? "kk-KZ" : "ru-RU");
+  const personalApplication = language === "kk"
+    ? joined.includes("жеке") && joined.includes("өтініш")
+    : joined.includes("личн") && joined.includes("заявлен");
+  // Legacy blocks can carry an old label or employee name. The print owns the
+  // label, so canonicalize this approved basis before rendering it.
+  const lines = isChildcareReturn && personalApplication
+    ? [language === "kk" ? "Жеке өтініші." : "Личное заявление."]
+    : rawLines;
   if (!lines.length) return "";
 
   const headings = dictionaries
-    .map((dict) => `<div>${escapePersonnelOrderPrintHtml(dict.basis)}:</div>`)
+    .map((dict) => `<div>${escapePersonnelOrderPrintHtml(
+      isChildcareReturn ? (language === "kk" ? "Негіз" : "Основание") : dict.basis,
+    )}:</div>`)
     .join("");
   const list = lines
     .map((line) => `<li>${escapePersonnelOrderPrintHtml(line)}</li>`)
@@ -176,6 +188,7 @@ function renderClosing(
   model: PersonnelOrderPrintViewModel,
   language: PersonnelOrderPrintLanguage,
 ): string {
+  if (String(model.documentTypeCode).toUpperCase() === "RETURN_FROM_CHILDCARE_LEAVE") return "";
   if (!model.closing) return "";
   const lines = resolveLocalizedLines(model.closing, language);
   if (!lines.length) return "";
@@ -224,8 +237,10 @@ function renderAcknowledgement(
   model: PersonnelOrderPrintViewModel,
   language: PersonnelOrderPrintLanguage,
 ): string {
-  if (!model.acknowledgements.length) return "";
-  const rows = model.acknowledgements
+  const acknowledgementRows = model.acknowledgements.length
+    ? model.acknowledgements
+    : [{ employeeId: null, employeeName: null, acknowledgedOn: null }];
+  const rows = acknowledgementRows
     .map((row) => {
       const fullName = String(row.employeeName || "").trim();
       const parts = fullName.split(/\s+/).filter(Boolean);
@@ -238,11 +253,9 @@ function renderAcknowledgement(
       const content = locales.map((locale) => {
         const isKk = locale === "kk";
         const familiarization = isKk ? "Бұйрықпен таныстым:" : "С приказом ознакомлен(а):";
-        const nameLabel = isKk ? "Аты-жөні:" : "Фамилия И.:";
         const formattedName = isKk ? kkName : ruName;
         const dateLine = date || (isKk ? "«___» ______________ 20___ ж." : "«___» ______________ 20___ г.");
-        return `<div class="personnel-order-print-ack-name">${escapePersonnelOrderPrintHtml(familiarization)} ____________________</div>
-    <div class="personnel-order-print-ack-name">${escapePersonnelOrderPrintHtml(nameLabel)} ${escapePersonnelOrderPrintHtml(formattedName)} ____________________</div>
+        return `<div class="personnel-order-print-ack-name">${escapePersonnelOrderPrintHtml(familiarization)} ___________________&nbsp;&nbsp;${escapePersonnelOrderPrintHtml(formattedName)}</div>
     <div class="personnel-order-print-ack-date">${escapePersonnelOrderPrintHtml(dateLine)}</div>`;
       }).join("");
       return `<div class="personnel-order-print-ack-row">
@@ -256,6 +269,11 @@ function renderAcknowledgement(
   return `<section class="personnel-order-print-block personnel-order-print-acknowledgement" data-testid="personnel-order-print-acknowledgement">
   ${rows}
 </section>`;
+}
+
+function isOrderVerbLine(value: string): boolean {
+  const normalized = value.trim().toUpperCase().replace(/:$/, "");
+  return normalized === "ПРИКАЗЫВАЮ" || normalized === "БҰЙЫРАМЫН";
 }
 
 function renderExecutor(model: PersonnelOrderPrintViewModel, language: PersonnelOrderPrintLanguage): string {

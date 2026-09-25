@@ -51,7 +51,7 @@ vi.mock("../_lib/personnelOrdersApi.client", async () => {
     })),
     previewPersonnelOrderHeaderDuplicate: vi.fn(async () => ({ blocking: false, warnings: [], candidates: [] })),
     patchPersonnelOrderDocumentHeader: vi.fn(async () => ({ no_op: false, resulting_document_revision: 2 })),
-    listPersonnelOrderDocumentItems: vi.fn(async () => ({ document_revision: 1, items: [{ item_id: 9, item_number: 1, item_type_code: "HIRE", employee_id: 7, employee_name: "Test employee", effective_date: "2026-09-02" }] })),
+    listPersonnelOrderDocumentItems: vi.fn(async () => ({ document_revision: 1, items: [{ item_id: 9, item_number: 1, item_type_code: "HIRE", employee_id: 7, employee_name: "Test employee", position_name: null, org_unit_name: null, specialty: null, needs_employee_link: false, effective_date: "2026-09-02" }] })),
     patchPersonnelOrderDocumentItem: vi.fn(async () => ({ no_op: false, resulting_document_revision: 2, header_type_code: "TRANSFER" })),
     generatePersonnelOrderEditorial: vi.fn(async () => ({
       order_id: 42,
@@ -64,6 +64,7 @@ vi.mock("../_lib/personnelOrdersApi.client", async () => {
 });
 
 import { getPersonnelOrder, getPersonnelOrderEditorial, getPersonnelOrderDocumentReview, confirmPersonnelOrderDocumentReview, reopenPersonnelOrderDocumentReview, patchPersonnelOrderDocumentHeader, listPersonnelOrderDocumentItems, patchPersonnelOrderDocumentItem } from "../_lib/personnelOrdersApi.client";
+import { getEmployees } from "@/app/directory/employees/_lib/api.client";
 
 const detail: PersonnelOrderDetailResponse = {
   order: {
@@ -91,16 +92,24 @@ afterEach(() => {
 describe("PersonnelOrderDetailDrawer document tab", () => {
   it("opens typed document items without exposing payload and saves only allowed fields", async () => {
     vi.mocked(getPersonnelOrder).mockResolvedValue({ ...detail, order: { ...detail.order, document_revision: 3 } });
+    vi.mocked(getEmployees).mockResolvedValue({ items: [{ id: 8, fio: "Selected employee", position: { name: "Doctor" }, org_unit: { name: "Unit" } }] } as never);
     render(<PersonnelOrderDetailDrawer orderId={42} open onClose={vi.fn()} />);
     fireEvent.click(await screen.findByRole("tab", { name: "Пункты" }));
     expect(await screen.findByTestId("personnel-order-document-items")).toBeInTheDocument();
     expect(listPersonnelOrderDocumentItems).toHaveBeenCalledWith(42);
     expect(screen.queryByText(/payload/i)).not.toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Тип пункта 9"), { target: { value: "TRANSFER" } });
-    fireEvent.change(screen.getByLabelText("Сотрудник 9"), { target: { value: "8" } });
+    fireEvent.change(screen.getByLabelText("Сотрудник 9"), { target: { value: "Selected" } });
+    await waitFor(() => expect(getEmployees).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole("button", { name: /Selected employee/ }));
+    fireEvent.change(screen.getByLabelText("Должность в приказе 9"), { target: { value: "Document doctor" } });
+    fireEvent.change(screen.getByLabelText("Отделение в приказе 9"), { target: { value: "Document unit" } });
+    fireEvent.change(screen.getByLabelText("Специальность 9"), { target: { value: "Neurology" } });
     fireEvent.change(screen.getByLabelText("Дата действия 9"), { target: { value: "2026-09-03" } });
-    fireEvent.click(screen.getByRole("button", { name: "Сохранить пункт" }));
-    await waitFor(() => expect(patchPersonnelOrderDocumentItem).toHaveBeenCalledWith(42, 9, expect.objectContaining({ expected_document_revision: 3, item_type_code: "TRANSFER", employee_id: 8, effective_date: "2026-09-03" })));
+    fireEvent.change(screen.getByLabelText("Ставка в приказе 9"), { target: { value: "0,25" } });
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить изменения" }));
+    await waitFor(() => expect(patchPersonnelOrderDocumentItem).toHaveBeenCalledWith(42, 9, expect.objectContaining({ expected_document_revision: 1, item_type_code: "TRANSFER", employee_id: 8, effective_date: "2026-09-03", document_subject_context: { position_name: "Document doctor", org_unit_name: "Document unit", specialty: "Neurology", rate: "0,25" } })));
+    await waitFor(() => expect(getPersonnelOrderEditorial).toHaveBeenCalledTimes(2));
   });
 
   it("opens requisites with current values and sends typed header patch", async () => {
@@ -232,7 +241,7 @@ describe("PersonnelOrderDetailDrawer document tab", () => {
     });
   });
 
-  it("rehydrates the production-shaped top-level position override into Russian document and print", async () => {
+  it("uses the current editorial body in document and print instead of a stale payload fallback", async () => {
     const productionDetail: PersonnelOrderDetailResponse = {
       ...detail,
       order: {
@@ -282,18 +291,21 @@ describe("PersonnelOrderDetailDrawer document tab", () => {
     const { rerender } = render(<PersonnelOrderDetailDrawer orderId={405} open onClose={vi.fn()} />);
     fireEvent.click(await screen.findByRole("button", { name: "Русский" }));
     await waitFor(() => {
-      expect(screen.getByTestId("personnel-order-document")).toHaveTextContent("медбрат");
+      expect(screen.getByTestId("personnel-order-document")).toHaveTextContent("Перевести Иванова на должность медсестра.");
     });
+    fireEvent.click(screen.getByRole("tab", { name: "Данные" }));
+    expect(await screen.findByTestId("personnel-order-editorial-editor")).toHaveTextContent("Перевести Иванова на должность медсестра.");
+    fireEvent.click(screen.getByRole("tab", { name: "Документ" }));
     fireEvent.click(screen.getByTestId("personnel-order-drawer-print"));
     await waitFor(() => expect(print).toHaveBeenCalled());
-    expect(screen.getByTestId("personnel-order-active-print-root")).toHaveTextContent("медбрат");
+    expect(screen.getByTestId("personnel-order-active-print-root")).toHaveTextContent("Перевести Иванова на должность медсестра.");
     fireEvent(window, new Event("afterprint"));
 
     rerender(<PersonnelOrderDetailDrawer orderId={405} open={false} onClose={vi.fn()} />);
     rerender(<PersonnelOrderDetailDrawer orderId={405} open onClose={vi.fn()} />);
     fireEvent.click(await screen.findByRole("button", { name: "Русский" }));
     await waitFor(() => {
-      expect(screen.getByTestId("personnel-order-document")).toHaveTextContent("медбрат");
+      expect(screen.getByTestId("personnel-order-document")).toHaveTextContent("Перевести Иванова на должность медсестра.");
     });
   });
 

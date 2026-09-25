@@ -93,6 +93,22 @@ describe("PersonnelOrderPrintToolbar", () => {
 });
 
 describe("PersonnelOrderPrintDocument", () => {
+  it("keeps acknowledgement initials and executor in RU and KK without a recorded date", () => {
+    const model = buildPersonnelOrderPrintViewModel({ ...detail, acknowledgements: [] }, {});
+    for (const language of ["ru", "kk"] as const) {
+      const { unmount } = render(<PersonnelOrderPrintDocument model={model} language={language} />);
+      const acknowledgement = screen.getByTestId("personnel-order-print-acknowledgement");
+      expect(acknowledgement).toHaveTextContent(language === "ru" ? "Петрова А." : "А. Петрова");
+      expect(acknowledgement.innerHTML).toContain(
+        language === "ru"
+          ? "___________________&nbsp;&nbsp;Петрова А."
+          : "___________________&nbsp;&nbsp;А. Петрова",
+      );
+      expect(screen.getByTestId("personnel-order-print-executor")).toHaveTextContent("М. Умерзакова");
+      unmount();
+    }
+  });
+
   it("renders one localized acknowledgement and executor for a repeated subject", () => {
     const repeated = {
       ...detail,
@@ -327,7 +343,7 @@ describe("PersonnelOrderPrintDocument", () => {
     expect(screen.getByTestId("personnel-order-print-signature")).toHaveTextContent("Директор");
   });
 
-  it("does not duplicate ПРИКАЗЫВАЮ when editorial preamble already includes it", () => {
+  it("moves an embedded legacy directive out of the preamble and centers it once", () => {
     const model = buildPersonnelOrderPrintViewModel(detail, {
       organizationName: "ММЦ",
       editorial: {
@@ -353,7 +369,115 @@ describe("PersonnelOrderPrintDocument", () => {
     render(<PersonnelOrderPrintDocument model={model} language="ru" />);
     const items = screen.getByTestId("personnel-order-print-items");
     expect(items).toHaveTextContent("ПРИКАЗЫВАЮ");
-    expect(items.querySelectorAll(".personnel-order-print-order-verb")).toHaveLength(0);
-    expect(items.querySelectorAll(".personnel-order-print-preamble p")).toHaveLength(2);
+    expect(items.querySelectorAll(".personnel-order-print-order-verb")).toHaveLength(1);
+    expect(items.querySelectorAll(".personnel-order-print-preamble p")).toHaveLength(1);
+  });
+
+  it("renders the childcare-return basis and footer once without removed review blocks", () => {
+    const model = buildPersonnelOrderPrintViewModel({
+      ...detail,
+      order: {
+        ...detail.order,
+        order_type_code: "RETURN_FROM_CHILDCARE_LEAVE",
+        legal_basis_article: null,
+        basis_summary: null,
+      },
+      items: [{
+        ...detail.items[0],
+        item_type_code: "RETURN_FROM_CHILDCARE_LEAVE",
+        employee_name: "Тестова Анна",
+        payload: {},
+      }],
+    }, {
+      editorial: {
+        order_id: 42,
+        order_status: "DRAFT",
+        editable: true,
+        order_blocks: [{
+          block_id: 81, scope: "order", locale: "ru", block_type: "preamble",
+          generated_text: "В соответствии с Трудовым кодексом Республики Казахстан\nПРИКАЗЫВАЮ:",
+          effective_text: "В соответствии с Трудовым кодексом Республики Казахстан\nПРИКАЗЫВАЮ:",
+          review_status: "CURRENT", editable: true, revision: 1,
+        }, {
+          block_id: 82, scope: "order", locale: "ru", block_type: "closing",
+          generated_text: "Контроль за исполнением приказа оставляю за собой.",
+          effective_text: "Контроль за исполнением приказа оставляю за собой.",
+          review_status: "CURRENT", editable: true, revision: 1,
+        }],
+        items: [{
+          order_item_id: 1, item_number: 1, item_type_code: "RETURN_FROM_CHILDCARE_LEAVE", basis_required: true,
+          blocks: [{ block_id: 83, scope: "item", order_item_id: 1, locale: "ru", block_type: "body", generated_text: "Актуальный текст выхода.", effective_text: "Актуальный текст выхода.", review_status: "CURRENT", editable: true, revision: 1 },
+            { block_id: 84, scope: "item", order_item_id: 1, locale: "ru", block_type: "basis", generated_text: "Личное заявление.", effective_text: "Личное заявление.", review_status: "CURRENT", editable: true, revision: 1 }],
+        }],
+      },
+    });
+    render(<PersonnelOrderPrintDocument model={model} language="ru" />);
+    const document = screen.getByTestId("personnel-order-print-document");
+    expect(document).toHaveTextContent("Основание: Личное заявление.");
+    expect(document).not.toHaveTextContent("Стаж работы ещё не определён.");
+    expect(document).not.toHaveTextContent("Контроль за исполнением приказа");
+    expect(document.querySelectorAll(".personnel-order-print-order-verb")).toHaveLength(1);
+    expect(screen.getByTestId("personnel-order-print-acknowledgement").innerHTML).toContain("___________________&nbsp;&nbsp;Тестова А.");
+    expect(screen.getByTestId("personnel-order-print-executor")).toHaveTextContent("Исполнитель: М. Умерзакова");
+  });
+
+  it("normalizes a legacy labelled childcare-return basis in RU and KK print", () => {
+    const model = buildPersonnelOrderPrintViewModel({
+      ...detail,
+      order: { ...detail.order, order_type_code: "RETURN_FROM_CHILDCARE_LEAVE" },
+      items: [{ ...detail.items[0], item_type_code: "RETURN_FROM_CHILDCARE_LEAVE", employee_name: "Тестов Сотрудник" }],
+    }, {
+      editorial: {
+        order_id: 42,
+        order_status: "DRAFT",
+        editable: true,
+        order_blocks: [{ block_id: 90, scope: "order", locale: "ru", block_type: "closing", generated_text: "Контроль за исполнением приказа оставляю за собой.", effective_text: "Контроль за исполнением приказа оставляю за собой.", review_status: "CURRENT", editable: true, revision: 1 }, { block_id: 91, scope: "order", locale: "kk", block_type: "closing", generated_text: "Бұйрықтың орындалуын бақылауды өзіме қалдырамын.", effective_text: "Бұйрықтың орындалуын бақылауды өзіме қалдырамын.", review_status: "CURRENT", editable: true, revision: 1 }],
+        items: [{ order_item_id: 1, item_number: 1, item_type_code: "RETURN_FROM_CHILDCARE_LEAVE", basis_required: true, blocks: [{ block_id: 92, scope: "item", order_item_id: 1, locale: "ru", block_type: "basis", generated_text: "Основание: личное заявление Тестов Сотрудник.", effective_text: "Основание: личное заявление Тестов Сотрудник.", review_status: "CURRENT", editable: true, revision: 1 }, { block_id: 93, scope: "item", order_item_id: 1, locale: "kk", block_type: "basis", generated_text: "Негіз: Тестов Сотрудниктің жеке өтініші.", effective_text: "Негіз: Тестов Сотрудниктің жеке өтініші.", review_status: "CURRENT", editable: true, revision: 1 }] }],
+      },
+    });
+
+    for (const [language, label, value] of [["ru", "Основание:", "Личное заявление."], ["kk", "Негіз:", "Жеке өтініші."]] as const) {
+      const { unmount } = render(<PersonnelOrderPrintDocument model={model} language={language} />);
+      const document = screen.getByTestId("personnel-order-print-document");
+      expect((document.textContent || "").split(label).length - 1, language).toBe(1);
+      expect(screen.getByTestId("personnel-order-print-basis")).toHaveTextContent(`${label} ${value}`);
+      expect(screen.getByTestId("personnel-order-print-basis")).not.toHaveTextContent("Тестов Сотрудник");
+      expect(document).not.toHaveTextContent("Дополнительные распоряжения");
+      expect(document).not.toHaveTextContent("Қосымша өкімдер");
+      expect(document).not.toHaveTextContent("Контроль за исполнением приказа");
+      expect(document).not.toHaveTextContent("Бұйрықтың орындалуын бақылауды");
+      unmount();
+    }
+  });
+
+  it("uses a CURRENT generated editorial body over the legacy payload template", () => {
+    const model = buildPersonnelOrderPrintViewModel(detail, {
+      editorial: {
+        order_id: 42,
+        order_status: "DRAFT",
+        editable: true,
+        order_blocks: [],
+        items: [{
+          order_item_id: 1,
+          item_number: 1,
+          item_type_code: "TRANSFER",
+          basis_required: false,
+          blocks: [{
+            block_id: 70,
+            scope: "item",
+            order_item_id: 1,
+            locale: "ru",
+            block_type: "body",
+            generated_text: "Актуальный editorial body.",
+            effective_text: "Актуальный editorial body.",
+            review_status: "CURRENT",
+            editable: true,
+            revision: 2,
+          }],
+        }],
+      },
+    });
+    render(<PersonnelOrderPrintDocument model={model} language="ru" />);
+    expect(screen.getByTestId("personnel-order-print-items")).toHaveTextContent("Актуальный editorial body.");
   });
 });
