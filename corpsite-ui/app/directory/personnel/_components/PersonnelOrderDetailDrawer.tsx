@@ -9,6 +9,9 @@ import {
   formatPersonnelOrderNumber,
   getPersonnelOrder,
   getPersonnelOrderEditorial,
+  getPersonnelOrderDocumentReview,
+  confirmPersonnelOrderDocumentReview,
+  reopenPersonnelOrderDocumentReview,
   recordPersonnelOrderAcknowledgement,
   clearPersonnelOrderAcknowledgement,
   isWritablePersonnelOrder,
@@ -18,6 +21,7 @@ import {
   type PersonnelOrderDetailResponse,
   type PersonnelOrderEditorialState,
   type PersonnelOrderLinkedEvent,
+  type PersonnelOrderDocumentReview,
 } from "../_lib/personnelOrdersApi.client";
 import {
   hasPersonnelOrderSignatory,
@@ -155,6 +159,7 @@ export default function PersonnelOrderDetailDrawer({
 }: Props) {
   const [detail, setDetail] = React.useState<PersonnelOrderDetailResponse | null>(null);
   const [editorial, setEditorial] = React.useState<PersonnelOrderEditorialState | null>(null);
+  const [documentReview, setDocumentReview] = React.useState<PersonnelOrderDocumentReview | null>(null);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [toast, setToast] = React.useState<{ message: string; kind: "success" | "error" } | null>(null);
@@ -187,15 +192,18 @@ export default function PersonnelOrderDetailDrawer({
     setLoading(true);
     setError(null);
     try {
-      const [body, editorialState] = await Promise.all([
+      const [body, editorialState, review] = await Promise.all([
         getPersonnelOrder(id), getPersonnelOrderEditorial(id).catch(() => null),
+        getPersonnelOrderDocumentReview(id).catch(() => null),
       ]);
       setDetail(body);
       setEditorial(editorialState);
+      setDocumentReview(review);
       return body;
     } catch (e) {
       setDetail(null);
       setEditorial(null);
+      setDocumentReview(null);
       setError(mapPersonnelOrdersApiError(e, "Не удалось загрузить приказ."));
       return null;
     } finally {
@@ -277,6 +285,7 @@ export default function PersonnelOrderDetailDrawer({
             <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">
               {order ? `Приказ ${formatPersonnelOrderNumber(order.order_number)}` : "Кадровый приказ"}
             </h2>
+            {documentReview ? <p data-testid="personnel-order-document-review-status" className="mt-1 text-xs font-medium text-zinc-600">{documentReview.state === "CONFIRMED" ? "Подтверждено кадровой службой" : "Не подтверждено кадровой службой"} · ревизия {documentReview.document_revision}</p> : null}
             {order ? (
               <p className="mt-1 text-xs text-zinc-500">
                 {formatPersonnelOrderDate(order.order_date)} · ID {order.order_id}
@@ -379,6 +388,14 @@ export default function PersonnelOrderDetailDrawer({
 
           {order && activeTab === "data" ? (
             <>
+              {documentReview ? <section data-testid="personnel-order-document-review">
+                <h3 className="mb-2 text-sm font-semibold text-zinc-900 dark:text-zinc-100">Проверка документа</h3>
+                {documentReview.blockers.length || documentReview.warnings.length ? <ul className="mb-3 space-y-1 text-sm text-amber-800">{[...documentReview.blockers, ...documentReview.warnings].map((entry, index) => <li key={`${entry.code}-${index}`}>{entry.code}</li>)}</ul> : null}
+                <div className="flex flex-wrap gap-2">
+                  {documentReview.allowed_actions.includes("confirm") ? <button type="button" className="rounded bg-blue-600 px-3 py-1.5 text-sm text-white" onClick={async () => { const next = await confirmPersonnelOrderDocumentReview(order.order_id, { expected_document_revision: documentReview.document_revision, reason_code: "HR_DOCUMENT_REVIEW" }); setDocumentReview(next); await reload(order.order_id); }}>Подтвердить кадровой службой</button> : null}
+                  {documentReview.allowed_actions.includes("reopen") ? <button type="button" className="rounded border border-amber-500 px-3 py-1.5 text-sm" onClick={async () => { const note = window.prompt("Пояснение для возврата на проверку"); if (!note?.trim()) return; const next = await reopenPersonnelOrderDocumentReview(order.order_id, { expected_document_revision: documentReview.document_revision, reason_code: "HR_DOCUMENT_REOPEN", note }); setDocumentReview(next); await reload(order.order_id); }}>Вернуть на проверку</button> : null}
+                </div>
+              </section> : null}
               <section>
                 <h3 className="mb-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100">Действия</h3>
                 <PersonnelOrderLifecycleActions

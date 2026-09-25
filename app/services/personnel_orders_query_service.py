@@ -280,6 +280,7 @@ def _serialize_order_header(
         "order_type_code": str(row["order_type_code"]),
         "order_class": str(row.get("order_class") or "PERSONNEL"),
         "status": str(row["status"]),
+        "document_revision": int(row.get("document_revision") or 1),
         "source_mode": str(row["source_mode"]),
         "legal_basis_article": row.get("legal_basis_article"),
         "signed_by_employee_id": int(row["signed_by_employee_id"])
@@ -477,6 +478,7 @@ def list_personnel_orders(
             po.order_type_code,
             po.order_class,
             po.status,
+            po.document_revision,
             po.source_mode,
             po.legal_basis_article,
             po.signed_by_employee_id,
@@ -563,6 +565,7 @@ def get_personnel_order(order_id: int) -> Dict[str, Any]:
                     po.order_type_code,
                     po.order_class,
                     po.status,
+                    po.document_revision,
                     po.source_mode,
                     po.legal_basis_article,
                     po.signed_by_employee_id,

@@ -20,6 +20,9 @@ from app.directory.personnel_orders_schemas import (
     PersonnelOrderAcknowledgementRecordIn,
     PersonnelOrderCreateIn,
     PersonnelOrderDetailResponse,
+    PersonnelOrderDocumentReviewConfirmIn,
+    PersonnelOrderDocumentReviewOut,
+    PersonnelOrderDocumentReviewReopenIn,
     PersonnelOrderItemCreateIn,
     PersonnelOrderItemUpdateIn,
     PersonnelOrderLifecycleAuditListResponse,
@@ -86,6 +89,16 @@ from app.services.personnel_orders_query_service import (
 )
 from app.services.personnel_order_lifecycle_audit_service import (
     list_personnel_order_lifecycle_audit,
+)
+from app.services.personnel_order_document_review_service import (
+    PersonnelOrderDocumentReviewConflictError,
+    PersonnelOrderDocumentReviewValidationError,
+    get_document_review,
+    mutate_document_review,
+)
+from app.db.models.personnel_orders import (
+    LIFECYCLE_AUDIT_ACTION_DOCUMENT_CONFIRMED,
+    LIFECYCLE_AUDIT_ACTION_DOCUMENT_REOPENED,
 )
 from app.services.personnel_order_acknowledgement_service import (
     PersonnelOrderAcknowledgementError,
@@ -784,6 +797,52 @@ def list_personnel_order_lifecycle_audit_route(
         raise
     except Exception as exc:
         raise as_http500(exc)
+
+
+@router.get("/personnel-orders/{order_id}/document-review", response_model=PersonnelOrderDocumentReviewOut)
+def get_personnel_order_document_review_route(order_id: int = Path(..., ge=1), user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    try:
+        require_personnel_admin_or_403(user)
+        return call_service(get_document_review, order_id=order_id)
+    except PersonnelOrderNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise as_http500(exc)
+
+
+def _document_review_mutation(order_id: int, payload: Any, action: str, user: Dict[str, Any]) -> Dict[str, Any]:
+    require_personnel_admin_or_403(user)
+    try:
+        return call_service(mutate_document_review, order_id=order_id, action=action,
+            expected_document_revision=payload.expected_document_revision, reason_code=payload.reason_code,
+            note=payload.note, actor_user_id=_require_user_id(user))
+    except PersonnelOrderNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except PersonnelOrderDocumentReviewConflictError as exc:
+        raise HTTPException(status_code=409, detail={"code": str(exc), "message": str(exc)})
+    except PersonnelOrderDocumentReviewValidationError as exc:
+        raise HTTPException(status_code=422, detail={"code": "DOCUMENT_REVIEW_BLOCKED", "blockers": exc.blockers})
+
+
+@router.post("/personnel-orders/{order_id}/document-review/confirm", response_model=PersonnelOrderDocumentReviewOut)
+def confirm_personnel_order_document_review_route(payload: PersonnelOrderDocumentReviewConfirmIn, order_id: int = Path(..., ge=1), user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    return _document_review_mutation(order_id, payload, LIFECYCLE_AUDIT_ACTION_DOCUMENT_CONFIRMED, user)
+
+
+@router.post("/personnel-orders/{order_id}/document-review/reopen", response_model=PersonnelOrderDocumentReviewOut)
+def reopen_personnel_order_document_review_route(payload: PersonnelOrderDocumentReviewReopenIn, order_id: int = Path(..., ge=1), user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    return _document_review_mutation(order_id, payload, LIFECYCLE_AUDIT_ACTION_DOCUMENT_REOPENED, user)
+
+
+@router.get("/personnel-orders/{order_id}/document-history", response_model=PersonnelOrderLifecycleAuditListResponse)
+def list_personnel_order_document_history_route(order_id: int = Path(..., ge=1), user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    require_personnel_admin_or_403(user)
+    result = call_service(list_personnel_order_lifecycle_audit, order_id=order_id, limit=500, offset=0)
+    result["items"] = [item for item in result["items"] if item["action"] in {LIFECYCLE_AUDIT_ACTION_DOCUMENT_CONFIRMED, LIFECYCLE_AUDIT_ACTION_DOCUMENT_REOPENED}]
+    result["total"] = len(result["items"])
+    return result
 
 
 @router.post("/personnel-orders/{order_id}/cancel", response_model=PersonnelOrderDetailResponse)

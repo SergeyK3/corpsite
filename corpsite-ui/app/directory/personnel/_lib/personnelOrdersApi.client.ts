@@ -173,6 +173,18 @@ export type PersonnelOrderDetailResponse = {
   acknowledgements?: PersonnelOrderAcknowledgement[];
 };
 
+export type PersonnelOrderDocumentReview = {
+  state: "NEEDS_REVIEW" | "CONFIRMED";
+  document_revision: number;
+  confirmed_at?: string | null;
+  confirmed_by?: number | null;
+  latest_reason_code?: string | null;
+  latest_note?: string | null;
+  blockers: Array<{ code: string; [key: string]: unknown }>;
+  warnings: Array<{ code: string; [key: string]: unknown }>;
+  allowed_actions: string[];
+};
+
 export type PersonnelOrderAcknowledgement = {
   acknowledgement_event_id: number;
   order_id: number;
@@ -464,6 +476,18 @@ export async function getPersonnelOrder(orderId: number): Promise<PersonnelOrder
   return requestJson<PersonnelOrderDetailResponse>("GET", `/directory/personnel-orders/${orderId}`, {
     fallback: "Не удалось загрузить приказ.",
   });
+}
+
+export async function getPersonnelOrderDocumentReview(orderId: number): Promise<PersonnelOrderDocumentReview> {
+  return requestJson("GET", `/directory/personnel-orders/${orderId}/document-review`, { fallback: "Не удалось загрузить проверку документа." });
+}
+
+export async function confirmPersonnelOrderDocumentReview(orderId: number, payload: { expected_document_revision: number; reason_code: string; note?: string }) {
+  return requestJson<PersonnelOrderDocumentReview>("POST", `/directory/personnel-orders/${orderId}/document-review/confirm`, { body: payload, fallback: "Не удалось подтвердить документ." });
+}
+
+export async function reopenPersonnelOrderDocumentReview(orderId: number, payload: { expected_document_revision: number; reason_code: string; note: string }) {
+  return requestJson<PersonnelOrderDocumentReview>("POST", `/directory/personnel-orders/${orderId}/document-review/reopen`, { body: payload, fallback: "Не удалось вернуть документ на проверку." });
 }
 
 export async function listPersonnelOrderAcknowledgements(orderId: number): Promise<{ items: PersonnelOrderAcknowledgement[] }> {

@@ -89,6 +89,27 @@ def test_my_order_confirmation_uses_status_and_existing_review_signal(monkeypatc
     assert "ещё не подтверждён" in review.json()["warning"]
 
 
+def test_document_review_event_overrides_legacy_derived_confirmation_without_leaking_audit(monkeypatch) -> None:
+    app.dependency_overrides[get_current_user] = lambda: {"user_id": 1}
+    monkeypatch.setattr(subject, "_employee_for_user", lambda user: ("READY", 42))
+    confirmed_row = _row(status="DRAFT", review=True)
+    confirmed_row["document_review_action"] = "DOCUMENT_CONFIRMED"
+    reopened_row = _row(status="REGISTERED")
+    reopened_row["document_review_action"] = "DOCUMENT_REOPENED"
+    try:
+        monkeypatch.setattr(subject, "_safe_rows", lambda employee_id, **kwargs: [confirmed_row])
+        confirmed = TestClient(app).get("/api/ppr/me/orders/11")
+        monkeypatch.setattr(subject, "_safe_rows", lambda employee_id, **kwargs: [reopened_row])
+        reopened = TestClient(app).get("/api/ppr/me/orders/11")
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+    assert confirmed.json()["confirmation_status"] == "CONFIRMED"
+    assert reopened.json()["confirmation_status"] == "UNCONFIRMED"
+    for forbidden in ("actor", "reason", "note", "blockers", "history", "metadata_json"):
+        assert forbidden not in confirmed.text
+        assert forbidden not in reopened.text
+
+
 def test_my_orders_composite_title_uses_only_current_employee_item_types(monkeypatch) -> None:
     row = _row(status="REGISTERED")
     row["title"] = "COMPOSITE"

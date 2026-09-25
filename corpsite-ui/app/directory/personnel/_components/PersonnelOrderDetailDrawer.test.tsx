@@ -40,6 +40,15 @@ vi.mock("../_lib/personnelOrdersApi.client", async () => {
       order_blocks: [],
       items: [],
     })),
+    getPersonnelOrderDocumentReview: vi.fn(async () => ({
+      state: "NEEDS_REVIEW", document_revision: 1, blockers: [], warnings: [], allowed_actions: ["confirm"],
+    })),
+    confirmPersonnelOrderDocumentReview: vi.fn(async () => ({
+      state: "CONFIRMED", document_revision: 2, blockers: [], warnings: [], allowed_actions: ["reopen"],
+    })),
+    reopenPersonnelOrderDocumentReview: vi.fn(async () => ({
+      state: "NEEDS_REVIEW", document_revision: 3, blockers: [], warnings: [], allowed_actions: ["confirm"],
+    })),
     generatePersonnelOrderEditorial: vi.fn(async () => ({
       order_id: 42,
       order_status: "DRAFT",
@@ -50,7 +59,7 @@ vi.mock("../_lib/personnelOrdersApi.client", async () => {
   };
 });
 
-import { getPersonnelOrder, getPersonnelOrderEditorial } from "../_lib/personnelOrdersApi.client";
+import { getPersonnelOrder, getPersonnelOrderEditorial, getPersonnelOrderDocumentReview, confirmPersonnelOrderDocumentReview, reopenPersonnelOrderDocumentReview } from "../_lib/personnelOrdersApi.client";
 
 const detail: PersonnelOrderDetailResponse = {
   order: {
@@ -76,6 +85,30 @@ afterEach(() => {
 });
 
 describe("PersonnelOrderDetailDrawer document tab", () => {
+  it("keeps document blockers in data and uses revision for confirm", async () => {
+    vi.mocked(getPersonnelOrder).mockResolvedValue(detail);
+    vi.mocked(getPersonnelOrderDocumentReview).mockResolvedValue({ state: "NEEDS_REVIEW", document_revision: 7, blockers: [{ code: "MISSING_ORDER_NUMBER" }], warnings: [], allowed_actions: ["confirm"] });
+    render(<PersonnelOrderDetailDrawer orderId={42} open onClose={vi.fn()} />);
+    expect(await screen.findByTestId("personnel-order-document-review-status")).toHaveTextContent("ревизия 7");
+    expect(screen.queryByText("MISSING_ORDER_NUMBER")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "Данные" }));
+    expect(await screen.findByTestId("personnel-order-document-review")).toHaveTextContent("MISSING_ORDER_NUMBER");
+    fireEvent.click(screen.getByRole("button", { name: "Подтвердить кадровой службой" }));
+    await waitFor(() => expect(confirmPersonnelOrderDocumentReview).toHaveBeenCalledWith(42, { expected_document_revision: 7, reason_code: "HR_DOCUMENT_REVIEW" }));
+  });
+
+  it("requires a reopen explanation and sends it with the revision", async () => {
+    vi.mocked(getPersonnelOrder).mockResolvedValue(detail);
+    vi.mocked(getPersonnelOrderDocumentReview).mockResolvedValue({ state: "CONFIRMED", document_revision: 4, blockers: [], warnings: [], allowed_actions: ["reopen"] });
+    const prompt = vi.spyOn(window, "prompt").mockReturnValueOnce("").mockReturnValueOnce("Needs source review");
+    render(<PersonnelOrderDetailDrawer orderId={42} open onClose={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("tab", { name: "Данные" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Вернуть на проверку" }));
+    expect(reopenPersonnelOrderDocumentReview).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Вернуть на проверку" }));
+    await waitFor(() => expect(reopenPersonnelOrderDocumentReview).toHaveBeenCalledWith(42, { expected_document_revision: 4, reason_code: "HR_DOCUMENT_REOPEN", note: "Needs source review" }));
+    prompt.mockRestore();
+  });
   it("uses one drawer language switch before actions and keeps it across document, data, and print", async () => {
     vi.mocked(getPersonnelOrder).mockResolvedValue({
       ...detail,

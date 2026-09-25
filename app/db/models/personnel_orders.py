@@ -93,6 +93,8 @@ LIFECYCLE_AUDIT_ACTION_RESTORE = "RESTORE"
 LIFECYCLE_AUDIT_ACTION_VOID_APPLIED = "VOID_APPLIED"
 LIFECYCLE_AUDIT_ACTION_HARD_DELETE = "HARD_DELETE"
 LIFECYCLE_AUDIT_ACTION_COMPENSATE_LINK = "COMPENSATE_LINK"
+LIFECYCLE_AUDIT_ACTION_DOCUMENT_CONFIRMED = "DOCUMENT_CONFIRMED"
+LIFECYCLE_AUDIT_ACTION_DOCUMENT_REOPENED = "DOCUMENT_REOPENED"
 LIFECYCLE_AUDIT_ACTIONS = (
     LIFECYCLE_AUDIT_ACTION_CANCEL,
     LIFECYCLE_AUDIT_ACTION_ANNUL,
@@ -101,6 +103,8 @@ LIFECYCLE_AUDIT_ACTIONS = (
     LIFECYCLE_AUDIT_ACTION_VOID_APPLIED,
     LIFECYCLE_AUDIT_ACTION_HARD_DELETE,
     LIFECYCLE_AUDIT_ACTION_COMPENSATE_LINK,
+    LIFECYCLE_AUDIT_ACTION_DOCUMENT_CONFIRMED,
+    LIFECYCLE_AUDIT_ACTION_DOCUMENT_REOPENED,
 )
 
 SOURCE_MODE_PAPER = "PAPER"
@@ -193,6 +197,7 @@ class PersonnelOrder(Base):
         Index("ix_personnel_orders_status", "status"),
         Index("ix_personnel_orders_order_date", "order_date"),
         Index("ix_personnel_orders_type_code", "order_type_code"),
+        CheckConstraint("document_revision >= 1", name="chk_personnel_orders_document_revision"),
     )
 
     order_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
@@ -206,6 +211,7 @@ class PersonnelOrder(Base):
         server_default=text(f"'{ORDER_CLASS_PERSONNEL}'"),
     )
     status: Mapped[str] = mapped_column(Text, nullable=False)
+    document_revision: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
     source_mode: Mapped[str] = mapped_column(Text, nullable=False)
     legal_basis_article: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     signed_by_employee_id: Mapped[Optional[int]] = mapped_column(
@@ -601,6 +607,7 @@ class PersonnelOrderLifecycleAudit(Base):
         Index("ix_po_lifecycle_audit_order_created", "order_id", "created_at"),
         Index("ix_po_lifecycle_audit_actor_created", "actor_user_id", "created_at"),
         Index("ix_po_lifecycle_audit_action", "action"),
+        Index("ix_po_lifecycle_audit_order_document_action_created", "order_id", "action", "created_at"),
     )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)

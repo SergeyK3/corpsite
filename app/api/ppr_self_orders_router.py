@@ -139,6 +139,12 @@ def _safe_rows(
                      AND own_return_item.item_type_code = 'RETURN_FROM_CHILDCARE_LEAVE'
                  )
                ) AS needs_docx_review
+               ,(
+                 SELECT audit.action FROM public.personnel_order_lifecycle_audit audit
+                 WHERE audit.order_id = po.order_id
+                   AND audit.action IN ('DOCUMENT_CONFIRMED', 'DOCUMENT_REOPENED')
+                 ORDER BY audit.created_at DESC, audit.id DESC LIMIT 1
+               ) AS document_review_action
         FROM public.personnel_order_items poi
         JOIN public.personnel_orders po ON po.order_id = poi.order_id
         LEFT JOIN public.personnel_order_editorial_blocks title
@@ -157,7 +163,8 @@ def _safe_rows(
 
 
 def _serialize(row: Any, *, locale: Literal["kk", "ru"], detail: bool = False) -> dict[str, Any]:
-    confirmed = _confirmed(
+    explicit_review = str(row.get("document_review_action") or "")
+    confirmed = explicit_review == "DOCUMENT_CONFIRMED" if explicit_review else _confirmed(
         str(row["status"]),
         bool(row["needs_review"]),
         bool(row.get("needs_docx_review")),

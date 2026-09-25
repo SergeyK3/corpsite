@@ -14,6 +14,7 @@ class PersonnelOrderHeaderOut(BaseModel):
     order_type_code: str
     order_class: str
     status: str
+    document_revision: int = 1
     source_mode: str
     legal_basis_article: Optional[str] = None
     signed_by_employee_id: Optional[int] = None
@@ -339,6 +340,8 @@ PersonnelOrderLifecycleAuditAction = Literal[
     "VOID_APPLIED",
     "HARD_DELETE",
     "COMPENSATE_LINK",
+    "DOCUMENT_CONFIRMED",
+    "DOCUMENT_REOPENED",
 ]
 
 
@@ -362,3 +365,32 @@ class PersonnelOrderLifecycleAuditListResponse(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+PersonnelOrderDocumentReviewState = Literal["NEEDS_REVIEW", "CONFIRMED"]
+
+
+class PersonnelOrderDocumentReviewOut(BaseModel):
+    state: PersonnelOrderDocumentReviewState
+    document_revision: int = Field(ge=1)
+    confirmed_at: Optional[str] = None
+    confirmed_by: Optional[int] = None
+    latest_reason_code: Optional[str] = None
+    latest_note: Optional[str] = None
+    blockers: List[Dict[str, Any]] = Field(default_factory=list)
+    warnings: List[Dict[str, Any]] = Field(default_factory=list)
+    allowed_actions: List[str] = Field(default_factory=list)
+
+
+class PersonnelOrderDocumentReviewConfirmIn(BaseModel):
+    model_config = {"extra": "forbid"}
+    expected_document_revision: int = Field(..., ge=1)
+    reason_code: str = Field(..., min_length=1, max_length=80)
+    note: Optional[str] = Field(default=None, max_length=2000)
+
+
+class PersonnelOrderDocumentReviewReopenIn(BaseModel):
+    model_config = {"extra": "forbid"}
+    expected_document_revision: int = Field(..., ge=1)
+    reason_code: str = Field(..., min_length=1, max_length=80)
+    note: str = Field(..., min_length=1, max_length=2000)
