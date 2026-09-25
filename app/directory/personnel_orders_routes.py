@@ -23,6 +23,8 @@ from app.directory.personnel_orders_schemas import (
     PersonnelOrderDocumentReviewConfirmIn,
     PersonnelOrderDocumentReviewOut,
     PersonnelOrderDocumentReviewReopenIn,
+    PersonnelOrderDocumentHeaderPatchIn,
+    PersonnelOrderHeaderDuplicatePreviewIn,
     PersonnelOrderItemCreateIn,
     PersonnelOrderItemUpdateIn,
     PersonnelOrderLifecycleAuditListResponse,
@@ -96,6 +98,7 @@ from app.services.personnel_order_document_review_service import (
     get_document_review,
     mutate_document_review,
 )
+from app.services.personnel_order_document_header_service import duplicate_preview, patch_document_header
 from app.db.models.personnel_orders import (
     LIFECYCLE_AUDIT_ACTION_DOCUMENT_CONFIRMED,
     LIFECYCLE_AUDIT_ACTION_DOCUMENT_REOPENED,
@@ -840,9 +843,24 @@ def reopen_personnel_order_document_review_route(payload: PersonnelOrderDocument
 def list_personnel_order_document_history_route(order_id: int = Path(..., ge=1), user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
     require_personnel_admin_or_403(user)
     result = call_service(list_personnel_order_lifecycle_audit, order_id=order_id, limit=500, offset=0)
-    result["items"] = [item for item in result["items"] if item["action"] in {LIFECYCLE_AUDIT_ACTION_DOCUMENT_CONFIRMED, LIFECYCLE_AUDIT_ACTION_DOCUMENT_REOPENED}]
+    result["items"] = [item for item in result["items"] if item["action"] in {LIFECYCLE_AUDIT_ACTION_DOCUMENT_CONFIRMED, LIFECYCLE_AUDIT_ACTION_DOCUMENT_REOPENED, "HEADER_UPDATED"}]
     result["total"] = len(result["items"])
     return result
+
+@router.post("/personnel-orders/header-duplicate-preview")
+def personnel_order_header_duplicate_preview_route(payload: PersonnelOrderHeaderDuplicatePreviewIn, user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    require_personnel_admin_or_403(user)
+    return call_service(duplicate_preview, order_number=payload.order_number, order_date=payload.order_date, order_id=payload.order_id)
+
+@router.patch("/personnel-orders/{order_id}/document-header")
+def patch_personnel_order_document_header_route(payload: PersonnelOrderDocumentHeaderPatchIn, order_id: int = Path(..., ge=1), user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    try:
+        require_personnel_admin_or_403(user)
+        return call_service(patch_document_header, order_id=order_id, expected_document_revision=payload.expected_document_revision, order_number=payload.order_number, order_date=payload.order_date, source_title=payload.source_title, source_title_locale=payload.source_title_locale, reason_code=payload.reason_code, reason_text=payload.reason_text, actor_user_id=_require_user_id(user))
+    except PersonnelOrderDocumentReviewConflictError as exc:
+        raise HTTPException(status_code=409, detail={"code":str(exc)})
+    except ValueError as exc:
+        raise HTTPException(status_code=422 if str(exc)=="CORRECTION_REASON_REQUIRED" else 409, detail={"code":str(exc)})
 
 
 @router.post("/personnel-orders/{order_id}/cancel", response_model=PersonnelOrderDetailResponse)

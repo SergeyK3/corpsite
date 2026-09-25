@@ -12,6 +12,8 @@ import {
   getPersonnelOrderDocumentReview,
   confirmPersonnelOrderDocumentReview,
   reopenPersonnelOrderDocumentReview,
+  previewPersonnelOrderHeaderDuplicate,
+  patchPersonnelOrderDocumentHeader,
   recordPersonnelOrderAcknowledgement,
   clearPersonnelOrderAcknowledgement,
   isWritablePersonnelOrder,
@@ -104,6 +106,34 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
+function PersonnelOrderDocumentHeaderForm({ detail, onSaved }: { detail: PersonnelOrderDetailResponse; onSaved: () => Promise<void> }) {
+  const order = detail.order;
+  const [number, setNumber] = React.useState(order.order_number || "");
+  const [orderDate, setOrderDate] = React.useState(order.order_date || "");
+  const [title, setTitle] = React.useState(order.source_title || "");
+  const [locale, setLocale] = React.useState(order.source_title_locale || "unknown");
+  const [reasonCode, setReasonCode] = React.useState(""); const [reasonText, setReasonText] = React.useState("");
+  const [message, setMessage] = React.useState<string | null>(null); const registered = ["REGISTERED", "SIGNED"].includes(order.status);
+  async function save() {
+    if (registered && (!reasonCode.trim() || !reasonText.trim())) { setMessage("Для зарегистрированного приказа укажите причину и пояснение."); return; }
+    try {
+      const duplicate = await previewPersonnelOrderHeaderDuplicate({ order_id: order.order_id, order_number: number, order_date: orderDate || null });
+      if (duplicate.blocking) { setMessage("Найден дублирующий номер приказа и дата."); return; }
+      if (duplicate.warnings.length && !window.confirm("Есть приказ с тем же номером и другой датой. Продолжить?")) return;
+      await patchPersonnelOrderDocumentHeader(order.order_id, { expected_document_revision: order.document_revision ?? 1, order_number: number, order_date: orderDate || null, source_title: title || null, source_title_locale: locale as "kk" | "ru" | "unknown", reason_code: reasonCode || null, reason_text: reasonText || null });
+      setMessage("Реквизиты сохранены."); await onSaved();
+    } catch (error) { setMessage(String(error).includes("409") || String(error).includes("CONFLICT") ? "Приказ был изменён другим пользователем. Обновите данные и повторите действие." : "Не удалось сохранить реквизиты."); }
+  }
+  return <section data-testid="personnel-order-requisites" className="space-y-3"><h3 className="text-sm font-semibold">Реквизиты</h3>
+    <label className="block text-sm">Номер приказа<input aria-label="Номер приказа" value={number} onChange={e=>setNumber(e.target.value)} className="mt-1 w-full rounded border p-2" /></label>
+    <label className="block text-sm">Дата приказа<input aria-label="Дата приказа" type="date" value={orderDate} onChange={e=>setOrderDate(e.target.value)} className="mt-1 w-full rounded border p-2" /></label>
+    <label className="block text-sm">Исходное название<textarea aria-label="Исходное название" value={title} onChange={e=>setTitle(e.target.value)} className="mt-1 w-full rounded border p-2" /></label>
+    <label className="block text-sm">Язык исходного названия<select aria-label="Язык исходного названия" value={locale} onChange={e=>setLocale(e.target.value)} className="mt-1 w-full rounded border p-2"><option value="kk">Қазақша</option><option value="ru">Русский</option><option value="unknown">Неизвестен</option></select></label>
+    <label className="block text-sm">Причина исправления<input aria-label="Причина исправления" value={reasonCode} onChange={e=>setReasonCode(e.target.value)} className="mt-1 w-full rounded border p-2" /></label>
+    <label className="block text-sm">Пояснение<textarea aria-label="Пояснение" value={reasonText} onChange={e=>setReasonText(e.target.value)} className="mt-1 w-full rounded border p-2" /></label>
+    <p className="text-xs text-zinc-500">Ревизия документа: {order.document_revision ?? 1}</p>{message ? <p role="alert">{message}</p> : null}<button type="button" onClick={()=>void save()} className="rounded bg-blue-600 px-3 py-2 text-sm text-white">Сохранить реквизиты</button></section>;
+}
+
 function renderFileLink(path?: string | null, url?: string | null): React.ReactNode {
   const href = String(url || path || "").trim();
   if (!href) return "—";
@@ -168,7 +198,7 @@ export default function PersonnelOrderDetailDrawer({
   const [printError, setPrintError] = React.useState<string | null>(null);
   const [headerRequisitesDraft, setHeaderRequisitesDraft] =
     React.useState<PersonnelOrderRequisitesSnapshot | null>(null);
-  const [activeTab, setActiveTab] = React.useState<"document" | "data">("document");
+  const [activeTab, setActiveTab] = React.useState<"document" | "data" | "requisites">("document");
   const [orderLanguage, setOrderLanguage] = React.useState<PersonnelOrderDocumentLanguage>("kk");
   const [printLanguage, setPrintLanguage] = React.useState<PersonnelOrderDocumentLanguage | null>(null);
 
@@ -328,6 +358,7 @@ export default function PersonnelOrderDetailDrawer({
           >
             Документ
           </button>
+          <button type="button" role="tab" aria-selected={activeTab === "requisites"} onClick={() => setActiveTab("requisites")} className={`rounded-t-lg px-3 py-2 text-sm font-medium ${activeTab === "requisites" ? "bg-zinc-100 text-zinc-950" : "text-zinc-500"}`}>Реквизиты</button>
           <button
             type="button"
             role="tab"
@@ -385,6 +416,7 @@ export default function PersonnelOrderDetailDrawer({
           {order && activeTab === "document" ? (
             <PersonnelOrderDocumentView detail={detail} language={orderLanguage} editorial={editorial} />
           ) : null}
+          {order && activeTab === "requisites" && detail ? <PersonnelOrderDocumentHeaderForm detail={detail} onSaved={async () => { await reload(order.order_id); }} /> : null}
 
           {order && activeTab === "data" ? (
             <>

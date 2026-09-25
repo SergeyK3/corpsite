@@ -95,6 +95,7 @@ LIFECYCLE_AUDIT_ACTION_HARD_DELETE = "HARD_DELETE"
 LIFECYCLE_AUDIT_ACTION_COMPENSATE_LINK = "COMPENSATE_LINK"
 LIFECYCLE_AUDIT_ACTION_DOCUMENT_CONFIRMED = "DOCUMENT_CONFIRMED"
 LIFECYCLE_AUDIT_ACTION_DOCUMENT_REOPENED = "DOCUMENT_REOPENED"
+LIFECYCLE_AUDIT_ACTION_HEADER_UPDATED = "HEADER_UPDATED"
 LIFECYCLE_AUDIT_ACTIONS = (
     LIFECYCLE_AUDIT_ACTION_CANCEL,
     LIFECYCLE_AUDIT_ACTION_ANNUL,
@@ -105,6 +106,7 @@ LIFECYCLE_AUDIT_ACTIONS = (
     LIFECYCLE_AUDIT_ACTION_COMPENSATE_LINK,
     LIFECYCLE_AUDIT_ACTION_DOCUMENT_CONFIRMED,
     LIFECYCLE_AUDIT_ACTION_DOCUMENT_REOPENED,
+    LIFECYCLE_AUDIT_ACTION_HEADER_UPDATED,
 )
 
 SOURCE_MODE_PAPER = "PAPER"
@@ -198,6 +200,7 @@ class PersonnelOrder(Base):
         Index("ix_personnel_orders_order_date", "order_date"),
         Index("ix_personnel_orders_type_code", "order_type_code"),
         CheckConstraint("document_revision >= 1", name="chk_personnel_orders_document_revision"),
+        CheckConstraint("source_title_locale IS NULL OR source_title_locale IN ('kk', 'ru', 'unknown')", name="chk_personnel_orders_source_title_locale"),
     )
 
     order_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
@@ -212,6 +215,8 @@ class PersonnelOrder(Base):
     )
     status: Mapped[str] = mapped_column(Text, nullable=False)
     document_revision: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
+    source_title: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    source_title_locale: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     source_mode: Mapped[str] = mapped_column(Text, nullable=False)
     legal_basis_article: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     signed_by_employee_id: Mapped[Optional[int]] = mapped_column(

@@ -15,6 +15,8 @@ class PersonnelOrderHeaderOut(BaseModel):
     order_class: str
     status: str
     document_revision: int = 1
+    source_title: Optional[str] = None
+    source_title_locale: Optional[Literal["kk", "ru", "unknown"]] = None
     source_mode: str
     legal_basis_article: Optional[str] = None
     signed_by_employee_id: Optional[int] = None
@@ -342,6 +344,7 @@ PersonnelOrderLifecycleAuditAction = Literal[
     "COMPENSATE_LINK",
     "DOCUMENT_CONFIRMED",
     "DOCUMENT_REOPENED",
+    "HEADER_UPDATED",
 ]
 
 
@@ -394,3 +397,16 @@ class PersonnelOrderDocumentReviewReopenIn(BaseModel):
     expected_document_revision: int = Field(..., ge=1)
     reason_code: str = Field(..., min_length=1, max_length=80)
     note: str = Field(..., min_length=1, max_length=2000)
+
+class PersonnelOrderHeaderDuplicatePreviewIn(BaseModel):
+    model_config = {"extra": "forbid"}
+    order_id: Optional[int] = Field(default=None, ge=1)
+    order_number: str = Field(..., min_length=1, max_length=200)
+    order_date: Optional[date] = None
+
+class PersonnelOrderDocumentHeaderPatchIn(PersonnelOrderHeaderDuplicatePreviewIn):
+    expected_document_revision: int = Field(..., ge=1)
+    source_title: Optional[str] = Field(default=None, max_length=2000)
+    source_title_locale: Optional[Literal["kk", "ru", "unknown"]] = None
+    reason_code: Optional[str] = Field(default=None, max_length=80)
+    reason_text: Optional[str] = Field(default=None, max_length=2000)

@@ -49,6 +49,8 @@ vi.mock("../_lib/personnelOrdersApi.client", async () => {
     reopenPersonnelOrderDocumentReview: vi.fn(async () => ({
       state: "NEEDS_REVIEW", document_revision: 3, blockers: [], warnings: [], allowed_actions: ["confirm"],
     })),
+    previewPersonnelOrderHeaderDuplicate: vi.fn(async () => ({ blocking: false, warnings: [], candidates: [] })),
+    patchPersonnelOrderDocumentHeader: vi.fn(async () => ({ no_op: false, resulting_document_revision: 2 })),
     generatePersonnelOrderEditorial: vi.fn(async () => ({
       order_id: 42,
       order_status: "DRAFT",
@@ -59,7 +61,7 @@ vi.mock("../_lib/personnelOrdersApi.client", async () => {
   };
 });
 
-import { getPersonnelOrder, getPersonnelOrderEditorial, getPersonnelOrderDocumentReview, confirmPersonnelOrderDocumentReview, reopenPersonnelOrderDocumentReview } from "../_lib/personnelOrdersApi.client";
+import { getPersonnelOrder, getPersonnelOrderEditorial, getPersonnelOrderDocumentReview, confirmPersonnelOrderDocumentReview, reopenPersonnelOrderDocumentReview, patchPersonnelOrderDocumentHeader } from "../_lib/personnelOrdersApi.client";
 
 const detail: PersonnelOrderDetailResponse = {
   order: {
@@ -85,6 +87,17 @@ afterEach(() => {
 });
 
 describe("PersonnelOrderDetailDrawer document tab", () => {
+  it("opens requisites with current values and sends typed header patch", async () => {
+    vi.mocked(getPersonnelOrder).mockResolvedValue({ ...detail, order: { ...detail.order, source_title: "Исходный текст", source_title_locale: "kk", document_revision: 3 } });
+    render(<PersonnelOrderDetailDrawer orderId={42} open onClose={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("tab", { name: "Реквизиты" }));
+    expect(await screen.findByTestId("personnel-order-requisites")).toHaveTextContent("Ревизия документа: 3");
+    expect(screen.getByLabelText("Номер приказа")).toHaveValue("12-К");
+    fireEvent.change(screen.getByLabelText("Номер приказа"), { target: { value: "13-К" } });
+    fireEvent.change(screen.getByLabelText("Исходное название"), { target: { value: "Новое название" } });
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить реквизиты" }));
+    await waitFor(() => expect(patchPersonnelOrderDocumentHeader).toHaveBeenCalledWith(42, expect.objectContaining({ expected_document_revision: 3, order_number: "13-К", source_title: "Новое название" })));
+  });
   it("keeps document blockers in data and uses revision for confirm", async () => {
     vi.mocked(getPersonnelOrder).mockResolvedValue(detail);
     vi.mocked(getPersonnelOrderDocumentReview).mockResolvedValue({ state: "NEEDS_REVIEW", document_revision: 7, blockers: [{ code: "MISSING_ORDER_NUMBER" }], warnings: [], allowed_actions: ["confirm"] });

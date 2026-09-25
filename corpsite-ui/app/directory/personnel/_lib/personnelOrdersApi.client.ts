@@ -41,6 +41,9 @@ export type PersonnelOrderListItem = {
   order_type_code: string;
   order_class: string;
   status: string;
+  document_revision?: number;
+  source_title?: string | null;
+  source_title_locale?: "kk" | "ru" | "unknown" | null;
   source_mode: string;
   legal_basis_article?: string | null;
   signed_by_employee_id?: number | null;
@@ -184,6 +187,7 @@ export type PersonnelOrderDocumentReview = {
   warnings: Array<{ code: string; [key: string]: unknown }>;
   allowed_actions: string[];
 };
+export type PersonnelOrderHeaderDuplicatePreview = { blocking: boolean; warnings: string[]; candidates: Array<{ order_id: number; order_number?: string | null; order_date?: string | null; order_type_code: string; status: string }> };
 
 export type PersonnelOrderAcknowledgement = {
   acknowledgement_event_id: number;
@@ -488,6 +492,12 @@ export async function confirmPersonnelOrderDocumentReview(orderId: number, paylo
 
 export async function reopenPersonnelOrderDocumentReview(orderId: number, payload: { expected_document_revision: number; reason_code: string; note: string }) {
   return requestJson<PersonnelOrderDocumentReview>("POST", `/directory/personnel-orders/${orderId}/document-review/reopen`, { body: payload, fallback: "Не удалось вернуть документ на проверку." });
+}
+export async function previewPersonnelOrderHeaderDuplicate(payload: { order_id?: number; order_number: string; order_date?: string | null }): Promise<PersonnelOrderHeaderDuplicatePreview> {
+  return requestJson("POST", "/directory/personnel-orders/header-duplicate-preview", { body: payload, fallback: "Не удалось проверить дубликат." });
+}
+export async function patchPersonnelOrderDocumentHeader(orderId: number, payload: { expected_document_revision: number; order_number: string; order_date?: string | null; source_title?: string | null; source_title_locale?: "kk" | "ru" | "unknown" | null; reason_code?: string | null; reason_text?: string | null }) {
+  return requestJson("PATCH", `/directory/personnel-orders/${orderId}/document-header`, { body: payload, fallback: "Не удалось сохранить реквизиты документа." });
 }
 
 export async function listPersonnelOrderAcknowledgements(orderId: number): Promise<{ items: PersonnelOrderAcknowledgement[] }> {
