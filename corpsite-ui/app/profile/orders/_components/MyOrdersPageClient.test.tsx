@@ -31,11 +31,11 @@ const ruOrder = {
   item_text: "Русский личный пункт",
 };
 
-beforeEach(() => { search = ""; window.print = vi.fn(); });
+beforeEach(() => { search = ""; });
 afterEach(() => { cleanup(); list.mockReset(); detail.mockReset(); replace.mockReset(); });
 
 describe("MyOrdersPageClient", () => {
-  it("fully localizes the list, detail, and preliminary print chrome in Kazakh", async () => {
+  it("fully localizes the list and detail chrome in Kazakh", async () => {
     list.mockResolvedValue({ status: "READY", orders: [kkOrder] });
     detail.mockResolvedValue({ ...kkOrder, preamble: null, basis: null, warning: null });
     render(<MyOrdersPageClient />);
@@ -50,13 +50,10 @@ describe("MyOrdersPageClient", () => {
     expect(await screen.findByText("Бұйрық кадр қызметімен әлі расталмаған. Мәліметтер түпнұсқамен салыстырып тексерілгеннен кейін нақтылануы мүмкін.")).toBeInTheDocument();
     expect(screen.getByTestId("my-order-unconfirmed-watermark")).toHaveTextContent("РАСТАЛМАҒАН");
     expect(screen.getByRole("button", { name: "Жабу" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Алдын ала нұсқаны басып шығару" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Алдын ала нұсқаны басып шығару" }));
-    expect(window.print).toHaveBeenCalledOnce();
 
     for (const russianServiceText of [
       "Мои приказы", "Год", "Статус", "Все", "Открыть", "Закрыть",
-      "Распечатать предварительную версию", "Не подтверждено кадровой службой",
+      "Не подтверждено кадровой службой",
       "Подтверждено кадровой службой", "НЕ ПОДТВЕРЖДЕНО",
       "Приказ ещё не подтверждён кадровой службой. Сведения могут быть уточнены после сверки с оригиналом.",
     ]) {
@@ -68,6 +65,9 @@ describe("MyOrdersPageClient", () => {
     list.mockResolvedValue({ status: "READY", orders: [] });
     render(<MyOrdersPageClient />);
     expect(await screen.findByTestId("my-orders-empty")).toBeInTheDocument();
+    expect(screen.getByTestId("my-orders-language-switcher")).toHaveClass("rounded-md", "border-blue-600");
+    expect(screen.getByRole("button", { name: "Қазақша" })).toHaveClass("bg-blue-600", "text-white");
+    expect(screen.getByRole("button", { name: "Русский" })).toHaveAttribute("aria-pressed", "false");
     expect(list).toHaveBeenLastCalledWith(undefined, "all", "kk");
     expect(replace).toHaveBeenCalledWith("/profile/orders?lang=kk", { scroll: false });
     fireEvent.change(screen.getAllByRole("combobox")[1], { target: { value: "unconfirmed" } });
@@ -89,7 +89,7 @@ describe("MyOrdersPageClient", () => {
     expect(list).toHaveBeenLastCalledWith(undefined, "all", "ru");
   });
 
-  it("uses the selected language for detail, close, and preliminary print", async () => {
+  it("uses the selected language for detail and close", async () => {
     search = "lang=ru";
     list.mockResolvedValue({ status: "READY", orders: [ruOrder] });
     detail.mockResolvedValue({ ...ruOrder, preamble: "Русская преамбула", basis: "Русское основание", warning: "Предупреждение" });
@@ -98,11 +98,11 @@ describe("MyOrdersPageClient", () => {
     expect(await screen.findByText("Русская преамбула")).toBeInTheDocument();
     expect(screen.getByText("Русское основание")).toBeInTheDocument();
     expect(detail).toHaveBeenCalledWith(1, "ru");
-    fireEvent.click(screen.getByRole("button", { name: "Распечатать предварительную версию" }));
-    expect(window.print).toHaveBeenCalledOnce();
     fireEvent.click(screen.getByRole("button", { name: "Закрыть" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Русский" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Русский" })).toHaveClass("bg-blue-600", "text-white");
+    expect(screen.getByRole("button", { name: "Қазақша" })).toHaveClass("bg-white", "text-blue-700");
   });
 
   it("does not silently substitute Russian content when Kazakh blocks are absent", async () => {
