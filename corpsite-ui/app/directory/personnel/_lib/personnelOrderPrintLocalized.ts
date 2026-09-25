@@ -35,21 +35,25 @@ export function resolveLocalizedLines(
   const ru = cleanText(text?.ru);
   const fb = cleanText(fallback);
 
+  const lines = (value: string | null): string[] => value
+    ? value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean)
+    : [];
+
   if (language === "kk") {
     const value = kk || ru || fb;
-    return value ? [value] : [];
+    return lines(value);
   }
   if (language === "ru") {
     const value = ru || kk || fb;
-    return value ? [value] : [];
+    return lines(value);
   }
 
   if (kk && ru) {
-    if (kk === ru) return [kk];
-    return [kk, ru];
+    if (kk === ru) return lines(kk);
+    return [...lines(kk), ...lines(ru)];
   }
   const value = kk || ru || fb;
-  return value ? [value] : [];
+  return lines(value);
 }
 
 export function resolveLocalizedText(

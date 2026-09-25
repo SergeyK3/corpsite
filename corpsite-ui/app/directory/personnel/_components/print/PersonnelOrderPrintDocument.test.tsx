@@ -341,7 +341,7 @@ describe("PersonnelOrderPrintDocument", () => {
             locale: "ru",
             block_type: "preamble",
             effective_text:
-              "В соответствии с Трудовым кодексом Республики Казахстан ПРИКАЗЫВАЮ:",
+              "В соответствии с Трудовым кодексом Республики Казахстан\nПРИКАЗЫВАЮ:",
             review_status: "CURRENT",
             editable: true,
             revision: 1,
@@ -354,5 +354,6 @@ describe("PersonnelOrderPrintDocument", () => {
     const items = screen.getByTestId("personnel-order-print-items");
     expect(items).toHaveTextContent("ПРИКАЗЫВАЮ");
     expect(items.querySelectorAll(".personnel-order-print-order-verb")).toHaveLength(0);
+    expect(items.querySelectorAll(".personnel-order-print-preamble p")).toHaveLength(2);
   });
 });

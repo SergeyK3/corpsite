@@ -103,7 +103,12 @@ function renderItem(
         ...(manual("kk") ? [manual("kk")!] : renderPersonnelOrderPrintItemText(item.context, "kk")),
         ...(manual("ru") ? [manual("ru")!] : renderPersonnelOrderPrintItemText(item.context, "ru")),
       ];
-  const body = lines
+  const tenure = language === "kk"
+    ? ["Жұмыс өтілі әлі анықталмаған."]
+    : language === "ru"
+      ? ["Стаж работы ещё не определён."]
+      : ["Жұмыс өтілі әлі анықталмаған.", "Стаж работы ещё не определён."];
+  const body = [...lines, ...tenure]
     .map((line) => `<p class="m-0">${escapePersonnelOrderPrintHtml(line)}</p>`)
     .join("");
   return `<li class="personnel-order-print-item" data-testid="personnel-order-print-item-${item.itemId}">

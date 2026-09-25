@@ -52,12 +52,13 @@ def pick_payload_value(payload: Mapping[str, Any], *keys: str) -> Any:
 def build_item_ctx(item: Mapping[str, Any], employee_name: Optional[str]) -> Dict[str, Any]:
     payload = payload_dict(item.get("payload"))
     assignment = payload_dict(payload.get("to_assignment") or payload.get("assignment"))
+    presentation = payload_dict(payload.get("presentation_context"))
     org_unit_name = pick_payload_value(
         payload, "org_unit_name", "orgUnitName", "from_org_unit_name"
-    ) or assignment.get("unit") or item.get("snapshot_org_unit_name")
+    ) or presentation.get("org_unit_name") or assignment.get("unit") or item.get("snapshot_org_unit_name")
     position_name = pick_payload_value(
         payload, "position_name", "positionName", "from_position_name"
-    ) or assignment.get("position") or item.get("snapshot_position_name")
+    ) or presentation.get("position_name") or assignment.get("position") or item.get("snapshot_position_name")
     return {
         "item_type_code": item.get("item_type_code"),
         "employee_name": employee_name or pick_payload_value(payload, "source_employee_name"),

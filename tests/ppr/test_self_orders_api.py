@@ -57,6 +57,7 @@ def test_my_orders_default_to_kazakh_and_reject_an_invalid_locale(monkeypatch) -
         default_response = client.get("/api/ppr/me/orders")
         default_detail = client.get("/api/ppr/me/orders/11")
         ru_response = client.get("/api/ppr/me/orders?locale=ru")
+        ru_detail = client.get("/api/ppr/me/orders/11?locale=ru")
         invalid_response = client.get("/api/ppr/me/orders?locale=en")
     finally:
         app.dependency_overrides.pop(get_current_user, None)
@@ -64,8 +65,11 @@ def test_my_orders_default_to_kazakh_and_reject_an_invalid_locale(monkeypatch) -
     assert default_response.json()["orders"][0]["title"] == "Бала күтіміне байланысты демалыстан жұмысқа шығу туралы"
     assert default_detail.json()["preamble"] == "Қазақша преамбула"
     assert default_detail.json()["basis"] == "Қазақша негіздеме"
+    assert default_detail.json()["tenure_text"] == "Жұмыс өтілі әлі анықталмаған."
+    assert "tenure_text" not in default_response.json()["orders"][0]
     assert ru_response.json()["orders"][0]["title"] == "О выходе на работу из отпуска по уходу за ребёнком"
-    assert seen == ["kk", "kk", "ru"]
+    assert ru_detail.json()["tenure_text"] == "Стаж работы ещё не определён."
+    assert seen == ["kk", "kk", "ru", "ru"]
     assert invalid_response.status_code == 422
 
 

@@ -105,6 +105,23 @@ describe("MyOrdersPageClient", () => {
     expect(screen.getByRole("button", { name: "Қазақша" })).toHaveClass("bg-white", "text-blue-700");
   });
 
+  it("keeps the corrected body identical in list/detail and shows tenure only in detail", async () => {
+    search = "lang=ru";
+    const body = "Разрешить сотруднику Иванова Алия Сериковна, должность: руководитель отдела кадров (отдел кадров) приступить к работе в связи с выходом из отпуска по уходу за ребёнком с 5 августа 2026 года.";
+    list.mockResolvedValue({ status: "READY", orders: [{ ...ruOrder, item_text: body }] });
+    detail.mockResolvedValue({ ...ruOrder, item_text: body, preamble: "В соответствии с Трудовым кодексом Республики Казахстан\nПРИКАЗЫВАЮ:", basis: "Основание: —", warning: null });
+    render(<MyOrdersPageClient />);
+    expect(await screen.findByText(body)).toBeInTheDocument();
+    expect(screen.queryByText("Стаж работы ещё не определён.")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Открыть" }));
+    expect((await screen.findByTestId("my-order-document")).textContent).toContain(body);
+    expect(screen.getByTestId("my-order-tenure-fallback")).toHaveTextContent("Стаж работы ещё не определён.");
+    expect(screen.getByLabelText("Преамбула приказа")).toHaveTextContent("ПРИКАЗЫВАЮ:");
+    for (const forbidden of ["Исполнитель", "С приказом ознакомлен", "Бұйрықпен таныстым", "Распечатать"]) {
+      expect(screen.queryByText(forbidden, { exact: false })).not.toBeInTheDocument();
+    }
+  });
+
   it("does not silently substitute Russian content when Kazakh blocks are absent", async () => {
     list.mockResolvedValue({ status: "READY", orders: [{ ...kkOrder, item_text: null }] });
     detail.mockResolvedValue({ ...kkOrder, item_text: null, preamble: null, basis: null, warning: null });

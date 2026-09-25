@@ -11,6 +11,7 @@ import { PERSONNEL_ORDER_PRINT_DICTIONARIES, statusMarkLinesForLanguage } from "
 import {
   formatPersonnelOrderPrintDate,
   formatPersonnelOrderPrintDateLines,
+  formatPersonnelOrderPrintStartDate,
   formatPersonnelOrderPrintRate,
   formatPersonnelOrderPrintRateValue,
   parsePersonnelOrderCalendarDate,
@@ -160,6 +161,17 @@ describe("personnelOrderPrint formatters", () => {
     ]);
   });
 
+  it("declines Kazakh start dates for every month", () => {
+    const monthSuffixes = [
+      "\u049b\u0430\u04a3\u0442\u0430\u0440\u0434\u0430\u043d", "\u0430\u049b\u043f\u0430\u043d\u043d\u0430\u043d", "\u043d\u0430\u0443\u0440\u044b\u0437\u0434\u0430\u043d", "\u0441\u04d9\u0443\u0456\u0440\u0434\u0435\u043d", "\u043c\u0430\u043c\u044b\u0440\u0434\u0430\u043d", "\u043c\u0430\u0443\u0441\u044b\u043c\u043d\u0430\u043d",
+      "\u0448\u0456\u043b\u0434\u0435\u0434\u0435\u043d", "\u0442\u0430\u043c\u044b\u0437\u0434\u0430\u043d", "\u049b\u044b\u0440\u043a\u04af\u0439\u0435\u043a\u0442\u0435\u043d", "\u049b\u0430\u0437\u0430\u043d\u043d\u0430\u043d", "\u049b\u0430\u0440\u0430\u0448\u0430\u0434\u0430\u043d", "\u0436\u0435\u043b\u0442\u043e\u049b\u0441\u0430\u043d\u043d\u0430\u043d",
+    ];
+    monthSuffixes.forEach((month, index) => {
+      const value = `2026-${String(index + 1).padStart(2, "0")}-05`;
+      expect(formatPersonnelOrderPrintStartDate(value, "kk")).toBe(`2026 \u0436\u044b\u043b\u0493\u044b 5 ${month}`);
+    });
+  });
+
   it("formats rates by language", () => {
     expect(formatPersonnelOrderPrintRateValue(1)).toBe("1,0");
     expect(formatPersonnelOrderPrintRate(1, "ru")).toContain("ставки");
@@ -186,7 +198,9 @@ describe("buildPersonnelOrderPrintViewModel", () => {
     expect(model.basis.length).toBeGreaterThan(0);
     expect(model.signatory?.fio).toBe("Иванов И.И.");
     expect(model.signatory?.position?.ru).toBe("Директор");
-    expect(model.acknowledgements).toEqual([{ employeeId: 7, employeeName: "Петрова Анна" }]);
+    expect(model.acknowledgements).toEqual([
+      { employeeId: 7, employeeName: "Петрова Анна", acknowledgedOn: null },
+    ]);
   });
 
   it("marks draft/unsigned/registered/voided correctly", () => {
@@ -536,7 +550,7 @@ describe("personnelOrderPrint item text", () => {
       {
         itemNumber: 2,
         itemTypeCode: "CONCURRENT_DUTY_START",
-        employeeName: "Макибаева Акмарал Сабитовна",
+        employeeName: "Иванова Алия Сериковна",
         effectiveDate: "2026-07-10",
         orgUnitName: { ru: "Приемное", kk: null },
         positionName: { ru: "Санитар", kk: null },
@@ -552,7 +566,7 @@ describe("personnelOrderPrint item text", () => {
       },
       "ru",
     )[0];
-    expect(text).toContain("Разрешить сотруднику Макибаева Акмарал Сабитовна");
+    expect(text).toContain("Разрешить сотруднику Иванова Алия Сериковна");
     expect(text).toContain("санитар (приемное отделение)");
     expect(text).toContain("с оплатой 0,5 ставки");
   });

@@ -156,6 +156,25 @@ def _format_date(value: Any, locale: str) -> str:
     return f"{day} {_RU_MONTHS[month - 1]} {year} года"
 
 
+def _format_date_from(value: Any, locale: str) -> str:
+    """Format a start date; Kazakh requires the ablative month form."""
+    raw = _clean(value)
+    if locale != "kk" or len(raw) < 10 or raw[4] != "-" or raw[7] != "-":
+        return _format_date(value, locale)
+    try:
+        year, month, day = int(raw[:4]), int(raw[5:7]), int(raw[8:10])
+    except ValueError:
+        return _format_date(value, locale)
+    if not (1 <= month <= 12 and 1 <= day <= 31):
+        return _format_date(value, locale)
+    kk_months_from = (
+        "қаңтардан", "ақпаннан", "наурыздан", "сәуірден",
+        "мамырдан", "маусымнан", "шілдеден", "тамыздан",
+        "қыркүйектен", "қазаннан", "қарашадан", "желтоқсаннан",
+    )
+    return f"{year} жылғы {day} {kk_months_from[month - 1]}"
+
+
 def _format_rate_value(rate: Any) -> str:
     if rate is None or rate == "":
         return "—"
@@ -280,60 +299,39 @@ def generate_order_block(
 
     if normalized_type == ORDER_BLOCK_TYPE_PREAMBLE:
         if order_type == ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE:
-            text = (
-                "Қазақстан Республикасының Еңбек кодексінің 100-бабы 4-тармағына сәйкес БҰЙЫРАМЫН:"
+            # The legal ground for this temporary wording will be confirmed
+            # separately; do not infer an article or a paragraph.
+            preamble = (
+                "Қазақстан Республикасының Еңбек кодексіне сәйкес"
                 if lang == "kk"
-                else "В соответствии с пунктом 4 статьи 100 Трудового кодекса Республики Казахстан ПРИКАЗЫВАЮ:"
+                else "В соответствии с Трудовым кодексом Республики Казахстан"
             )
-            return _result(
-                generated_text=text,
-                generator_key=GENERATOR_KEY_ORDER_PREAMBLE,
-                fingerprint_payload={
-                    "block_type": ORDER_BLOCK_TYPE_PREAMBLE,
-                    "locale": lang,
-                    "order_type_code": order_type,
-                    "legal_basis_article": "100.4",
-                },
-            )
-        if order_type == ORDER_TYPE_SUPPLEMENTARY_PAY:
-            text = (
+        elif order_type == ORDER_TYPE_SUPPLEMENTARY_PAY:
+            preamble = (
                 "Қосымша ақының шарттары DOCX-пен салыстырылғаннан кейін нақтыланады."
                 if lang == "kk"
                 else "Условия дополнительной оплаты уточняются после сверки с DOCX."
             )
-            return _result(
-                generated_text=text,
-                generator_key=GENERATOR_KEY_ORDER_PREAMBLE,
-                fingerprint_payload={
-                    "block_type": ORDER_BLOCK_TYPE_PREAMBLE,
-                    "locale": lang,
-                    "order_type_code": order_type,
-                },
+        elif lang == "kk":
+            preamble = (
+                f"Қазақстан Республикасының Еңбек кодексінің {legal_basis} бабына сәйкес"
+                if legal_basis
+                else "Қазақстан Республикасының Еңбек кодексіне сәйкес"
             )
-        if lang == "kk":
-            if legal_basis:
-                text = (
-                    f"Қазақстан Республикасының Еңбек кодексінің {legal_basis} "
-                    f"бабына сәйкес БҰЙЫРАМЫН:"
-                )
-            else:
-                text = "Қазақстан Республикасының Еңбек кодексіне сәйкес БҰЙЫРАМЫН:"
         else:
-            if legal_basis:
-                text = (
-                    f"В соответствии со статьёй {legal_basis} Трудового кодекса "
-                    f"Республики Казахстан ПРИКАЗЫВАЮ:"
-                )
-            else:
-                text = (
-                    "В соответствии с Трудовым кодексом Республики Казахстан ПРИКАЗЫВАЮ:"
-                )
+            preamble = (
+                f"В соответствии со статьёй {legal_basis} Трудового кодекса Республики Казахстан"
+                if legal_basis
+                else "В соответствии с Трудовым кодексом Республики Казахстан"
+            )
+        text = f"{preamble}\n{'БҰЙЫРАМЫН:' if lang == 'kk' else 'ПРИКАЗЫВАЮ:'}"
         return _result(
             generated_text=text,
             generator_key=GENERATOR_KEY_ORDER_PREAMBLE,
             fingerprint_payload={
                 "block_type": ORDER_BLOCK_TYPE_PREAMBLE,
                 "locale": lang,
+                "order_type_code": order_type or None,
                 "legal_basis_article": legal_basis or None,
             },
         )
@@ -467,20 +465,18 @@ def generate_item_body(locale: str, item_ctx: Mapping[str, Any]) -> Dict[str, st
                 f"«{position}» со ставкой {rate_value} с {date}."
             )
     elif item_type == ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE:
-        # Reconstruction payload may contain a stale historical assignment.
-        # This type has no confirmed assignment snapshot contract, so retain
-        # only the linked employee and the structured item effective date.
         has_effective_date = effective_date not in (None, "")
+        org = _localized_name(org_unit_name, lang)
+        position = _localized_position(position_name, lang)
+        has_assignment_context = org != "—" and position != "—"
         if lang == "kk":
-            date_part = f"{date} бастап " if has_effective_date else ""
-            text = (
-                f"{date_part}{fio} бала күтіміне байланысты демалыстан жұмысқа шығуға рұқсат берілсін."
-            )
+            assignment_part = f", лауазымы: {position} ({org})," if has_assignment_context else ""
+            date_part = f"{_format_date_from(effective_date, lang)} бастап" if has_effective_date else ""
+            text = f"Қызметкер {fio}{assignment_part} {date_part} бала күтіміне байланысты демалыстан жұмысқа шығуға рұқсат берілсін."
         else:
-            date_part = f", с {date}" if has_effective_date else ""
-            text = (
-                f"{fio}{date_part} приступить к работе в связи с выходом из отпуска по уходу за ребёнком."
-            )
+            assignment_part = f", должность: {position.lower()} ({org.lower()})" if has_assignment_context else ""
+            date_part = f" с {date}" if has_effective_date else ""
+            text = f"Разрешить сотруднику {fio}{assignment_part} приступить к работе в связи с выходом из отпуска по уходу за ребёнком{date_part}."
     elif item_type == ORDER_TYPE_TRANSFER:
         org = _localized_name(to_org_unit_name or org_unit_name, lang)
         position = _localized_position(to_position_name or position_name, lang)
@@ -569,10 +565,6 @@ def generate_item_body(locale: str, item_ctx: Mapping[str, Any]) -> Dict[str, st
             text = f"{fio}, күні {date}."
         else:
             text = f"{fio}, дата {date}."
-
-    # No authoritative per-primary-position tenure source currently exists.
-    # Keep this presentation fallback out of personnel payload and facts.
-    text = f"{text} {'Жұмыс өтілі әлі анықталмаған.' if lang == 'kk' else 'Стаж работы ещё не определён.'}"
 
     return _result(
         generated_text=text,

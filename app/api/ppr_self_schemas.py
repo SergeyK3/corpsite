@@ -83,6 +83,7 @@ class PprSelfOrderDetailResponse(PprSelfOrderListItem):
     warning: str | None = None
     preamble: str | None = None
     basis: str | None = None
+    tenure_text: str
 
 
 class _StrictSelfCommand(BaseModel):

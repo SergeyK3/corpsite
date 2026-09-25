@@ -22,6 +22,10 @@ _UNCONFIRMED_WARNING = (
     "Приказ ещё не подтверждён кадровой службой. Сведения могут быть уточнены после сверки с оригиналом."
 )
 _CONFIRMED_STATUSES = {"SIGNED", "REGISTERED", "VOIDED"}
+_TENURE_FALLBACK = {
+    "kk": "Жұмыс өтілі әлі анықталмаған.",
+    "ru": "Стаж работы ещё не определён.",
+}
 _SELF_ITEM_TYPE_LABELS = {
     "kk": {
         "HIRE": "Жұмысқа қабылдау туралы",
@@ -180,6 +184,7 @@ def _serialize(row: Any, *, locale: Literal["kk", "ru"], detail: bool = False) -
         result["warning"] = None if confirmed else _UNCONFIRMED_WARNING
         result["preamble"] = row.get("preamble")
         result["basis"] = row.get("basis")
+        result["tenure_text"] = _TENURE_FALLBACK[locale]
     return result
 
 

@@ -1,6 +1,7 @@
 import type { PersonnelOrderPrintLanguage } from "./personnelOrderPrintLanguage";
 import {
   formatPersonnelOrderPrintDate,
+  formatPersonnelOrderPrintStartDate,
   formatPersonnelOrderPrintRate,
   formatPersonnelOrderPrintRateValue,
 } from "./personnelOrderPrintFormat";
@@ -137,6 +138,20 @@ function renderSupplementaryPay(ctx: PersonnelOrderPrintItemContext, lang: "kk" 
     : `Дополнительная оплата для ${fio}: размер, период, основание и условия требуют сверки с DOCX.`;
 }
 
+function renderReturnFromChildcareLeave(ctx: PersonnelOrderPrintItemContext, lang: "kk" | "ru"): string {
+  const fio = dash(ctx.employeeName);
+  const org = resolveLocalizedText(ctx.orgUnitName, lang);
+  const position = resolvePersonnelOrderPositionText(ctx.positionName, lang);
+  const date = formatPersonnelOrderPrintStartDate(ctx.effectiveDate, lang);
+  const hasContext = org !== "—" && position !== "—";
+  if (lang === "kk") {
+    const assignment = hasContext ? `, лауазымы: ${position} (${org}),` : "";
+    return `Қызметкер ${fio}${assignment} ${date} бастап бала күтіміне байланысты демалыстан жұмысқа шығуға рұқсат берілсін.`;
+  }
+  const assignment = hasContext ? `, должность: ${position.toLocaleLowerCase("ru-RU")} (${org.toLocaleLowerCase("ru-RU")})` : "";
+  return `Разрешить сотруднику ${fio}${assignment} приступить к работе в связи с выходом из отпуска по уходу за ребёнком с ${date}.`;
+}
+
 function renderGeneric(ctx: PersonnelOrderPrintItemContext, lang: "kk" | "ru"): string {
   const fio = dash(ctx.employeeName);
   const date = formatPersonnelOrderPrintDate(ctx.effectiveDate, lang);
@@ -166,10 +181,12 @@ export function renderPersonnelOrderPrintItemText(
         text = renderConcurrentEnd(ctx, lang); break;
       case "SUPPLEMENTARY_PAY":
         text = renderSupplementaryPay(ctx, lang); break;
+      case "RETURN_FROM_CHILDCARE_LEAVE":
+        text = renderReturnFromChildcareLeave(ctx, lang); break;
       default:
         text = renderGeneric(ctx, lang);
     }
-    return `${text} ${lang === "kk" ? "Жұмыс өтілі әлі анықталмаған." : "Стаж работы ещё не определён."}`;
+    return text;
   };
 
   if (language === "kk") return [renderOne("kk")];

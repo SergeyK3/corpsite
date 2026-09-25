@@ -17,6 +17,7 @@ export type MyOrderDetail = MyOrder & {
   warning: string | null;
   preamble: string | null;
   basis: string | null;
+  tenure_text?: string | null;
 };
 export type MyOrdersResponse = {
   status: "READY" | "NO_EMPLOYEE_LINK" | "PERSON_NOT_LINKED" | "IDENTITY_AMBIGUOUS";

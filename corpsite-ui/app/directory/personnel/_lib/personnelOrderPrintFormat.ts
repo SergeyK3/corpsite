@@ -71,6 +71,20 @@ export function formatPersonnelOrderPrintDate(
   return formatDateRu(parts);
 }
 
+export function formatPersonnelOrderPrintStartDate(
+  value: string | null | undefined,
+  language: PersonnelOrderPrintLanguage | "kk" | "ru",
+): string {
+  const parts = parsePersonnelOrderCalendarDate(value);
+  if (!parts || language !== "kk") return formatPersonnelOrderPrintDate(value, language);
+  const months = [
+    "қаңтардан", "ақпаннан", "наурыздан", "сәуірден",
+    "мамырдан", "маусымнан", "шілдеден", "тамыздан",
+    "қыркүйектен", "қазаннан", "қарашадан", "желтоқсаннан",
+  ];
+  return `${parts.year} жылғы ${parts.day} ${months[parts.month - 1]}`;
+}
+
 export function formatPersonnelOrderPrintDateLines(
   value: string | null | undefined,
   language: PersonnelOrderPrintLanguage,

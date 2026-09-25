@@ -269,6 +269,9 @@ function buildItemContext(
   const assignment = payload.assignment && typeof payload.assignment === "object"
     ? payload.assignment as Record<string, unknown>
     : {};
+  const presentation = payload.presentation_context && typeof payload.presentation_context === "object"
+    ? payload.presentation_context as Record<string, unknown>
+    : {};
   const positionOverride = localizedOverride(payload.position_text_override) || localizedOverride(assignment.position_text_override);
 
   return {
@@ -276,10 +279,10 @@ function buildItemContext(
     itemTypeCode: item.item_type_code,
     employeeName: itemDisplayName(item),
     effectiveDate: optionalString(item.effective_date),
-    orgUnitName: assignmentText(assignment.unit) ||
+    orgUnitName: localizedOverride(presentation.org_unit_name) || assignmentText(assignment.unit) ||
       nameFromMap(maps.orgUnitNames, orgUnitId) ||
       (optionalString(item.org_unit_name) ? localizedFromSingle(item.org_unit_name) : null),
-    positionName: positionOverride || assignmentText(assignment.position) || nameFromMap(maps.positionNames, positionId),
+    positionName: localizedOverride(presentation.position_name) || positionOverride || assignmentText(assignment.position) || nameFromMap(maps.positionNames, positionId),
     toOrgUnitName: assignmentText(assignment.unit) || nameFromMap(maps.orgUnitNames, toOrgUnitId),
     toPositionName: positionOverride || assignmentText(assignment.position) || nameFromMap(maps.positionNames, toPositionId),
     rate: (payload.employment_rate as number | string | null | undefined) ?? (payload.rate as number | string | null | undefined) ?? (assignment.rate as number | string | null | undefined) ?? null,
