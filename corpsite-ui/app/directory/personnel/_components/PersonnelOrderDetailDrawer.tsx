@@ -9,6 +9,8 @@ import {
   formatPersonnelOrderNumber,
   getPersonnelOrder,
   getPersonnelOrderEditorial,
+  recordPersonnelOrderAcknowledgement,
+  clearPersonnelOrderAcknowledgement,
   isWritablePersonnelOrder,
   isPersonnelOrderApplied,
   mapPersonnelOrdersApiError,
@@ -56,6 +58,38 @@ type Props = {
   onChanged?: (detail: PersonnelOrderDetailResponse) => void;
   hirePersonId?: number | null;
 };
+
+function PersonnelOrderAcknowledgements({ detail, onChanged }: { detail: PersonnelOrderDetailResponse; onChanged: (next: PersonnelOrderDetailResponse) => void }) {
+  const subjects = Array.from(new Map((detail.items || [])
+    .filter((item) => item.item_status === "ACTIVE" && item.employee_id != null)
+    .map((item) => [item.employee_id!, item])).values());
+  const [dates, setDates] = React.useState<Record<number, string>>({});
+  if (!subjects.length) return null;
+  async function reload() { onChanged(await getPersonnelOrder(detail.order.order_id)); }
+  return <section data-testid="personnel-order-acknowledgements">
+    <h3 className="mb-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100">Ознакомление с приказом</h3>
+    <div className="space-y-3">
+      {subjects.map((item) => {
+        const current = (detail.acknowledgements || []).find((entry) => entry.employee_id === item.employee_id);
+        const value = dates[item.employee_id!] ?? (current?.event_type === "CLEARED" ? "" : current?.acknowledged_on || "");
+        return <div key={item.employee_id} className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
+          <div className="text-sm font-medium">{item.employee_name || "Требуется кадровая проверка"}</div>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <input aria-label={`Дата ознакомления ${item.employee_id}`} type="date" value={value}
+              onChange={(event) => setDates((old) => ({ ...old, [item.employee_id!]: event.target.value }))}
+              className="rounded border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700" />
+            <button type="button" disabled={!value} className="rounded bg-blue-600 px-2 py-1 text-sm text-white disabled:opacity-50"
+              onClick={async () => { if (current && current.acknowledged_on && current.acknowledged_on !== value && !window.confirm("Исправить дату ознакомления?")) return; await recordPersonnelOrderAcknowledgement(detail.order.order_id, item.employee_id!, value); await reload(); }}>
+              {current?.acknowledged_on ? "Исправить" : "Зарегистрировать"}
+            </button>
+            {current?.acknowledged_on ? <button type="button" className="rounded border border-red-300 px-2 py-1 text-sm text-red-700"
+              onClick={async () => { if (!window.confirm("Очистить ошибочную дату ознакомления?")) return; await clearPersonnelOrderAcknowledgement(detail.order.order_id, item.employee_id!); await reload(); }}>Очистить</button> : null}
+          </div>
+        </div>;
+      })}
+    </div>
+  </section>;
+}
 
 function Field({ label, value }: { label: string; value: React.ReactNode }) {
   return (
@@ -428,6 +462,8 @@ export default function PersonnelOrderDetailDrawer({
                   basisDocuments={basisDocuments}
                 />
               </section>
+
+              {detail ? <PersonnelOrderAcknowledgements detail={detail} onChanged={handleChanged} /> : null}
 
               <section>
                 <h3 className="mb-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100">

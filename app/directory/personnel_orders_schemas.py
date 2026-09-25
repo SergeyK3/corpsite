@@ -141,6 +141,30 @@ class PersonnelOrderDetailResponse(BaseModel):
     attachments: List[PersonnelOrderAttachmentOut]
     prints: List[PersonnelOrderPrintOut]
     events: List[PersonnelOrderLinkedEventOut]
+    acknowledgements: List["PersonnelOrderAcknowledgementOut"] = Field(default_factory=list)
+
+
+class PersonnelOrderAcknowledgementOut(BaseModel):
+    acknowledgement_event_id: int
+    order_id: int
+    employee_id: int
+    event_type: str
+    acknowledged_on: Optional[str] = None
+    created_at: Optional[str] = None
+    created_by_user_id: int
+
+
+class PersonnelOrderAcknowledgementListResponse(BaseModel):
+    items: List[PersonnelOrderAcknowledgementOut] = Field(default_factory=list)
+
+
+class PersonnelOrderAcknowledgementRecordIn(BaseModel):
+    employee_id: int = Field(..., ge=1)
+    acknowledged_on: date
+
+
+class PersonnelOrderAcknowledgementClearIn(BaseModel):
+    employee_id: int = Field(..., ge=1)
 
 
 class PersonnelOrderSignatoryDefaultOut(BaseModel):

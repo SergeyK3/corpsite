@@ -137,7 +137,7 @@ def _validate_leave_draft_item(
     basis = payload.get("basis") if isinstance(payload.get("basis"), dict) else {}
     if basis and (str(basis.get("kind") or "").strip() != "PERSONAL_APPLICATION" or not str(basis.get("date") or "").strip()):
         raise PersonnelOrderValidationError("Leave personal application requires kind PERSONAL_APPLICATION and date.")
-    if item_type_code == "LEAVE.UNPAID.GRANT" and payload.get("work_periods") is not None:
+    if item_type_code in {"LEAVE.UNPAID.GRANT", "LEAVE.CHILDCARE.GRANT"} and payload.get("work_periods") is not None:
         raise PersonnelOrderValidationError("Unpaid leave must not include work_periods.")
     if item_type_code == "LEAVE.ANNUAL.GRANT":
         work_periods = payload.get("work_periods")

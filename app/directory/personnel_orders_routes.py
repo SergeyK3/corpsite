@@ -15,6 +15,9 @@ from app.directory.personnel_orders_schemas import (
     EditorialStateResponse,
     PersonnelOrderCancelIn,
     PersonnelOrderArchiveIn,
+    PersonnelOrderAcknowledgementClearIn,
+    PersonnelOrderAcknowledgementListResponse,
+    PersonnelOrderAcknowledgementRecordIn,
     PersonnelOrderCreateIn,
     PersonnelOrderDetailResponse,
     PersonnelOrderItemCreateIn,
@@ -84,6 +87,12 @@ from app.services.personnel_orders_query_service import (
 from app.services.personnel_order_lifecycle_audit_service import (
     list_personnel_order_lifecycle_audit,
 )
+from app.services.personnel_order_acknowledgement_service import (
+    PersonnelOrderAcknowledgementError,
+    clear as clear_acknowledgement,
+    list_current as list_current_acknowledgements,
+    record as record_acknowledgement,
+)
 
 router = APIRouter()
 
@@ -104,6 +113,12 @@ def _order_archived_http(exc: PersonnelOrderArchivedError) -> HTTPException:
 
 def _conflict_http409(exc: PersonnelOrderConflictError) -> HTTPException:
     return HTTPException(status_code=409, detail=str(exc))
+
+
+def _acknowledgement_http(exc: PersonnelOrderAcknowledgementError) -> HTTPException:
+    code = str(exc)
+    status = 422 if code == "ACKNOWLEDGEMENT_DATE_OUT_OF_RANGE" else 409 if code == "ACKNOWLEDGEMENT_SCHEMA_UNAVAILABLE" else 422
+    return HTTPException(status_code=status, detail={"code": code, "message": code})
 
 
 def _cancel_error_http(exc: PersonnelOrderCancelError) -> HTTPException:
@@ -620,6 +635,63 @@ def reset_personnel_order_editorial_block_route(
         raise validation_error_to_http422(exc)
     except PersonnelOrderConflictError as exc:
         raise _conflict_http409(exc)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise as_http500(exc)
+
+
+@router.get(
+    "/personnel-orders/{order_id}/acknowledgements",
+    response_model=PersonnelOrderAcknowledgementListResponse,
+)
+def list_personnel_order_acknowledgements_route(
+    order_id: int = Path(..., ge=1),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    try:
+        require_personnel_admin_or_403(user)
+        return call_service(list_current_acknowledgements, order_id=order_id)
+    except PersonnelOrderNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise as_http500(exc)
+
+
+@router.post("/personnel-orders/{order_id}/acknowledgements")
+def record_personnel_order_acknowledgement_route(
+    payload: PersonnelOrderAcknowledgementRecordIn,
+    order_id: int = Path(..., ge=1),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    try:
+        require_personnel_admin_or_403(user)
+        return call_service(record_acknowledgement, order_id=order_id, employee_id=payload.employee_id,
+                            acknowledged_on=payload.acknowledged_on, actor_user_id=_require_user_id(user))
+    except PersonnelOrderNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except PersonnelOrderAcknowledgementError as exc:
+        raise _acknowledgement_http(exc)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise as_http500(exc)
+
+
+@router.post("/personnel-orders/{order_id}/acknowledgements/clear")
+def clear_personnel_order_acknowledgement_route(
+    payload: PersonnelOrderAcknowledgementClearIn,
+    order_id: int = Path(..., ge=1),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    try:
+        require_personnel_admin_or_403(user)
+        return call_service(clear_acknowledgement, order_id=order_id, employee_id=payload.employee_id,
+                            actor_user_id=_require_user_id(user))
+    except PersonnelOrderAcknowledgementError as exc:
+        raise _acknowledgement_http(exc)
     except HTTPException:
         raise
     except Exception as exc:

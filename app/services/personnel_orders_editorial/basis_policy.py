@@ -29,7 +29,7 @@ def resolve_basis_required(item_type_code: str) -> tuple[bool, str | None]:
     treat as required AND unsupported so callers mark REVIEW_REQUIRED.
     """
     normalized = str(item_type_code or "").strip().upper()
-    if normalized in {ORDER_TYPE_SUPPLEMENTARY_PAY, ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE}:
+    if normalized in {ORDER_TYPE_SUPPLEMENTARY_PAY, ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE, "LEAVE.CHILDCARE.GRANT"}:
         # The journal title carries no reliable basis.  A reconstruction draft
         # must not invent one from the usual personnel-order default.
         return False, None

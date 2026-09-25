@@ -23,6 +23,7 @@ from app.db.models.personnel_orders import (
     ORDER_TYPE_CONCURRENT_DUTY_END,
     ORDER_TYPE_CONCURRENT_DUTY_START,
     ORDER_TYPE_HIRE,
+    ORDER_TYPE_LEAVE_CHILDCARE_GRANT,
     ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE,
     ORDER_TYPE_SUPPLEMENTARY_PAY,
     ORDER_TYPE_TERMINATION,
@@ -37,6 +38,7 @@ from app.services.personnel_orders_editorial.constants import (
     GENERATOR_VERSION,
 )
 from app.services.personnel_orders_editorial.fingerprint import compute_fingerprint
+from app.services.personnel_orders_editorial.position_dictionary import localized_personnel_order_position
 
 DOCUMENT_TITLES: Dict[str, Dict[str, str]] = {
     ORDER_TYPE_HIRE: {
@@ -78,6 +80,10 @@ DOCUMENT_TITLES: Dict[str, Dict[str, str]] = {
     "LEAVE.UNPAID.GRANT": {
         "kk": "Жалақы сақталмайтын демалыс беру туралы",
         "ru": "О предоставлении отпуска без сохранения заработной платы",
+    },
+    ORDER_TYPE_LEAVE_CHILDCARE_GRANT: {
+        "kk": "Бала үш жасқа толғанға дейін оның күтіміне байланысты жалақы сақталмайтын демалыс беру туралы",
+        "ru": "О предоставлении отпуска без сохранения заработной платы по уходу за ребёнком до достижения им возраста трёх лет",
     },
 }
 
@@ -187,6 +193,10 @@ def _localized_name(value: Any, locale: str) -> str:
     return _dash(value)
 
 
+def _localized_position(value: Any, locale: str) -> str:
+    return localized_personnel_order_position(value, locale)
+
+
 def _leave_work_periods(item_ctx: Mapping[str, Any]) -> list[Dict[str, Any]]:
     """Return the current array form, with a read-only legacy fallback."""
     raw_periods = item_ctx.get("work_periods")
@@ -271,9 +281,9 @@ def generate_order_block(
     if normalized_type == ORDER_BLOCK_TYPE_PREAMBLE:
         if order_type == ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE:
             text = (
-                "Қазақстан Республикасының Еңбек кодексінің 100-бабы 3-тармағына сәйкес БҰЙЫРАМЫН:"
+                "Қазақстан Республикасының Еңбек кодексінің 100-бабы 4-тармағына сәйкес БҰЙЫРАМЫН:"
                 if lang == "kk"
-                else "В соответствии с пунктом 3 статьи 100 Трудового кодекса Республики Казахстан ПРИКАЗЫВАЮ:"
+                else "В соответствии с пунктом 4 статьи 100 Трудового кодекса Республики Казахстан ПРИКАЗЫВАЮ:"
             )
             return _result(
                 generated_text=text,
@@ -282,7 +292,7 @@ def generate_order_block(
                     "block_type": ORDER_BLOCK_TYPE_PREAMBLE,
                     "locale": lang,
                     "order_type_code": order_type,
-                    "legal_basis_article": "100.3",
+                    "legal_basis_article": "100.4",
                 },
             )
         if order_type == ORDER_TYPE_SUPPLEMENTARY_PAY:
@@ -373,7 +383,7 @@ def generate_item_body(locale: str, item_ctx: Mapping[str, Any]) -> Dict[str, st
 
     if item_type == "LEAVE.ANNUAL.GRANT":
         org = _localized_name(org_unit_name, lang)
-        position = _localized_name(position_name, lang)
+        position = _localized_position(position_name, lang)
         leave_start_text = _format_date(leave_start, lang)
         leave_end_text = _format_date(leave_end, lang)
         days = _dash(leave_days)
@@ -411,7 +421,7 @@ def generate_item_body(locale: str, item_ctx: Mapping[str, Any]) -> Dict[str, st
             )
     elif item_type == "LEAVE.UNPAID.GRANT":
         org = _localized_name(org_unit_name, lang)
-        position = _localized_name(position_name, lang)
+        position = _localized_position(position_name, lang)
         leave_start_text = _format_date(leave_start, lang)
         leave_end_text = _format_date(leave_end, lang)
         days = _dash(leave_days)
@@ -427,9 +437,24 @@ def generate_item_body(locale: str, item_ctx: Mapping[str, Any]) -> Dict[str, st
                 f"заработной платы с {leave_start_text} по {leave_end_text} включительно "
                 f"продолжительностью {days} календарных дней. {_leave_basis(item_ctx, lang)}"
             )
+    elif item_type == ORDER_TYPE_LEAVE_CHILDCARE_GRANT:
+        org = _localized_name(org_unit_name, lang)
+        position = _localized_position(position_name, lang)
+        leave_start_text = _format_date(leave_start, lang)
+        leave_end_text = _format_date(leave_end, lang)
+        if lang == "kk":
+            text = (
+                f"{leave_start_text} бастап {leave_end_text} дейін «{org}» бөлімшесінің «{position}» қызметкері {fio} "
+                "бала үш жасқа толғанға дейін оның күтіміне байланысты жалақы сақталмайтын демалыс берілсін."
+            )
+        else:
+            text = (
+                f"Предоставить {fio}, {position} подразделения «{org}», отпуск без сохранения заработной платы "
+                f"по уходу за ребёнком до достижения им возраста трёх лет с {leave_start_text} по {leave_end_text}."
+            )
     elif item_type == ORDER_TYPE_HIRE:
         org = _localized_name(org_unit_name, lang)
-        position = _localized_name(position_name, lang)
+        position = _localized_position(position_name, lang)
         rate_value = _format_rate_value(rate)
         if lang == "kk":
             text = (
@@ -442,19 +467,23 @@ def generate_item_body(locale: str, item_ctx: Mapping[str, Any]) -> Dict[str, st
                 f"«{position}» со ставкой {rate_value} с {date}."
             )
     elif item_type == ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE:
+        # Reconstruction payload may contain a stale historical assignment.
+        # This type has no confirmed assignment snapshot contract, so retain
+        # only the linked employee and the structured item effective date.
+        has_effective_date = effective_date not in (None, "")
         if lang == "kk":
+            date_part = f"{date} бастап " if has_effective_date else ""
             text = (
-                f"{fio} бала күтіміне байланысты демалыстан шығуына байланысты жұмысқа кіріссін. "
-                "Шығу күні, негізі және өзге шарттары түпнұсқа бұйрықпен (DOCX) салыстырылуы тиіс."
+                f"{date_part}{fio} бала күтіміне байланысты демалыстан жұмысқа шығуға рұқсат берілсін."
             )
         else:
+            date_part = f", с {date}" if has_effective_date else ""
             text = (
-                f"{fio} приступить к работе в связи с выходом из отпуска по уходу за ребёнком. "
-                "Дата выхода, основание и иные условия подлежат сверке с оригиналом приказа (DOCX)."
+                f"{fio}{date_part} приступить к работе в связи с выходом из отпуска по уходу за ребёнком."
             )
     elif item_type == ORDER_TYPE_TRANSFER:
         org = _localized_name(to_org_unit_name or org_unit_name, lang)
-        position = _localized_name(to_position_name or position_name, lang)
+        position = _localized_position(to_position_name or position_name, lang)
         rate_value = (
             _format_rate_value(to_rate)
             if to_rate is not None and to_rate != ""
@@ -540,6 +569,10 @@ def generate_item_body(locale: str, item_ctx: Mapping[str, Any]) -> Dict[str, st
             text = f"{fio}, күні {date}."
         else:
             text = f"{fio}, дата {date}."
+
+    # No authoritative per-primary-position tenure source currently exists.
+    # Keep this presentation fallback out of personnel payload and facts.
+    text = f"{text} {'Жұмыс өтілі әлі анықталмаған.' if lang == 'kk' else 'Стаж работы ещё не определён.'}"
 
     return _result(
         generated_text=text,

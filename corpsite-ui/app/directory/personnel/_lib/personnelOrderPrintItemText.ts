@@ -6,6 +6,7 @@ import {
 } from "./personnelOrderPrintFormat";
 import type { LocalizedText } from "./personnelOrderPrintLocalized";
 import { resolveLocalizedText } from "./personnelOrderPrintLocalized";
+import { resolvePersonnelOrderPositionText } from "./personnelOrderPositionDictionary";
 import { russianEmployeeForOrder, russianOrderAssignment } from "./personnelOrderRussianWording";
 
 export type PersonnelOrderPrintItemContext = {
@@ -34,7 +35,7 @@ function dash(value: string | null | undefined): string {
 function renderHire(ctx: PersonnelOrderPrintItemContext, lang: "kk" | "ru"): string {
   const fio = dash(ctx.employeeName);
   const org = resolveLocalizedText(ctx.orgUnitName, lang);
-  const position = resolveLocalizedText(ctx.positionName, lang);
+  const position = resolvePersonnelOrderPositionText(ctx.positionName, lang);
   const rateValue = formatPersonnelOrderPrintRateValue(ctx.rate);
   const date = formatPersonnelOrderPrintDate(ctx.effectiveDate, lang);
   if (lang === "kk") {
@@ -49,7 +50,7 @@ function renderHire(ctx: PersonnelOrderPrintItemContext, lang: "kk" | "ru"): str
 function renderTransfer(ctx: PersonnelOrderPrintItemContext, lang: "kk" | "ru"): string {
   const fio = dash(ctx.employeeName);
   const org = resolveLocalizedText(ctx.toOrgUnitName || ctx.orgUnitName, lang);
-  const position = resolveLocalizedText(ctx.toPositionName || ctx.positionName, lang);
+  const position = resolvePersonnelOrderPositionText(ctx.toPositionName || ctx.positionName, lang);
   const rateValue =
     ctx.toRate != null && ctx.toRate !== ""
       ? formatPersonnelOrderPrintRateValue(ctx.toRate)
@@ -98,7 +99,7 @@ function renderConcurrentStart(ctx: PersonnelOrderPrintItemContext, lang: "kk" |
     return `${fio} үшін қоса атқару ${concurrentValue} мөлшерлемесінде ${date} бастап белгіленсін.${totalPart}`;
   }
   const employee = russianEmployeeForOrder(fio);
-  const position = resolveLocalizedText(ctx.toPositionName || ctx.positionName, "ru");
+  const position = resolvePersonnelOrderPositionText(ctx.toPositionName || ctx.positionName, "ru");
   const unit = resolveLocalizedText(ctx.toOrgUnitName || ctx.orgUnitName, "ru");
   const assignment = russianOrderAssignment(position, unit);
   if (employee) {
@@ -151,22 +152,24 @@ export function renderPersonnelOrderPrintItemText(
 ): string[] {
   const type = String(ctx.itemTypeCode || "").trim().toUpperCase();
   const renderOne = (lang: "kk" | "ru") => {
+    let text: string;
     switch (type) {
       case "HIRE":
-        return renderHire(ctx, lang);
+        text = renderHire(ctx, lang); break;
       case "TRANSFER":
-        return renderTransfer(ctx, lang);
+        text = renderTransfer(ctx, lang); break;
       case "TERMINATION":
-        return renderTermination(ctx, lang);
+        text = renderTermination(ctx, lang); break;
       case "CONCURRENT_DUTY_START":
-        return renderConcurrentStart(ctx, lang);
+        text = renderConcurrentStart(ctx, lang); break;
       case "CONCURRENT_DUTY_END":
-        return renderConcurrentEnd(ctx, lang);
+        text = renderConcurrentEnd(ctx, lang); break;
       case "SUPPLEMENTARY_PAY":
-        return renderSupplementaryPay(ctx, lang);
+        text = renderSupplementaryPay(ctx, lang); break;
       default:
-        return renderGeneric(ctx, lang);
+        text = renderGeneric(ctx, lang);
     }
+    return `${text} ${lang === "kk" ? "Жұмыс өтілі әлі анықталмаған." : "Стаж работы ещё не определён."}`;
   };
 
   if (language === "kk") return [renderOne("kk")];

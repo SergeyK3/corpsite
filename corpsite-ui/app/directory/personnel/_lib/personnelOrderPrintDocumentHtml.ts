@@ -220,33 +220,42 @@ function renderAcknowledgement(
   language: PersonnelOrderPrintLanguage,
 ): string {
   if (!model.acknowledgements.length) return "";
-  const dictionaries = printDictionariesForLanguage(language);
-  const primary = primaryPrintDictionary(language);
-  const heading = dictionaries
-    .map((dict) => `<div>${escapePersonnelOrderPrintHtml(dict.familiarization)}</div>`)
-    .join("");
-
   const rows = model.acknowledgements
-    .map((row, index) => {
-      const name =
-        String(row.employeeName || "").trim() || `№${row.employeeId ?? index + 1}`;
+    .map((row) => {
+      const fullName = String(row.employeeName || "").trim();
+      const parts = fullName.split(/\s+/).filter(Boolean);
+      const ruName = parts.length >= 2 ? `${parts[0]} ${parts[1][0]}.` : "";
+      const kkName = parts.length >= 2 ? `${parts[1][0]}. ${parts[0]}` : "";
+      const date = row.acknowledgedOn
+        ? new Date(`${row.acknowledgedOn}T00:00:00`).toLocaleDateString("ru-RU")
+        : null;
+      const locales: Array<"kk" | "ru"> = language === "kk-ru" ? ["kk", "ru"] : [language];
+      const content = locales.map((locale) => {
+        const isKk = locale === "kk";
+        const familiarization = isKk ? "Бұйрықпен таныстым:" : "С приказом ознакомлен(а):";
+        const nameLabel = isKk ? "Аты-жөні:" : "Фамилия И.:";
+        const formattedName = isKk ? kkName : ruName;
+        const dateLine = date || (isKk ? "«___» ______________ 20___ ж." : "«___» ______________ 20___ г.");
+        return `<div class="personnel-order-print-ack-name">${escapePersonnelOrderPrintHtml(familiarization)} ____________________</div>
+    <div class="personnel-order-print-ack-name">${escapePersonnelOrderPrintHtml(nameLabel)} ${escapePersonnelOrderPrintHtml(formattedName)} ____________________</div>
+    <div class="personnel-order-print-ack-date">${escapePersonnelOrderPrintHtml(dateLine)}</div>`;
+      }).join("");
       return `<div class="personnel-order-print-ack-row">
   <div class="personnel-order-print-ack-grid">
-    <div>
-      <div class="personnel-order-print-signature-line">&nbsp;</div>
-      <div class="personnel-order-print-ack-caption">${escapePersonnelOrderPrintHtml(primary.signatureCaption)}</div>
-    </div>
-    <div class="personnel-order-print-ack-name">${escapePersonnelOrderPrintHtml(name)}</div>
-    <div class="personnel-order-print-ack-date">${escapePersonnelOrderPrintHtml(primary.familiarizationDate)}</div>
+    ${content}
   </div>
 </div>`;
     })
     .join("");
 
   return `<section class="personnel-order-print-block personnel-order-print-acknowledgement" data-testid="personnel-order-print-acknowledgement">
-  <div class="personnel-order-print-ack-heading">${heading}</div>
   ${rows}
 </section>`;
+}
+
+function renderExecutor(model: PersonnelOrderPrintViewModel, language: PersonnelOrderPrintLanguage): string {
+  const label = language === "kk" ? "Орындаушы" : "Исполнитель";
+  return `<section class="personnel-order-print-block personnel-order-print-executor" data-testid="personnel-order-print-executor">${escapePersonnelOrderPrintHtml(label)}: ${escapePersonnelOrderPrintHtml(model.executorName)}</section>`;
 }
 
 /**
@@ -268,6 +277,7 @@ export function buildPersonnelOrderPrintDocumentHtml(
       ${renderTailDate(model, language)}
       ${renderSignature(model, language)}
       ${renderAcknowledgement(model, language)}
+      ${renderExecutor(model, language)}
     </div>
   </div>
 </article>`;

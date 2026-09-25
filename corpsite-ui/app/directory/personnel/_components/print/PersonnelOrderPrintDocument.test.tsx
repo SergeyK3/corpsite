@@ -93,6 +93,21 @@ describe("PersonnelOrderPrintToolbar", () => {
 });
 
 describe("PersonnelOrderPrintDocument", () => {
+  it("renders one localized acknowledgement and executor for a repeated subject", () => {
+    const repeated = {
+      ...detail,
+      items: [...detail.items, { ...detail.items[0], item_id: 2, item_number: 2 }],
+      acknowledgements: [{ acknowledgement_event_id: 1, order_id: 42, employee_id: 7, event_type: "RECORDED", acknowledged_on: "2026-07-12", created_by_user_id: 1 }],
+    };
+    render(<PersonnelOrderPrintDocument model={buildPersonnelOrderPrintViewModel(repeated, {})} language="ru" />);
+    const ack = screen.getByTestId("personnel-order-print-acknowledgement");
+    expect(ack.querySelectorAll(".personnel-order-print-ack-row")).toHaveLength(1);
+    expect(ack).toHaveTextContent("Петрова А.");
+    expect(ack).toHaveTextContent("12.07.2026");
+    expect(screen.getByTestId("personnel-order-print-executor")).toHaveTextContent("Исполнитель: М. Умерзакова");
+    expect(screen.getByTestId("personnel-order-print-items")).toHaveTextContent("Стаж работы ещё не определён.");
+  });
+
   it("uses scoped print document class without Times on toolbar", () => {
     const model = buildPersonnelOrderPrintViewModel(detail, { organizationName: "ММЦ" });
     render(
@@ -136,7 +151,7 @@ describe("PersonnelOrderPrintDocument", () => {
     expect(screen.getByTestId("personnel-order-print-signature")).not.toHaveTextContent("Руководитель");
     expect(screen.getByTestId("personnel-order-print-signature")).not.toHaveTextContent("Подпись");
     expect(screen.getByTestId("personnel-order-print-acknowledgement")).toHaveTextContent(
-      "Петрова Анна",
+      "Петрова А.",
     );
     expect(screen.getByTestId("personnel-order-print-acknowledgement")).not.toHaveTextContent("Ф.И.О.");
     expect(screen.getByTestId("personnel-order-print-acknowledgement")).not.toHaveTextContent("Т.А.Ә.");

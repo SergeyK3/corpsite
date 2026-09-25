@@ -50,7 +50,8 @@ export type PersonnelOrderPrintViewModel = {
     position: LocalizedText | null;
     fio: string | null;
   };
-  acknowledgements: Array<{ employeeId: number | null; employeeName: string | null }>;
+  acknowledgements: Array<{ employeeId: number | null; employeeName: string | null; acknowledgedOn: string | null }>;
+  executorName: string;
 };
 
 export type PersonnelOrderPrintNameMaps = {
@@ -63,6 +64,14 @@ export type PersonnelOrderPrintNameMaps = {
   /** Optional editorial state from GET …/editorial (WP-PO-EDIT-002). */
   editorial?: PersonnelOrderEditorialState | null;
 };
+
+/**
+ * created_by records draft creation, not proven registration. Keep the agreed
+ * fallback in one place until a registration lifecycle actor is available.
+ */
+export function resolvePersonnelOrderExecutorName(_detail: PersonnelOrderDetailResponse): string {
+  return "М. Умерзакова";
+}
 
 /** Official document titles — not technical type labels (HIRE / Составной). */
 export const PERSONNEL_ORDER_PRINT_DOCUMENT_TITLES: Record<string, LocalizedText> = {
@@ -360,9 +369,11 @@ export function buildPersonnelOrderPrintViewModel(
     if (seenEmployees.has(key)) continue;
     seenEmployees.add(key);
     if (!item.employeeName && item.employeeId == null) continue;
+    const acknowledgement = (detail.acknowledgements || []).find((entry) => entry.employee_id === item.employeeId);
     acknowledgements.push({
       employeeId: item.employeeId,
       employeeName: item.employeeName,
+      acknowledgedOn: acknowledgement?.event_type === "CLEARED" ? null : acknowledgement?.acknowledged_on || null,
     });
   }
 
@@ -394,6 +405,7 @@ export function buildPersonnelOrderPrintViewModel(
       fio: signatoryFio,
     },
     acknowledgements,
+    executorName: resolvePersonnelOrderExecutorName(detail),
   };
 }
 

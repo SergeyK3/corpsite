@@ -170,6 +170,17 @@ export type PersonnelOrderDetailResponse = {
   attachments: PersonnelOrderAttachment[];
   prints: PersonnelOrderPrint[];
   events: PersonnelOrderLinkedEvent[];
+  acknowledgements?: PersonnelOrderAcknowledgement[];
+};
+
+export type PersonnelOrderAcknowledgement = {
+  acknowledgement_event_id: number;
+  order_id: number;
+  employee_id: number;
+  event_type: "RECORDED" | "CORRECTED" | "CLEARED" | string;
+  acknowledged_on?: string | null;
+  created_at?: string | null;
+  created_by_user_id: number;
 };
 
 /** WP-PO-EDIT-002 editorial persistence projection. */
@@ -452,6 +463,22 @@ export async function listPersonnelOrders(
 export async function getPersonnelOrder(orderId: number): Promise<PersonnelOrderDetailResponse> {
   return requestJson<PersonnelOrderDetailResponse>("GET", `/directory/personnel-orders/${orderId}`, {
     fallback: "Не удалось загрузить приказ.",
+  });
+}
+
+export async function listPersonnelOrderAcknowledgements(orderId: number): Promise<{ items: PersonnelOrderAcknowledgement[] }> {
+  return requestJson("GET", `/directory/personnel-orders/${orderId}/acknowledgements`, { fallback: "Не удалось загрузить ознакомление." });
+}
+
+export async function recordPersonnelOrderAcknowledgement(orderId: number, employeeId: number, acknowledgedOn: string) {
+  return requestJson("POST", `/directory/personnel-orders/${orderId}/acknowledgements`, {
+    body: { employee_id: employeeId, acknowledged_on: acknowledgedOn }, fallback: "Не удалось зарегистрировать ознакомление.",
+  });
+}
+
+export async function clearPersonnelOrderAcknowledgement(orderId: number, employeeId: number) {
+  return requestJson("POST", `/directory/personnel-orders/${orderId}/acknowledgements/clear`, {
+    body: { employee_id: employeeId }, fallback: "Не удалось очистить ознакомление.",
   });
 }
 

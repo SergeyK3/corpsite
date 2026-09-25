@@ -64,6 +64,7 @@ def test_supplementary_pay_generated_text_is_bilingual_and_does_not_invent_terms
 
 def test_return_from_childcare_leave_is_bilingual_fail_closed_and_does_not_invent_terms() -> None:
     assert classify_personnel_order_action("Выход из отпуска по уходу за ребёнком") == "RETURN_FROM_CHILDCARE_LEAVE"
+    assert classify_personnel_order_action("Выйти на работу после отпуска по уходу за ребёнком") == "RETURN_FROM_CHILDCARE_LEAVE"
     assert classify_personnel_order_action("Бала күтіміне байланысты демалыстан шығу") == "RETURN_FROM_CHILDCARE_LEAVE"
     assert classify_personnel_order_action("Вышла на работу") is None
 
@@ -88,18 +89,32 @@ def test_return_from_childcare_leave_is_bilingual_fail_closed_and_does_not_inven
     }
     assert generate_order_block(
         "preamble", "ru", {"order_type_code": "RETURN_FROM_CHILDCARE_LEAVE", "legal_basis_article": "999"}
-    )["generated_text"] == "В соответствии с пунктом 3 статьи 100 Трудового кодекса Республики Казахстан ПРИКАЗЫВАЮ:"
+    )["generated_text"] == "В соответствии с пунктом 4 статьи 100 Трудового кодекса Республики Казахстан ПРИКАЗЫВАЮ:"
     assert generate_order_block(
         "preamble", "kk", {"order_type_code": "RETURN_FROM_CHILDCARE_LEAVE"}
-    )["generated_text"] == "Қазақстан Республикасының Еңбек кодексінің 100-бабы 3-тармағына сәйкес БҰЙЫРАМЫН:"
+    )["generated_text"] == "Қазақстан Республикасының Еңбек кодексінің 100-бабы 4-тармағына сәйкес БҰЙЫРАМЫН:"
     assert "выходом из отпуска по уходу за ребёнком" in ru
     assert "бала күтіміне байланысты демалыстан" in kk
+    assert "Стаж работы ещё не определён." in ru
+    assert "Жұмыс өтілі әлі анықталмаған." in kk
     for forbidden in (
-        "2099", "9.99", "Не включать", "999",
+        "9.99", "Не включать", "999",
         "Тестовое образование", "Тестовый сертификат", "Тестовый стаж",
     ):
         assert forbidden not in ru
         assert forbidden not in kk
+
+
+def test_childcare_grant_is_distinct_from_return_for_ru_and_kk() -> None:
+    assert classify_personnel_order_action("Предоставить отпуск по уходу за ребёнком") == "LEAVE.CHILDCARE.GRANT"
+    assert classify_personnel_order_action("Бала күтіміне байланысты демалыс берілсін") == "LEAVE.CHILDCARE.GRANT"
+    assert classify_personnel_order_action("Вышла на работу") is None
+    assert "ребёнком" in generate_order_block("title", "ru", {"order_type_code": "LEAVE.CHILDCARE.GRANT"})["generated_text"]
+    assert "бала" in generate_order_block("title", "kk", {"order_type_code": "LEAVE.CHILDCARE.GRANT"})["generated_text"].casefold()
+    ru = generate_item_body("ru", {"item_type_code": "LEAVE.CHILDCARE.GRANT", "employee_name": "Иванова", "leave_start": "2026-01-01", "leave_end": "2026-01-02"})["generated_text"]
+    kk = generate_item_body("kk", {"item_type_code": "LEAVE.CHILDCARE.GRANT", "employee_name": "Иванова", "leave_start": "2026-01-01", "leave_end": "2026-01-02"})["generated_text"]
+    assert ru.endswith("Стаж работы ещё не определён.")
+    assert kk.endswith("Жұмыс өтілі әлі анықталмаған.")
 
 
 def test_hire_body_kk_ru() -> None:
@@ -117,6 +132,7 @@ def test_hire_body_kk_ru() -> None:
     assert "қабылдансын" in kk["generated_text"]
     assert "Принять на работу" in ru["generated_text"]
     assert kk["source_fingerprint"] != ru["source_fingerprint"]
+    assert ru["generated_text"].endswith("Стаж работы ещё не определён.")
 
 
 def test_personal_application_basis() -> None:
@@ -139,6 +155,23 @@ def test_missing_employee_uses_dash() -> None:
     ru = generate_item_body("ru", ctx)
     assert "—" in ru["generated_text"]
     assert "Уволить" in ru["generated_text"]
+
+
+def test_position_dictionary_translates_only_approved_pair_and_preserves_saved_kk() -> None:
+    base = {
+        "item_type_code": "HIRE",
+        "employee_name": "Иванова И.И.",
+        "effective_date": "2026-07-07",
+        "org_unit_name": "Отделение",
+        "rate": 1,
+    }
+    translated = generate_item_body("kk", {**base, "position_name": "Медсестра — анестезистка"})
+    preserved = generate_item_body(
+        "kk",
+        {**base, "position_name": {"ru": "медсестра-анестезистка", "kk": "сақталған атау"}},
+    )
+    assert "анестезист мейіргері" in translated["generated_text"]
+    assert "сақталған атау" in preserved["generated_text"]
 
 
 def test_closing_has_default_responsibility_text() -> None:

@@ -52,6 +52,7 @@ from app.db.models.personnel_orders import (
     STORAGE_TYPE_LOCAL_SHARE,
     STORAGE_TYPE_URL,
     PersonnelOrder,
+    PersonnelOrderAcknowledgementEvent,
     PersonnelOrderAttachment,
     PersonnelOrderEditorialBlock,
     PersonnelOrderItem,

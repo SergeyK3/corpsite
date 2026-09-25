@@ -729,6 +729,17 @@ def get_personnel_order(order_id: int) -> Dict[str, Any]:
             {"order_id": int(order_id)},
         ).mappings().all()
 
+        acknowledgement_rows = []
+        if conn.execute(text("SELECT to_regclass('public.personnel_order_acknowledgement_events')")).scalar_one() is not None:
+            acknowledgement_rows = conn.execute(text("""
+                SELECT DISTINCT ON (employee_id)
+                    acknowledgement_event_id, order_id, employee_id, event_type,
+                    acknowledged_on, created_at, created_by_user_id
+                FROM public.personnel_order_acknowledgement_events
+                WHERE order_id=:order_id
+                ORDER BY employee_id, created_at DESC, acknowledgement_event_id DESC
+            """), {"order_id": int(order_id)}).mappings().all()
+
     return {
         "order": _serialize_order_header(dict(header_row), include_archive_summary=True),
         "items": [_serialize_order_item(dict(row)) for row in item_rows],
@@ -736,6 +747,14 @@ def get_personnel_order(order_id: int) -> Dict[str, Any]:
         "attachments": [_serialize_attachment(dict(row)) for row in attachment_rows],
         "prints": [_serialize_print(dict(row)) for row in print_rows],
         "events": [_serialize_linked_event(dict(row)) for row in event_rows],
+        "acknowledgements": [
+            {
+                **dict(row),
+                "acknowledged_on": _iso_date(row.get("acknowledged_on")),
+                "created_at": _iso_datetime(row.get("created_at")),
+            }
+            for row in acknowledgement_rows
+        ],
     }
 
 

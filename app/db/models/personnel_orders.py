@@ -36,6 +36,7 @@ ORDER_TYPE_CONCURRENT_DUTY_START = "CONCURRENT_DUTY_START"
 ORDER_TYPE_CONCURRENT_DUTY_END = "CONCURRENT_DUTY_END"
 ORDER_TYPE_SUPPLEMENTARY_PAY = "SUPPLEMENTARY_PAY"
 ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE = "RETURN_FROM_CHILDCARE_LEAVE"
+ORDER_TYPE_LEAVE_CHILDCARE_GRANT = "LEAVE.CHILDCARE.GRANT"
 ORDER_TYPE_COMPOSITE = "COMPOSITE"
 
 # This draft-only reconstruction code is intentionally separate from the MVP
@@ -57,6 +58,7 @@ MVP_ITEM_TYPE_CODES = MVP_ORDER_TYPE_CODES
 LEAVE_DRAFT_ITEM_TYPE_CODES = (
     "LEAVE.ANNUAL.GRANT",
     "LEAVE.UNPAID.GRANT",
+    ORDER_TYPE_LEAVE_CHILDCARE_GRANT,
 )
 MVP_HEADER_ORDER_TYPE_CODES = MVP_ORDER_TYPE_CODES + (ORDER_TYPE_COMPOSITE,) + LEAVE_DRAFT_ITEM_TYPE_CODES
 PERSONNEL_ORDER_HEADER_TYPE_CODES = (
@@ -106,6 +108,15 @@ SOURCE_MODE_DIGITAL = "DIGITAL"
 
 ITEM_STATUS_ACTIVE = "ACTIVE"
 ITEM_STATUS_VOIDED = "VOIDED"
+
+ACKNOWLEDGEMENT_EVENT_RECORDED = "RECORDED"
+ACKNOWLEDGEMENT_EVENT_CORRECTED = "CORRECTED"
+ACKNOWLEDGEMENT_EVENT_CLEARED = "CLEARED"
+ACKNOWLEDGEMENT_EVENT_TYPES = (
+    ACKNOWLEDGEMENT_EVENT_RECORDED,
+    ACKNOWLEDGEMENT_EVENT_CORRECTED,
+    ACKNOWLEDGEMENT_EVENT_CLEARED,
+)
 
 LOCALE_KK = "kk"
 LOCALE_RU = "ru"
@@ -176,7 +187,7 @@ class PersonnelOrder(Base):
             "order_type_code IN "
             "('HIRE', 'TRANSFER', 'TERMINATION', 'RETURN_FROM_CHILDCARE_LEAVE', 'CONCURRENT_DUTY_START', "
             "'CONCURRENT_DUTY_END', 'COMPOSITE', 'LEAVE.ANNUAL.GRANT', "
-            "'LEAVE.UNPAID.GRANT', 'SUPPLEMENTARY_PAY')",
+            "'LEAVE.UNPAID.GRANT', 'LEAVE.CHILDCARE.GRANT', 'SUPPLEMENTARY_PAY')",
             name="chk_personnel_orders_order_type_code",
         ),
         Index("ix_personnel_orders_status", "status"),
@@ -255,7 +266,7 @@ class PersonnelOrderItem(Base):
             "item_type_code IN "
             "('HIRE', 'TRANSFER', 'TERMINATION', 'RETURN_FROM_CHILDCARE_LEAVE', 'CONCURRENT_DUTY_START', "
             "'CONCURRENT_DUTY_END', 'LEAVE.ANNUAL.GRANT', "
-            "'LEAVE.UNPAID.GRANT', 'SUPPLEMENTARY_PAY')",
+            "'LEAVE.UNPAID.GRANT', 'LEAVE.CHILDCARE.GRANT', 'SUPPLEMENTARY_PAY')",
             name="chk_personnel_order_items_item_type_code",
         ),
         Index("ix_personnel_order_items_order_id", "order_id"),
@@ -301,6 +312,38 @@ class PersonnelOrderItem(Base):
         nullable=False,
         server_default=func.now(),
     )
+
+
+class PersonnelOrderAcknowledgementEvent(Base):
+    """Append-only acknowledgement history keyed by order and unique worker."""
+
+    __tablename__ = "personnel_order_acknowledgement_events"
+    __table_args__ = (
+        CheckConstraint(
+            "event_type IN ('RECORDED', 'CORRECTED', 'CLEARED')",
+            name="chk_personnel_order_ack_event_type",
+        ),
+        CheckConstraint(
+            "(event_type = 'CLEARED' AND acknowledged_on IS NULL) OR "
+            "(event_type IN ('RECORDED', 'CORRECTED') AND acknowledged_on IS NOT NULL)",
+            name="chk_personnel_order_ack_event_date",
+        ),
+        Index(
+            "ix_personnel_order_ack_events_order_employee_created",
+            "order_id",
+            "employee_id",
+            "created_at",
+            "acknowledgement_event_id",
+        ),
+    )
+
+    acknowledgement_event_id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    order_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("personnel_orders.order_id", ondelete="RESTRICT"), nullable=False)
+    employee_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("employees.employee_id", ondelete="RESTRICT"), nullable=False)
+    event_type: Mapped[str] = mapped_column(Text, nullable=False)
+    acknowledged_on: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    created_by_user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.user_id", ondelete="RESTRICT"), nullable=False)
 
 
 class PersonnelOrderLocalizedText(Base):
