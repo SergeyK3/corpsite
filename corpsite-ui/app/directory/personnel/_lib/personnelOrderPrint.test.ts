@@ -233,6 +233,39 @@ describe("buildPersonnelOrderPrintViewModel", () => {
     expect(model.basis).toEqual([]);
   });
 
+  it("uses the approved return-from-childcare-leave preamble when legacy editorial data is absent", () => {
+    const detail = {
+      ...sampleDetail({ order_type_code: "RETURN_FROM_CHILDCARE_LEAVE", legal_basis_article: null, basis_summary: null }),
+      items: [{
+        ...sampleDetail().items[0],
+        item_type_code: "RETURN_FROM_CHILDCARE_LEAVE",
+        effective_date: "2026-08-05",
+        payload: {
+          presentation_context: {
+            position_name: { ru: "руководитель отдела кадров", kk: "кадрлар бөлімінің басшысы" },
+            org_unit_name: { ru: "отдел кадров", kk: "кадрлар бөлімі" },
+          },
+        },
+      }],
+      localized_texts: [],
+    };
+    const model = buildPersonnelOrderPrintViewModel(detail, {});
+    expect(model.title.ru).toBe("О выходе на работу из отпуска по уходу за ребёнком");
+    expect(model.title.kk).toBe("Бала күтіміне байланысты демалыстан жұмысқа шығу туралы");
+    expect(resolveLocalizedLines(model.preamble || {}, "ru")).toEqual([
+      "В соответствии с Трудовым кодексом Республики Казахстан",
+      "ПРИКАЗЫВАЮ:",
+    ]);
+    expect(resolveLocalizedLines(model.preamble || {}, "kk")).toEqual([
+      "Қазақстан Республикасының Еңбек кодексіне сәйкес",
+      "БҰЙЫРАМЫН:",
+    ]);
+    const html = buildPersonnelOrderPrintDocumentHtml(model, "ru");
+    expect(html).toContain("Разрешить сотруднику");
+    expect(html).toContain("Стаж работы ещё не определён.");
+    expect(html).not.toContain("RETURN_FROM_CHILDCARE_LEAVE");
+  });
+
   it("resolves signatory position from directory map when order field empty", () => {
     const model = buildPersonnelOrderPrintViewModel(
       sampleDetail({ signed_by_position: null }),

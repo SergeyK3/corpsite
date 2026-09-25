@@ -101,6 +101,12 @@ export default function PersonnelOrderDocumentView({
         ))}
       </ol>
 
+      {document.informationLines?.length ? (
+        <section className="space-y-2 text-sm leading-6" data-testid="personnel-order-document-information">
+          {document.informationLines.map((line, index) => <p key={index}>{line}</p>)}
+        </section>
+      ) : null}
+
       {document.additionalInstructions.length ? (
         <section className="space-y-2 text-sm leading-6">
           <h4 className="font-semibold">{ui.additional}</h4>

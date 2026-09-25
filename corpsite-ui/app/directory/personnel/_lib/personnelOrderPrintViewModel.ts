@@ -85,6 +85,18 @@ export const PERSONNEL_ORDER_PRINT_DOCUMENT_TITLES: Record<string, LocalizedText
   COMPOSITE: localizedText("Кадрлық өзгерістер туралы", "О кадровых изменениях"),
 };
 
+/**
+ * A print template remains available even when a legacy order has no saved
+ * editorial preamble.  This is intentionally narrow: other order types keep
+ * their established, type-specific preambles.
+ */
+const PERSONNEL_ORDER_PRINT_PREAMBLE_FALLBACKS: Record<string, LocalizedText> = {
+  RETURN_FROM_CHILDCARE_LEAVE: localizedText(
+    "Қазақстан Республикасының Еңбек кодексіне сәйкес\nБҰЙЫРАМЫН:",
+    "В соответствии с Трудовым кодексом Республики Казахстан\nПРИКАЗЫВАЮ:",
+  ),
+};
+
 function optionalNumber(value: unknown): number | null {
   const n = Number(value);
   return Number.isFinite(n) && n > 0 ? Math.trunc(n) : null;
@@ -219,9 +231,12 @@ function pickLocalizedTexts(
   };
 
   const legacyPreamble = localizedText(kk?.preamble, ru?.preamble);
+  const fallbackPreamble = PERSONNEL_ORDER_PRINT_PREAMBLE_FALLBACKS[
+    String(detail.order.order_type_code || "").toUpperCase()
+  ] || localizedText();
   const preambleMerged = localizedText(
-    editorialPreamble?.kk || legacyPreamble.kk,
-    editorialPreamble?.ru || legacyPreamble.ru,
+    editorialPreamble?.kk || legacyPreamble.kk || fallbackPreamble.kk,
+    editorialPreamble?.ru || legacyPreamble.ru || fallbackPreamble.ru,
   );
   const hasPreamble = Boolean(preambleMerged.kk || preambleMerged.ru);
   const hasClosing = Boolean(editorialClosing?.kk || editorialClosing?.ru);

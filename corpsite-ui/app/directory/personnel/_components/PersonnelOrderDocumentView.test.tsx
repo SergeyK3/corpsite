@@ -1,7 +1,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
-import PersonnelOrderDocumentView from "./PersonnelOrderDocumentView";
+import PersonnelOrderDocumentView, { personnelOrderDocumentAvailable } from "./PersonnelOrderDocumentView";
 import { renderPersonnelOrderDocument, resolvePersonnelOrderTemplateKey } from "./personnelOrderDocumentTemplates";
 import type { PersonnelOrderDetailResponse } from "../_lib/personnelOrdersApi.client";
 
@@ -33,12 +33,70 @@ const application = [{ basis_id: "application", document_type: "EMPLOYEE_APPLICA
 afterEach(cleanup);
 
 describe("PersonnelOrderDocumentView", () => {
+  it("registers and renders the approved bilingual return-from-childcare-leave template", () => {
+    const order = detail([{
+      item_id: 1,
+      order_id: 42,
+      item_number: 1,
+      item_type_code: "RETURN_FROM_CHILDCARE_LEAVE",
+      item_status: "ACTIVE",
+      employee_id: 7,
+      employee_name: "Тестовый сотрудник",
+      effective_date: "2026-08-05",
+      payload: {
+        presentation_context: {
+          position_name: { ru: "руководитель отдела кадров", kk: "кадрлар бөлімінің басшысы" },
+          org_unit_name: { ru: "отдел кадров", kk: "кадрлар бөлімі" },
+        },
+      },
+    }], application);
+    order.order.order_type_code = "RETURN_FROM_CHILDCARE_LEAVE";
+
+    const ru = renderPersonnelOrderDocument(order, "ru");
+    const kk = renderPersonnelOrderDocument(order, "kk");
+    expect(resolvePersonnelOrderTemplateKey(order)).toBe("personnel.return-from-childcare-leave.standard");
+    expect(personnelOrderDocumentAvailable(order, "ru")).toBe(true);
+    expect(personnelOrderDocumentAvailable(order, "kk")).toBe(true);
+    expect(ru).toMatchObject({
+      title: "О выходе на работу из отпуска по уходу за ребёнком",
+      preamble: "В соответствии с Трудовым кодексом Республики Казахстан",
+      directive: "ПРИКАЗЫВАЮ:",
+      informationLines: ["Стаж работы ещё не определён."],
+    });
+    expect(ru?.points[0]?.text).toBe("Разрешить сотруднику Тестовый сотрудник, должность: руководитель отдела кадров (отдел кадров) приступить к работе в связи с выходом из отпуска по уходу за ребёнком с 5 августа 2026 года.");
+    expect(kk).toMatchObject({
+      title: "Бала күтіміне байланысты демалыстан жұмысқа шығу туралы",
+      preamble: "Қазақстан Республикасының Еңбек кодексіне сәйкес",
+      directive: "БҰЙЫРАМЫН:",
+      informationLines: ["Жұмыс өтілі әлі анықталмаған."],
+    });
+    expect(kk?.points[0]?.text).toBe("Қызметкер Тестовый сотрудник, лауазымы: кадрлар бөлімінің басшысы (кадрлар бөлімі), 2026 жылғы 5 тамыздан бастап бала күтіміне байланысты демалыстан жұмысқа шығуға рұқсат берілсін.");
+
+    render(<PersonnelOrderDocumentView detail={order} language="ru" />);
+    const document = screen.getByTestId("personnel-order-document");
+    expect(document).not.toHaveTextContent("утверждённый шаблон пока отсутствует");
+    expect(document).toHaveTextContent("ПРИКАЗЫВАЮ:");
+    expect(screen.getByTestId("personnel-order-document-information")).toHaveTextContent("Стаж работы ещё не определён.");
+  });
+
+  it("keeps the template available when a return-from-childcare-leave item needs DOCX review", () => {
+    const order = detail([{
+      item_id: 1, order_id: 1, item_number: 1, item_type_code: "RETURN_FROM_CHILDCARE_LEAVE", item_status: "ACTIVE",
+      employee_id: 1, employee_name: "Тестовый сотрудник", effective_date: null, payload: {},
+    }], []);
+    order.order.order_type_code = "RETURN_FROM_CHILDCARE_LEAVE";
+    const document = renderPersonnelOrderDocument(order, "ru");
+    expect(personnelOrderDocumentAvailable(order, "ru")).toBe(true);
+    expect(document?.additionalInstructions).toEqual(["Дата выхода, должность и подразделение требуют сверки с оригиналом приказа (DOCX)."]);
+  });
+
   it("resolves approved templates from actions, not control-order numbers", () => {
     for (const [type, key] of [
       ["HIRE", "personnel.hire.standard"],
       ["TRANSFER", "personnel.transfer.permanent"],
       ["CONCURRENT_DUTY_START", "personnel.concurrent-duty.start"],
       ["TERMINATION", "personnel.termination.employee-initiative-unused-leave"],
+      ["RETURN_FROM_CHILDCARE_LEAVE", "personnel.return-from-childcare-leave.standard"],
     ] as const) {
       const order = detail([{ item_id: 1, item_number: 1, item_type_code: type, payload: {} }], application);
       order.order.order_number = "1336-ж";

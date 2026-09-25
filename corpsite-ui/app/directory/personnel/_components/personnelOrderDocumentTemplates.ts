@@ -25,6 +25,8 @@ export type RenderedOrderDocument = {
   preamble: string;
   directive: string;
   points: RenderedOrderPoint[];
+  /** Informational lines that are part of the approved document, not directives. */
+  informationLines?: string[];
   additionalInstructions: string[];
 };
 
@@ -35,6 +37,7 @@ export const APPROVED_PERSONNEL_ORDER_TEMPLATE_VERSIONS = {
   "personnel.termination.employee-initiative-unused-leave": { kk: 1, ru: 1 },
   "personnel.supplementary-pay.review": { kk: 1, ru: 1 },
   "personnel.transfer.permanent-with-concurrent-duty": { kk: 1, ru: 1 },
+  "personnel.return-from-childcare-leave.standard": { kk: 1, ru: 1 },
 } as const;
 
 export type ApprovedPersonnelOrderTemplateKey = keyof typeof APPROVED_PERSONNEL_ORDER_TEMPLATE_VERSIONS;
@@ -47,6 +50,10 @@ export const PERSONNEL_ORDER_TITLE_DICTIONARY = {
   TERMINATION: { kk: "Еңбек шартын бұзу туралы", ru: "О расторжении трудового договора" },
   SUPPLEMENTARY_PAY: { kk: "Қосымша ақы туралы", ru: "О дополнительной оплате" },
   TRANSFER_WITH_CONCURRENT_DUTY: { kk: "Ауыстыру туралы", ru: "О переводе и совмещении должностей" },
+  RETURN_FROM_CHILDCARE_LEAVE: {
+    kk: "Бала күтіміне байланысты демалыстан жұмысқа шығу туралы",
+    ru: "О выходе на работу из отпуска по уходу за ребёнком",
+  },
 } as const;
 
 // Runtime projection of the existing bilingual position and unit dictionaries.
@@ -85,6 +92,7 @@ function titleFor(key: ApprovedPersonnelOrderTemplateKey, language: PersonnelOrd
     "personnel.termination.employee-initiative-unused-leave": "TERMINATION",
     "personnel.supplementary-pay.review": "SUPPLEMENTARY_PAY",
     "personnel.transfer.permanent-with-concurrent-duty": "TRANSFER_WITH_CONCURRENT_DUTY",
+    "personnel.return-from-childcare-leave.standard": "RETURN_FROM_CHILDCARE_LEAVE",
   } as const)[key];
   return PERSONNEL_ORDER_TITLE_DICTIONARY[code][language];
 }
@@ -171,6 +179,7 @@ function dateParts(value: string | null | undefined): { day: number; month: numb
 }
 
 const kkMonths = ["қаңтар", "ақпан", "наурыз", "сәуір", "мамыр", "маусым", "шілде", "тамыз", "қыркүйек", "қазан", "қараша", "желтоқсан"];
+const kkMonthsFrom = ["қаңтардан", "ақпаннан", "наурыздан", "сәуірден", "мамырдан", "маусымнан", "шілдеден", "тамыздан", "қыркүйектен", "қазаннан", "қарашадан", "желтоқсаннан"];
 const ruMonths = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"];
 
 function effectiveDate(value: string | null | undefined, language: PersonnelOrderDocumentLanguage): string {
@@ -179,6 +188,14 @@ function effectiveDate(value: string | null | undefined, language: PersonnelOrde
   return language === "kk"
     ? `${parts.year} жылғы ${parts.day} ${kkMonths[parts.month - 1]}`
     : `${parts.day} ${ruMonths[parts.month - 1]} ${parts.year} года`;
+}
+
+function effectiveStartDate(value: string | null | undefined, language: PersonnelOrderDocumentLanguage): string {
+  const parts = dateParts(value);
+  if (!parts) return "—";
+  return language === "kk"
+    ? `${parts.year} жылғы ${parts.day} ${kkMonthsFrom[parts.month - 1]} бастап`
+    : effectiveDate(value, language);
 }
 
 function basisDocuments(detail: PersonnelOrderDetailResponse): BasisDocument[] {
@@ -237,7 +254,8 @@ export function renderPersonnelOrderDocument(
       : templateKey === "personnel.concurrent-duty.start" ? concurrentDutyForLanguage(detail, language)
         : templateKey === "personnel.supplementary-pay.review" ? supplementaryPayForLanguage(detail, language)
         : templateKey === "personnel.termination.employee-initiative-unused-leave" ? terminationByEmployeeInitiativeForLanguage(detail, language)
-          : permanentTransferWithConcurrentDutyForLanguage(detail, language);
+          : templateKey === "personnel.return-from-childcare-leave.standard" ? returnFromChildcareLeaveForLanguage(detail, language)
+            : permanentTransferWithConcurrentDutyForLanguage(detail, language);
   const manualBlockText = (block: { override_text?: string | null; generated_text?: string | null; effective_text?: string | null } | undefined) =>
     block?.override_text?.trim() || (!block?.generated_text?.trim() ? block?.effective_text?.trim() : null) || null;
   const orderBlockOverride = (blockType: string) => manualBlockText(editorial?.order_blocks.find(
@@ -254,7 +272,9 @@ export function renderPersonnelOrderDocument(
           : templateKey === "personnel.supplementary-pay.review" ? supplementaryPayForLanguage(oneItemDetail, language)
           : templateKey === "personnel.termination.employee-initiative-unused-leave"
             ? terminationByEmployeeInitiativeForLanguage(oneItemDetail, language)
-            : rendered;
+            : templateKey === "personnel.return-from-childcare-leave.standard"
+              ? returnFromChildcareLeaveForLanguage(oneItemDetail, language)
+              : rendered;
   };
   const automaticPoints = items.map((item) => oneItemDocument(item).points[0]);
   if (templateKey === "personnel.termination.employee-initiative-unused-leave") {
@@ -303,6 +323,7 @@ export function resolvePersonnelOrderTemplateKey(
       CONCURRENT_DUTY_START: "personnel.concurrent-duty.start",
       TERMINATION: "personnel.termination.employee-initiative-unused-leave",
       SUPPLEMENTARY_PAY: "personnel.supplementary-pay.review",
+      RETURN_FROM_CHILDCARE_LEAVE: "personnel.return-from-childcare-leave.standard",
     } as Record<string, ApprovedPersonnelOrderTemplateKey | undefined>)[type] || null;
   }
   return ({
@@ -311,6 +332,7 @@ export function resolvePersonnelOrderTemplateKey(
     CONCURRENT_DUTY_START: "personnel.concurrent-duty.start",
     TERMINATION: "personnel.termination.employee-initiative-unused-leave",
     SUPPLEMENTARY_PAY: "personnel.supplementary-pay.review",
+    RETURN_FROM_CHILDCARE_LEAVE: "personnel.return-from-childcare-leave.standard",
   } as Record<string, ApprovedPersonnelOrderTemplateKey | undefined>)[String(detail.order.order_type_code).toUpperCase()] || null;
 }
 
@@ -324,6 +346,17 @@ function assignmentForItem(item: PersonnelOrderItem, language: PersonnelOrderDoc
   // The editor keeps the wording override on the item payload.  Preserve the
   // structured assignment as-is and project that wording only while rendering.
   return assignment({ ...target, position_text_override: source.position_text_override || target.position_text_override }, language);
+}
+
+function returnFromChildcarePresentation(item: PersonnelOrderItem, language: PersonnelOrderDocumentLanguage) {
+  const source = payload(item);
+  const context = record(source.presentation_context);
+  const assignmentTarget = assignmentForItem(item, language);
+  const position = dictionaryValue(context.position_name, language, POSITION_KK_BY_RU, POSITION_RU_BY_KK)
+    || assignmentTarget.position;
+  const unit = dictionaryValue(context.org_unit_name, language, UNIT_KK_BY_RU, UNIT_RU_BY_KK)
+    || assignmentTarget.unit;
+  return { position, unit };
 }
 
 function russianOrderEmployee(name: string, action: "hire" | "transfer" | "concurrent"): string | null {
@@ -372,6 +405,40 @@ function concurrentDutyForLanguage(detail: PersonnelOrderDetailResponse, languag
     ? `Разрешить ${russianEmployee} с ${when} совмещение обязанностей по должности ${russianOrderTarget(target)} с оплатой ${target.rate} ставки.`
     : `Разрешить ${name} с ${when} совмещение обязанностей по должности ${target.position} ${target.unit} с оплатой ${target.rate} ставки.`;
   return standardDocument("personnel.concurrent-duty.start", language, { kk: "Қоса атқару туралы", ru: "О совмещении обязанностей" }, { kk: "Қазақстан Республикасының Еңбек кодексінің 111-бабына сәйкес", ru: "В соответствии со статьей 111 Трудового кодекса Республики Казахстан" }, language === "kk" ? `${name} ${when} бастап ${target.unit} ${target.position} міндеттерін ${target.rate} мөлшерлемемен қоса атқаруға рұқсат берілсін.` : russianPoint, renderBasis(detail, item, language));
+}
+
+/**
+ * Approved template for a return from childcare leave.  This deliberately
+ * uses presentation context only for the document wording: it never creates
+ * an assignment or an employee event while a historical order is viewed.
+ */
+function returnFromChildcareLeaveForLanguage(detail: PersonnelOrderDetailResponse, language: PersonnelOrderDocumentLanguage): RenderedOrderDocument {
+  const item = primaryItem(detail, "RETURN_FROM_CHILDCARE_LEAVE");
+  const name = employeeName(item);
+  const target = returnFromChildcarePresentation(item, language);
+  const date = effectiveStartDate(item.effective_date, language);
+  const complete = name !== "—" && date !== "—" && target.position !== "—" && target.unit !== "—";
+  const point = complete
+    ? language === "kk"
+      ? `Қызметкер ${name}, лауазымы: ${target.position} (${target.unit}), ${date} бала күтіміне байланысты демалыстан жұмысқа шығуға рұқсат берілсін.`
+      : `Разрешить сотруднику ${name}, должность: ${target.position} (${target.unit}) приступить к работе в связи с выходом из отпуска по уходу за ребёнком с ${date}.`
+    : language === "kk"
+      ? `Қызметкер ${name}, бала күтіміне байланысты демалыстан жұмысқа шығуға рұқсат берілсін.`
+      : `Разрешить сотруднику ${name} приступить к работе в связи с выходом из отпуска по уходу за ребёнком.`;
+  return {
+    templateKey: "personnel.return-from-childcare-leave.standard",
+    templateVersion: 1,
+    title: PERSONNEL_ORDER_TITLE_DICTIONARY.RETURN_FROM_CHILDCARE_LEAVE[language],
+    preamble: language === "kk"
+      ? "Қазақстан Республикасының Еңбек кодексіне сәйкес"
+      : "В соответствии с Трудовым кодексом Республики Казахстан",
+    directive: language === "kk" ? "БҰЙЫРАМЫН:" : "ПРИКАЗЫВАЮ:",
+    points: [{ text: point, basis: renderBasis(detail, item, language) }],
+    informationLines: [language === "kk" ? "Жұмыс өтілі әлі анықталмаған." : "Стаж работы ещё не определён."],
+    additionalInstructions: complete ? [] : [language === "kk"
+      ? "Шығу күні, лауазымы және бөлімшесі түпнұсқа DOCX-пен салыстыруды талап етеді."
+      : "Дата выхода, должность и подразделение требуют сверки с оригиналом приказа (DOCX)."],
+  };
 }
 
 function supplementaryPayForLanguage(detail: PersonnelOrderDetailResponse, language: PersonnelOrderDocumentLanguage): RenderedOrderDocument {
