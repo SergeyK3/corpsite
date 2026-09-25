@@ -532,8 +532,16 @@ export async function previewPersonnelOrderHeaderDuplicate(payload: { order_id?:
 export async function patchPersonnelOrderDocumentHeader(orderId: number, payload: { expected_document_revision: number; order_number: string; order_date?: string | null; source_title?: string | null; source_title_locale?: "kk" | "ru" | "unknown" | null; reason_code?: string | null; reason_text?: string | null }) {
   return requestJson("PATCH", `/directory/personnel-orders/${orderId}/document-header`, { body: payload, fallback: "Не удалось сохранить реквизиты документа." });
 }
-export async function patchPersonnelOrderDocumentItem(orderId: number, itemId: number, payload: { expected_document_revision: number; item_type_code: string; employee_id?: number | null; effective_date?: string | null; document_subject_context?: { position_name?: string | null; org_unit_name?: string | null; specialty?: string | null; rate?: string | null; basis_type?: "PERSONAL_APPLICATION" | "OTHER" | null }; reason_code?: string | null; reason_text?: string | null }) {
-  return requestJson("PATCH", `/directory/personnel-orders/${orderId}/document-items/${itemId}`, { body: payload, fallback: "Не удалось сохранить пункт." });
+export type PersonnelOrderDocumentItemPatchResult = {
+  no_op: boolean;
+  resulting_document_revision: number;
+  header_type_code?: string;
+  document_review_state?: "NEEDS_REVIEW" | null;
+  audit_event_ids: number[];
+};
+
+export async function patchPersonnelOrderDocumentItem(orderId: number, itemId: number, payload: { expected_document_revision: number; item_type_code: string; employee_id?: number | null; effective_date?: string | null; document_subject_context?: { position_name?: string | null; org_unit_name?: string | null; specialty?: string | null; rate?: string | null; basis_type?: "PERSONAL_APPLICATION" | "OTHER" | null }; reason_code?: string | null; reason_text?: string | null }): Promise<PersonnelOrderDocumentItemPatchResult> {
+  return requestJson<PersonnelOrderDocumentItemPatchResult>("PATCH", `/directory/personnel-orders/${orderId}/document-items/${itemId}`, { body: payload, fallback: "Не удалось сохранить пункт." });
 }
 export type PersonnelOrderDocumentItem = { item_id: number; item_number: number; item_type_code: string; employee_id?: number | null; employee_name?: string | null; org_unit_name?: string | null; position_name?: string | null; specialty?: string | null; rate?: string | null; needs_employee_link?: boolean; effective_date?: string | null };
 export async function listPersonnelOrderDocumentItems(orderId: number): Promise<{ document_revision: number; items: PersonnelOrderDocumentItem[] }> {
