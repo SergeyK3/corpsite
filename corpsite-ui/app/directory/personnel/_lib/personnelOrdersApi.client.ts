@@ -272,6 +272,26 @@ export type PersonnelOrderCreatePayload = {
   comment?: string | null;
 };
 
+export type PersonnelOrderManualDraftCreatePayload = {
+  order_number: string;
+  order_date: string;
+  source_title: string;
+  source_title_locale: "kk" | "ru";
+  item_type_code: string;
+  employee_id: number;
+  effective_date: string;
+};
+
+export type PersonnelOrderManualDraftCreateResult = {
+  order_id: number;
+  order_number: string;
+  order_type_code: string;
+  status: "DRAFT";
+  source_mode: "MANUAL";
+  document_revision: number;
+  document_review_state: "NEEDS_REVIEW";
+};
+
 export type PersonnelOrderUpdatePayload = {
   order_number?: string;
   order_date?: string;
@@ -586,6 +606,15 @@ export async function createPersonnelOrder(
   payload: PersonnelOrderCreatePayload,
 ): Promise<PersonnelOrderDetailResponse> {
   return requestJson<PersonnelOrderDetailResponse>("POST", "/directory/personnel-orders", {
+    body: payload,
+    fallback: "Не удалось создать приказ.",
+  });
+}
+
+export async function createManualPersonnelOrderDraft(
+  payload: PersonnelOrderManualDraftCreatePayload,
+): Promise<PersonnelOrderManualDraftCreateResult> {
+  return requestJson("POST", "/directory/personnel-orders/manual-draft", {
     body: payload,
     fallback: "Не удалось создать приказ.",
   });

@@ -27,6 +27,8 @@ from app.directory.personnel_orders_schemas import (
     PersonnelOrderHeaderDuplicatePreviewIn,
     PersonnelOrderDocumentItemPatchIn,
     PersonnelOrderDocumentItemListResponse,
+    PersonnelOrderManualDraftCreateIn,
+    PersonnelOrderManualDraftCreateOut,
     PersonnelOrderItemCreateIn,
     PersonnelOrderItemUpdateIn,
     PersonnelOrderLifecycleAuditListResponse,
@@ -102,6 +104,7 @@ from app.services.personnel_order_document_review_service import (
 )
 from app.services.personnel_order_document_header_service import duplicate_preview, patch_document_header
 from app.services.personnel_order_document_item_service import list_document_items, patch_document_item
+from app.services.personnel_order_manual_draft_service import create_manual_draft
 from app.db.models.personnel_orders import (
     LIFECYCLE_AUDIT_ACTION_DOCUMENT_CONFIRMED,
     LIFECYCLE_AUDIT_ACTION_DOCUMENT_REOPENED,
@@ -114,6 +117,17 @@ from app.services.personnel_order_acknowledgement_service import (
 )
 
 router = APIRouter()
+
+
+@router.post("/personnel-orders/manual-draft", response_model=PersonnelOrderManualDraftCreateOut, status_code=201)
+def create_manual_personnel_order_draft_route(payload: PersonnelOrderManualDraftCreateIn, user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    require_personnel_admin_or_403(user)
+    try:
+        return call_service(create_manual_draft, created_by=_require_user_id(user), **payload.model_dump())
+    except PersonnelOrderValidationError as exc:
+        raise validation_error_to_http422(exc)
+    except PersonnelOrderConflictError as exc:
+        raise HTTPException(status_code=409, detail={"code": str(exc)})
 
 
 def _require_user_id(user: Dict[str, Any]) -> int:

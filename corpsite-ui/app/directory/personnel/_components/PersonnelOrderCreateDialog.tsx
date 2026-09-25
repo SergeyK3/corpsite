@@ -1,124 +1,31 @@
 "use client";
 
 import * as React from "react";
+import { PERSONNEL_ORDER_CREATE_TYPE_OPTIONS, createManualPersonnelOrderDraft, mapPersonnelOrdersApiError, previewPersonnelOrderHeaderDuplicate, type PersonnelOrderManualDraftCreateResult } from "../_lib/personnelOrdersApi.client";
 
-import {
-  PERSONNEL_ORDER_CREATE_TYPE_OPTIONS,
-  createPersonnelOrder,
-  mapPersonnelOrdersApiError,
-  type PersonnelOrderDetailResponse,
-} from "../_lib/personnelOrdersApi.client";
-
-type Props = {
-  open: boolean;
-  onClose: () => void;
-  onCreated: (detail: PersonnelOrderDetailResponse) => void;
-};
+type Props = { open: boolean; onClose: () => void; onCreated: (result: PersonnelOrderManualDraftCreateResult) => void };
 
 export default function PersonnelOrderCreateDialog({ open, onClose, onCreated }: Props) {
-  const [orderTypeCode, setOrderTypeCode] = React.useState("HIRE");
-  const [comment, setComment] = React.useState("");
-  const [submitting, setSubmitting] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-
-  React.useEffect(() => {
-    if (!open) return;
-    setOrderTypeCode("HIRE");
-    setComment("");
-    setError(null);
-    setSubmitting(false);
-  }, [open]);
-
+  const [number, setNumber] = React.useState(""); const [orderDate, setOrderDate] = React.useState(""); const [title, setTitle] = React.useState(""); const [locale, setLocale] = React.useState<"kk" | "ru">("kk");
+  const [itemType, setItemType] = React.useState("HIRE"); const [employeeId, setEmployeeId] = React.useState(""); const [effectiveDate, setEffectiveDate] = React.useState(""); const [submitting, setSubmitting] = React.useState(false); const [error, setError] = React.useState<string | null>(null);
+  React.useEffect(() => { if (open) { setNumber(""); setOrderDate(""); setTitle(""); setLocale("kk"); setItemType("HIRE"); setEmployeeId(""); setEffectiveDate(""); setError(null); } }, [open]);
   if (!open) return null;
-
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setSubmitting(true);
-    setError(null);
+  async function submit(event: React.FormEvent) {
+    event.preventDefault(); setSubmitting(true); setError(null);
     try {
-      const detail = await createPersonnelOrder({
-        order_type_code: orderTypeCode,
-        source_mode: "PAPER",
-        comment: comment.trim() || null,
-      });
-      onCreated(detail);
-      onClose();
-    } catch (err) {
-      setError(mapPersonnelOrdersApiError(err, "Не удалось создать приказ."));
-    } finally {
-      setSubmitting(false);
-    }
+      const duplicate = await previewPersonnelOrderHeaderDuplicate({ order_number: number, order_date: orderDate });
+      if (duplicate.blocking) { setError("Найден приказ с таким же номером и датой."); return; }
+      if (duplicate.warnings.length && !window.confirm("Есть приказ с тем же номером и другой датой. Продолжить?")) return;
+      const result = await createManualPersonnelOrderDraft({ order_number: number, order_date: orderDate, source_title: title, source_title_locale: locale, item_type_code: itemType, employee_id: Number(employeeId), effective_date: effectiveDate });
+      onCreated(result); onClose();
+    } catch (err) { setError(mapPersonnelOrdersApiError(err, "Не удалось создать приказ.")); } finally { setSubmitting(false); }
   }
-
-  return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" data-testid="personnel-order-create-dialog">
-      <button type="button" aria-label="Закрыть" className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative w-full max-w-md rounded-xl border border-zinc-200 bg-white p-5 shadow-xl dark:border-zinc-800 dark:bg-zinc-950">
-        <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-50">Создать приказ</h2>
-        <p className="mt-1 text-sm text-zinc-500">
-          Черновик без номера и даты. Регистрационные реквизиты заполняются позже из бумажного журнала.
-        </p>
-
-        <form className="mt-4 space-y-4" onSubmit={handleSubmit}>
-          <div className="rounded-xl border border-zinc-200 bg-zinc-50/80 p-3 dark:border-zinc-800 dark:bg-zinc-900/30">
-            <label className="mb-1 block text-sm font-medium text-zinc-800 dark:text-zinc-200">
-              Тип приказа
-            </label>
-            <p className="mb-2 text-xs text-zinc-500">
-              Определяет назначение приказа. Типы пунктов настраиваются после создания черновика.
-            </p>
-            <select
-              value={orderTypeCode}
-              onChange={(e) => setOrderTypeCode(e.target.value)}
-              className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-              required
-            >
-              {PERSONNEL_ORDER_CREATE_TYPE_OPTIONS.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="mb-1 block text-sm font-medium text-zinc-800 dark:text-zinc-200">
-              Комментарий
-            </label>
-            <textarea
-              value={comment}
-              onChange={(e) => setComment(e.target.value)}
-              rows={3}
-              className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-              placeholder="Необязательно"
-            />
-          </div>
-
-          {error ? (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900/55 dark:bg-red-950/35 dark:text-red-200">
-              {error}
-            </div>
-          ) : null}
-
-          <div className="flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={submitting}
-              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700"
-            >
-              Отмена
-            </button>
-            <button
-              type="submit"
-              disabled={submitting}
-              className="rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900"
-            >
-              {submitting ? "Создание…" : "Создать черновик"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
+  return <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" data-testid="personnel-order-create-dialog"><button type="button" aria-label="Закрыть" className="absolute inset-0 bg-black/40" onClick={onClose} />
+    <div className="relative w-full max-w-md rounded-xl border border-zinc-200 bg-white p-5 shadow-xl"><h2 className="text-lg font-semibold">Создать приказ</h2><p className="mt-1 text-sm text-zinc-500">Ручной черновик с одним пунктом; кадровые последствия не создаются.</p>
+      <form className="mt-4 space-y-3" onSubmit={submit}>
+        <label className="block text-sm">Номер приказа<input aria-label="Номер приказа" required value={number} onChange={(e) => setNumber(e.target.value)} className="mt-1 w-full rounded border p-2" /></label><label className="block text-sm">Дата приказа<input aria-label="Дата приказа" type="date" required value={orderDate} onChange={(e) => setOrderDate(e.target.value)} className="mt-1 w-full rounded border p-2" /></label>
+        <label className="block text-sm">Исходное название<textarea aria-label="Исходное название" required value={title} onChange={(e) => setTitle(e.target.value)} className="mt-1 w-full rounded border p-2" /></label><label className="block text-sm">Язык исходного названия<select aria-label="Язык исходного названия" value={locale} onChange={(e) => setLocale(e.target.value as "kk" | "ru")} className="mt-1 w-full rounded border p-2"><option value="kk">Қазақша</option><option value="ru">Русский</option></select></label>
+        <label className="block text-sm">Тип пункта<select aria-label="Тип пункта" value={itemType} onChange={(e) => setItemType(e.target.value)} className="mt-1 w-full rounded border p-2">{PERSONNEL_ORDER_CREATE_TYPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label><label className="block text-sm">Сотрудник<input aria-label="Сотрудник" type="number" min="1" required value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} className="mt-1 w-full rounded border p-2" /></label><label className="block text-sm">Дата действия<input aria-label="Дата действия" type="date" required value={effectiveDate} onChange={(e) => setEffectiveDate(e.target.value)} className="mt-1 w-full rounded border p-2" /></label>
+        {error ? <p role="alert" className="text-sm text-red-700">{error}</p> : null}<div className="flex justify-end gap-2"><button type="button" onClick={onClose} className="rounded border px-3 py-2 text-sm">Отмена</button><button type="submit" disabled={submitting} className="rounded bg-blue-600 px-3 py-2 text-sm text-white">{submitting ? "Создание…" : "Создать приказ"}</button></div>
+      </form></div></div>;
 }

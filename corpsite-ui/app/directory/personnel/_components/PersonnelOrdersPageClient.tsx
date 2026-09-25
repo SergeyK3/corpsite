@@ -21,7 +21,7 @@ import {
   parsePersonnelOrdersFilters,
   personnelOrderStatusLabel,
   personnelOrderTypeLabel,
-  type PersonnelOrderDetailResponse,
+  type PersonnelOrderManualDraftCreateResult,
   type PersonnelOrderListItem,
   type PersonnelOrdersFilters,
 } from "../_lib/personnelOrdersApi.client";
@@ -154,12 +154,12 @@ export default function PersonnelOrdersPageClient() {
     }
   }
 
-  function handleCreated(detail: PersonnelOrderDetailResponse) {
-    setToast(`Создан черновик приказа #${detail.order.order_id}`);
+  function handleCreated(detail: PersonnelOrderManualDraftCreateResult) {
+    setToast(`Создан черновик приказа #${detail.order_id}`);
     void load();
-    setSelectedOrderId(detail.order.order_id);
+    setSelectedOrderId(detail.order_id);
     setDrawerOpen(true);
-    updateFilters({ order_id: detail.order.order_id });
+    updateFilters({ order_id: detail.order_id });
   }
 
   function handleChanged() {

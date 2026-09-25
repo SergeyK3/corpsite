@@ -435,3 +435,24 @@ class PersonnelOrderDocumentItemOut(BaseModel):
 class PersonnelOrderDocumentItemListResponse(BaseModel):
     document_revision: int
     items: List[PersonnelOrderDocumentItemOut]
+
+
+class PersonnelOrderManualDraftCreateIn(BaseModel):
+    model_config = {"extra": "forbid"}
+    order_number: str = Field(..., min_length=1, max_length=200)
+    order_date: date
+    source_title: str = Field(..., min_length=1, max_length=2000)
+    source_title_locale: Literal["kk", "ru"]
+    item_type_code: str = Field(..., min_length=1, max_length=80)
+    employee_id: int = Field(..., ge=1)
+    effective_date: date
+
+
+class PersonnelOrderManualDraftCreateOut(BaseModel):
+    order_id: int
+    order_number: str
+    order_type_code: str
+    status: str
+    source_mode: str
+    document_revision: int
+    document_review_state: Literal["NEEDS_REVIEW"]
