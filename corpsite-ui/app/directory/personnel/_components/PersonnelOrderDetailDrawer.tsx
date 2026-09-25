@@ -73,6 +73,17 @@ type Props = {
   hirePersonId?: number | null;
 };
 
+const SOURCE_TITLE_LOCALES = ["kk", "ru", "unknown"] as const;
+type SourceTitleLocale = (typeof SOURCE_TITLE_LOCALES)[number];
+
+function isSourceTitleLocale(value: unknown): value is SourceTitleLocale {
+  return typeof value === "string" && SOURCE_TITLE_LOCALES.some((locale) => locale === value);
+}
+
+function sourceTitleLocale(value: unknown): SourceTitleLocale {
+  return isSourceTitleLocale(value) ? value : "unknown";
+}
+
 function PersonnelOrderAcknowledgements({ detail, onChanged }: { detail: PersonnelOrderDetailResponse; onChanged: (next: PersonnelOrderDetailResponse) => void }) {
   const subjects = Array.from(new Map((detail.items || [])
     .filter((item) => item.item_status === "ACTIVE" && item.employee_id != null)
@@ -119,7 +130,8 @@ function PersonnelOrderDocumentHeaderForm({ detail, onSaved }: { detail: Personn
   const [number, setNumber] = React.useState(order.order_number || "");
   const [orderDate, setOrderDate] = React.useState(order.order_date || "");
   const [title, setTitle] = React.useState(order.source_title || "");
-  const [locale, setLocale] = React.useState(order.source_title_locale || "unknown");
+  const [locale, setLocaleState] = React.useState<SourceTitleLocale>(() => sourceTitleLocale(order.source_title_locale));
+  const setLocale = (value: unknown) => setLocaleState(sourceTitleLocale(value));
   const [reasonCode, setReasonCode] = React.useState(""); const [reasonText, setReasonText] = React.useState("");
   const [message, setMessage] = React.useState<string | null>(null); const registered = ["REGISTERED", "SIGNED"].includes(order.status);
   async function save() {
