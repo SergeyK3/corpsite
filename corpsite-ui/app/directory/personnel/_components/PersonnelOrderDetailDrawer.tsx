@@ -14,6 +14,8 @@ import {
   reopenPersonnelOrderDocumentReview,
   previewPersonnelOrderHeaderDuplicate,
   patchPersonnelOrderDocumentHeader,
+  listPersonnelOrderDocumentItems,
+  patchPersonnelOrderDocumentItem,
   recordPersonnelOrderAcknowledgement,
   clearPersonnelOrderAcknowledgement,
   isWritablePersonnelOrder,
@@ -24,6 +26,7 @@ import {
   type PersonnelOrderEditorialState,
   type PersonnelOrderLinkedEvent,
   type PersonnelOrderDocumentReview,
+  type PersonnelOrderDocumentItem,
 } from "../_lib/personnelOrdersApi.client";
 import {
   hasPersonnelOrderSignatory,
@@ -134,6 +137,70 @@ function PersonnelOrderDocumentHeaderForm({ detail, onSaved }: { detail: Personn
     <p className="text-xs text-zinc-500">Ревизия документа: {order.document_revision ?? 1}</p>{message ? <p role="alert">{message}</p> : null}<button type="button" onClick={()=>void save()} className="rounded bg-blue-600 px-3 py-2 text-sm text-white">Сохранить реквизиты</button></section>;
 }
 
+const DOCUMENT_ITEM_TYPES = [
+  "HIRE", "TRANSFER", "TERMINATION", "CONCURRENT_DUTY_START", "CONCURRENT_DUTY_END",
+  "SUPPLEMENTARY_PAY", "RETURN_FROM_CHILDCARE_LEAVE", "LEAVE.ANNUAL.GRANT",
+  "LEAVE.UNPAID.GRANT", "LEAVE.CHILDCARE.GRANT",
+];
+
+function PersonnelOrderDocumentItemsForm({ detail, onSaved }: { detail: PersonnelOrderDetailResponse; onSaved: () => Promise<void> }) {
+  const order = detail.order;
+  const [items, setItems] = React.useState<PersonnelOrderDocumentItem[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [message, setMessage] = React.useState<string | null>(null);
+  const [reasonCode, setReasonCode] = React.useState("");
+  const [reasonText, setReasonText] = React.useState("");
+  const registered = ["REGISTERED", "SIGNED"].includes(order.status);
+
+  const load = React.useCallback(async () => {
+    setLoading(true);
+    try { setItems((await listPersonnelOrderDocumentItems(order.order_id)).items); }
+    catch { setMessage("Не удалось загрузить пункты приказа."); }
+    finally { setLoading(false); }
+  }, [order.order_id]);
+  React.useEffect(() => { void load(); }, [load]);
+
+  function change(itemId: number, patch: Partial<PersonnelOrderDocumentItem>) {
+    setItems((old) => old.map((item) => item.item_id === itemId ? { ...item, ...patch } : item));
+  }
+  async function save(item: PersonnelOrderDocumentItem) {
+    if (registered && (!reasonCode.trim() || !reasonText.trim())) {
+      setMessage("Для зарегистрированного приказа укажите причину и пояснение."); return;
+    }
+    try {
+      const result = await patchPersonnelOrderDocumentItem(order.order_id, item.item_id, {
+        expected_document_revision: order.document_revision ?? 1,
+        item_type_code: item.item_type_code,
+        employee_id: item.employee_id ?? null,
+        effective_date: item.effective_date || null,
+        reason_code: reasonCode || null,
+        reason_text: reasonText || null,
+      });
+      setMessage(result.no_op ? "Изменений нет." : "Пункт сохранён.");
+      await onSaved(); await load();
+    } catch (error) {
+      setMessage(String(error).includes("409") || String(error).includes("CONFLICT")
+        ? "Приказ был изменён другим пользователем. Обновите данные и повторите действие."
+        : "Не удалось сохранить пункт.");
+    }
+  }
+  return <section data-testid="personnel-order-document-items" className="space-y-4">
+    <h3 className="text-sm font-semibold">Пункты</h3>
+    <p className="text-xs text-zinc-500">Редактируются только тип, сотрудник и дата действия. Служебные данные не отображаются.</p>
+    {registered ? <><label className="block text-sm">Причина исправления<input aria-label="Причина исправления пункта" value={reasonCode} onChange={(e) => setReasonCode(e.target.value)} className="mt-1 w-full rounded border p-2" /></label><label className="block text-sm">Пояснение<textarea aria-label="Пояснение исправления пункта" value={reasonText} onChange={(e) => setReasonText(e.target.value)} className="mt-1 w-full rounded border p-2" /></label></> : null}
+    {message ? <p role="alert">{message}</p> : null}
+    {loading ? <p className="text-sm text-zinc-500">Загрузка пунктов…</p> : null}
+    {items.map((item) => <article key={item.item_id} className="space-y-2 rounded border border-zinc-200 p-3 dark:border-zinc-800" data-testid={`personnel-order-document-item-${item.item_id}`}>
+      <div className="text-sm font-medium">Пункт {item.item_number}</div>
+      <label className="block text-sm">Тип пункта<select aria-label={`Тип пункта ${item.item_id}`} value={item.item_type_code} onChange={(e) => change(item.item_id, { item_type_code: e.target.value })} className="mt-1 w-full rounded border p-2">{DOCUMENT_ITEM_TYPES.map((code) => <option key={code} value={code}>{code}</option>)}</select></label>
+      <label className="block text-sm">Сотрудник<input aria-label={`Сотрудник ${item.item_id}`} type="number" min="1" value={item.employee_id ?? ""} onChange={(e) => change(item.item_id, { employee_id: e.target.value ? Number(e.target.value) : null })} className="mt-1 w-full rounded border p-2" /></label>
+      {item.employee_name ? <p className="text-xs text-zinc-500">{item.employee_name}</p> : null}
+      <label className="block text-sm">Дата действия<input aria-label={`Дата действия ${item.item_id}`} type="date" value={item.effective_date || ""} onChange={(e) => change(item.item_id, { effective_date: e.target.value || null })} className="mt-1 w-full rounded border p-2" /></label>
+      <button type="button" onClick={() => void save(item)} className="rounded bg-blue-600 px-3 py-2 text-sm text-white">Сохранить пункт</button>
+    </article>)}
+  </section>;
+}
+
 function renderFileLink(path?: string | null, url?: string | null): React.ReactNode {
   const href = String(url || path || "").trim();
   if (!href) return "—";
@@ -198,7 +265,7 @@ export default function PersonnelOrderDetailDrawer({
   const [printError, setPrintError] = React.useState<string | null>(null);
   const [headerRequisitesDraft, setHeaderRequisitesDraft] =
     React.useState<PersonnelOrderRequisitesSnapshot | null>(null);
-  const [activeTab, setActiveTab] = React.useState<"document" | "data" | "requisites">("document");
+  const [activeTab, setActiveTab] = React.useState<"document" | "data" | "requisites" | "items">("document");
   const [orderLanguage, setOrderLanguage] = React.useState<PersonnelOrderDocumentLanguage>("kk");
   const [printLanguage, setPrintLanguage] = React.useState<PersonnelOrderDocumentLanguage | null>(null);
 
@@ -359,6 +426,7 @@ export default function PersonnelOrderDetailDrawer({
             Документ
           </button>
           <button type="button" role="tab" aria-selected={activeTab === "requisites"} onClick={() => setActiveTab("requisites")} className={`rounded-t-lg px-3 py-2 text-sm font-medium ${activeTab === "requisites" ? "bg-zinc-100 text-zinc-950" : "text-zinc-500"}`}>Реквизиты</button>
+          <button type="button" role="tab" aria-selected={activeTab === "items"} onClick={() => setActiveTab("items")} className={`rounded-t-lg px-3 py-2 text-sm font-medium ${activeTab === "items" ? "bg-zinc-100 text-zinc-950" : "text-zinc-500"}`}>Пункты</button>
           <button
             type="button"
             role="tab"
@@ -416,7 +484,8 @@ export default function PersonnelOrderDetailDrawer({
           {order && activeTab === "document" ? (
             <PersonnelOrderDocumentView detail={detail} language={orderLanguage} editorial={editorial} />
           ) : null}
-          {order && activeTab === "requisites" && detail ? <PersonnelOrderDocumentHeaderForm detail={detail} onSaved={async () => { await reload(order.order_id); }} /> : null}
+          {order && activeTab === "requisites" && detail ? <PersonnelOrderDocumentHeaderForm detail={detail} onSaved={async () => { const next = await reload(order.order_id); if (next) onChanged?.(next); }} /> : null}
+          {order && activeTab === "items" && detail ? <PersonnelOrderDocumentItemsForm detail={detail} onSaved={async () => { const next = await reload(order.order_id); if (next) onChanged?.(next); }} /> : null}
 
           {order && activeTab === "data" ? (
             <>

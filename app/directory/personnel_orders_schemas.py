@@ -345,6 +345,7 @@ PersonnelOrderLifecycleAuditAction = Literal[
     "DOCUMENT_CONFIRMED",
     "DOCUMENT_REOPENED",
     "HEADER_UPDATED",
+    "ITEM_UPDATED",
 ]
 
 
@@ -410,3 +411,27 @@ class PersonnelOrderDocumentHeaderPatchIn(PersonnelOrderHeaderDuplicatePreviewIn
     source_title_locale: Optional[Literal["kk", "ru", "unknown"]] = None
     reason_code: Optional[str] = Field(default=None, max_length=80)
     reason_text: Optional[str] = Field(default=None, max_length=2000)
+
+class PersonnelOrderDocumentItemPatchIn(BaseModel):
+    model_config = {"extra": "forbid"}
+    expected_document_revision: int = Field(..., ge=1)
+    item_type_code: str = Field(..., min_length=1, max_length=80)
+    employee_id: Optional[int] = Field(default=None, ge=1)
+    effective_date: Optional[date] = None
+    reason_code: Optional[str] = Field(default=None, max_length=80)
+    reason_text: Optional[str] = Field(default=None, max_length=2000)
+
+
+class PersonnelOrderDocumentItemOut(BaseModel):
+    """Safe document-correction projection; deliberately excludes payload."""
+    item_id: int
+    item_number: int
+    item_type_code: str
+    employee_id: Optional[int] = None
+    employee_name: Optional[str] = None
+    effective_date: Optional[str] = None
+
+
+class PersonnelOrderDocumentItemListResponse(BaseModel):
+    document_revision: int
+    items: List[PersonnelOrderDocumentItemOut]

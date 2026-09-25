@@ -51,6 +51,8 @@ vi.mock("../_lib/personnelOrdersApi.client", async () => {
     })),
     previewPersonnelOrderHeaderDuplicate: vi.fn(async () => ({ blocking: false, warnings: [], candidates: [] })),
     patchPersonnelOrderDocumentHeader: vi.fn(async () => ({ no_op: false, resulting_document_revision: 2 })),
+    listPersonnelOrderDocumentItems: vi.fn(async () => ({ document_revision: 1, items: [{ item_id: 9, item_number: 1, item_type_code: "HIRE", employee_id: 7, employee_name: "Test employee", effective_date: "2026-09-02" }] })),
+    patchPersonnelOrderDocumentItem: vi.fn(async () => ({ no_op: false, resulting_document_revision: 2, header_type_code: "TRANSFER" })),
     generatePersonnelOrderEditorial: vi.fn(async () => ({
       order_id: 42,
       order_status: "DRAFT",
@@ -61,7 +63,7 @@ vi.mock("../_lib/personnelOrdersApi.client", async () => {
   };
 });
 
-import { getPersonnelOrder, getPersonnelOrderEditorial, getPersonnelOrderDocumentReview, confirmPersonnelOrderDocumentReview, reopenPersonnelOrderDocumentReview, patchPersonnelOrderDocumentHeader } from "../_lib/personnelOrdersApi.client";
+import { getPersonnelOrder, getPersonnelOrderEditorial, getPersonnelOrderDocumentReview, confirmPersonnelOrderDocumentReview, reopenPersonnelOrderDocumentReview, patchPersonnelOrderDocumentHeader, listPersonnelOrderDocumentItems, patchPersonnelOrderDocumentItem } from "../_lib/personnelOrdersApi.client";
 
 const detail: PersonnelOrderDetailResponse = {
   order: {
@@ -87,6 +89,20 @@ afterEach(() => {
 });
 
 describe("PersonnelOrderDetailDrawer document tab", () => {
+  it("opens typed document items without exposing payload and saves only allowed fields", async () => {
+    vi.mocked(getPersonnelOrder).mockResolvedValue({ ...detail, order: { ...detail.order, document_revision: 3 } });
+    render(<PersonnelOrderDetailDrawer orderId={42} open onClose={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("tab", { name: "Пункты" }));
+    expect(await screen.findByTestId("personnel-order-document-items")).toBeInTheDocument();
+    expect(listPersonnelOrderDocumentItems).toHaveBeenCalledWith(42);
+    expect(screen.queryByText(/payload/i)).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Тип пункта 9"), { target: { value: "TRANSFER" } });
+    fireEvent.change(screen.getByLabelText("Сотрудник 9"), { target: { value: "8" } });
+    fireEvent.change(screen.getByLabelText("Дата действия 9"), { target: { value: "2026-09-03" } });
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить пункт" }));
+    await waitFor(() => expect(patchPersonnelOrderDocumentItem).toHaveBeenCalledWith(42, 9, expect.objectContaining({ expected_document_revision: 3, item_type_code: "TRANSFER", employee_id: 8, effective_date: "2026-09-03" })));
+  });
+
   it("opens requisites with current values and sends typed header patch", async () => {
     vi.mocked(getPersonnelOrder).mockResolvedValue({ ...detail, order: { ...detail.order, source_title: "Исходный текст", source_title_locale: "kk", document_revision: 3 } });
     render(<PersonnelOrderDetailDrawer orderId={42} open onClose={vi.fn()} />);
