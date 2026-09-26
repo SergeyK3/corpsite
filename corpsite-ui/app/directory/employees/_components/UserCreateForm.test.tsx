@@ -99,6 +99,7 @@ describe("UserCreateForm login field", () => {
     await waitFor(() => {
       expect(screen.getByLabelText(/Логин/i)).toHaveValue("kozgambaeva.lt");
     });
+    expect(screen.getByRole("heading", { name: "Создание доступа к Corpsite" })).toBeInTheDocument();
     expect(screen.getByText(/Аккаунт для:/i)).toBeInTheDocument();
     expect(screen.queryByLabelText(/^ФИО$/i)).not.toBeInTheDocument();
   });
@@ -215,7 +216,7 @@ describe("UserCreateForm login field", () => {
     fireEvent.change(loginInput, { target: { value: "custom.login" } });
     expect(loginInput.value).toBe("custom.login");
 
-    fireEvent.submit(screen.getByRole("button", { name: "Создать" }).closest("form")!);
+    fireEvent.submit(screen.getByRole("button", { name: "Создать доступ" }).closest("form")!);
     expect(onSubmit).toHaveBeenCalledWith(
       expect.objectContaining({ login: "custom.login", org_unit_id: "44" }),
     );

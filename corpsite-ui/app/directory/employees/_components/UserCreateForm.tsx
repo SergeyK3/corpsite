@@ -173,7 +173,7 @@ export default function UserCreateForm({
       <div className="flex items-start justify-between border-b border-zinc-200 dark:border-zinc-800 px-6 py-5">
         <div>
           <h2 className="text-2xl font-semibold leading-tight text-zinc-900 dark:text-zinc-50">
-            Создание пользователя
+            Создание доступа к Corpsite
           </h2>
           <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
             Аккаунт для:{" "}
@@ -327,7 +327,7 @@ export default function UserCreateForm({
           disabled={saving || rolesLoading}
           className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {saving ? "Сохранение..." : "Создать"}
+          {saving ? "Сохранение..." : "Создать доступ"}
         </button>
       </div>
     </form>

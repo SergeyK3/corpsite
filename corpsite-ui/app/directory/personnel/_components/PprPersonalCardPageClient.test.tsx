@@ -78,7 +78,7 @@ vi.mock("../../employees/_components/EmployeeAccountSections", () => ({
       data-allow-role-edit={String(allowRoleEdit)}
     >
       {!readOnly ? <button type="button">Создать доступ к Corpsite</button> : null}
-      {initialUserCreateOpen ? <div data-testid="user-create-drawer">Создание пользователя</div> : null}
+      {initialUserCreateOpen ? <div data-testid="user-create-drawer">Создание доступа к Corpsite</div> : null}
     </div>
   ),
 }));
