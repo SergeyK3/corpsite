@@ -47,9 +47,14 @@ function targetFromTechnicalUser(user: AdminUser): AccessTargetSearchItem | null
 }
 
 function userMatchesQuery(user: AdminUser, query: string): boolean {
-  const q = query.trim().toLocaleLowerCase();
+  const q = query.trim().toLowerCase();
   if (!q) return true;
-  return [user.login, user.full_name].some((value) => String(value ?? "").toLocaleLowerCase().includes(q));
+  return [user.login, user.full_name].some((value) => String(value ?? "").toLowerCase().includes(q));
+}
+
+function isTechnicalUser(user: AdminUser): boolean {
+  const employeeId = Number(user.employee_id);
+  return !Number.isFinite(employeeId) || employeeId < 1;
 }
 
 async function fetchAllAdminUsers(): Promise<AdminUser[]> {
@@ -115,7 +120,7 @@ export default function PersonnelUserTargetSearch({ value, onChange }: Props) {
         for (const user of users) {
           if (user.is_active === false || !userMatchesQuery(user, fioQuery)) continue;
           // Personnel filters apply only to linked employee records.
-          if (user.employee_id == null) {
+          if (isTechnicalUser(user)) {
             const item = targetFromTechnicalUser(user);
             if (item) byUserId.set(item.target_id, item);
           } else if (!hasPersonnelFilter && !byUserId.has(user.user_id)) {
@@ -138,7 +143,7 @@ export default function PersonnelUserTargetSearch({ value, onChange }: Props) {
       <label><span className="mb-1 block font-medium">Должность</span><select aria-label="Должность" value={positionId} onChange={(event) => setPositionId(event.target.value)} className="w-full rounded border px-2 py-1 dark:border-zinc-600 dark:bg-zinc-900"><option value="">Все должности</option>{positions.map((position) => <option key={position.id} value={position.id}>{position.name}</option>)}</select></label>
     </div>
     {value ? <div className="flex items-center justify-between rounded border border-green-300 bg-green-50 px-2 py-1 dark:border-green-800 dark:bg-green-950/30"><span>{value.label}{value.subtitle ? ` — ${value.subtitle}` : ""}</span><button type="button" className="text-xs underline" onClick={() => onChange(null)}>Сменить</button></div> : <>
-      <label><span className="mb-1 block font-medium">Поиск по ФИО</span><input aria-label="Поиск по ФИО" type="search" value={fioQuery} onChange={(event) => setFioQuery(event.target.value)} placeholder="ФИО сотрудника" className="w-full rounded border px-2 py-1 dark:border-zinc-600 dark:bg-zinc-900" /></label>
+      <label><span className="mb-1 block font-medium">Поиск по логину или ФИО</span><input aria-label="Поиск по логину или ФИО" type="search" value={fioQuery} onChange={(event) => setFioQuery(event.target.value)} placeholder="Логин или ФИО сотрудника" className="w-full rounded border px-2 py-1 dark:border-zinc-600 dark:bg-zinc-900" /></label>
       {loading ? <p className="text-xs text-zinc-500">Поиск…</p> : null}
       {!loading && results.length > 0 ? <ul className="max-h-52 overflow-auto rounded border dark:border-zinc-700">{results.map((item) => <li key={item.target_id}><button type="button" className="block w-full px-2 py-1.5 text-left text-xs hover:bg-zinc-100 dark:hover:bg-zinc-800" onClick={() => onChange(item)}><div className="font-medium">{item.label}</div><div className="text-zinc-500">{item.subtitle}</div></button></li>)}</ul> : null}
       {!loading && results.length === 0 ? <p className="text-xs text-zinc-500">Пользователи не найдены.</p> : null}

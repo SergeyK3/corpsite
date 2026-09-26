@@ -60,7 +60,7 @@ describe("PersonnelUserTargetSearch", () => {
     fireEvent.change(screen.getByLabelText("Группа отделений"), { target: { value: "1" } });
     fireEvent.change(screen.getByLabelText("Отделение"), { target: { value: "10" } });
     fireEvent.change(screen.getByLabelText("Должность"), { target: { value: "7" } });
-    fireEvent.change(screen.getByLabelText("Поиск по ФИО"), { target: { value: "Test" } });
+    fireEvent.change(screen.getByLabelText("Поиск по логину или ФИО"), { target: { value: "Test" } });
 
     await waitFor(() => expect(getEmployees).toHaveBeenLastCalledWith(expect.objectContaining({
       org_group_id: "1", org_unit_id: "10", position_id: "7", q: "Test",
@@ -78,17 +78,24 @@ describe("PersonnelUserTargetSearch", () => {
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ target_type: "USER", target_id: 55 }));
   });
 
-  it("finds and selects an active technical user without employee_id by login", async () => {
+  it("finds a technical current user from the complete /admin/users response regardless of login case or personnel filters", async () => {
     const onChange = await renderSearch();
     fetchAdminUsers.mockResolvedValue([
-      { user_id: 55, employee_id: 100, is_active: true },
-      { user_id: 99, employee_id: null, full_name: null, login: "technical-user-99", role_name: "Test system role", is_active: true },
+      {
+        user_id: 55, employee_id: 100, full_name: "Test Employee", login: "employee-user-55", role_id: 7, role_name: "Employee role", unit_id: 10,
+        is_active: true, must_change_password: false, locked_at: null, locked_reason: null, token_version: 1, created_at: "2026-01-01T00:00:00+00:00",
+      },
+      {
+        user_id: 99, employee_id: 0, full_name: null, login: "Admin", role_id: 1, role_name: "System administrator", unit_id: null,
+        is_active: true, must_change_password: false, locked_at: null, locked_reason: null, token_version: 4, created_at: "2026-01-01T00:00:00+00:00",
+      },
     ]);
     getEmployees.mockResolvedValue({ items: [], total: 0 });
 
-    fireEvent.change(screen.getByLabelText("Поиск по ФИО"), { target: { value: "technical-user-99" } });
-    const result = await screen.findByRole("button", { name: /technical-user-99/ });
-    expect(result).toHaveTextContent("Test system role");
+    fireEvent.change(screen.getByLabelText("Группа отделений"), { target: { value: "1" } });
+    fireEvent.change(screen.getByLabelText("Поиск по логину или ФИО"), { target: { value: "admin" } });
+    const result = await screen.findByRole("button", { name: /Admin/ });
+    expect(result).toHaveTextContent("System administrator");
 
     fireEvent.click(result);
     expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ target_type: "USER", target_id: 99 }));
