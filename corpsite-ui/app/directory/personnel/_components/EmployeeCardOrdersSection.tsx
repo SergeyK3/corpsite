@@ -11,22 +11,15 @@ import {
   personnelOrderStatusLabel,
   type PersonnelOrderListItem,
 } from "../_lib/personnelOrdersApi.client";
+import { PERSONNEL_ORDER_TYPE_LABELS } from "../_lib/personnelOrderLabels";
 
 type Props = {
   employeeId: string;
 };
 
 function orderTypeLabel(code: string | null | undefined): string {
-  const map: Record<string, string> = {
-    HIRE: "Приём",
-    TRANSFER: "Перевод",
-    TERMINATION: "Увольнение",
-    CONCURRENT_DUTY_START: "Совмещение (начало)",
-    CONCURRENT_DUTY_END: "Совмещение (окончание)",
-    COMPOSITE: "Составной",
-  };
   const key = String(code || "").trim().toUpperCase();
-  return map[key] || key || "Приказ";
+  return PERSONNEL_ORDER_TYPE_LABELS[key as keyof typeof PERSONNEL_ORDER_TYPE_LABELS] || "Тип приказа не определён";
 }
 
 export default function EmployeeCardOrdersSection({ employeeId }: Props) {
