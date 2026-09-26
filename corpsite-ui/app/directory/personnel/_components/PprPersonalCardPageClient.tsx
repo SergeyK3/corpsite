@@ -62,6 +62,7 @@ import PprPersonPhoto from "./PprPersonPhoto";
 import EmployeeOperationalAssignmentSection from "./EmployeeOperationalAssignmentSection";
 import EmployeeCardOrdersSection from "./EmployeeCardOrdersSection";
 import EmployeeOnboardingSection from "./EmployeeOnboardingSection";
+import EmployeeAccountSections from "../../employees/_components/EmployeeAccountSections";
 import { getEmployees } from "../../employees/_lib/api.client";
 import { getPersonMigrationStatus, listMigrationStatusUniverses, type MigrationCell, type MigrationSection, type MigrationUniverse } from "../_lib/migrationStatusApi.client";
 import MigrationStatusBlock from "./MigrationStatusBlock";
@@ -129,6 +130,8 @@ export default function PprPersonalCardPageClient({
   const resolvedEmployeeId = pprEmployeeId ?? fallbackEmployeeId;
   const migrationUniverseId = Number(searchParams.get("migration_universe_id"));
   const canReadMigration = currentUser?.has_ppr_migration_status_read === true;
+  const canReadEmployeeAccess = currentUser?.has_user_access_admin === true;
+  const provisionAccount = searchParams.get("provisionAccount") === "1";
 
   const loadCard = React.useCallback(
     async (signal?: AbortSignal) => {
@@ -600,6 +603,25 @@ export default function PprPersonalCardPageClient({
                     employeeId={resolvedEmployeeId}
                     batchId={null}
                     rowId={null}
+                  />
+                </PprCardSection>
+              ) : null}
+
+              {!isApplicant && resolvedEmployeeId ? (
+                <PprCardSection
+                  id="access"
+                  title="Доступ"
+                  description={canReadEmployeeAccess
+                    ? "Учётная запись Corpsite и управление ролью."
+                    : "Только чтение: состояние учётной записи Corpsite."}
+                >
+                  <EmployeeAccountSections
+                    employeeId={resolvedEmployeeId}
+                    initialUserCreateOpen={canReadEmployeeAccess && provisionAccount}
+                    readOnly={!canReadEmployeeAccess}
+                    allowRoleEdit={canReadEmployeeAccess}
+                    embedded
+                    showEvents={false}
                   />
                 </PprCardSection>
               ) : null}

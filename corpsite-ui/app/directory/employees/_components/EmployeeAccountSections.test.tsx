@@ -149,6 +149,27 @@ describe("EmployeeAccountSections provisioning UX", () => {
     });
   });
 
+  it("does not auto-open user creation when an account already exists", async () => {
+    vi.mocked(getEmployee).mockResolvedValue({
+      employee_id: 100,
+      fio: "Тестовый сотрудник",
+      user: { user_id: 361, login: "test.user", role_id: 5, role_name: "Общий доступ", is_active: true },
+    } as Awaited<ReturnType<typeof getEmployee>>);
+
+    render(
+      <EmployeeAccountSections
+        employeeId="100"
+        showEvents={false}
+        showTelegram={false}
+        initialUserCreateOpen
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByText("test.user")).toBeInTheDocument());
+    expect(screen.queryByTestId("user-create-drawer")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Изменить роль Corpsite" })).toBeInTheDocument();
+  });
+
   it("opens user create drawer from CTA button", async () => {
     vi.mocked(getEmployee).mockResolvedValue({
       employee_id: 100,

@@ -59,6 +59,30 @@ vi.mock("./EmployeeOperationalAssignmentSection", () => ({
   default: () => <div data-testid="assignment-section">Трудовая деятельность</div>,
 }));
 
+vi.mock("../../employees/_components/EmployeeAccountSections", () => ({
+  default: ({
+    employeeId,
+    initialUserCreateOpen,
+    readOnly,
+    allowRoleEdit,
+  }: {
+    employeeId: string;
+    initialUserCreateOpen?: boolean;
+    readOnly?: boolean;
+    allowRoleEdit?: boolean;
+  }) => (
+    <div
+      data-testid="employee-access-section"
+      data-employee-id={employeeId}
+      data-read-only={String(readOnly)}
+      data-allow-role-edit={String(allowRoleEdit)}
+    >
+      {!readOnly ? <button type="button">Создать доступ к Corpsite</button> : null}
+      {initialUserCreateOpen ? <div data-testid="user-create-drawer">Создание пользователя</div> : null}
+    </div>
+  ),
+}));
+
 vi.mock("./EmployeeCardOrdersSection", () => ({
   default: () => <div data-testid="orders-section">Кадровые приказы</div>,
 }));
@@ -389,6 +413,50 @@ afterEach(() => {
 });
 
 describe("PprPersonalCardPageClient", () => {
+  it("keeps access read-only without USER_ACCESS_ADMIN and enables management with it", async () => {
+    getPprByEmployeeIdMock.mockResolvedValue(buildMaterializedPpr());
+    const view = render(<PprPersonalCardPageClient employeeId="42" />);
+    await screen.findByRole("heading", { name: PERSONAL_CARD_TITLE });
+    expect(screen.getByTestId("employee-access-section")).toHaveAttribute("data-read-only", "true");
+    expect(screen.queryByRole("button", { name: "Создать доступ к Corpsite" })).not.toBeInTheDocument();
+
+    view.rerender(
+      <CurrentUserProvider value={{ has_user_access_admin: true }}>
+        <PprPersonalCardPageClient employeeId="42" />
+      </CurrentUserProvider>,
+    );
+    expect(await screen.findByTestId("employee-access-section")).toHaveAttribute("data-employee-id", "42");
+    expect(screen.getByTestId("employee-access-section")).toHaveAttribute("data-read-only", "false");
+    expect(screen.getByRole("button", { name: "Создать доступ к Corpsite" })).toBeInTheDocument();
+  });
+
+  it("passes provisionAccount to the existing user-create drawer for the resolved employee", async () => {
+    currentCardSearchParams = new URLSearchParams("section=access&provisionAccount=1");
+    getPprByEmployeeIdMock.mockResolvedValue(buildMaterializedPpr({
+      identity: { ...buildMaterializedPpr().identity, employee_context_id: 77 },
+    }));
+
+    render(
+      <CurrentUserProvider value={{ has_user_access_admin: true }}>
+        <PprPersonalCardPageClient employeeId="42" />
+      </CurrentUserProvider>,
+    );
+
+    expect(await screen.findByTestId("user-create-drawer")).toBeInTheDocument();
+    expect(screen.getByTestId("employee-access-section")).toHaveAttribute("data-employee-id", "77");
+  });
+
+  it("does not request account creation without USER_ACCESS_ADMIN even when provisionAccount is set", async () => {
+    currentCardSearchParams = new URLSearchParams("section=access&provisionAccount=1");
+    getPprByEmployeeIdMock.mockResolvedValue(buildMaterializedPpr());
+
+    render(<PprPersonalCardPageClient employeeId="42" />);
+
+    await screen.findByTestId("employee-access-section");
+    expect(screen.queryByTestId("user-create-drawer")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Создать доступ к Corpsite" })).not.toBeInTheDocument();
+  });
+
   it("does not load migration data without the exact read permission", async () => {
     getPprByEmployeeIdMock.mockResolvedValue(buildMaterializedPpr());
     render(<PprPersonalCardPageClient employeeId="42" />);
@@ -449,7 +517,7 @@ describe("PprPersonalCardPageClient", () => {
     expect(screen.getByTestId("orders-section")).toBeInTheDocument();
     expect(screen.queryByText("NOT_MATERIALIZED")).not.toBeInTheDocument();
     expect(screen.queryByText("Кадровая карточка-досье")).not.toBeInTheDocument();
-    expect(screen.queryByText("Доступ")).not.toBeInTheDocument();
+    expect(screen.getByTestId("employee-access-section")).toHaveAttribute("data-read-only", "true");
     expect(screen.queryByText("История кадровых событий")).not.toBeInTheDocument();
   });
 
