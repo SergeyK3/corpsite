@@ -6,9 +6,9 @@ vi.mock("../_lib/personnelOrdersApi.client", async () => {
   const actual = await vi.importActual<typeof import("../_lib/personnelOrdersApi.client")>("../_lib/personnelOrdersApi.client");
   return { ...actual, previewPersonnelOrderHeaderDuplicate: vi.fn(), createManualPersonnelOrderDraft: vi.fn() };
 });
-vi.mock("@/app/directory/employees/_lib/api.client", () => ({ getEmployees: vi.fn() }));
+vi.mock("@/app/directory/employees/_lib/api.client", () => ({ getEmployee: vi.fn(), getEmployees: vi.fn() }));
 import { createManualPersonnelOrderDraft, previewPersonnelOrderHeaderDuplicate } from "../_lib/personnelOrdersApi.client";
-import { getEmployees } from "@/app/directory/employees/_lib/api.client";
+import { getEmployee, getEmployees } from "@/app/directory/employees/_lib/api.client";
 
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 const testEmployee = { id: "7", fio: "Тестова Анна", position: { id: 2, name: "невролог" }, org_unit: { unit_id: 3, name: "инсультный центр", code: null, parent_unit_id: null, is_active: true }, department: null, rate: null, status: "active", date_from: null, date_to: null };
@@ -71,4 +71,37 @@ it("creates an unlinked typed subject when the directory search has no result", 
   fireEvent.click(screen.getByRole("button", { name: "Создать приказ" }));
   await waitFor(() => expect(createManualPersonnelOrderDraft).toHaveBeenCalledWith(expect.objectContaining({ order_number: "M-1", order_date: "2026-09-25", source_title: "Атауы", source_title_locale: "ru", item_type_code: "TRANSFER", effective_date: "2026-10-01", employee_id: null, unresolved_subject: { full_name: "Тестова Анна", org_unit_name: "Инсультный центр", position_name: "врач (ординатор)", specialty: "невропатолог" } })));
   expect(JSON.stringify(vi.mocked(createManualPersonnelOrderDraft).mock.calls[0][0])).not.toContain("payload");
+});
+
+it("prefills the unique scoped employee found from the page filter", async () => {
+  const scopedEmployee = { ...testEmployee, id: "42", fio: "Тестовый сотрудник", position: { id: 4, name: "Тестовая должность" }, org_unit: { ...testEmployee.org_unit!, name: "Тестовое отделение" }, specialty: "Тестовая специальность" } as typeof testEmployee & { specialty: string };
+  vi.mocked(getEmployees).mockResolvedValue({ items: [scopedEmployee], total: 1 });
+  render(<PersonnelOrderCreateDialog open initialEmployeeQuery="Тестовый" onClose={vi.fn()} onCreated={vi.fn()} />);
+  await waitFor(() => expect(screen.getByLabelText("Сотрудник")).toHaveValue("Тестовый сотрудник"));
+  expect(screen.getByLabelText("Должность в приказе")).toHaveValue("Тестовая должность");
+  expect(screen.getByLabelText("Отделение в приказе")).toHaveValue("Тестовое отделение");
+  expect(screen.getByLabelText("Специальность")).toHaveValue("Тестовая специальность");
+});
+
+it("uses the exact employee id from the filter before considering its text query", async () => {
+  vi.mocked(getEmployee).mockResolvedValue({ ...testEmployee, id: "42", fio: "Тестовый сотрудник" });
+  render(<PersonnelOrderCreateDialog open initialEmployeeId={42} initialEmployeeQuery="другой текст" onClose={vi.fn()} onCreated={vi.fn()} />);
+  await waitFor(() => expect(screen.getByLabelText("Сотрудник")).toHaveValue("Тестовый сотрудник"));
+  expect(getEmployee).toHaveBeenCalledWith("42");
+  expect(getEmployees).not.toHaveBeenCalled();
+});
+
+it("does not auto-select an ambiguous text filter", async () => {
+  vi.mocked(getEmployees).mockResolvedValue({ items: [testEmployee, { ...testEmployee, id: "8", fio: "Тестова Анна Вторая" }], total: 2 });
+  render(<PersonnelOrderCreateDialog open initialEmployeeQuery="Тестова" onClose={vi.fn()} onCreated={vi.fn()} />);
+  expect(await screen.findAllByRole("option", { name: /Тестова Анна/ })).toHaveLength(2);
+  expect(screen.getByLabelText("Сотрудник")).toHaveValue("Тестова");
+  expect(screen.queryByLabelText("Должность в приказе")).not.toBeInTheDocument();
+});
+
+it("keeps create and cancel in the fixed dialog footer", () => {
+  render(<PersonnelOrderCreateDialog open onClose={vi.fn()} onCreated={vi.fn()} />);
+  const footer = screen.getByTestId("personnel-order-create-footer");
+  expect(footer).toContainElement(screen.getByRole("button", { name: "Отмена" }));
+  expect(footer).toContainElement(screen.getByRole("button", { name: "Создать приказ" }));
 });

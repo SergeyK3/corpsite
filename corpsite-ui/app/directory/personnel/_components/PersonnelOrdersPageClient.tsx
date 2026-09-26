@@ -411,6 +411,9 @@ export default function PersonnelOrdersPageClient() {
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         onCreated={handleCreated}
+        initialEmployeeId={filters.employee_id}
+        initialEmployeeQuery={filters.q}
+        initialOrgUnitId={filters.org_unit_id}
       />
 
       <PersonnelOrderPrintLanguageDialog
