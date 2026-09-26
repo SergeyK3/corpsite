@@ -20,6 +20,7 @@ import {
 } from "../../_lib/adminSystemApi.client";
 import { ENFORCEMENT_NOTICE, GRANT_SAFETY_WARNINGS, buildEffectiveAccessSummary } from "../../_lib/adminSystemLabels";
 import ErrorBanner, { InfoBanner, SuccessBanner } from "../shared/ErrorBanner";
+import PersonnelUserTargetSearch from "../shared/PersonnelUserTargetSearch";
 import TargetSearchField from "../shared/TargetSearchField";
 
 const TARGET_TYPES = ["USER", "EMPLOYEE", "PERSON", "ASSIGNMENT", "POSITION", "ORG_UNIT"];
@@ -261,7 +262,10 @@ export default function AccessTab() {
             target_type
             <select
               value={targetType}
-              onChange={(e) => setTargetType(e.target.value)}
+              onChange={(e) => {
+                setTargetType(e.target.value);
+                setSelectedTarget(null);
+              }}
               className="mt-1 w-full rounded border px-2 py-1 dark:border-zinc-600 dark:bg-zinc-900"
             >
               {TARGET_TYPES.map((t) => (
@@ -273,12 +277,16 @@ export default function AccessTab() {
           </label>
 
           <div className="sm:col-span-2">
+            {targetType === "USER" ? (
+              <PersonnelUserTargetSearch value={selectedTarget} onChange={setSelectedTarget} />
+            ) : (
             <TargetSearchField
               targetType={targetType}
               value={selectedTarget}
               onChange={setSelectedTarget}
               label="Target (поиск)"
             />
+            )}
           </div>
 
           <label className="text-sm">
