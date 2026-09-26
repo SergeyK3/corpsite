@@ -13,8 +13,16 @@ from app.db.engine import engine
 from app.services.operational_contact_service import ensure_operational_contact_for_employee
 from app.services.security_audit_service import write_security_event
 from app.security.directory_scope import is_privileged as _is_privileged
+from app.security.admin_permissions import USER_ACCESS_ADMIN, has_admin_permission
 
 router = APIRouter()
+
+
+def _can_manage_user_access(user: Dict[str, Any]) -> bool:
+    """Authorize the same access-management capability projected by /auth/me."""
+    return _is_privileged(user) or has_admin_permission(
+        int(user["user_id"]), USER_ACCESS_ADMIN
+    )
 
 
 class UserCreateIn(BaseModel):
@@ -178,8 +186,8 @@ def update_user_role(
     user_id: int = Path(..., ge=1),
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    if not _is_privileged(user):
-        raise HTTPException(status_code=403, detail="Forbidden.")
+    if not _can_manage_user_access(user):
+        raise HTTPException(status_code=403, detail="Permission required: USER_ACCESS_ADMIN")
 
     with engine.begin() as conn:
         current = conn.execute(
@@ -244,8 +252,8 @@ def create_user(
     body: UserCreateIn,
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    if not _is_privileged(user):
-        raise HTTPException(status_code=403, detail="Forbidden.")
+    if not _can_manage_user_access(user):
+        raise HTTPException(status_code=403, detail="Permission required: USER_ACCESS_ADMIN")
 
     login = _normalize_text(body.login)
     if not login:

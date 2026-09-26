@@ -142,6 +142,52 @@ def _make_employee(seed) -> tuple[int, int, List[int], List[int]]:
     return int(employee_id), int(position_id), created_employee_ids, created_position_ids
 
 
+@pytest.fixture
+def user_access_admin_headers(seed):
+    """An access administrator that is deliberately not in the legacy allowlist."""
+    created_permission_id: int | None = None
+    grant_id: int | None = None
+    with engine.begin() as conn:
+        created_permission_id = conn.execute(
+            text(
+                """
+                INSERT INTO public.access_roles (code, name, description, access_level, level_rank, is_system)
+                VALUES ('USER_ACCESS_ADMIN', 'User Access Administrator', 'pytest role catalog', 'MANAGER', 20, TRUE)
+                ON CONFLICT (code) DO NOTHING
+                RETURNING access_role_id
+                """
+            )
+        ).scalar_one_or_none()
+        permission_id = int(
+            conn.execute(
+                text("SELECT access_role_id FROM public.access_roles WHERE code = 'USER_ACCESS_ADMIN'")
+            ).scalar_one()
+        )
+        grant_id = int(
+            conn.execute(
+                text(
+                    """
+                    INSERT INTO public.access_grants (access_role_id, target_type, target_id, granted_by_user_id, reason)
+                    VALUES (:permission_id, 'USER', :user_id, :user_id, 'pytest user access catalog')
+                    RETURNING grant_id
+                    """
+                ),
+                {"permission_id": permission_id, "user_id": int(seed["initiator_user_id"])},
+            ).scalar_one()
+        )
+    try:
+        yield auth_headers(seed["initiator_user_id"])
+    finally:
+        with engine.begin() as conn:
+            if grant_id is not None:
+                conn.execute(text("DELETE FROM public.access_grants WHERE grant_id = :grant_id"), {"grant_id": grant_id})
+            if created_permission_id is not None:
+                conn.execute(
+                    text("DELETE FROM public.access_roles WHERE access_role_id = :access_role_id"),
+                    {"access_role_id": created_permission_id},
+                )
+
+
 @pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
 def test_create_user_privileged_returns_201(client, seed, privileged_headers):
     employee_id, _position_id, created_employee_ids, created_position_ids = _make_employee(seed)
@@ -167,6 +213,45 @@ def test_create_user_privileged_returns_201(client, seed, privileged_headers):
         assert body["login"] == login
         assert body["role_id"] == int(seed["executor_role_id"])
         assert body["is_active"] is True
+    finally:
+        _cleanup_users_by_logins([login])
+        _cleanup_employees(created_employee_ids)
+        _cleanup_positions(created_position_ids)
+
+
+@pytest.mark.skipif(not _db_available(), reason="PostgreSQL not available")
+def test_user_access_admin_loads_existing_employee_role_and_can_create_user(
+    client, seed, user_access_admin_headers,
+):
+    """The same permission that exposes the import-card access UI authorizes its API calls."""
+    employee_id, _position_id, created_employee_ids, created_position_ids = _make_employee(seed)
+    login = f"pytest_user_access_{uuid4().hex[:10]}"
+    password = uuid4().hex
+    try:
+        roles_response = client.get(
+            "/directory/roles",
+            params={"is_active": "true", "limit": 500, "offset": 0},
+            headers=user_access_admin_headers,
+        )
+        assert roles_response.status_code == 200, roles_response.text
+        employee_role = next(
+            item for item in roles_response.json()["items"] if item["role_code"] == "EMPLOYEE"
+        )
+        assert employee_role["is_active"] is True
+
+        create_response = client.post(
+            "/directory/users",
+            json={
+                "employee_id": employee_id,
+                "role_id": employee_role["role_id"],
+                "login": login,
+                "password": password,
+                "is_active": True,
+            },
+            headers=user_access_admin_headers,
+        )
+        assert create_response.status_code == 201, create_response.text
+        assert create_response.json()["role_id"] == employee_role["role_id"]
     finally:
         _cleanup_users_by_logins([login])
         _cleanup_employees(created_employee_ids)

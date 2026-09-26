@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import UserCreateForm from "./UserCreateForm";
+import { listPlatformRoleCatalog } from "@/lib/platformRoleCatalog";
 
 vi.mock("@/components/OrgScopeFilter", () => ({
   default: ({
@@ -218,5 +219,43 @@ describe("UserCreateForm login field", () => {
     expect(onSubmit).toHaveBeenCalledWith(
       expect.objectContaining({ login: "custom.login", org_unit_id: "44" }),
     );
+  });
+
+  it("shows and submits Общий доступ using its existing system id", async () => {
+    vi.mocked(listPlatformRoleCatalog).mockResolvedValueOnce([
+      { id: 1679, label: "Общий доступ", code: "EMPLOYEE" },
+    ]);
+    const onSubmit = vi.fn();
+    render(
+      <UserCreateForm
+        fullName={KOZGAMBAEVA_FIO}
+        initialValues={baseInitialValues}
+        onCancel={() => {}}
+        onSubmit={onSubmit}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByRole("option", { name: /Общий доступ.*EMPLOYEE/i })).toBeInTheDocument();
+    });
+    fireEvent.change(document.getElementById("user-role")!, { target: { value: "1679" } });
+    fireEvent.submit(document.querySelector("form")!);
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ role_id: "1679" }));
+  });
+
+  it("shows a real catalog API refusal", async () => {
+    vi.mocked(listPlatformRoleCatalog).mockRejectedValueOnce(
+      new Error("HTTP 403: Permission required: USER_ACCESS_ADMIN"),
+    );
+    render(
+      <UserCreateForm
+        fullName={KOZGAMBAEVA_FIO}
+        initialValues={baseInitialValues}
+        onCancel={() => {}}
+        onSubmit={() => {}}
+      />,
+    );
+
+    expect(await screen.findByText("HTTP 403: Permission required: USER_ACCESS_ADMIN")).toBeInTheDocument();
   });
 });

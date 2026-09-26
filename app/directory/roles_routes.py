@@ -13,9 +13,17 @@ from app.db.engine import engine
 from app.org_scope.apply import apply_org_scope
 from app.org_scope.types import OrgScopeParams, OrgScopeStrategy
 from app.security.directory_scope import is_privileged as _is_privileged
+from app.security.admin_permissions import USER_ACCESS_ADMIN, has_admin_permission
 from app.services.platform_roles_catalog import pytest_role_exclusion_sql
 
 router = APIRouter()
+
+
+def _can_manage_user_access(user: Dict[str, Any]) -> bool:
+    """Keep the role catalogue authorization aligned with user provisioning."""
+    return _is_privileged(user) or has_admin_permission(
+        int(user["user_id"]), USER_ACCESS_ADMIN
+    )
 
 
 class RoleUpsert(BaseModel):
@@ -234,8 +242,8 @@ def list_roles(
     ),
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    if not _is_privileged(user):
-        raise HTTPException(status_code=403, detail="Forbidden.")
+    if not _can_manage_user_access(user):
+        raise HTTPException(status_code=403, detail="Permission required: USER_ACCESS_ADMIN")
 
     meta = _roles_meta()
     base_sql = _build_select_sql(meta)
