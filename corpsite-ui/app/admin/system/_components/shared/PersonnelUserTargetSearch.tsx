@@ -6,7 +6,7 @@ import { getEmployees, getPositions } from "@/app/directory/employees/_lib/api.c
 import { getOrgUnitsTree } from "@/app/directory/org-units/_lib/api.client";
 import { apiFetchJson } from "@/lib/api";
 
-import type { AccessTargetSearchItem } from "../../_lib/adminSystemApi.client";
+import { fetchAdminUsers, type AccessTargetSearchItem, type AdminUser } from "../../_lib/adminSystemApi.client";
 import { flattenOrgUnitTree, formatDepartmentOptionLabel, sortDepartmentGroupOptions, type DepartmentGroupOption, type OrgUnitOption } from "../../_lib/visibilityTabLogic";
 
 type Props = { value: AccessTargetSearchItem | null; onChange: (item: AccessTargetSearchItem | null) => void };
@@ -30,6 +30,36 @@ function targetFrom(employee: { fio?: string | null; department?: { name?: strin
   const department = String(employee.department?.name ?? employee.org_unit?.name ?? "").trim();
   const position = String(employee.position?.name ?? "").trim();
   return { target_type: "USER", target_id: userId, label: name || login || "Пользователь", subtitle: [login ? `login: ${login}` : null, position, department].filter(Boolean).join(" · "), metadata: { login: login || null, position_name: position || null, department_name: department || null } };
+}
+
+function targetFromTechnicalUser(user: AdminUser): AccessTargetSearchItem | null {
+  const userId = Number(user.user_id);
+  const login = String(user.login ?? "").trim();
+  if (!Number.isFinite(userId) || userId < 1 || !login) return null;
+  const role = String(user.role_name ?? "").trim();
+  return {
+    target_type: "USER",
+    target_id: userId,
+    label: login,
+    subtitle: role ? `Системная роль: ${role}` : "Техническая учётная запись",
+    metadata: { login, role_name: role || null, technical: true },
+  };
+}
+
+function userMatchesQuery(user: AdminUser, query: string): boolean {
+  const q = query.trim().toLocaleLowerCase();
+  if (!q) return true;
+  return [user.login, user.full_name].some((value) => String(value ?? "").toLocaleLowerCase().includes(q));
+}
+
+async function fetchAllAdminUsers(): Promise<AdminUser[]> {
+  const limit = 500;
+  const users: AdminUser[] = [];
+  for (let offset = 0; ; offset += limit) {
+    const page = await fetchAdminUsers({ limit, offset });
+    users.push(...page);
+    if (page.length < limit) return users;
+  }
 }
 
 /** Personnel filters only find existing linked USER records; they never provision accounts. */
@@ -75,9 +105,26 @@ export default function PersonnelUserTargetSearch({ value, onChange }: Props) {
     const timer = window.setTimeout(() => { void (async () => {
       setLoading(true);
       try {
-        const response = await getEmployees({ status: "active", org_group_id: groupId || null, org_unit_id: departmentId || null, position_id: positionId || null, q: fioQuery || null, limit: 50 });
+        const [response, users] = await Promise.all([
+          getEmployees({ status: "active", org_group_id: groupId || null, org_unit_id: departmentId || null, position_id: positionId || null, q: fioQuery || null, limit: 50 }),
+          fetchAllAdminUsers(),
+        ]);
         const byUserId = new Map<number, AccessTargetSearchItem>();
         for (const employee of response.items) { const item = targetFrom(employee); if (item) byUserId.set(item.target_id, item); }
+        const hasPersonnelFilter = Boolean(groupId || departmentId || positionId);
+        for (const user of users) {
+          if (user.is_active === false || !userMatchesQuery(user, fioQuery)) continue;
+          // Personnel filters apply only to linked employee records.
+          if (user.employee_id == null) {
+            const item = targetFromTechnicalUser(user);
+            if (item) byUserId.set(item.target_id, item);
+          } else if (!hasPersonnelFilter && !byUserId.has(user.user_id)) {
+            // The personnel endpoint searches FIO; the catalogue also makes login
+            // searches for linked accounts work.
+            const item = targetFromTechnicalUser(user);
+            if (item) byUserId.set(item.target_id, item);
+          }
+        }
         setResults(Array.from(byUserId.values()));
       } catch { setResults([]); } finally { setLoading(false); }
     })(); }, 250);
