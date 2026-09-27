@@ -132,6 +132,8 @@ def _validate_leave_draft_item(
         leave_days = int(payload.get("leave_days"))
     except (TypeError, ValueError):
         raise PersonnelOrderValidationError("Leave item requires integer payload.leave_days.")
+    if item_type_code == "LEAVE.UNPAID.GRANT" and leave_days != (period_end - period_start).days + 1:
+        raise PersonnelOrderValidationError("Unpaid leave payload.leave_days must equal inclusive leave period days.")
     if payload.get("work_periods") is not None and leave_days != (period_end - period_start).days + 1:
         raise PersonnelOrderValidationError("Leave payload.leave_days must equal inclusive leave period days.")
     basis = payload.get("basis") if isinstance(payload.get("basis"), dict) else {}

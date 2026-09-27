@@ -42,6 +42,7 @@ from app.services.personnel_orders_editorial.mapper import build_item_ctx, iso_d
 from app.services.personnel_orders_editorial.repository import (
     ensure_default_basis,
     fetch_order,
+    load_bases,
     load_employee_names,
     load_item_blocks,
     load_items,
@@ -115,11 +116,20 @@ def generate_editorial(
             int(i["employee_id"]) for i in items if i.get("employee_id") is not None
         ]
         bases: Dict[int, Dict[str, Any]] = {}
+        unpaid_item_ids: list[int] = []
         for item in items:
             if scope and scope.get("item_id") is not None and int(scope["item_id"]) != int(item["item_id"]):
                 continue
-            if str(item["item_type_code"]).strip().upper() != ORDER_TYPE_SUPPLEMENTARY_PAY:
+            item_type_code = str(item["item_type_code"]).strip().upper()
+            if item_type_code == "LEAVE.UNPAID.GRANT":
+                unpaid_item_ids.append(int(item["item_id"]))
+            elif item_type_code != ORDER_TYPE_SUPPLEMENTARY_PAY:
                 bases[int(item["item_id"])] = ensure_default_basis(active_conn, item)
+
+        # A normalized unpaid-leave basis is canonical.  Do not manufacture a
+        # row before checking for it: only an actually absent row may fall back
+        # to the legacy payload of an older draft.
+        bases.update(load_bases(active_conn, unpaid_item_ids))
 
         for basis in bases.values():
             if basis.get("subject_employee_id") is not None:
@@ -218,7 +228,8 @@ def generate_editorial(
             employee_name = names.get(int(item["employee_id"])) if item.get("employee_id") else None
             item_ctx = build_item_ctx(item, employee_name)
             basis = bases.get(item_id)
-            if basis is None and str(item["item_type_code"]).strip().upper() != ORDER_TYPE_SUPPLEMENTARY_PAY:
+            item_type_code = str(item["item_type_code"]).strip().upper()
+            if basis is None and item_type_code not in {ORDER_TYPE_SUPPLEMENTARY_PAY, "LEAVE.UNPAID.GRANT"}:
                 if scope and scope.get("item_id") is not None and int(scope["item_id"]) != item_id:
                     continue
                 basis = ensure_default_basis(active_conn, item)
@@ -234,6 +245,18 @@ def generate_editorial(
                 "document_number": basis.get("document_number") if basis else None,
                 "free_text": basis.get("free_text") if basis else None,
             }
+            if basis is None and item_type_code == "LEAVE.UNPAID.GRANT":
+                # Legacy drafts stored the application only in payload. Read
+                # it solely when no normalized basis row exists; new and
+                # normalized records always win, even when their date/number
+                # is blank.
+                legacy_basis = item_ctx.get("basis") if isinstance(item_ctx.get("basis"), Mapping) else {}
+                if str(legacy_basis.get("kind") or "").strip().upper() == "PERSONAL_APPLICATION":
+                    basis_fact.update({
+                        "basis_type": "PERSONAL_APPLICATION",
+                        "document_date": legacy_basis.get("date"),
+                        "document_number": legacy_basis.get("number"),
+                    })
 
             for locale in ALLOWED_LOCALES:
                 for block_type in ITEM_BLOCK_TYPES:

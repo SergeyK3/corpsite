@@ -47,6 +47,32 @@ const pilotDetail = {
   },
 };
 
+const unpaidDetail = {
+  required_fields: ["ФИО сотрудника", "Дата начала отпуска", "Дата окончания отпуска", "Вычисляемое количество календарных дней", "Личное заявление"],
+  additional_fields: ["Дата заявления (если известна)", "Номер заявления (если известен)"],
+  document_parts: [],
+  variables: [{ code: "leave.days", label: "Количество календарных дней" }, { code: "basis.application_date_ru", label: "Дата личного заявления на русском языке" }],
+  specialty_note: "Ставка, специальность, сведения о ребёнке и рабочий период ежегодного отпуска в этот шаблон не включаются.",
+  previews: {
+    ru: {
+      title: "О предоставлении отпуска без сохранения заработной платы",
+      preamble: "В соответствии с Трудовым кодексом Республики Казахстан",
+      directive: "ПРИКАЗЫВАЮ:",
+      body: "Предоставить «ФИО сотрудника», Должность подразделения «Подразделение», отпуск без сохранения заработной платы с 15 января 2026 года по 17 января 2026 года включительно продолжительностью 3 календарных дней.",
+      basis: "Основание: личное заявление от 10 января 2026 года № 15.",
+      footer: "С приказом ознакомлен(а): ___________________ [Фамилия И.]\n«___» ______________ 20___ г.\nИсполнитель: [Инициалы и фамилия исполнителя]",
+    },
+    kk: {
+      title: "Жалақы сақталмайтын демалыс беру туралы",
+      preamble: "Қазақстан Республикасының Еңбек кодексіне сәйкес",
+      directive: "БҰЙЫРАМЫН:",
+      body: "«Қызметкердің аты-жөні», «Бөлімше» бөлімшесінің «Лауазым» қызметкеріне 2026 жылғы 15 қаңтар мен 2026 жылғы 17 қаңтар аралығындағы 3 күнтізбелік күнге жалақы сақталмайтын демалыс берілсін.",
+      basis: "Негіз: 2026 жылғы 10 қаңтар күнгі жеке өтініш № 15.",
+      footer: "Бұйрықпен таныстым: ___________________ [Тегі А.]\n«___» ______________ 20___ ж.\nОрындаушы: [Орындаушының аты-жөні]",
+    },
+  },
+};
+
 describe("TemplatesPageClient", () => {
   beforeEach(() => {
     currentSearch = new URLSearchParams();
@@ -63,6 +89,20 @@ describe("TemplatesPageClient", () => {
       required_fields: [],
       notes: "Не формализованы",
       pilot_detail: pilotDetail,
+      template_detail: null,
+    }, {
+      type_code: "LEAVE.UNPAID.GRANT",
+      title_ru: "О предоставлении отпуска без сохранения заработной платы",
+      title_kk: "Жалақы сақталмайтын демалыс беру туралы",
+      source: "BUILT_IN",
+      support_level: "SUPPORTED",
+      supported_locales: ["ru", "kk"],
+      uses_specialized_generator: true,
+      is_pilot: false,
+      required_fields: unpaidDetail.required_fields,
+      notes: "Формализованный read-only шаблон.",
+      pilot_detail: null,
+      template_detail: unpaidDetail,
     }] });
   });
 
@@ -118,6 +158,26 @@ describe("TemplatesPageClient", () => {
     const variableLine = screen.getByText("employee.full_name:").parentElement;
     expect(variableLine).toHaveTextContent("employee.full_name: ФИО сотрудника");
     expect(variableLine).toHaveClass("flex", "flex-wrap");
+  });
+
+  it("renders the unpaid leave detail with one separate basis and no closing block", async () => {
+    currentSearch = new URLSearchParams("section=personnel-orders&type=LEAVE.UNPAID.GRANT");
+    render(<TemplatesPageClient />);
+
+    const detail = await screen.findByTestId("personnel-order-template-detail");
+    expect(detail).toHaveTextContent("Реквизиты этого шаблона");
+    expect(detail).toHaveTextContent("Дата заявления (если известна)");
+    const ru = screen.getByTestId("pilot-preview-ru");
+    const kk = screen.getByTestId("pilot-preview-kk");
+    expect(ru).toHaveTextContent("ПРИКАЗЫВАЮ:");
+    expect(kk).toHaveTextContent("БҰЙЫРАМЫН:");
+    expect(ru).toHaveTextContent("Основание: личное заявление от 10 января 2026 года № 15.");
+    expect(kk).toHaveTextContent("Негіз: 2026 жылғы 10 қаңтар күнгі жеке өтініш № 15.");
+    expect(kk).toHaveTextContent("17 қаңтар аралығындағы 3 күнтізбелік күнге");
+    expect(ru.textContent?.match(/Основание:/g)).toHaveLength(1);
+    expect(kk.textContent?.match(/Негіз:/g)).toHaveLength(1);
+    expect(`${ru.textContent} ${kk.textContent}`).not.toMatch(/контроль|ставка|специальность|ребён/i);
+    expect(screen.queryByRole("button", { name: /редактировать|опубликовать|архивировать/i })).not.toBeInTheDocument();
   });
 
   it("writes the selected section to the URL while preserving other query parameters", () => {

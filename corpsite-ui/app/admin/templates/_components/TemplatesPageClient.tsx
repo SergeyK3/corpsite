@@ -50,9 +50,9 @@ function PreviewFooter({ locale }: { locale: "ru" | "kk" }) {
   );
 }
 
-function PilotDetail({ detail }: { detail: PersonnelOrderTemplatePilotDetail }) {
+function FormalizedTemplateDetail({ detail }: { detail: PersonnelOrderTemplatePilotDetail }) {
   return (
-    <div className="mt-5 space-y-4" data-testid="pilot-template-detail">
+    <div className="mt-5 space-y-4" data-testid="formalized-template-detail">
       <div className="grid gap-4 lg:grid-cols-2">
         <section className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/40">
           <h4 className="font-semibold">Реквизиты этого шаблона</h4>
@@ -109,14 +109,14 @@ function PilotDetail({ detail }: { detail: PersonnelOrderTemplatePilotDetail }) 
 }
 
 function TemplateDetail({ item }: { item: PersonnelOrderTemplateCatalogItem }) {
-  const pilot = item.pilot_detail;
+  const detail = item.template_detail ?? item.pilot_detail;
   return (
     <aside data-testid="personnel-order-template-detail" className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
       <h3 className="text-lg font-semibold">{item.title_ru}</h3>
       <p className="mt-1">{item.title_kk}</p>
       <p className="mt-2 text-sm">{item.type_code} · {item.support_level}</p>
       <p className="mt-1 text-sm">{item.uses_specialized_generator ? "Специализированный генератор" : "Общий fallback"}</p>
-      {pilot ? <PilotDetail detail={pilot} /> : <>
+      {detail ? <FormalizedTemplateDetail detail={detail} /> : <>
         <p className="mt-3">Обязательные поля: {item.required_fields.join(", ") || "не формализованы"}</p>
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">{item.notes}</p>
       </>}

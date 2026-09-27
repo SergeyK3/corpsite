@@ -340,7 +340,7 @@ def generate_order_block(
         )
 
     if normalized_type == ORDER_BLOCK_TYPE_CLOSING:
-        if order_type == ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE:
+        if order_type in {ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE, "LEAVE.UNPAID.GRANT"}:
             return _result(
                 generated_text="",
                 generator_key=GENERATOR_KEY_ORDER_CLOSING,
@@ -439,14 +439,14 @@ def generate_item_body(locale: str, item_ctx: Mapping[str, Any]) -> Dict[str, st
         if lang == "kk":
             text = (
                 f"{fio}, «{org}» бөлімшесінің «{position}» қызметкеріне "
-                f"{leave_start_text} мен {leave_end_text} аралығында {days} күнтізбелік күнге "
-                f"жалақы сақталмайтын демалыс берілсін. {_leave_basis(item_ctx, lang)}"
+                f"{leave_start_text} мен {leave_end_text} аралығындағы {days} күнтізбелік күнге "
+                "жалақы сақталмайтын демалыс берілсін."
             )
         else:
             text = (
                 f"Предоставить {fio}, {position} подразделения «{org}», отпуск без сохранения "
                 f"заработной платы с {leave_start_text} по {leave_end_text} включительно "
-                f"продолжительностью {days} календарных дней. {_leave_basis(item_ctx, lang)}"
+                f"продолжительностью {days} календарных дней."
             )
     elif item_type == ORDER_TYPE_LEAVE_CHILDCARE_GRANT:
         org = _localized_name(org_unit_name, lang)
@@ -636,6 +636,21 @@ def generate_basis_text(locale: str, basis_fact: Mapping[str, Any]) -> Dict[str,
             # Keep this effective block label-free and never include the
             # employee's name for this document type.
             text = "Жеке өтініші." if lang == "kk" else "Личное заявление."
+        elif item_type == "LEAVE.UNPAID.GRANT":
+            formatted_date = _format_date(document_date, lang) if document_date else ""
+            number_part = f" № {document_number}" if document_number else ""
+            if lang == "kk":
+                text = (
+                    f"Негіз: {formatted_date} күнгі жеке өтініш{number_part}."
+                    if formatted_date
+                    else f"Негіз: Жеке өтініш{number_part}."
+                )
+            else:
+                text = (
+                    f"Основание: личное заявление от {formatted_date}{number_part}."
+                    if formatted_date
+                    else f"Основание: Личное заявление{number_part}."
+                )
         elif lang == "ru":
             text = (
                 "Основание: личное заявление."

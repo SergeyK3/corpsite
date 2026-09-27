@@ -341,26 +341,32 @@ def test_unpaid_leave_body_uses_payload_and_snapshot_in_both_locales() -> None:
     ru = generate_item_body("ru", ctx)
     kk = generate_item_body("kk", ctx)
     for text in (ru["generated_text"], kk["generated_text"]):
-        for value in ("Иванов И.И.", "Отдел кадров", "Руководитель отдела кадров", "10", "15"):
+        for value in ("Иванов И.И.", "Отдел кадров", "Руководитель отдела кадров", "10"):
             assert value in text
     assert "без сохранения заработной платы" in ru["generated_text"]
     assert "жалақы сақталмайтын" in kk["generated_text"]
+    assert "аралығындағы 10 күнтізбелік күнге" in kk["generated_text"]
+    assert "Основание:" not in ru["generated_text"]
+    assert "Негіз:" not in kk["generated_text"]
 
 
-def test_unpaid_leave_basis_omits_missing_date_and_number_cleanly() -> None:
-    body = generate_item_body(
-        "ru",
-        {
-            "item_type_code": "LEAVE.UNPAID.GRANT",
-            "employee_name": "Иванов И.И.",
-            "org_unit_name": "Отдел кадров",
-            "position_name": "Специалист",
-            "leave_start": "2026-08-03",
-            "leave_end": "2026-08-12",
-            "leave_days": 10,
-            "basis": {"kind": "PERSONAL_APPLICATION"},
-        },
-    )
-    assert "Основание: личное заявление." in body["generated_text"]
-    assert "от —" not in body["generated_text"]
-    assert "…" not in body["generated_text"]
+def test_unpaid_leave_basis_is_separate_and_uses_normalized_date_and_number() -> None:
+    fact = {
+        "item_type_code": "LEAVE.UNPAID.GRANT",
+        "basis_type": "PERSONAL_APPLICATION",
+        "document_date": "2026-07-20",
+        "document_number": "15",
+    }
+    assert generate_basis_text("ru", fact)["generated_text"] == "Основание: личное заявление от 20 июля 2026 года № 15."
+    assert generate_basis_text("kk", fact)["generated_text"] == "Негіз: 2026 жылғы 20 шілде күнгі жеке өтініш № 15."
+
+
+def test_unpaid_leave_basis_does_not_invent_missing_date_or_number() -> None:
+    fact = {"item_type_code": "LEAVE.UNPAID.GRANT", "basis_type": "PERSONAL_APPLICATION"}
+    assert generate_basis_text("ru", fact)["generated_text"] == "Основание: Личное заявление."
+    assert generate_basis_text("kk", fact)["generated_text"] == "Негіз: Жеке өтініш."
+
+
+def test_unpaid_leave_has_no_execution_control_closing() -> None:
+    assert generate_order_block("closing", "ru", {"order_type_code": "LEAVE.UNPAID.GRANT"})["generated_text"] == ""
+    assert generate_order_block("closing", "kk", {"order_type_code": "LEAVE.UNPAID.GRANT"})["generated_text"] == ""

@@ -164,9 +164,12 @@ function renderBasis(
     : joined.includes("личн") && joined.includes("заявлен");
   // Legacy blocks can carry an old label or employee name. The print owns the
   // label, so canonicalize this approved basis before rendering it.
+  const isUnpaidLeave = String(model.documentTypeCode).toUpperCase() === "LEAVE.UNPAID.GRANT";
   const lines = isChildcareReturn && personalApplication
     ? [language === "kk" ? "Жеке өтініші." : "Личное заявление."]
-    : rawLines;
+    : isUnpaidLeave
+      ? rawLines.map((line) => line.replace(language === "kk" ? /^\s*Негіз:\s*/i : /^\s*Основание:\s*/i, ""))
+      : rawLines;
   if (!lines.length) return "";
 
   const headings = dictionaries

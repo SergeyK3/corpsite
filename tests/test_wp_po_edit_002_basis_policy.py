@@ -28,3 +28,9 @@ def test_unknown_type_fail_closed() -> None:
     required, unsupported = resolve_basis_required("BONUS")
     assert required is True
     assert unsupported == "UNSUPPORTED_ITEM_TYPE"
+
+
+def test_unpaid_leave_has_a_supported_normalized_basis_policy() -> None:
+    required, unsupported = resolve_basis_required("LEAVE.UNPAID.GRANT")
+    assert required is True
+    assert unsupported is None

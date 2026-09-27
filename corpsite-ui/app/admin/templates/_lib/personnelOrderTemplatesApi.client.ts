@@ -35,6 +35,7 @@ export type PersonnelOrderTemplateCatalogItem = {
   required_fields: string[];
   notes: string;
   pilot_detail?: PersonnelOrderTemplatePilotDetail | null;
+  template_detail?: PersonnelOrderTemplatePilotDetail | null;
 };
 
 export function listPersonnelOrderTemplateCatalog() {

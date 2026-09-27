@@ -29,6 +29,23 @@ _PILOT_REQUIRED_FIELDS = [
     "Основание: личное заявление или другое подтверждённое основание",
 ]
 
+_UNPAID_LEAVE_REQUIRED_FIELDS = [
+    "ФИО сотрудника",
+    "Должность на русском языке",
+    "Должность на казахском языке",
+    "Подразделение на русском языке",
+    "Подразделение на казахском языке",
+    "Дата начала отпуска",
+    "Дата окончания отпуска",
+    "Вычисляемое количество календарных дней",
+    "Личное заявление",
+]
+
+_UNPAID_LEAVE_ADDITIONAL_FIELDS = [
+    "Дата заявления (если известна)",
+    "Номер заявления (если известен)",
+]
+
 
 def _pilot_detail() -> dict[str, Any]:
     """Return a display-only specimen built through the live editorial helpers."""
@@ -95,6 +112,72 @@ def _pilot_detail() -> dict[str, Any]:
     }
 
 
+def _unpaid_leave_detail() -> dict[str, Any]:
+    """Return a neutral specimen from the live unpaid-leave generators."""
+    previews: dict[str, dict[str, str]] = {}
+    for locale in ("ru", "kk"):
+        item = {
+            "item_type_code": "LEAVE.UNPAID.GRANT",
+            "employee_name": "«ФИО сотрудника»" if locale == "ru" else "«Қызметкердің аты-жөні»",
+            "org_unit_name": {"ru": "Подразделение", "kk": "Бөлімше"},
+            "position_name": {"ru": "Должность", "kk": "Лауазым"},
+            "leave_start": "2026-01-15",
+            "leave_end": "2026-01-17",
+            "leave_days": 3,
+        }
+        basis_text = generate_basis_text(
+            locale,
+            {
+                "basis_type": BASIS_TYPE_PERSONAL_APPLICATION,
+                "item_type_code": "LEAVE.UNPAID.GRANT",
+                "document_date": "2026-01-10",
+                "document_number": "15",
+            },
+        )["generated_text"]
+        previews[locale] = {
+            "title": DOCUMENT_TITLES["LEAVE.UNPAID.GRANT"][locale],
+            "preamble": generate_order_block(
+                ORDER_BLOCK_TYPE_PREAMBLE,
+                locale,
+                {"order_type_code": "LEAVE.UNPAID.GRANT"},
+            )["generated_text"],
+            "directive": "ПРИКАЗЫВАЮ:" if locale == "ru" else "БҰЙЫРАМЫН:",
+            "body": generate_item_body(locale, item)["generated_text"],
+            "basis": basis_text,
+            "footer": (
+                "С приказом ознакомлен(а): ___________________ [Фамилия И.]\n"
+                "«___» ______________ 20___ г.\n"
+                "Исполнитель: [Инициалы и фамилия исполнителя]"
+                if locale == "ru"
+                else "Бұйрықпен таныстым: ___________________ [Тегі А.]\n"
+                "«___» ______________ 20___ ж.\n"
+                "Орындаушы: [Орындаушының аты-жөні]"
+            ),
+        }
+    return {
+        "required_fields": _UNPAID_LEAVE_REQUIRED_FIELDS,
+        "additional_fields": _UNPAID_LEAVE_ADDITIONAL_FIELDS,
+        "document_parts": [],
+        "variables": [
+            {"code": "employee.full_name", "label": "ФИО сотрудника"},
+            {"code": "position.title_ru", "label": "Должность на русском языке"},
+            {"code": "position.title_kk", "label": "Должность на казахском языке"},
+            {"code": "org_unit.title_ru", "label": "Подразделение на русском языке"},
+            {"code": "org_unit.title_kk", "label": "Подразделение на казахском языке"},
+            {"code": "leave.start_ru", "label": "Дата начала отпуска на русском языке"},
+            {"code": "leave.start_kk", "label": "Дата начала отпуска на казахском языке"},
+            {"code": "leave.end_ru", "label": "Дата окончания отпуска на русском языке"},
+            {"code": "leave.end_kk", "label": "Дата окончания отпуска на казахском языке"},
+            {"code": "leave.days", "label": "Количество календарных дней"},
+            {"code": "basis.application_date_ru", "label": "Дата личного заявления на русском языке"},
+            {"code": "basis.application_date_kk", "label": "Дата личного заявления на казахском языке"},
+            {"code": "basis.application_number_suffix", "label": "Номер личного заявления"},
+        ],
+        "specialty_note": "Ставка, специальность, сведения о ребёнке и рабочий период ежегодного отпуска в этот шаблон не включаются.",
+        "previews": previews,
+    }
+
+
 _SUPPORT_LEVELS = {
     "HIRE": "SUPPORTED",
     "TRANSFER": "SUPPORTED",
@@ -103,7 +186,7 @@ _SUPPORT_LEVELS = {
     "CONCURRENT_DUTY_END": "SUPPORTED",
     "LEAVE.ANNUAL.GRANT": "SUPPORTED",
     ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE: "SUPPORTED",
-    "LEAVE.UNPAID.GRANT": "PARTIAL",
+    "LEAVE.UNPAID.GRANT": "SUPPORTED",
     "LEAVE.CHILDCARE.GRANT": "PARTIAL",
     "SUPPLEMENTARY_PAY": "PARTIAL",
 }
@@ -129,11 +212,16 @@ def list_personnel_order_template_catalog() -> list[dict[str, Any]]:
             "uses_specialized_generator": type_code in DOCUMENT_TITLES,
             "is_pilot": type_code == ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE,
             "required_fields": (
-                _PILOT_REQUIRED_FIELDS
-                if type_code == ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE
+                _PILOT_REQUIRED_FIELDS if type_code == ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE
+                else _UNPAID_LEAVE_REQUIRED_FIELDS if type_code == "LEAVE.UNPAID.GRANT"
                 else []
             ),
-            "notes": "Обязательные поля шаблона пока не формализованы; каталог не выводит данные конкретных приказов.",
+            "notes": (
+                "Основание берётся из нормализованной записи; устаревшие реквизиты используются только как fallback, когда такой записи нет."
+                if type_code == "LEAVE.UNPAID.GRANT"
+                else "Обязательные поля шаблона пока не формализованы; каталог не выводит данные конкретных приказов."
+            ),
             "pilot_detail": _pilot_detail() if type_code == ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE else None,
+            "template_detail": _unpaid_leave_detail() if type_code == "LEAVE.UNPAID.GRANT" else None,
         })
     return rows

@@ -42,6 +42,7 @@ class PersonnelOrderTemplateCatalogItem(BaseModel):
     required_fields: List[str]
     notes: str
     pilot_detail: Optional[PersonnelOrderTemplatePilotDetail] = None
+    template_detail: Optional[PersonnelOrderTemplatePilotDetail] = None
 
 
 class PersonnelOrderTemplateCatalogResponse(BaseModel):
