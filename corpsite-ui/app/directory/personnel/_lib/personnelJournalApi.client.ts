@@ -69,6 +69,15 @@ export type PersonnelEventRow = {
   /** Canonical personnel-order relation; absent for legacy/unlinked events. */
   order_id?: number | null;
   order_number?: string | null;
+  /**
+   * Read-only preparation state for an unlinked HR-import event.  Candidate
+   * values are not a canonical relation and must not populate order_id.
+   */
+  import_order_preparation?: {
+    state: "NOT_PREPARED" | "AMBIGUOUS" | "DRAFT" | "PENDING_APPLY" | "APPLIED";
+    candidate_order_id?: number | null;
+    candidate_order_number?: string | null;
+  } | null;
   comment: string | null;
 };
 

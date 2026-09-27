@@ -213,7 +213,7 @@ describe("PersonnelJournalPageClient", () => {
     expect(screen.getByRole("link", { name: "52-К" })).toHaveAttribute("href", "/directory/personnel/orders?order_id=43&tab=data");
   });
 
-  it("links an unlinked import event to the employee's orders and keeps the draft order separate", async () => {
+  it("shows an unprepared import event and keeps the draft order separate", async () => {
     listPersonnelEventsMock.mockResolvedValue({
       total: 2,
       items: [
@@ -225,7 +225,7 @@ describe("PersonnelJournalPageClient", () => {
     render(<PersonnelJournalPageClient />);
 
     const imported = await screen.findByTestId("personnel-journal-row-7");
-    const importOrderLink = within(imported).getByRole("link", { name: "Проверить оформление приказа" });
+    const importOrderLink = within(imported).getByRole("link", { name: "Приказ не подготовлен" });
     expect(importOrderLink).toHaveAttribute("href", "/directory/personnel/orders?employee_id=9");
     expect(importOrderLink.getAttribute("href")).not.toContain("order_id");
     const draft = screen.getByTestId("personnel-journal-row-draft-order-item-19");
@@ -235,6 +235,59 @@ describe("PersonnelJournalPageClient", () => {
     );
     fireEvent.click(within(draft).getByTestId("personnel-journal-employee-9"));
     expect(pushMock).toHaveBeenCalledWith("/directory/personnel/employees/9/card?section=history");
+  });
+
+  it("renders factual order-preparation states for unlinked import events", async () => {
+    const importRow = (event_id: number, employee_id: number, import_order_preparation: unknown) => ({
+      event_id,
+      employee_id,
+      employee_name: `Employee ${employee_id}`,
+      event_type: "EMPLOYEE_ENROLLED_FROM_IMPORT",
+      effective_date: "2026-09-01",
+      from_org_unit_id: null,
+      from_org_unit_name: null,
+      to_org_unit_id: null,
+      to_org_unit_name: null,
+      from_position_id: null,
+      from_position_name: null,
+      to_position_id: null,
+      to_position_name: null,
+      from_rate: null,
+      to_rate: null,
+      order_ref: null,
+      order_id: null,
+      order_number: null,
+      comment: null,
+      import_order_preparation,
+    });
+    listPersonnelEventsMock.mockResolvedValue({
+      total: 4,
+      items: [
+        importRow(61, 11, { state: "DRAFT", candidate_order_id: 101, candidate_order_number: "101-К" }),
+        importRow(62, 12, { state: "PENDING_APPLY", candidate_order_id: 102, candidate_order_number: "102-К" }),
+        importRow(63, 13, { state: "APPLIED", candidate_order_id: 103, candidate_order_number: "103-К" }),
+        importRow(64, 14, { state: "AMBIGUOUS" }),
+      ],
+    });
+
+    render(<PersonnelJournalPageClient />);
+
+    const draft = await screen.findByTestId("personnel-journal-row-61");
+    expect(within(draft).getByRole("link", { name: "№ 101-К — требуется регистрация" })).toHaveAttribute(
+      "href", "/directory/personnel/orders?order_id=101&tab=data",
+    );
+    const registered = screen.getByTestId("personnel-journal-row-62");
+    expect(within(registered).getByRole("link", { name: "№ 102-К — требуется применить" })).toHaveAttribute(
+      "href", "/directory/personnel/orders?order_id=102&tab=data",
+    );
+    const applied = screen.getByTestId("personnel-journal-row-63");
+    expect(within(applied).getByRole("link", { name: "№ 103-К — приказ оформлен" })).toHaveAttribute(
+      "href", "/directory/personnel/orders?order_id=103&tab=data",
+    );
+    const ambiguous = screen.getByTestId("personnel-journal-row-64");
+    expect(within(ambiguous).getByRole("link", { name: "Приказы сотрудника" })).toHaveAttribute(
+      "href", "/directory/personnel/orders?employee_id=14",
+    );
   });
 
   it("does not open a guessed order for a journal row without a canonical relation", async () => {

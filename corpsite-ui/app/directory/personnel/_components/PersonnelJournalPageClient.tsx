@@ -53,19 +53,46 @@ function linkedOrderId(row: PersonnelEventRow): number | null {
   return Number.isSafeInteger(value) && value > 0 ? value : null;
 }
 
+function importOrderPreparationLink(row: PersonnelEventRow): React.ReactNode {
+  const preparation = row.import_order_preparation;
+  const state = preparation?.state;
+  const candidateOrderId = Number(preparation?.candidate_order_id);
+  const candidateOrderNumber = String(preparation?.candidate_order_number ?? "").trim() || "—";
+  const hasCandidate = Number.isSafeInteger(candidateOrderId) && candidateOrderId > 0;
+
+  if (hasCandidate && (state === "DRAFT" || state === "PENDING_APPLY" || state === "APPLIED")) {
+    const suffix = state === "DRAFT"
+      ? "требуется регистрация"
+      : state === "PENDING_APPLY"
+        ? "требуется применить"
+        : "приказ оформлен";
+    return (
+      <a
+        href={`${buildPersonnelOrdersHref({ order_id: candidateOrderId })}&tab=data`}
+        className="font-medium text-blue-700 underline hover:text-blue-900 dark:text-blue-300 dark:hover:text-blue-100"
+      >
+        № {candidateOrderNumber} — {suffix}
+      </a>
+    );
+  }
+
+  const label = state === "AMBIGUOUS" ? "Приказы сотрудника" : "Приказ не подготовлен";
+  return (
+    <a
+      href={buildPersonnelOrdersHref({ employee_id: row.employee_id })}
+      className="font-medium text-blue-700 underline hover:text-blue-900 dark:text-blue-300 dark:hover:text-blue-100"
+    >
+      {label}
+    </a>
+  );
+}
+
 function renderOrderLink(row: PersonnelEventRow): React.ReactNode {
   const orderId = linkedOrderId(row);
   const orderNumber = String(row.order_number ?? "").trim();
   if (!orderId || !orderNumber) {
     if (String(row.event_type || "").toUpperCase() === "EMPLOYEE_ENROLLED_FROM_IMPORT") {
-      return (
-        <a
-          href={buildPersonnelOrdersHref({ employee_id: row.employee_id })}
-          className="font-medium text-blue-700 underline hover:text-blue-900 dark:text-blue-300 dark:hover:text-blue-100"
-        >
-          Проверить оформление приказа
-        </a>
-      );
+      return importOrderPreparationLink(row);
     }
     return "Приказ не связан";
   }

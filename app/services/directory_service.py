@@ -2295,6 +2295,82 @@ def _list_unapplied_personnel_order_items(
         return [dict(row) for row in conn.execute(query, params).mappings().all()]
 
 
+def _list_import_order_preparation(employee_ids: List[int]) -> Dict[int, Dict[str, Any]]:
+    """Return a read-only, unambiguous order-preparation state for HR-import events.
+
+    The result deliberately uses separate ``candidate_*`` keys.  It must never
+    be treated as a canonical relation of the import event itself.
+    """
+    normalized_ids = sorted({int(employee_id) for employee_id in employee_ids if int(employee_id) > 0})
+    if not normalized_ids:
+        return {}
+
+    query = text(
+        """
+        SELECT
+            poi.employee_id,
+            po.order_id AS candidate_order_id,
+            po.order_number AS candidate_order_number,
+            po.status AS candidate_order_status,
+            EXISTS (
+                SELECT 1
+                FROM public.employee_events applied
+                WHERE applied.order_item_id = poi.item_id
+            ) AS candidate_has_linked_event
+        FROM public.personnel_order_items poi
+        JOIN public.personnel_orders po ON po.order_id = poi.order_id
+        WHERE poi.employee_id IN :employee_ids
+          AND poi.item_status = 'ACTIVE'
+          AND po.source_mode = 'MANUAL'
+          AND po.status IN ('DRAFT', 'REGISTERED', 'SIGNED')
+        ORDER BY poi.employee_id, po.order_id, poi.item_id
+        """
+    ).bindparams(bindparam("employee_ids", expanding=True))
+
+    with engine.begin() as conn:
+        rows = [dict(row) for row in conn.execute(query, {"employee_ids": normalized_ids}).mappings().all()]
+
+    candidates_by_employee: Dict[int, Dict[int, Dict[str, Any]]] = {}
+    for row in rows:
+        employee_id = int(row["employee_id"])
+        order_id = int(row["candidate_order_id"])
+        employee_candidates = candidates_by_employee.setdefault(employee_id, {})
+        candidate = employee_candidates.setdefault(
+            order_id,
+            {
+                "order_id": order_id,
+                "order_number": row.get("candidate_order_number"),
+                "order_status": str(row["candidate_order_status"]),
+                "has_linked_event": False,
+            },
+        )
+        candidate["has_linked_event"] = candidate["has_linked_event"] or bool(
+            row.get("candidate_has_linked_event")
+        )
+
+    result: Dict[int, Dict[str, Any]] = {}
+    for employee_id in normalized_ids:
+        candidates = list(candidates_by_employee.get(employee_id, {}).values())
+        if not candidates:
+            result[employee_id] = {"state": "NOT_PREPARED"}
+        elif len(candidates) != 1:
+            result[employee_id] = {"state": "AMBIGUOUS"}
+        else:
+            candidate = candidates[0]
+            if candidate["has_linked_event"]:
+                state = "APPLIED"
+            elif candidate["order_status"] == "DRAFT":
+                state = "DRAFT"
+            else:
+                state = "PENDING_APPLY"
+            result[employee_id] = {
+                "state": state,
+                "candidate_order_id": candidate["order_id"],
+                "candidate_order_number": candidate["order_number"],
+            }
+    return result
+
+
 def list_personnel_events(
     *,
     event_category: Optional[str] = None,
@@ -2387,7 +2463,7 @@ def list_personnel_events(
     # that existing column, just as the employee-card history endpoint does.
     include_order_linkage = _employee_events_order_columns_available()
     include_order_details = include_order_linkage and personnel_orders_available()
-    order_linkage_select = ",\n            ev.order_id" if include_order_linkage else ""
+    order_linkage_select = ",\n            ev.order_id,\n            ev.order_item_id" if include_order_linkage else ""
     if include_order_details:
         order_linkage_select += ",\n            po.order_number"
     order_linkage_join = (
@@ -2464,6 +2540,17 @@ def list_personnel_events(
         if include_order_details
         else []
     )
+    import_employee_ids = [
+        int(row["employee_id"])
+        for row in rows
+        if str(row.get("event_type") or "").upper() == "EMPLOYEE_ENROLLED_FROM_IMPORT"
+        and row.get("order_id") is None
+    ]
+    import_order_preparation = (
+        _list_import_order_preparation(import_employee_ids)
+        if include_order_details and import_employee_ids
+        else {}
+    )
 
     items: List[Dict[str, Any]] = []
     for r in rows:
@@ -2492,8 +2579,7 @@ def list_personnel_events(
         else:
             lifecycle_status = "APPROVED"
 
-        items.append(
-            {
+        item = {
                 "event_id": int(r["event_id"]),
                 "employee_id": int(r["employee_id"]),
                 "employee_name": str(r.get("employee_name") or ""),
@@ -2527,10 +2613,23 @@ def list_personnel_events(
                     if include_order_linkage and r.get("order_id") is not None
                     else None
                 ),
+                "order_item_id": (
+                    int(r["order_item_id"])
+                    if include_order_linkage and r.get("order_item_id") is not None
+                    else None
+                ),
                 "order_number": r.get("order_number") if include_order_details else None,
                 "comment": r.get("comment"),
             }
-        )
+        if (
+            event_type.upper() == "EMPLOYEE_ENROLLED_FROM_IMPORT"
+            and r.get("order_id") is None
+        ):
+            item["import_order_preparation"] = import_order_preparation.get(
+                int(r["employee_id"]),
+                {"state": "NOT_PREPARED"},
+            )
+        items.append(item)
 
     for r in temporary_rows:
         item_type_code = str(r["item_type_code"])
