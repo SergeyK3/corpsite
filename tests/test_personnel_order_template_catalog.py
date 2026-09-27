@@ -11,7 +11,54 @@ def test_catalog_is_registry_backed_and_safe():
     assert "COMPOSITE" not in codes
     pilot = next(item for item in items if item["type_code"] == "RETURN_FROM_CHILDCARE_LEAVE")
     assert pilot["is_pilot"] is True and pilot["support_level"] == "SUPPORTED"
-    assert all(set(item) == {"type_code", "title_ru", "title_kk", "source", "support_level", "supported_locales", "uses_specialized_generator", "is_pilot", "required_fields", "notes"} for item in items)
+    assert all(set(item) == {"type_code", "title_ru", "title_kk", "source", "support_level", "supported_locales", "uses_specialized_generator", "is_pilot", "required_fields", "notes", "pilot_detail"} for item in items)
+
+
+def test_pilot_has_typed_requisites_and_non_personal_bilingual_preview():
+    items = list_personnel_order_template_catalog()
+    pilot = next(item for item in items if item["type_code"] == "RETURN_FROM_CHILDCARE_LEAVE")
+    detail = pilot["pilot_detail"]
+
+    assert pilot["required_fields"] == detail["required_fields"]
+    assert detail["required_fields"] == [
+        "ФИО сотрудника",
+        "Должность на русском языке",
+        "Должность на казахском языке",
+        "Подразделение на русском языке",
+        "Подразделение на казахском языке",
+        "Ставка",
+        "Дата выхода на работу",
+        "Основание: личное заявление или другое подтверждённое основание",
+    ]
+    assert detail["additional_fields"] == []
+    assert "Печатный подвал" in detail["document_parts"]
+    assert detail["specialty_note"] == "Специальность хранится отдельно и в тело этого приказа не включается."
+
+    ru, kk = detail["previews"]["ru"], detail["previews"]["kk"]
+    assert ru["directive"] == "ПРИКАЗЫВАЮ:"
+    assert kk["directive"] == "БҰЙЫРАМЫН:"
+    assert ru["basis"] == "Основание: Личное заявление."
+    assert kk["basis"] == "Негіз: Жеке өтініші."
+    assert ru["footer"] == (
+        "С приказом ознакомлен(а): ___________________ [Фамилия И.]\n"
+        "«___» ______________ 20___ г.\n"
+        "Исполнитель: [Инициалы и фамилия исполнителя]"
+    )
+    assert kk["footer"] == (
+        "Бұйрықпен таныстым: ___________________ [Тегі А.]\n"
+        "«___» ______________ 20___ ж.\n"
+        "Орындаушы: [Орындаушының аты-жөні]"
+    )
+    assert ru["basis"].count("Основание:") == 1
+    assert kk["basis"].count("Негіз:") == 1
+    preview_text = " ".join(value for preview in (ru, kk) for value in preview.values()).lower()
+    assert all(forbidden not in preview_text for forbidden in ("стаж", "дополнительное распоряжение", "контроль", "docx"))
+    assert all(real_name not in preview_text for real_name in ("райник", "оразбекова"))
+    assert "сотруднику сотрудник" not in ru["body"].lower()
+    assert "сотрудникға" not in kk["body"].lower()
+    assert "«ФИО сотрудника»" in ru["body"]
+    assert "шартты адамға" in kk["body"].lower()
+    assert all(item["pilot_detail"] is None for item in items if not item["is_pilot"])
 
 
 def test_catalog_endpoint_requires_existing_admin_guard():

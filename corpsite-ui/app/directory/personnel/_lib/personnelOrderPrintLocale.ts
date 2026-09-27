@@ -57,6 +57,16 @@ export const PERSONNEL_ORDER_PRINT_DICTIONARIES: Record<"kk" | "ru", PersonnelOr
   },
 };
 
+export function blankPersonnelOrderAcknowledgementFooter(locale: "kk" | "ru") {
+  const dictionary = PERSONNEL_ORDER_PRINT_DICTIONARIES[locale];
+  return {
+    familiarization: dictionary.familiarization,
+    date: locale === "kk" ? "«___» ______________ 20___ ж." : "«___» ______________ 20___ г.",
+    namePlaceholder: locale === "kk" ? "[Тегі А.]" : "[Фамилия И.]",
+    executor: locale === "kk" ? "Орындаушы: [Орындаушының аты-жөні]" : "Исполнитель: [Инициалы и фамилия исполнителя]",
+  };
+}
+
 export function printDictionariesForLanguage(
   language: PersonnelOrderPrintLanguage,
 ): PersonnelOrderPrintDictionary[] {

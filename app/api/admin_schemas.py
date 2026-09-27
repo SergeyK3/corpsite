@@ -7,6 +7,29 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class PersonnelOrderTemplateVariable(BaseModel):
+    code: str
+    label: str
+
+
+class PersonnelOrderTemplatePreview(BaseModel):
+    title: str
+    preamble: str
+    directive: str
+    body: str
+    basis: str
+    footer: str
+
+
+class PersonnelOrderTemplatePilotDetail(BaseModel):
+    required_fields: List[str]
+    additional_fields: List[str]
+    document_parts: List[str]
+    variables: List[PersonnelOrderTemplateVariable]
+    specialty_note: str
+    previews: Dict[str, PersonnelOrderTemplatePreview]
+
+
 class PersonnelOrderTemplateCatalogItem(BaseModel):
     type_code: str
     title_ru: str
@@ -18,6 +41,7 @@ class PersonnelOrderTemplateCatalogItem(BaseModel):
     is_pilot: bool
     required_fields: List[str]
     notes: str
+    pilot_detail: Optional[PersonnelOrderTemplatePilotDetail] = None
 
 
 class PersonnelOrderTemplateCatalogResponse(BaseModel):
