@@ -22,6 +22,9 @@ from app.api.admin_schemas import (
     GuardModeResponse,
     SecurityAuditEventResponse,
     PersonnelOrderTemplateCatalogResponse,
+    PersonnelOrderTemplateDraftOut,
+    PersonnelOrderTemplateDraftPreview,
+    PersonnelOrderTemplateDraftSave,
 )
 from app.api.telegram_health_schemas import TelegramHealthResponse
 from app.security.admin_guard import require_sysadmin_api
@@ -72,6 +75,7 @@ from app.services.security_audit_service import list_security_events
 from app.services.telegram_health_service import get_telegram_health
 from app.api.admin_org_units_routes import router as admin_org_units_router
 from app.services.personnel_order_template_catalog_service import list_personnel_order_template_catalog
+from app.services.personnel_order_template_draft_service import TemplateDraftError, create_draft, get_draft, preview_draft, save_draft
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 router.include_router(admin_org_units_router)
@@ -86,6 +90,34 @@ def admin_list_personnel_order_templates(
     _admin: Dict[str, Any] = Depends(require_sysadmin_api),
 ) -> Dict[str, Any]:
     return {"items": list_personnel_order_template_catalog()}
+
+
+def _template_draft_error(exc: TemplateDraftError) -> HTTPException:
+    return HTTPException(status_code=409 if exc.conflict else 400, detail={"code": exc.code, "message": str(exc)})
+
+
+@router.get("/personnel-order-templates/{item_type_code}/draft", response_model=Optional[PersonnelOrderTemplateDraftOut])
+def admin_get_personnel_order_template_draft(item_type_code: str, _admin: Dict[str, Any] = Depends(require_sysadmin_api)) -> Optional[Dict[str, Any]]:
+    try: return get_draft(item_type_code)
+    except TemplateDraftError as exc: raise _template_draft_error(exc) from exc
+
+
+@router.post("/personnel-order-templates/{item_type_code}/draft", response_model=PersonnelOrderTemplateDraftOut)
+def admin_create_personnel_order_template_draft(item_type_code: str, admin: Dict[str, Any] = Depends(require_sysadmin_api)) -> Dict[str, Any]:
+    try: return create_draft(item_type_code, int(admin["user_id"]))
+    except TemplateDraftError as exc: raise _template_draft_error(exc) from exc
+
+
+@router.put("/personnel-order-templates/{item_type_code}/draft", response_model=PersonnelOrderTemplateDraftOut)
+def admin_save_personnel_order_template_draft(item_type_code: str, body: PersonnelOrderTemplateDraftSave, admin: Dict[str, Any] = Depends(require_sysadmin_api)) -> Dict[str, Any]:
+    try: return save_draft(item_type_code, body.expected_revision, body.model_dump(exclude={"expected_revision"}), int(admin["user_id"]))
+    except TemplateDraftError as exc: raise _template_draft_error(exc) from exc
+
+
+@router.post("/personnel-order-templates/{item_type_code}/draft/preview")
+def admin_preview_personnel_order_template_draft(item_type_code: str, body: PersonnelOrderTemplateDraftPreview, _admin: Dict[str, Any] = Depends(require_sysadmin_api)) -> Dict[str, Any]:
+    try: return {"previews": preview_draft(item_type_code, body.model_dump())}
+    except TemplateDraftError as exc: raise _template_draft_error(exc) from exc
 
 
 @router.get("/access/roles", response_model=List[AccessRoleRefResponse])

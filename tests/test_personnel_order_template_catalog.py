@@ -12,7 +12,9 @@ def test_catalog_is_registry_backed_and_safe():
     assert "COMPOSITE" not in codes
     pilot = next(item for item in items if item["type_code"] == "RETURN_FROM_CHILDCARE_LEAVE")
     assert pilot["is_pilot"] is True and pilot["support_level"] == "SUPPORTED"
-    assert all(set(item) == {"type_code", "title_ru", "title_kk", "source", "support_level", "supported_locales", "uses_specialized_generator", "is_pilot", "required_fields", "notes", "pilot_detail", "template_detail"} for item in items)
+    assert all(set(item) == {"type_code", "title_ru", "title_kk", "source", "support_level", "supported_locales", "uses_specialized_generator", "is_pilot", "editor_available", "required_fields", "notes", "pilot_detail", "template_detail"} for item in items)
+    assert next(item for item in items if item["type_code"] == "LEAVE.UNPAID.GRANT")["editor_available"] is True
+    assert all(not item["editor_available"] for item in items if item["type_code"] != "LEAVE.UNPAID.GRANT")
 
 
 def test_pilot_has_typed_requisites_and_non_personal_bilingual_preview():

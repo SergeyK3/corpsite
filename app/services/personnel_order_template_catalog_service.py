@@ -211,6 +211,7 @@ def list_personnel_order_template_catalog() -> list[dict[str, Any]]:
             "supported_locales": locales,
             "uses_specialized_generator": type_code in DOCUMENT_TITLES,
             "is_pilot": type_code == ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE,
+            "editor_available": type_code == "LEAVE.UNPAID.GRANT",
             "required_fields": (
                 _PILOT_REQUIRED_FIELDS if type_code == ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE
                 else _UNPAID_LEAVE_REQUIRED_FIELDS if type_code == "LEAVE.UNPAID.GRANT"

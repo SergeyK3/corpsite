@@ -39,6 +39,7 @@ class PersonnelOrderTemplateCatalogItem(BaseModel):
     supported_locales: List[str]
     uses_specialized_generator: bool
     is_pilot: bool
+    editor_available: bool
     required_fields: List[str]
     notes: str
     pilot_detail: Optional[PersonnelOrderTemplatePilotDetail] = None
@@ -47,6 +48,37 @@ class PersonnelOrderTemplateCatalogItem(BaseModel):
 
 class PersonnelOrderTemplateCatalogResponse(BaseModel):
     items: List[PersonnelOrderTemplateCatalogItem]
+
+
+class PersonnelOrderTemplateDraftText(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    title_ru: str
+    title_kk: str
+    preamble_ru: str
+    preamble_kk: str
+    body_template_ru: str
+    body_template_kk: str
+    basis_template_ru: str
+    basis_template_kk: str
+
+
+class PersonnelOrderTemplateDraftSave(PersonnelOrderTemplateDraftText):
+    expected_revision: int = Field(..., ge=1)
+
+
+class PersonnelOrderTemplateDraftOut(PersonnelOrderTemplateDraftText):
+    template_version_id: int
+    item_type_code: str
+    version_number: int
+    status: str
+    revision: int
+    based_on_built_in: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class PersonnelOrderTemplateDraftPreview(PersonnelOrderTemplateDraftText):
+    pass
 
 
 class MatchedGrantOut(BaseModel):

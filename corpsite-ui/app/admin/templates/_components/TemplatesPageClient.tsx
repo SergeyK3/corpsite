@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import RegularTasksAdminClient from "@/app/regular-tasks/_components/RegularTasksAdminClient";
@@ -16,9 +16,27 @@ import {
   listPersonnelOrderTemplateCatalog,
   type PersonnelOrderTemplateCatalogItem,
   type PersonnelOrderTemplatePilotDetail,
+  type PersonnelOrderTemplatePreview,
+  type PersonnelOrderTemplateDraft,
+  type PersonnelOrderTemplateDraftText,
+  createPersonnelOrderTemplateDraft,
+  getPersonnelOrderTemplateDraft,
+  previewPersonnelOrderTemplateDraft,
+  savePersonnelOrderTemplateDraft,
 } from "../_lib/personnelOrderTemplatesApi.client";
 
 const TAB_CLASS = "rounded-xl border px-4 py-2 text-sm font-medium transition";
+
+function draftErrorMessage(cause: unknown): string {
+  const error = cause as { message?: unknown; details?: { detail?: unknown } };
+  const validation = Array.isArray(error?.details?.detail) ? error.details.detail[0] as { loc?: unknown; msg?: unknown } : null;
+  if (validation) {
+    const location = Array.isArray(validation.loc) ? validation.loc.filter((part) => part !== "body").join(".") : "";
+    const message = typeof validation.msg === "string" ? validation.msg : "Некорректное значение";
+    return location ? `Поле «${location}»: ${message}` : message;
+  }
+  return typeof error?.message === "string" && error.message.trim() ? error.message : "Не удалось выполнить действие.";
+}
 
 function GeneralPersonnelOrderRequirements() {
   return (
@@ -48,6 +66,19 @@ function PreviewFooter({ locale }: { locale: "ru" | "kk" }) {
       <p>{footer.executor}</p>
     </div>
   );
+}
+
+function editableDraftText(source: PersonnelOrderTemplateDraftText): PersonnelOrderTemplateDraftText {
+  return {
+    title_ru: source.title_ru,
+    title_kk: source.title_kk,
+    preamble_ru: source.preamble_ru,
+    preamble_kk: source.preamble_kk,
+    body_template_ru: source.body_template_ru,
+    body_template_kk: source.body_template_kk,
+    basis_template_ru: source.basis_template_ru,
+    basis_template_kk: source.basis_template_kk,
+  };
 }
 
 function FormalizedTemplateDetail({ detail }: { detail: PersonnelOrderTemplatePilotDetail }) {
@@ -108,8 +139,45 @@ function FormalizedTemplateDetail({ detail }: { detail: PersonnelOrderTemplatePi
   );
 }
 
+function DraftEditor({ draft, onSaved }: { draft: PersonnelOrderTemplateDraft; onSaved: (draft: PersonnelOrderTemplateDraft) => void }) {
+  const [values, setValues] = useState<PersonnelOrderTemplateDraftText>(() => editableDraftText(draft));
+  const [preview, setPreview] = useState<Record<"ru" | "kk", PersonnelOrderTemplatePreview> | null>(null);
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
+  const previewRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => { if (preview) previewRef.current?.scrollIntoView?.({ behavior: "smooth", block: "nearest" }); }, [preview]);
+  const fields: Array<[keyof PersonnelOrderTemplateDraftText, string]> = [["title_ru", "Заголовок RU"], ["title_kk", "Заголовок KK"], ["preamble_ru", "Преамбула RU"], ["preamble_kk", "Преамбула KK"], ["body_template_ru", "Распорядительный текст RU"], ["body_template_kk", "Распорядительный текст KK"], ["basis_template_ru", "Основание RU"], ["basis_template_kk", "Основание KK"]];
+  const change = (key: keyof PersonnelOrderTemplateDraftText, value: string) => setValues((old) => ({ ...old, [key]: value }));
+  const showPreview = () => {
+    setError("");
+    setPreviewing(true);
+    void previewPersonnelOrderTemplateDraft(draft.item_type_code, editableDraftText(values))
+      .then((result) => setPreview(result.previews))
+      .catch((cause) => setError(draftErrorMessage(cause)))
+      .finally(() => setPreviewing(false));
+  };
+  const save = () => {
+    setSaving(true);
+    void savePersonnelOrderTemplateDraft(draft.item_type_code, { ...values, expected_revision: draft.revision })
+      .then((next) => { onSaved(next); setValues(editableDraftText(next)); })
+      .catch((cause) => setError(draftErrorMessage(cause)))
+      .finally(() => setSaving(false));
+  };
+  return <section className="mt-5 rounded-xl border border-blue-200 p-4" data-testid="template-draft-editor"><h4 className="font-semibold">Черновая версия шаблона</h4><p className="text-sm">Версия {draft.version_number} · revision {draft.revision} · Черновик</p><p className="mt-2 text-sm text-amber-700">Черновик не применяется к кадровым приказам.</p><div className="mt-3 grid gap-3">{fields.map(([key, label]) => <label key={key} className="text-sm">{label}<textarea aria-label={label} value={values[key]} onChange={(e) => change(key, e.target.value)} className="mt-1 min-h-20 w-full rounded border p-2" /></label>)}</div><p className="mt-3 text-xs">Разрешённые переменные: employee.full_name, position.title_ru, position.title_kk, org_unit.title_ru, org_unit.title_kk, leave.start_ru, leave.start_kk, leave.end_ru, leave.end_kk, leave.days, basis.application_date_ru, basis.application_date_kk, basis.application_number_suffix.</p><div className="mt-5 flex flex-wrap items-center gap-3 border-t border-zinc-200 pt-4 dark:border-zinc-800" data-testid="template-draft-actions"><button type="button" onClick={showPreview} disabled={previewing} className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-800 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800">{previewing ? "Формирование…" : "Предварительный просмотр"}</button><button type="button" onClick={save} disabled={saving} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-500 dark:text-zinc-950 dark:hover:bg-blue-400">{saving ? "Сохранение…" : "Сохранить черновик"}</button>{error ? <p role="alert" className="text-sm text-red-700">{error}</p> : null}</div>{preview ? <div ref={previewRef} data-testid="template-draft-preview" className="mt-4 grid gap-3 md:grid-cols-2">{(["ru", "kk"] as const).map((locale) => <article key={locale}><b>{locale.toUpperCase()}</b><p>{preview[locale].title}</p><p>{preview[locale].preamble}</p><p className="text-center">{preview[locale].directive}</p><p>{preview[locale].body}</p><p>{preview[locale].basis}</p><PreviewFooter locale={locale} /></article>)}</div> : null}</section>;
+}
+
 function TemplateDetail({ item }: { item: PersonnelOrderTemplateCatalogItem }) {
   const detail = item.template_detail ?? item.pilot_detail;
+  const [draft, setDraft] = useState<PersonnelOrderTemplateDraft | null>(null);
+  const [openingEditor, setOpeningEditor] = useState(false);
+  const openEditor = () => {
+    setOpeningEditor(true);
+    void getPersonnelOrderTemplateDraft(item.type_code)
+      .then((existing) => existing ?? createPersonnelOrderTemplateDraft(item.type_code))
+      .then(setDraft)
+      .finally(() => setOpeningEditor(false));
+  };
   return (
     <aside data-testid="personnel-order-template-detail" className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
       <h3 className="text-lg font-semibold">{item.title_ru}</h3>
@@ -120,6 +188,8 @@ function TemplateDetail({ item }: { item: PersonnelOrderTemplateCatalogItem }) {
         <p className="mt-3">Обязательные поля: {item.required_fields.join(", ") || "не формализованы"}</p>
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">{item.notes}</p>
       </>}
+      {item.editor_available && !draft ? <div className="mt-4"><button className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-500 dark:text-zinc-950 dark:hover:bg-blue-400" type="button" onClick={openEditor} disabled={openingEditor}>{openingEditor ? "Открытие…" : "Редактировать"}</button></div> : null}
+      {draft ? <DraftEditor draft={draft} onSaved={setDraft} /> : null}
     </aside>
   );
 }
