@@ -264,8 +264,8 @@ describe("PersonnelJournalPageClient", () => {
       total: 4,
       items: [
         importRow(61, 11, { state: "DRAFT", candidate_order_id: 101, candidate_order_number: "101-К" }),
-        importRow(62, 12, { state: "PENDING_APPLY", candidate_order_id: 102, candidate_order_number: "102-К" }),
-        importRow(63, 13, { state: "APPLIED", candidate_order_id: 103, candidate_order_number: "103-К" }),
+        importRow(62, 12, { state: "PENDING_APPLY", candidate_order_id: 102, candidate_order_number: "1321/1" }),
+        importRow(63, 13, { state: "APPLIED", candidate_order_id: 103, candidate_order_number: "Приказ 1321/1" }),
         importRow(64, 14, { state: "AMBIGUOUS" }),
       ],
     });
@@ -277,13 +277,14 @@ describe("PersonnelJournalPageClient", () => {
       "href", "/directory/personnel/orders?order_id=101&tab=data",
     );
     const registered = screen.getByTestId("personnel-journal-row-62");
-    expect(within(registered).getByRole("link", { name: "№ 102-К — требуется применить" })).toHaveAttribute(
+    expect(within(registered).getByRole("link", { name: "№ 1321/1 — требуется применить" })).toHaveAttribute(
       "href", "/directory/personnel/orders?order_id=102&tab=data",
     );
     const applied = screen.getByTestId("personnel-journal-row-63");
-    expect(within(applied).getByRole("link", { name: "№ 103-К — приказ оформлен" })).toHaveAttribute(
+    expect(within(applied).getByRole("link", { name: "Приказ 1321/1 — приказ оформлен" })).toHaveAttribute(
       "href", "/directory/personnel/orders?order_id=103&tab=data",
     );
+    expect(screen.queryByRole("link", { name: "№ Приказ 1321/1 — приказ оформлен" })).not.toBeInTheDocument();
     const ambiguous = screen.getByTestId("personnel-journal-row-64");
     expect(within(ambiguous).getByRole("link", { name: "Приказы сотрудника" })).toHaveAttribute(
       "href", "/directory/personnel/orders?employee_id=14",

@@ -53,6 +53,12 @@ function linkedOrderId(row: PersonnelEventRow): number | null {
   return Number.isSafeInteger(value) && value > 0 ? value : null;
 }
 
+function formatOrderNumberForPreparation(orderNumber: string): string {
+  return /^(?:Приказ|Бұйрық|№)/iu.test(orderNumber)
+    ? orderNumber
+    : `№ ${orderNumber}`;
+}
+
 function importOrderPreparationLink(row: PersonnelEventRow): React.ReactNode {
   const preparation = row.import_order_preparation;
   const state = preparation?.state;
@@ -71,7 +77,7 @@ function importOrderPreparationLink(row: PersonnelEventRow): React.ReactNode {
         href={`${buildPersonnelOrdersHref({ order_id: candidateOrderId })}&tab=data`}
         className="font-medium text-blue-700 underline hover:text-blue-900 dark:text-blue-300 dark:hover:text-blue-100"
       >
-        № {candidateOrderNumber} — {suffix}
+        {formatOrderNumberForPreparation(candidateOrderNumber)} — {suffix}
       </a>
     );
   }
