@@ -4,11 +4,12 @@ import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import TaskOrgFiltersBar from "@/components/TaskOrgFiltersBar";
+import { getEmployees } from "@/app/directory/employees/_lib/api.client";
+import { mapEmployeesResponseToSearchOptions, type EmployeeSearchOption } from "../_lib/personnelOrderEmployeeSearch";
 
 import PersonnelOrderCreateDialog from "./PersonnelOrderCreateDialog";
 import PersonnelOrderDetailDrawer from "./PersonnelOrderDetailDrawer";
 import { PersonnelOrdersTable } from "./PersonnelOrdersTable";
-import PersonnelOrderPrintLanguageDialog from "./print/PersonnelOrderPrintLanguageDialog";
 import {
   PERSONNEL_ORDERS_BASE_PATH,
   PERSONNEL_ORDER_STATUS_FILTER_OPTIONS,
@@ -16,7 +17,6 @@ import {
   buildPersonnelOrdersQueryParams,
   filterPersonnelOrdersBySearch,
   listPersonnelOrders,
-  getPersonnelOrder,
   mapPersonnelOrdersApiError,
   parsePersonnelOrdersFilters,
   personnelOrderStatusLabel,
@@ -25,25 +25,11 @@ import {
   type PersonnelOrderListItem,
   type PersonnelOrdersFilters,
 } from "../_lib/personnelOrdersApi.client";
-import {
-  buildPersonnelOrderPrintHref,
-  type PersonnelOrderPrintLanguage,
-} from "../_lib/personnelOrderPrintLanguage";
-import { openPersonnelOrderPdf } from "../_lib/personnelOrderPdfOpen.client";
-import {
-  PERSONNEL_ORDER_PRINT_POPUP_BLOCKED_MESSAGE,
-  openPersonnelOrderPrintPreview,
-} from "../_lib/personnelOrderPrintPreview.client";
-import {
-  hasPersonnelOrderSignatory,
-  resolvePersonnelOrderSignatoryDisplay,
-} from "../_lib/personnelOrderDocumentRequisites";
-import type { PersonnelOrderPrintDialogAction } from "./print/PersonnelOrderPrintLanguageDialog";
 
 function activeFilterSummary(filters: PersonnelOrdersFilters): string[] {
   const parts: string[] = [];
   if (filters.order_id) parts.push(`приказ #${filters.order_id}`);
-  if (filters.employee_id) parts.push(`сотрудник #${filters.employee_id}`);
+  if (filters.employee_id) parts.push("сотрудник");
   if (filters.org_unit_id) parts.push(`подразделение #${filters.org_unit_id}`);
   if (filters.status) parts.push(personnelOrderStatusLabel(filters.status));
   if (filters.order_type_code) parts.push(personnelOrderTypeLabel(filters.order_type_code));
@@ -79,9 +65,20 @@ export default function PersonnelOrdersPageClient() {
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [createOpen, setCreateOpen] = React.useState(false);
   const [toast, setToast] = React.useState<string | null>(null);
-  const [printOrderId, setPrintOrderId] = React.useState<number | null>(null);
-  const [printBusy, setPrintBusy] = React.useState(false);
-  const [printError, setPrintError] = React.useState<string | null>(null);
+  const [employeeQuery, setEmployeeQuery] = React.useState("");
+  const [employeeOptions, setEmployeeOptions] = React.useState<EmployeeSearchOption[]>([]);
+
+  React.useEffect(() => {
+    const query = employeeQuery.trim();
+    if (query.length < 2) { setEmployeeOptions([]); return; }
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void getEmployees({ q: query, limit: 20, status: "all" }).then((response) => {
+        if (!cancelled) setEmployeeOptions(mapEmployeesResponseToSearchOptions(response));
+      }).catch(() => { if (!cancelled) setEmployeeOptions([]); });
+    }, 200);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [employeeQuery]);
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -167,50 +164,6 @@ export default function PersonnelOrdersPageClient() {
     void load();
   }
 
-  function openPrintDialog(row: PersonnelOrderListItem) {
-    setPrintError(null);
-    setPrintOrderId(row.order_id);
-  }
-
-  async function confirmPrint(
-    language: PersonnelOrderPrintLanguage,
-    action: PersonnelOrderPrintDialogAction,
-  ) {
-    if (printOrderId == null) return;
-    const orderId = printOrderId;
-    if (action === "preview") {
-      setPrintOrderId(null);
-      try {
-        const fresh = await getPersonnelOrder(orderId);
-        const signatory = resolvePersonnelOrderSignatoryDisplay(fresh.order);
-        if (!hasPersonnelOrderSignatory(signatory)) {
-          setPrintError(
-            "Реквизиты подписанта не сохранены. Заполните и сохраните заголовок приказа.",
-          );
-          return;
-        }
-        const opened = openPersonnelOrderPrintPreview(
-          orderId,
-          language,
-          fresh.order.updated_at || Date.now(),
-        );
-        setPrintError(opened ? null : PERSONNEL_ORDER_PRINT_POPUP_BLOCKED_MESSAGE);
-      } catch (e) {
-        setPrintError(mapPersonnelOrdersApiError(e, "Не удалось подготовить предпросмотр."));
-      }
-      return;
-    }
-    setPrintBusy(true);
-    setPrintError(null);
-    const result = await openPersonnelOrderPdf(orderId, language);
-    setPrintBusy(false);
-    if (result.ok) {
-      setPrintOrderId(null);
-      return;
-    }
-    setPrintError(result.error);
-  }
-
   return (
     <div className="space-y-4 px-4 py-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -233,15 +186,6 @@ export default function PersonnelOrdersPageClient() {
       {toast ? (
         <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900 dark:border-emerald-900/55 dark:bg-emerald-950/35 dark:text-emerald-100">
           {toast}
-        </div>
-      ) : null}
-
-      {printError ? (
-        <div
-          className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800 dark:border-red-900/55 dark:bg-red-950/35 dark:text-red-100"
-          data-testid="personnel-order-pdf-open-error"
-        >
-          {printError}
         </div>
       ) : null}
 
@@ -333,23 +277,20 @@ export default function PersonnelOrdersPageClient() {
             className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
           />
         </div>
-        <div>
+        <div className="relative">
           <label className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">
-            ID сотрудника
+            Сотрудник
           </label>
           <input
-            type="number"
-            min={1}
-            value={filters.employee_id ?? ""}
-            onChange={(e) => {
-              const raw = e.target.value.trim();
-              updateFilters({
-                employee_id: raw ? Number(raw) : undefined,
-              });
-            }}
-            placeholder="employee_id"
-            className="min-w-[8rem] rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+            type="search"
+            aria-label="Сотрудник"
+            value={employeeQuery}
+            onChange={(e) => setEmployeeQuery(e.target.value)}
+            placeholder="Введите фамилию или ФИО"
+            className="min-w-[14rem] rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
           />
+          {filters.employee_id ? <button type="button" aria-label="Очистить сотрудника" onClick={() => { setEmployeeQuery(""); updateFilters({ employee_id: undefined }); }} className="ml-2 text-xs underline">Очистить</button> : null}
+          {employeeOptions.length > 0 ? <div className="absolute z-20 mt-1 w-full rounded border bg-white shadow dark:bg-zinc-950">{employeeOptions.map((option) => <button key={option.employee_id} type="button" className="block w-full px-3 py-2 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800" onClick={() => { setEmployeeQuery(option.full_name); setEmployeeOptions([]); updateFilters({ employee_id: option.employee_id }); }}><span className="block font-medium">{option.full_name}</span><span className="block text-xs text-zinc-500">{option.position_name || "—"} · {option.org_unit_name || "—"}</span></button>)}</div> : null}
         </div>
         <div>
           <label className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">
@@ -397,7 +338,6 @@ export default function PersonnelOrdersPageClient() {
             : "Приказы пока не созданы."
         }
         onRowClick={openOrder}
-        onPrintClick={openPrintDialog}
       />
 
       <PersonnelOrderDetailDrawer
@@ -418,15 +358,6 @@ export default function PersonnelOrdersPageClient() {
         initialOrgUnitId={filters.org_unit_id}
       />
 
-      <PersonnelOrderPrintLanguageDialog
-        open={printOrderId != null}
-        onClose={() => {
-          if (printBusy) return;
-          setPrintOrderId(null);
-        }}
-        onConfirm={confirmPrint}
-        busy={printBusy}
-      />
     </div>
   );
 }

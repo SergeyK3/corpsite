@@ -16,7 +16,6 @@ export type PersonnelOrdersTableProps = {
   loading?: boolean;
   emptyMessage?: string;
   onRowClick?: (row: PersonnelOrderListItem) => void;
-  onPrintClick?: (row: PersonnelOrderListItem) => void;
 };
 
 function formatEmployees(row: PersonnelOrderListItem): string {
@@ -28,8 +27,8 @@ function formatEmployees(row: PersonnelOrderListItem): string {
 }
 
 function sourceTitle(row: PersonnelOrderListItem): string {
-  const title = row.storage_json?.source_title;
-  return typeof title === "string" && title.trim() ? title.trim() : "—";
+  const title = row.source_title;
+  return typeof title === "string" && title !== "" ? title : "—";
 }
 
 function isTechnicalOrder(row: PersonnelOrderListItem): boolean {
@@ -51,7 +50,6 @@ export function PersonnelOrdersTable({
   loading = false,
   emptyMessage = "Приказы не найдены.",
   onRowClick,
-  onPrintClick,
 }: PersonnelOrdersTableProps) {
   if (loading) {
     return (
@@ -150,19 +148,6 @@ export function PersonnelOrdersTable({
                       }}
                     >
                       Открыть
-                    </button>
-                  ) : null}
-                  {onPrintClick ? (
-                    <button
-                      type="button"
-                      className="rounded-md border border-zinc-300 bg-zinc-900 px-2 py-1 text-xs font-medium text-white hover:bg-zinc-800 dark:border-zinc-200 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-white"
-                      data-testid={`personnel-order-print-${row.order_id}`}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onPrintClick(row);
-                      }}
-                    >
-                      Печать
                     </button>
                   ) : null}
                 </div>
