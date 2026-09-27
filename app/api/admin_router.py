@@ -21,6 +21,7 @@ from app.api.admin_schemas import (
     EnrollmentQueueItemResponse,
     GuardModeResponse,
     SecurityAuditEventResponse,
+    PersonnelOrderTemplateCatalogResponse,
 )
 from app.api.telegram_health_schemas import TelegramHealthResponse
 from app.security.admin_guard import require_sysadmin_api
@@ -70,6 +71,7 @@ from app.services.personnel_visibility_service import (
 from app.services.security_audit_service import list_security_events
 from app.services.telegram_health_service import get_telegram_health
 from app.api.admin_org_units_routes import router as admin_org_units_router
+from app.services.personnel_order_template_catalog_service import list_personnel_order_template_catalog
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 router.include_router(admin_org_units_router)
@@ -77,6 +79,13 @@ router.include_router(admin_org_units_router)
 
 def _value_error_to_http(exc: ValueError) -> HTTPException:
     return HTTPException(status_code=400, detail=str(exc))
+
+
+@router.get("/personnel-order-templates", response_model=PersonnelOrderTemplateCatalogResponse)
+def admin_list_personnel_order_templates(
+    _admin: Dict[str, Any] = Depends(require_sysadmin_api),
+) -> Dict[str, Any]:
+    return {"items": list_personnel_order_template_catalog()}
 
 
 @router.get("/access/roles", response_model=List[AccessRoleRefResponse])

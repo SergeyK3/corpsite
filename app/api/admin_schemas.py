@@ -7,6 +7,23 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 
+class PersonnelOrderTemplateCatalogItem(BaseModel):
+    type_code: str
+    title_ru: str
+    title_kk: str
+    source: str
+    support_level: str
+    supported_locales: List[str]
+    uses_specialized_generator: bool
+    is_pilot: bool
+    required_fields: List[str]
+    notes: str
+
+
+class PersonnelOrderTemplateCatalogResponse(BaseModel):
+    items: List[PersonnelOrderTemplateCatalogItem]
+
+
 class MatchedGrantOut(BaseModel):
     grant_id: int
     access_role_code: str

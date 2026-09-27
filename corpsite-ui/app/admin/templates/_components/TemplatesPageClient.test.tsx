@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import TemplatesPageClient from "./TemplatesPageClient";
+import { listPersonnelOrderTemplateCatalog } from "../_lib/personnelOrderTemplatesApi.client";
 
 let currentSearch = new URLSearchParams();
 const push = vi.fn();
@@ -18,11 +19,13 @@ vi.mock("@/app/regular-tasks/_components/RegularTasksAdminClient", () => ({
     </div>
   ),
 }));
+vi.mock("../_lib/personnelOrderTemplatesApi.client", () => ({ listPersonnelOrderTemplateCatalog: vi.fn() }));
 
 describe("TemplatesPageClient", () => {
   beforeEach(() => {
     currentSearch = new URLSearchParams();
     push.mockReset();
+    vi.mocked(listPersonnelOrderTemplateCatalog).mockResolvedValue({ items: [{ type_code: "RETURN_FROM_CHILDCARE_LEAVE", title_ru: "О выходе на работу из отпуска по уходу за ребёнком", title_kk: "Бала күтіміне байланысты демалыстан жұмысқа шығу туралы", source: "BUILT_IN", support_level: "SUPPORTED", supported_locales: ["ru", "kk"], uses_specialized_generator: true, is_pilot: true, required_fields: [], notes: "Не формализованы" }] });
   });
 
   afterEach(cleanup);
@@ -36,13 +39,11 @@ describe("TemplatesPageClient", () => {
     expect(screen.queryByTestId("personnel-order-templates-empty-state")).not.toBeInTheDocument();
   });
 
-  it("shows the personnel order templates empty state for its direct URL", () => {
+  it("shows the personnel order templates catalogue for its direct URL", async () => {
     currentSearch = new URLSearchParams("section=personnel-orders");
     render(<TemplatesPageClient />);
 
-    expect(screen.getByTestId("personnel-order-templates-empty-state")).toHaveTextContent(
-      "Здесь будет каталог версионируемых RU/KK-шаблонов кадровых приказов.",
-    );
+    expect(await screen.findByTestId("personnel-order-templates-catalog")).toHaveTextContent("RETURN_FROM_CHILDCARE_LEAVE");
     expect(screen.queryByTestId("reused-regular-task-templates")).not.toBeInTheDocument();
   });
 
@@ -61,7 +62,7 @@ describe("TemplatesPageClient", () => {
 
     currentSearch = new URLSearchParams("section=personnel-orders");
     rerender(<TemplatesPageClient />);
-    expect(screen.getByTestId("personnel-order-templates-empty-state")).toBeInTheDocument();
+    expect(screen.getByTestId("personnel-order-templates-catalog")).toBeInTheDocument();
 
     currentSearch = new URLSearchParams("section=tasks");
     rerender(<TemplatesPageClient />);
