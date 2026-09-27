@@ -184,6 +184,44 @@ describe("PersonnelJournalPageClient", () => {
     expect(screen.getByText("Иванов И.И.")).toBeInTheDocument();
   });
 
+  it("opens the explicitly linked personnel order when its journal row is clicked", async () => {
+    listPersonnelEventsMock.mockResolvedValue({
+      total: 1,
+      items: [{ event_id: 51, employee_id: 7, employee_name: "Aliyev A.A.", event_type: "HIRE", effective_date: "2026-08-24", from_org_unit_id: null, from_org_unit_name: null, to_org_unit_id: null, to_org_unit_name: null, from_position_id: null, from_position_name: null, to_position_id: null, to_position_name: null, from_rate: null, to_rate: null, order_ref: "No. 51-K", order_id: 42, comment: null }],
+    });
+
+    render(<PersonnelJournalPageClient />);
+
+    fireEvent.click(await screen.findByTestId("personnel-journal-row-51"));
+    expect(pushMock).toHaveBeenCalledWith("/directory/personnel/orders?order_id=42");
+  });
+
+  it("opens the employee card, not the order, when the employee name is clicked", async () => {
+    listPersonnelEventsMock.mockResolvedValue({
+      total: 1,
+      items: [{ event_id: 52, employee_id: 8, employee_name: "Bayeva B.B.", event_type: "HIRE", effective_date: "2026-08-24", from_org_unit_id: null, from_org_unit_name: null, to_org_unit_id: null, to_org_unit_name: null, from_position_id: null, from_position_name: null, to_position_id: null, to_position_name: null, from_rate: null, to_rate: null, order_ref: "No. 52-K", order_id: 43, comment: null }],
+    });
+
+    render(<PersonnelJournalPageClient />);
+
+    fireEvent.click(await screen.findByTestId("personnel-journal-employee-8"));
+    expect(pushMock).toHaveBeenCalledWith("/directory/personnel/employees/8/card?section=history");
+    expect(pushMock).not.toHaveBeenCalledWith("/directory/personnel/orders?order_id=43");
+  });
+
+  it("does not open a guessed order for a journal row without a canonical relation", async () => {
+    listPersonnelEventsMock.mockResolvedValue({
+      total: 1,
+      items: [{ event_id: 53, employee_id: 9, employee_name: "Unlinked employee", event_type: "HIRE", effective_date: "2026-08-24", from_org_unit_id: null, from_org_unit_name: null, to_org_unit_id: null, to_org_unit_name: null, from_position_id: null, from_position_name: null, to_position_id: null, to_position_name: null, from_rate: null, to_rate: null, order_ref: null, order_id: null, comment: null }],
+    });
+
+    render(<PersonnelJournalPageClient />);
+
+    fireEvent.click(await screen.findByTestId("personnel-journal-row-53"));
+    expect(screen.getByText("Приказ не связан")).toBeInTheDocument();
+    expect(pushMock).not.toHaveBeenCalled();
+  });
+
   it("continues to render existing journal rows", async () => {
     listPersonnelEventsMock.mockResolvedValue({
       total: 1,

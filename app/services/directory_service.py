@@ -2340,6 +2340,12 @@ def list_personnel_events(
 
     where_sql = " AND ".join(where_parts)
 
+    # `order_id` is already part of the canonical employee_events projection.
+    # Keep the journal compatible with installations that have not yet received
+    # that existing column, just as the employee-card history endpoint does.
+    include_order_linkage = _employee_events_order_columns_available()
+    order_id_select = ",\n            ev.order_id" if include_order_linkage else ""
+
     q_total = text(
         f"""
         SELECT COUNT(*) AS cnt
@@ -2368,7 +2374,7 @@ def list_personnel_events(
             tp.name AS to_position_name,
             ev.from_rate,
             ev.to_rate,
-            ev.order_ref,
+            ev.order_ref{order_id_select},
             ev.comment
         FROM public.employee_events ev
         JOIN public.employees e ON e.employee_id = ev.employee_id
@@ -2459,6 +2465,11 @@ def list_personnel_events(
                 "from_rate": _event_rate(r.get("from_rate")),
                 "to_rate": _event_rate(r.get("to_rate")),
                 "order_ref": r.get("order_ref"),
+                "order_id": (
+                    int(r["order_id"])
+                    if include_order_linkage and r.get("order_id") is not None
+                    else None
+                ),
                 "comment": r.get("comment"),
             }
         )
