@@ -1,6 +1,14 @@
 // FILE: corpsite-ui/app/regular-tasks/page.tsx
-import RegularTasksAdminClient from "./_components/RegularTasksAdminClient";
+import { redirect } from "next/navigation";
 
-export default function RegularTasksAdminPage() {
-  return <RegularTasksAdminClient />;
+import { buildLegacyRegularTaskTemplatesHref } from "../admin/templates/_lib/templateSections";
+
+export const dynamic = "force-dynamic";
+
+type Props = {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+};
+
+export default async function RegularTasksAdminPage({ searchParams }: Props) {
+  redirect(buildLegacyRegularTaskTemplatesHref(await searchParams));
 }

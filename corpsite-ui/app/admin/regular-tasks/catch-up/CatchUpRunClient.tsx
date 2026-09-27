@@ -111,7 +111,7 @@ const NAV_BUTTON_CLASS =
 function CatchUpNavActions({ dryRunId }: { dryRunId?: number | null }) {
   return (
     <div className="flex flex-wrap gap-2" data-testid="catch-up-nav-actions">
-      <Link href="/admin/regular-tasks" className={NAV_BUTTON_CLASS} data-testid="catch-up-nav-templates">
+      <Link href="/admin/templates?section=tasks" className={NAV_BUTTON_CLASS} data-testid="catch-up-nav-templates">
         {catchUpUiLabel("nav_to_templates")}
       </Link>
       <Link href="/regular-task-runs" className={NAV_BUTTON_CLASS} data-testid="catch-up-nav-journal">

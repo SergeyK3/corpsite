@@ -71,9 +71,9 @@ function renderNavIcon(iconId: NavItem["iconId"]) {
 
 const PRIMARY_ADMIN_NAV: NavItem[] = [
   {
-    href: "/admin/regular-tasks",
-    title: "Шаблоны регулярных задач",
-    matchPrefixes: ["/admin/regular-tasks", "/regular-tasks"],
+    href: "/admin/templates",
+    title: "Шаблоны",
+    matchPrefixes: ["/admin/templates"],
   },
   {
     href: "/admin/regular-tasks/catch-up",

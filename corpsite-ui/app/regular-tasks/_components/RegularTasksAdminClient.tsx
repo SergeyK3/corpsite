@@ -273,7 +273,11 @@ function normalizeExecutorRoles(
     });
 }
 
-export default function RegularTasksAdminClient() {
+type RegularTasksAdminClientProps = {
+  embedded?: boolean;
+};
+
+export default function RegularTasksAdminClient({ embedded = false }: RegularTasksAdminClientProps) {
   const router = useRouter();
   const pathname = usePathname();
   const sp = useSearchParams();
@@ -871,9 +875,11 @@ export default function RegularTasksAdminClient() {
       <section className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-3 shadow-sm">
         <div className="flex flex-col gap-3">
           <div className="flex flex-col gap-2 xl:flex-row xl:items-start xl:justify-between">
-            <div>
-              <h1 className="text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">Шаблоны регулярных задач</h1>
-            </div>
+            {!embedded ? (
+              <div>
+                <h1 className="text-3xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">Шаблоны регулярных задач</h1>
+              </div>
+            ) : null}
 
             <div className="flex flex-wrap gap-2">
               <button

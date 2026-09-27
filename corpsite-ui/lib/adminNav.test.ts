@@ -60,6 +60,8 @@ describe("adminNav", () => {
   });
 
   it("forbidden routes respect split access", () => {
+    expect(isForbiddenAdminRoute("/admin/templates", systemAdmin)).toBe(false);
+    expect(isForbiddenAdminRoute("/admin/templates", directoryPrivileged)).toBe(true);
     expect(isForbiddenAdminRoute("/admin/system", directoryPrivileged)).toBe(true);
     expect(isForbiddenAdminRoute("/admin/system", breakGlassSysadmin)).toBe(false);
     expect(isForbiddenAdminRoute("/admin/sync", directoryPrivileged)).toBe(true);
