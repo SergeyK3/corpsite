@@ -71,6 +71,7 @@ type Props = {
   onClose: () => void;
   onChanged?: (detail: PersonnelOrderDetailResponse) => void;
   hirePersonId?: number | null;
+  initialTab?: "document" | "data" | "requisites" | "items";
 };
 
 const SOURCE_TITLE_LOCALES = ["kk", "ru", "unknown"] as const;
@@ -295,6 +296,7 @@ export default function PersonnelOrderDetailDrawer({
   onClose,
   onChanged,
   hirePersonId = null,
+  initialTab,
 }: Props) {
   const [detail, setDetail] = React.useState<PersonnelOrderDetailResponse | null>(null);
   const [editorial, setEditorial] = React.useState<PersonnelOrderEditorialState | null>(null);
@@ -310,6 +312,10 @@ export default function PersonnelOrderDetailDrawer({
   const [activeTab, setActiveTab] = React.useState<"document" | "data" | "requisites" | "items">("document");
   const [orderLanguage, setOrderLanguage] = React.useState<PersonnelOrderDocumentLanguage>("kk");
   const [printLanguage, setPrintLanguage] = React.useState<PersonnelOrderDocumentLanguage | null>(null);
+
+  React.useEffect(() => {
+    if (open && initialTab) setActiveTab(initialTab);
+  }, [initialTab, open, orderId]);
 
   React.useEffect(() => {
     if (!printLanguage) return;

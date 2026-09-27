@@ -42,7 +42,11 @@ async function apiGetJson<T>(path: string, qs?: string): Promise<T> {
 }
 
 export type PersonnelEventRow = {
-  event_id: number;
+  event_id: number | string;
+  /** Read-only projection of an active order item that has not been applied yet. */
+  is_temporary?: boolean;
+  order_item_id?: number | null;
+  order_status?: string | null;
   employee_id: number;
   employee_name: string;
   event_type: string;
@@ -62,6 +66,9 @@ export type PersonnelEventRow = {
   from_rate: number | null;
   to_rate: number | null;
   order_ref: string | null;
+  /** Canonical personnel-order relation; absent for legacy/unlinked events. */
+  order_id?: number | null;
+  order_number?: string | null;
   comment: string | null;
 };
 

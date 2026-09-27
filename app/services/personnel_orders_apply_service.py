@@ -20,6 +20,7 @@ from app.db.models.personnel_orders import (
     ORDER_TYPE_CONCURRENT_DUTY_END,
     ORDER_TYPE_CONCURRENT_DUTY_START,
     ORDER_TYPE_HIRE,
+    ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE,
     ORDER_TYPE_TERMINATION,
     ORDER_TYPE_TRANSFER,
 )
@@ -195,6 +196,8 @@ def _resolve_event_types(item_type_code: str, payload: Dict[str, Any]) -> List[s
     normalized = str(item_type_code or "").strip().upper()
     if normalized == "LEAVE.ANNUAL.GRANT":
         return ["ANNUAL_LEAVE"]
+    if normalized == ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE:
+        return ["LEAVE.CHILDCARE.RETURN"]
     if normalized not in MVP_ITEM_TYPE_CODES:
         raise PersonnelOrderValidationError(f"Unsupported item_type_code: {item_type_code}")
 
@@ -278,6 +281,47 @@ def _apply_annual_leave(
         to_rate=rate,
         order_ref=order_ref,
         comment=str(source_description) if source_description is not None else None,
+        created_by=created_by,
+        order_id=order_id,
+        order_item_id=int(item["item_id"]),
+    )
+
+
+def _apply_childcare_leave_return(
+    conn,
+    *,
+    item: Dict[str, Any],
+    order_id: int,
+    order_ref: str,
+    created_by: int,
+) -> None:
+    """Record a return from childcare leave without changing employment state."""
+    employee_id = int(item["employee_id"])
+    snapshot = _fetch_employee_snapshot(conn, employee_id)
+    org_unit_id = int(snapshot["org_unit_id"]) if snapshot.get("org_unit_id") is not None else None
+    position_id = int(snapshot["position_id"]) if snapshot.get("position_id") is not None else None
+    rate_raw = snapshot.get("employment_rate")
+    rate = float(rate_raw) if rate_raw is not None else None
+
+    _insert_employee_event(
+        conn,
+        employee_id=employee_id,
+        event_type="LEAVE.CHILDCARE.RETURN",
+        event_class=get_event_class("LEAVE.CHILDCARE.RETURN"),
+        lifecycle_status="APPROVED",
+        metadata={
+            "personnel_order_id": int(order_id),
+            "personnel_order_item_id": int(item["item_id"]),
+        },
+        effective_date=item["effective_date"],
+        from_org_unit_id=org_unit_id,
+        from_position_id=position_id,
+        from_rate=rate,
+        to_org_unit_id=org_unit_id,
+        to_position_id=position_id,
+        to_rate=rate,
+        order_ref=order_ref,
+        comment=None,
         created_by=created_by,
         order_id=order_id,
         order_item_id=int(item["item_id"]),
@@ -742,6 +786,14 @@ def _apply_item_events(
             )
         elif event_type == "ANNUAL_LEAVE":
             _apply_annual_leave(
+                conn,
+                item=item,
+                order_id=order_id,
+                order_ref=order_ref,
+                created_by=created_by,
+            )
+        elif event_type == "LEAVE.CHILDCARE.RETURN":
+            _apply_childcare_leave_return(
                 conn,
                 item=item,
                 order_id=order_id,

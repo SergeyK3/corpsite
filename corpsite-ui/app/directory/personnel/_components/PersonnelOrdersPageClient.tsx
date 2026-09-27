@@ -69,6 +69,7 @@ export default function PersonnelOrdersPageClient() {
     const numeric = Number(raw);
     return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
   }, [searchParams]);
+  const drawerInitialTab = searchParams.get("tab") === "data" ? "data" : undefined;
 
   const [items, setItems] = React.useState<PersonnelOrderListItem[]>([]);
   const [total, setTotal] = React.useState(0);
@@ -405,6 +406,7 @@ export default function PersonnelOrdersPageClient() {
         onClose={closeDrawer}
         onChanged={handleChanged}
         hirePersonId={hirePersonId}
+        initialTab={drawerInitialTab}
       />
 
       <PersonnelOrderCreateDialog

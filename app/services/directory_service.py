@@ -2253,6 +2253,48 @@ def list_employee_events(
     return {"items": items, "total": total}
 
 
+def _list_unapplied_personnel_order_items(
+    *,
+    scope_unit_ids: Optional[List[int]],
+) -> List[Dict[str, Any]]:
+    """Read-only journal projections for order items not yet represented by an event."""
+    where_parts = [
+        "poi.item_status = 'ACTIVE'",
+        "poi.employee_id IS NOT NULL",
+        "poi.effective_date IS NOT NULL",
+        "po.source_mode = 'MANUAL'",
+        "po.status IN ('DRAFT', 'REGISTERED', 'SIGNED')",
+        "NOT EXISTS (SELECT 1 FROM public.employee_events applied WHERE applied.order_item_id = poi.item_id)",
+    ]
+    params: Dict[str, Any] = {}
+    if scope_unit_ids is not None:
+        normalized = sorted({int(value) for value in scope_unit_ids})
+        if not normalized:
+            return []
+        where_parts.append("e.org_unit_id IN :scope_unit_ids")
+        params["scope_unit_ids"] = normalized
+    query = text(
+        f"""
+        SELECT poi.item_id AS order_item_id, poi.item_type_code, poi.effective_date,
+               po.order_id, po.order_number, po.status AS order_status,
+               e.employee_id, e.full_name AS employee_name,
+               e.org_unit_id, ou.name AS org_unit_name,
+               e.position_id, pos.name AS position_name, e.employment_rate
+        FROM public.personnel_order_items poi
+        JOIN public.personnel_orders po ON po.order_id = poi.order_id
+        JOIN public.employees e ON e.employee_id = poi.employee_id
+        LEFT JOIN public.org_units ou ON ou.unit_id = e.org_unit_id
+        LEFT JOIN public.positions pos ON pos.position_id = e.position_id
+        WHERE {' AND '.join(where_parts)}
+        ORDER BY poi.effective_date DESC, poi.item_id DESC
+        """
+    )
+    if params:
+        query = query.bindparams(bindparam("scope_unit_ids", expanding=True))
+    with engine.begin() as conn:
+        return [dict(row) for row in conn.execute(query, params).mappings().all()]
+
+
 def list_personnel_events(
     *,
     event_category: Optional[str] = None,
@@ -2344,7 +2386,15 @@ def list_personnel_events(
     # Keep the journal compatible with installations that have not yet received
     # that existing column, just as the employee-card history endpoint does.
     include_order_linkage = _employee_events_order_columns_available()
-    order_id_select = ",\n            ev.order_id" if include_order_linkage else ""
+    include_order_details = include_order_linkage and personnel_orders_available()
+    order_linkage_select = ",\n            ev.order_id" if include_order_linkage else ""
+    if include_order_details:
+        order_linkage_select += ",\n            po.order_number"
+    order_linkage_join = (
+        "LEFT JOIN public.personnel_orders po ON po.order_id = ev.order_id"
+        if include_order_details
+        else ""
+    )
 
     q_total = text(
         f"""
@@ -2374,7 +2424,7 @@ def list_personnel_events(
             tp.name AS to_position_name,
             ev.from_rate,
             ev.to_rate,
-            ev.order_ref{order_id_select},
+            ev.order_ref{order_linkage_select},
             ev.comment
         FROM public.employee_events ev
         JOIN public.employees e ON e.employee_id = ev.employee_id
@@ -2382,6 +2432,7 @@ def list_personnel_events(
         LEFT JOIN public.org_units tou ON tou.unit_id = ev.to_org_unit_id
         LEFT JOIN public.positions fp ON fp.position_id = ev.from_position_id
         LEFT JOIN public.positions tp ON tp.position_id = ev.to_position_id
+        {order_linkage_join}
         WHERE {where_sql}
         ORDER BY ev.effective_date DESC, ev.event_id DESC
         LIMIT :limit OFFSET :offset
@@ -2407,6 +2458,12 @@ def list_personnel_events(
     with engine.begin() as conn:
         total = int(conn.execute(q_total, params).mappings().first()["cnt"])
         rows = conn.execute(q_list, params).mappings().all()
+
+    temporary_rows = (
+        _list_unapplied_personnel_order_items(scope_unit_ids=scope_unit_ids)
+        if include_order_details
+        else []
+    )
 
     items: List[Dict[str, Any]] = []
     for r in rows:
@@ -2470,8 +2527,52 @@ def list_personnel_events(
                     if include_order_linkage and r.get("order_id") is not None
                     else None
                 ),
+                "order_number": r.get("order_number") if include_order_details else None,
                 "comment": r.get("comment"),
             }
         )
 
-    return {"items": items, "total": total}
+    for r in temporary_rows:
+        item_type_code = str(r["item_type_code"])
+        event_type = (
+            "LEAVE.CHILDCARE.RETURN"
+            if item_type_code == "RETURN_FROM_CHILDCARE_LEAVE"
+            else f"PENDING_ORDER_ITEM:{item_type_code}"
+        )
+        items.append(
+            {
+                "event_id": f"draft-order-item-{int(r['order_item_id'])}",
+                "is_temporary": True,
+                "order_item_id": int(r["order_item_id"]),
+                "order_status": str(r["order_status"]),
+                "employee_id": int(r["employee_id"]),
+                "employee_name": str(r.get("employee_name") or ""),
+                "event_type": event_type,
+                "event_class": get_event_class(event_type),
+                "event_label": (
+                    get_event_label(event_type)
+                    if item_type_code == "RETURN_FROM_CHILDCARE_LEAVE"
+                    else f"Черновой пункт приказа: {item_type_code}"
+                ),
+                "lifecycle_status": "PENDING_APPLY",
+                "metadata": None,
+                "effective_date": r["effective_date"].isoformat(),
+                "from_org_unit_id": r.get("org_unit_id"),
+                "from_org_unit_name": r.get("org_unit_name"),
+                "to_org_unit_id": r.get("org_unit_id"),
+                "to_org_unit_name": r.get("org_unit_name"),
+                "from_position_id": r.get("position_id"),
+                "from_position_name": r.get("position_name"),
+                "to_position_id": r.get("position_id"),
+                "to_position_name": r.get("position_name"),
+                "from_rate": _event_rate(r.get("employment_rate")),
+                "to_rate": _event_rate(r.get("employment_rate")),
+                "order_ref": None,
+                "order_id": int(r["order_id"]),
+                "order_number": r.get("order_number"),
+                "comment": None,
+            }
+        )
+
+    items.sort(key=lambda item: (str(item.get("effective_date") or ""), str(item.get("event_id") or "")), reverse=True)
+    return {"items": items, "total": total + len(temporary_rows)}

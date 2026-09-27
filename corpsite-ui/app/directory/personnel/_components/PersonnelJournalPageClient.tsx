@@ -7,7 +7,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { buildEmployeeCardHref } from "@/lib/employeeCardNav";
 import TaskOrgFiltersBar from "@/components/TaskOrgFiltersBar";
 import { readTaskOrgFiltersFromSearchParams } from "@/lib/taskOrgFilters";
-import { formatPersonnelOrderDate } from "../_lib/personnelOrderLabels";
 import { buildPersonnelOrdersHref } from "../_lib/personnelOrdersApi.client";
 import {
   listHREventRegistry,
@@ -49,23 +48,44 @@ function fmtDate(v: string | null | undefined): string {
   return dt.toLocaleDateString("ru-RU");
 }
 
-function fmtOrderRef(v: string | null | undefined, orderId?: number | null): React.ReactNode {
-  const value = String(v ?? "").trim();
-  if (!value && !orderId) return "Приказ не связан";
-  const orderDateMatch = value.match(/^(.*\s)(\d{4}-\d{2}-\d{2})$/);
-  const displayValue = orderDateMatch
-    ? `${orderDateMatch[1]}${formatPersonnelOrderDate(orderDateMatch[2])}`
-    : value || `Приказ #${orderId}`;
-  return (
-    <span className="inline-flex max-w-[12rem] truncate rounded border border-zinc-200 bg-zinc-50 px-1.5 py-0.5 font-mono text-xs font-semibold tracking-tight text-zinc-800 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100">
-      {displayValue}
-    </span>
-  );
+function linkedOrderId(row: PersonnelEventRow): number | null {
+  const value = Number(row.order_id);
+  return Number.isSafeInteger(value) && value > 0 ? value : null;
 }
 
-function linkedOrderId(row: PersonnelEventRow): number | null {
-  const value = Number((row as PersonnelEventRow & { order_id?: unknown }).order_id);
-  return Number.isSafeInteger(value) && value > 0 ? value : null;
+function renderOrderLink(row: PersonnelEventRow): React.ReactNode {
+  const orderId = linkedOrderId(row);
+  const orderNumber = String(row.order_number ?? "").trim();
+  if (!orderId || !orderNumber) {
+    if (String(row.event_type || "").toUpperCase() === "EMPLOYEE_ENROLLED_FROM_IMPORT") {
+      return (
+        <a
+          href={buildPersonnelOrdersHref({ employee_id: row.employee_id })}
+          className="font-medium text-blue-700 underline hover:text-blue-900 dark:text-blue-300 dark:hover:text-blue-100"
+        >
+          Проверить оформление приказа
+        </a>
+      );
+    }
+    return "Приказ не связан";
+  }
+  return (
+    <div className="space-y-1">
+      <a
+        href={`${buildPersonnelOrdersHref({ order_id: orderId })}&tab=data`}
+        className="font-medium text-blue-700 hover:underline dark:text-blue-300"
+      >
+        {orderNumber}
+      </a>
+      {row.is_temporary ? (
+        <span className="block text-xs font-medium text-amber-800 dark:text-amber-200">
+          {row.order_status === "DRAFT"
+            ? "Черновик"
+            : "Кадровое событие ещё не создано. Откройте приказ для применения."}
+        </span>
+      ) : null}
+    </div>
+  );
 }
 
 function fmtRate(v: number | null | undefined): string {
@@ -293,10 +313,6 @@ export default function PersonnelJournalPageClient() {
 
   function openEmployee(id: number) {
     router.push(buildEmployeeCardHref(id, { section: "history" }));
-  }
-
-  function openOrder(orderId: number) {
-    router.push(buildPersonnelOrdersHref({ order_id: orderId }));
   }
 
   const eventCategory = searchParams.get("event_category") || "";
@@ -623,14 +639,11 @@ export default function PersonnelJournalPageClient() {
               ) : null}
               {filteredItems.map((row) => {
                 const typeKey = String(row.event_type || "").toUpperCase();
-                const orderId = linkedOrderId(row);
-                const hasLinkedOrder = orderId !== null;
                 return (
                   <tr
                     key={row.event_id}
                     data-testid={`personnel-journal-row-${row.event_id}`}
-                    onClick={hasLinkedOrder ? () => openOrder(orderId) : undefined}
-                    className={`border-t border-zinc-200 dark:border-zinc-800${hasLinkedOrder ? " cursor-pointer hover:bg-blue-50/60 dark:hover:bg-blue-950/20" : ""}`}
+                    className="border-t border-zinc-200 dark:border-zinc-800"
                   >
                     <td className="px-3 py-2 whitespace-nowrap">{fmtDate(row.effective_date)}</td>
                     <td className="px-3 py-2 font-medium text-zinc-900 dark:text-zinc-50">
@@ -659,7 +672,7 @@ export default function PersonnelJournalPageClient() {
                     </td>
                     {renderOrgUnitCells(row)}
                     <td className="px-3 py-2 align-top">{renderEventDetails(row)}</td>
-                    <td className="px-3 py-2">{fmtOrderRef(row.order_ref, orderId)}</td>
+                    <td className="px-3 py-2">{renderOrderLink(row)}</td>
                   </tr>
                 );
               })}

@@ -281,6 +281,9 @@ HR_EVENT_REGISTRY.update(
         "LEAVE.CHILDCARE.GRANT": _leave_event(
             "LEAVE.CHILDCARE.GRANT", "Отпуск по уходу за ребёнком", "Бала күтіміне байланысты демалыс", "CHILDCARE", "GRANT"
         ),
+        "LEAVE.CHILDCARE.RETURN": _leave_event(
+            "LEAVE.CHILDCARE.RETURN", "Return from childcare leave", "Childcare leave return", "CHILDCARE", "EARLY_RETURN"
+        ),
         "LEAVE.UNCLASSIFIED": _leave_event(
             "LEAVE.UNCLASSIFIED", "Неклассифицированный отпуск", "Жіктелмеген демалыс", None, None,
             automatic_effect=NO_AUTOMATIC_EFFECT,

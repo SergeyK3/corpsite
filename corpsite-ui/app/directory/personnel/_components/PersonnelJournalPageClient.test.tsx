@@ -184,29 +184,57 @@ describe("PersonnelJournalPageClient", () => {
     expect(screen.getByText("Иванов И.И.")).toBeInTheDocument();
   });
 
-  it("opens the explicitly linked personnel order when its journal row is clicked", async () => {
+  it("shows the linked order number as a deep link without displaying its technical ID", async () => {
     listPersonnelEventsMock.mockResolvedValue({
       total: 1,
-      items: [{ event_id: 51, employee_id: 7, employee_name: "Aliyev A.A.", event_type: "HIRE", effective_date: "2026-08-24", from_org_unit_id: null, from_org_unit_name: null, to_org_unit_id: null, to_org_unit_name: null, from_position_id: null, from_position_name: null, to_position_id: null, to_position_name: null, from_rate: null, to_rate: null, order_ref: "No. 51-K", order_id: 42, comment: null }],
+      items: [{ event_id: 51, employee_id: 7, employee_name: "Aliyev A.A.", event_type: "HIRE", effective_date: "2026-08-24", from_org_unit_id: null, from_org_unit_name: null, to_org_unit_id: null, to_org_unit_name: null, from_position_id: null, from_position_name: null, to_position_id: null, to_position_name: null, from_rate: null, to_rate: null, order_ref: "legacy reference", order_id: 42, order_number: "51-К", comment: null }],
     });
 
     render(<PersonnelJournalPageClient />);
 
-    fireEvent.click(await screen.findByTestId("personnel-journal-row-51"));
-    expect(pushMock).toHaveBeenCalledWith("/directory/personnel/orders?order_id=42");
+    const orderLink = await screen.findByRole("link", { name: "51-К" });
+    expect(orderLink).toHaveAttribute("href", "/directory/personnel/orders?order_id=42&tab=data");
+    expect(screen.queryByText("42")).not.toBeInTheDocument();
+    expect(screen.queryByText("legacy reference")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("personnel-journal-row-51"));
+    expect(pushMock).not.toHaveBeenCalled();
   });
 
   it("opens the employee card, not the order, when the employee name is clicked", async () => {
     listPersonnelEventsMock.mockResolvedValue({
       total: 1,
-      items: [{ event_id: 52, employee_id: 8, employee_name: "Bayeva B.B.", event_type: "HIRE", effective_date: "2026-08-24", from_org_unit_id: null, from_org_unit_name: null, to_org_unit_id: null, to_org_unit_name: null, from_position_id: null, from_position_name: null, to_position_id: null, to_position_name: null, from_rate: null, to_rate: null, order_ref: "No. 52-K", order_id: 43, comment: null }],
+      items: [{ event_id: 52, employee_id: 8, employee_name: "Bayeva B.B.", event_type: "HIRE", effective_date: "2026-08-24", from_org_unit_id: null, from_org_unit_name: null, to_org_unit_id: null, to_position_id: null, to_position_name: null, from_position_id: null, from_position_name: null, from_rate: null, to_rate: null, order_ref: null, order_id: 43, order_number: "52-К", comment: null }],
     });
 
     render(<PersonnelJournalPageClient />);
 
     fireEvent.click(await screen.findByTestId("personnel-journal-employee-8"));
     expect(pushMock).toHaveBeenCalledWith("/directory/personnel/employees/8/card?section=history");
-    expect(pushMock).not.toHaveBeenCalledWith("/directory/personnel/orders?order_id=43");
+    expect(screen.getByRole("link", { name: "52-К" })).toHaveAttribute("href", "/directory/personnel/orders?order_id=43&tab=data");
+  });
+
+  it("links an unlinked import event to the employee's orders and keeps the draft order separate", async () => {
+    listPersonnelEventsMock.mockResolvedValue({
+      total: 2,
+      items: [
+        { event_id: 7, employee_id: 9, employee_name: "Employee", event_type: "EMPLOYEE_ENROLLED_FROM_IMPORT", event_label: "Added from HR import", effective_date: "2026-09-01", from_org_unit_id: null, from_org_unit_name: null, to_org_unit_id: null, to_org_unit_name: null, from_position_id: null, from_position_name: null, to_position_id: null, to_position_name: null, from_rate: null, to_rate: null, order_ref: null, order_id: null, comment: null },
+        { event_id: "draft-order-item-19", is_temporary: true, order_item_id: 19, order_status: "DRAFT", employee_id: 9, employee_name: "Employee", event_type: "LEAVE.CHILDCARE.RETURN", event_label: "Return from childcare leave", lifecycle_status: "PENDING_APPLY", effective_date: "2026-09-02", from_org_unit_id: null, from_org_unit_name: null, to_org_unit_id: null, to_org_unit_name: null, from_position_id: null, from_position_name: null, to_position_id: null, to_position_name: null, from_rate: null, to_rate: null, order_ref: null, order_id: 19, order_number: "19-K", comment: null },
+      ],
+    });
+
+    render(<PersonnelJournalPageClient />);
+
+    const imported = await screen.findByTestId("personnel-journal-row-7");
+    const importOrderLink = within(imported).getByRole("link", { name: "Проверить оформление приказа" });
+    expect(importOrderLink).toHaveAttribute("href", "/directory/personnel/orders?employee_id=9");
+    expect(importOrderLink.getAttribute("href")).not.toContain("order_id");
+    const draft = screen.getByTestId("personnel-journal-row-draft-order-item-19");
+    expect(within(draft).getByText("Черновик")).toBeInTheDocument();
+    expect(within(draft).getByRole("link", { name: "19-K" })).toHaveAttribute(
+      "href", "/directory/personnel/orders?order_id=19&tab=data",
+    );
+    fireEvent.click(within(draft).getByTestId("personnel-journal-employee-9"));
+    expect(pushMock).toHaveBeenCalledWith("/directory/personnel/employees/9/card?section=history");
   });
 
   it("does not open a guessed order for a journal row without a canonical relation", async () => {

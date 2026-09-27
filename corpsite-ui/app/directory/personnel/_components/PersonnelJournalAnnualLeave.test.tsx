@@ -51,6 +51,8 @@ describe("PersonnelJournalPageClient annual leave", () => {
         from_rate: 1,
         to_rate: 1,
         order_ref: "№79-д от 2026-03-04",
+        order_id: 79,
+        order_number: "79-д",
         comment: null,
       }],
     });
@@ -62,7 +64,7 @@ describe("PersonnelJournalPageClient annual leave", () => {
     expect(screen.getByText("Подразделение: Accounting")).toBeInTheDocument();
     expect(screen.getByText("Должность: Chief accountant")).toBeInTheDocument();
     expect(screen.getByText("Ставка: 1")).toBeInTheDocument();
-    expect(screen.getByText("№79-д от 04.03.2026")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "79-д" })).toHaveAttribute("href", "/directory/personnel/orders?order_id=79&tab=data");
     expect(screen.queryByText("Accounting → Accounting")).not.toBeInTheDocument();
     expect(screen.queryByText("Chief accountant → Chief accountant")).not.toBeInTheDocument();
     expect(screen.queryByText("1 → 1")).not.toBeInTheDocument();
