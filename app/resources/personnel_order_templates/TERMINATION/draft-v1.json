@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "item_type_code": "TERMINATION",
+  "title_ru": "О прекращении трудового договора",
+  "title_kk": "Еңбек шартын бұзу туралы",
+  "preamble_ru": "В соответствии с пунктом 5 статьи 49 и пунктом 2 статьи 56 Трудового кодекса Республики Казахстан",
+  "preamble_kk": "Қазақстан Республикасы Еңбек Кодексiнің 49-бабының 5-тармағына және 56-бабының 2-тармағына сәйкес",
+  "body_template_ru": "Уволить {{employee.full_name}}, {{position.title_ru}} подразделения «{{org_unit.title_ru}}», {{effective_date}}. Основание: {{termination.reason}}.",
+  "body_template_kk": "«{{org_unit.title_kk}}» бөлімшесінің «{{position.title_kk}}» қызметкері {{employee.full_name}} {{effective_date}} бастап жұмыстан босатылсын. Негіздеме: {{termination.reason}}.",
+  "basis_template_ru": "{{basis}}",
+  "basis_template_kk": "{{basis}}",
+  "allowed_variables": [
+    "employee.full_name",
+    "employee.full_name_instrumental_kk",
+    "position.title_ru",
+    "position.title_kk",
+    "org_unit.title_ru",
+    "org_unit.title_kk",
+    "effective_date",
+    "termination.reason",
+    "termination.unused_leave_days",
+    "basis"
+  ],
+  "required_variables": {},
+  "base_content_sha256": "1ad82a8101f6a205bb13d7565d77c14d81f33a3824895c5b69d209b84b3a503a",
+  "content_sha256": "5dc8c6dda024ec1ae9ffd84a6e73afbc06af49278017f798a5caa6d3c29d2e36"
+}
