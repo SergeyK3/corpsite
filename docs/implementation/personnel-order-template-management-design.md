@@ -231,7 +231,11 @@
 
 Настраиваемый `DRAFT` сначала редактируется в локальной БД. Затем его восемь
 текстовых полей экспортируются в versioned JSON manifest, который хранится в
-Git (`app/resources/personnel_order_templates/<ITEM_TYPE_CODE>/draft-v1.json`).
+Git (`app/resources/personnel_order_templates/<ITEM_TYPE_CODE>/draft-vN.json`).
+Первый manifest (`v1`) опирается на встроенный server default; каждый следующий
+append-only manifest получает base hash из target hash предыдущего. Ранее
+созданные manifests не перезаписываются. Validator требует непрерывную цепочку
+версий и проверяет hash-связь между соседними snapshots.
 На сервере обязателен `sync_personnel_order_templates --dry-run`; `--apply`
 запускается только после backup. Apply создаёт отсутствующий DRAFT или меняет
 его только при совпадении base hash. Независимо изменённый серверный DRAFT

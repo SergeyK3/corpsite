@@ -7,7 +7,7 @@ from typing import Any
 
 import pytest
 
-from app.services.personnel_order_template_manifest import MANIFEST_FIELDS, TEXT_FIELDS, ManifestError, content_sha256, export_drafts, load_manifest, manifest_path, sync_manifests, write_manifest
+from app.services.personnel_order_template_manifest import MANIFEST_FIELDS, TEXT_FIELDS, ManifestError, content_sha256, export_drafts, load_manifest, load_manifest_chains, manifest_path, sync_manifests, write_manifest
 from app.services.personnel_order_template_specs import get_personnel_order_template_spec
 
 TYPE = "TERMINATION"
@@ -24,8 +24,8 @@ class _Result:
 
 class _TemplateDb:
     """Transaction-aware SQL boundary double for the sync-only table."""
-    def __init__(self, row: dict[str, Any] | None = None, *, fail_update: bool = False) -> None:
-        self.row, self.fail_update, self.statements, self._snapshot = row, fail_update, [], None
+    def __init__(self, row: dict[str, Any] | None = None, *, fail_update: bool = False, fail_on_update: int | None = None) -> None:
+        self.row, self.fail_update, self.fail_on_update, self.update_count, self.statements, self._snapshot = row, fail_update, fail_on_update, 0, [], None
     def connect(self) -> "_TemplateDb": return self
     def begin(self) -> "_TemplateDb": return self
     def __enter__(self) -> "_TemplateDb": self._snapshot = deepcopy(self.row); return self
@@ -38,7 +38,8 @@ class _TemplateDb:
         if compact.startswith("INSERT"):
             self.row = {"template_version_id": 800, "item_type_code": values["type"], "revision": 1, **{field: values[field] for field in TEXT_FIELDS}}
             return _Result(self.row)
-        if self.fail_update: raise RuntimeError("injected write failure")
+        self.update_count += 1
+        if self.fail_update or self.fail_on_update == self.update_count: raise RuntimeError("injected write failure")
         assert compact.startswith("UPDATE") and self.row is not None
         self.row.update({field: values[field] for field in TEXT_FIELDS}); self.row["revision"] += 1
         return _Result(self.row)
@@ -47,6 +48,14 @@ class _TemplateDb:
 def _write(tmp_path: Path, values: dict[str, str]) -> Path:
     assert write_manifest(TYPE, values, tmp_path) == "EXPORT"
     return manifest_path(TYPE, tmp_path)
+
+
+def _chain(tmp_path: Path) -> tuple[dict[str, str], dict[str, str]]:
+    v1 = _texts(); v1["title_ru"] += " v1"
+    v2 = dict(v1); v2["preamble_ru"] += " редакция"
+    assert write_manifest(TYPE, v1, tmp_path) == "EXPORT"
+    assert write_manifest(TYPE, v2, tmp_path) == "EXPORT"
+    return v1, v2
 
 
 def test_canonical_export_is_stable_and_excludes_ids_and_personal_data(tmp_path: Path) -> None:
@@ -100,6 +109,51 @@ def test_sync_rolls_back_on_write_error(tmp_path: Path) -> None:
     server = _TemplateDb({"template_version_id": 12, "revision": 3, **_texts()}, fail_update=True); before = deepcopy(server.row)
     with pytest.raises(RuntimeError, match="injected"): sync_manifests(apply=True, db_engine=server, root=tmp_path)
     assert server.row == before
+
+
+def test_versioned_chain_syncs_built_in_then_v1_then_v2(tmp_path: Path) -> None:
+    v1, v2 = _chain(tmp_path)
+    chain = load_manifest_chains(tmp_path)[TYPE]
+    assert len(chain) == 2
+    assert chain[1]["base_content_sha256"] == chain[0]["content_sha256"]
+    assert write_manifest(TYPE, v2, tmp_path) == "NO_OP"
+
+    built_in = _TemplateDb({"template_version_id": 12, "revision": 3, **_texts()})
+    assert sync_manifests(apply=True, db_engine=built_in, root=tmp_path) == {TYPE: "UPDATE"}
+    assert {field: built_in.row[field] for field in TEXT_FIELDS} == v2 and built_in.row["revision"] == 5
+
+
+def test_versioned_chain_applies_only_v2_from_v1_and_noops_at_v2(tmp_path: Path) -> None:
+    v1, v2 = _chain(tmp_path)
+    at_v1 = _TemplateDb({"template_version_id": 12, "revision": 3, **v1})
+    assert sync_manifests(apply=True, db_engine=at_v1, root=tmp_path) == {TYPE: "UPDATE"}
+    assert {field: at_v1.row[field] for field in TEXT_FIELDS} == v2 and at_v1.row["revision"] == 4
+    at_v2 = _TemplateDb({"template_version_id": 12, "revision": 4, **v2})
+    assert sync_manifests(apply=True, db_engine=at_v2, root=tmp_path) == {TYPE: "NO_OP"}
+    assert at_v2.row["revision"] == 4
+
+
+def test_versioned_chain_conflicts_for_unknown_hash_and_rolls_back_intermediate_failure(tmp_path: Path) -> None:
+    v1, _ = _chain(tmp_path)
+    unknown = dict(v1); unknown["body_template_ru"] += " independent"
+    conflicting = _TemplateDb({"template_version_id": 12, "revision": 3, **unknown})
+    assert sync_manifests(apply=True, db_engine=conflicting, root=tmp_path) == {TYPE: "CONFLICT"}
+    assert not any(sql.lstrip().upper().startswith("UPDATE") for sql in conflicting.statements)
+    failing = _TemplateDb({"template_version_id": 12, "revision": 3, **_texts()}, fail_on_update=2)
+    before = deepcopy(failing.row)
+    with pytest.raises(RuntimeError, match="injected"):
+        sync_manifests(apply=True, db_engine=failing, root=tmp_path)
+    assert failing.row == before
+
+
+def test_validator_rejects_a_broken_or_noncontinuous_chain(tmp_path: Path) -> None:
+    _, v2 = _chain(tmp_path)
+    broken = json.loads(manifest_path(TYPE, tmp_path, 2).read_text(encoding="utf-8"))
+    broken["base_content_sha256"] = "0" * 64
+    manifest_path(TYPE, tmp_path, 2).write_bytes((json.dumps(broken, ensure_ascii=False, indent=2) + "\n").encode("utf-8"))
+    with pytest.raises(ManifestError, match="chain"):
+        load_manifest_chains(tmp_path)
+    assert v2["preamble_ru"]
 
 
 @pytest.mark.parametrize("unsafe", ("{{unknown.variable}}", "<script>alert(1)</script>"))
