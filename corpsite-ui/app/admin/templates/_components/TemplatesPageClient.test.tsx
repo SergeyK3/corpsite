@@ -32,7 +32,7 @@ const pilotDetail = {
       title: "О выходе на работу из отпуска по уходу за ребёнком",
       preamble: "В соответствии с законодательством Республики Казахстан",
       directive: "ПРИКАЗЫВАЮ:",
-      body: "Сотруднику приступить к работе 15 января 2026 года.",
+      body: "«ФИО сотрудника» приступить к работе в должности «Должность» подразделения «Подразделение» на «Ставка» ставки с «Дата выхода».",
       basis: "Основание: Личное заявление.",
       footer: "С приказом ознакомлен(а): ___________________ [Фамилия И.]\n«___» ______________ 20___ г.\nИсполнитель: [Инициалы и фамилия исполнителя]",
     },
@@ -40,7 +40,7 @@ const pilotDetail = {
       title: "Бала күтіміне байланысты демалыстан жұмысқа шығу туралы",
       preamble: "Қазақстан Республикасының заңнамасына сәйкес",
       directive: "БҰЙЫРАМЫН:",
-      body: "Қызметкер 2026 жылғы 15 қаңтардан бастап жұмысқа кіріссін.",
+      body: "«Қызметкердің аты-жөні» «Лауазым» лауазымында «Бөлімше» бөлімшесінде «Мөлшерлеме» мөлшерлемемен «Жұмысқа шығу күні» бастап жұмысқа кіріссін.",
       basis: "Негіз: Жеке өтініші.",
       footer: "Бұйрықпен таныстым: ___________________ [Тегі А.]\n«___» ______________ 20___ ж.\nОрындаушы: [Орындаушының аты-жөні]",
     },
@@ -109,7 +109,7 @@ describe("TemplatesPageClient", () => {
       supported_locales: ["ru", "kk"],
       uses_specialized_generator: true,
       is_pilot: true,
-      editor_available: false,
+      editor_available: true,
       required_fields: [],
       notes: "Не формализованы",
       pilot_detail: pilotDetail,
@@ -128,10 +128,24 @@ describe("TemplatesPageClient", () => {
       notes: "Формализованный read-only шаблон.",
       pilot_detail: null,
       template_detail: unpaidDetail,
+    }, {
+      type_code: "HIRE",
+      title_ru: "Приём на работу",
+      title_kk: "Жұмысқа қабылдау",
+      source: "BUILT_IN",
+      support_level: "SUPPORTED",
+      supported_locales: ["ru", "kk"],
+      uses_specialized_generator: true,
+      is_pilot: false,
+      editor_available: false,
+      required_fields: [],
+      notes: "Без редактора.",
+      pilot_detail: null,
+      template_detail: null,
     }] });
   });
 
-  afterEach(cleanup);
+  afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
   it("opens task templates by default and reuses the regular task component", () => {
     render(<TemplatesPageClient />);
@@ -165,6 +179,17 @@ describe("TemplatesPageClient", () => {
     const kk = screen.getByTestId("pilot-preview-kk");
     expect(ru).toHaveTextContent("ПРИКАЗЫВАЮ:");
     expect(kk).toHaveTextContent("БҰЙЫРАМЫН:");
+    expect(ru).toHaveTextContent("«ФИО сотрудника»");
+    expect(ru).toHaveTextContent("«Должность»");
+    expect(ru).toHaveTextContent("«Подразделение»");
+    expect(ru).toHaveTextContent("«Дата выхода»");
+    expect(ru).toHaveTextContent("«Ставка»");
+    expect(kk).toHaveTextContent("«Қызметкердің аты-жөні»");
+    expect(kk).toHaveTextContent("«Лауазым»");
+    expect(kk).toHaveTextContent("«Бөлімше»");
+    expect(kk).toHaveTextContent("«Жұмысқа шығу күні»");
+    expect(kk).toHaveTextContent("«Мөлшерлеме»");
+    expect(`${ru.textContent} ${kk.textContent}`).not.toMatch(/15 января 2026|2026 жылғы 15 қаңтар|1\.0/);
     expect(ru).toHaveTextContent("Основание: Личное заявление.");
     expect(kk).toHaveTextContent("Негіз: Жеке өтініші.");
     expect(ru).toHaveTextContent("«___» ______________ 20___ г.");
@@ -227,11 +252,25 @@ describe("TemplatesPageClient", () => {
     expect(screen.getByTestId("task-templates-section")).toBeInTheDocument();
   });
 
-  it("does not offer the draft editor for another formalized template", async () => {
+  it("offers the draft editor for the childcare-return template", async () => {
     currentSearch = new URLSearchParams("section=personnel-orders&type=RETURN_FROM_CHILDCARE_LEAVE");
+    vi.mocked(createPersonnelOrderTemplateDraft).mockResolvedValue({ ...unpaidDraft, item_type_code: "RETURN_FROM_CHILDCARE_LEAVE" });
     render(<TemplatesPageClient />);
     await screen.findByTestId("personnel-order-template-detail");
-    expect(screen.queryByRole("button", { name: "Редактировать" })).not.toBeInTheDocument();
+    const button = screen.getByRole("button", { name: "Редактировать шаблон" });
+    expect(button).toHaveClass("bg-blue-700", "text-white", "rounded-lg");
+    fireEvent.click(button);
+    await waitFor(() => expect(createPersonnelOrderTemplateDraft).toHaveBeenCalledWith("RETURN_FROM_CHILDCARE_LEAVE"));
+    const editor = await screen.findByTestId("template-draft-editor");
+    expect(editor).toHaveTextContent("Русский");
+    expect(editor).toHaveTextContent("Қазақша");
+  });
+
+  it("does not offer the editor button for an unsupported template", async () => {
+    currentSearch = new URLSearchParams("section=personnel-orders&type=HIRE");
+    render(<TemplatesPageClient />);
+    await screen.findByTestId("personnel-order-template-detail");
+    expect(screen.queryByRole("button", { name: "Редактировать шаблон" })).not.toBeInTheDocument();
   });
 
   it("offers the draft editor only for unpaid leave and preserves unsaved bilingual text through preview", async () => {
@@ -239,22 +278,52 @@ describe("TemplatesPageClient", () => {
     render(<TemplatesPageClient />);
 
     await screen.findByTestId("personnel-order-template-detail");
-    expect(screen.getByRole("button", { name: "Редактировать" })).toHaveClass("bg-blue-700", "text-white", "rounded-lg");
-    fireEvent.click(screen.getByRole("button", { name: "Редактировать" }));
+    expect(screen.getByRole("button", { name: "Редактировать шаблон" })).toHaveClass("bg-blue-700", "text-white", "rounded-lg");
+    fireEvent.click(screen.getByRole("button", { name: "Редактировать шаблон" }));
     await waitFor(() => expect(createPersonnelOrderTemplateDraft).toHaveBeenCalledWith("LEAVE.UNPAID.GRANT"));
 
     expect(await screen.findByTestId("template-draft-editor")).toHaveTextContent("Черновик не применяется к кадровым приказам.");
     expect(screen.getByLabelText("Заголовок RU")).toHaveValue("Заголовок RU");
     expect(screen.getByLabelText("Заголовок KK")).toHaveValue("Тақырып KK");
+    expect(screen.getByTestId("template-draft-language-ru")).toHaveTextContent("Русский");
+    expect(screen.getByTestId("template-draft-language-kk")).toHaveTextContent("Қазақша");
+    const bilingualFields = screen.getByTestId("template-draft-fields");
+    expect(bilingualFields).toHaveClass("grid-cols-1", "md:grid-cols-2");
+    expect(Array.from(bilingualFields.children).map((child) => child.getAttribute("data-testid"))).toEqual([
+      "template-draft-language-ru", "template-draft-language-kk",
+      "template-draft-field-title_ru", "template-draft-field-title_kk",
+      "template-draft-field-preamble_ru", "template-draft-field-preamble_kk",
+      "template-draft-field-body_template_ru", "template-draft-field-body_template_kk",
+      "template-draft-field-basis_template_ru", "template-draft-field-basis_template_kk",
+    ]);
+    ([
+      ["title_ru", "title_kk", "h-16"],
+      ["preamble_ru", "preamble_kk", "h-28"],
+      ["body_template_ru", "body_template_kk", "h-48"],
+      ["basis_template_ru", "basis_template_kk", "h-28"],
+    ] as const).forEach(([ru, kk, heightClass]) => {
+      const ruField = screen.getByTestId(`template-draft-field-${ru}`);
+      const kkField = screen.getByTestId(`template-draft-field-${kk}`);
+      expect(ruField).toHaveClass("min-w-0");
+      expect(kkField).toHaveClass("min-w-0");
+      expect(ruField.querySelector("textarea")).toHaveClass(heightClass, "resize-y");
+      expect(kkField.querySelector("textarea")).toHaveClass(heightClass, "resize-none");
+    });
+    expect(screen.getByLabelText("Преамбула RU")).toHaveValue(unpaidDraft.preamble_ru);
+    expect(screen.getByLabelText("Преамбула KK")).toHaveValue(unpaidDraft.preamble_kk);
+    expect(screen.getByLabelText("Распорядительный текст RU")).toHaveValue(unpaidDraft.body_template_ru);
+    expect(screen.getByLabelText("Распорядительный текст KK")).toHaveValue(unpaidDraft.body_template_kk);
+    expect(screen.getByLabelText("Основание RU")).toHaveValue(unpaidDraft.basis_template_ru);
+    expect(screen.getByLabelText("Основание KK")).toHaveValue(unpaidDraft.basis_template_kk);
     expect(screen.queryByRole("button", { name: /Опубликовать/i })).not.toBeInTheDocument();
-    expect(screen.getByTestId("template-draft-actions")).toHaveClass("border-t", "pt-4");
+    expect(screen.getByTestId("template-draft-actions")).toHaveClass("border-t", "pt-3");
     expect(screen.getByRole("button", { name: "Предварительный просмотр" })).toHaveClass("border", "bg-white");
     expect(screen.getByRole("button", { name: "Сохранить черновик" })).toHaveClass("bg-blue-700", "text-white", "rounded-lg");
 
     fireEvent.change(screen.getByLabelText("Заголовок RU"), { target: { value: "Несохранённый текст" } });
     fireEvent.click(screen.getByRole("button", { name: "Предварительный просмотр" }));
     expect(previewPersonnelOrderTemplateDraft).toHaveBeenCalledWith("LEAVE.UNPAID.GRANT", expect.objectContaining({ title_ru: "Несохранённый текст" }));
-    const previewBody = vi.mocked(previewPersonnelOrderTemplateDraft).mock.calls[0]?.[1];
+    const previewBody = vi.mocked(previewPersonnelOrderTemplateDraft).mock.calls.at(-1)?.[1];
     expect(Object.keys(previewBody ?? {}).sort()).toEqual([
       "basis_template_kk", "basis_template_ru", "body_template_kk", "body_template_ru",
       "preamble_kk", "preamble_ru", "title_kk", "title_ru",
@@ -265,9 +334,87 @@ describe("TemplatesPageClient", () => {
     expect(await screen.findByTestId("template-draft-preview")).toHaveTextContent("ПРИКАЗЫВАЮ:");
     expect(screen.getByTestId("template-draft-preview")).toHaveTextContent("БҰЙЫРАМЫН:");
     expect(screen.getByLabelText("Заголовок RU")).toHaveValue("Несохранённый текст");
+    expect(screen.getByLabelText("Распорядительный текст RU")).toHaveValue(unpaidDraft.body_template_ru);
+    expect(screen.getByLabelText("Распорядительный текст KK")).toHaveValue(unpaidDraft.body_template_kk);
 
     fireEvent.click(screen.getByRole("button", { name: "Сохранить черновик" }));
     await waitFor(() => expect(savePersonnelOrderTemplateDraft).toHaveBeenCalledWith("LEAVE.UNPAID.GRANT", expect.objectContaining({ title_ru: "Несохранённый текст", expected_revision: 1 })));
+  });
+
+  it("synchronizes each resized RU textarea only with its paired KK textarea", async () => {
+    let resizeCallback: ResizeObserverCallback | undefined;
+    class ResizeObserverMock {
+      constructor(callback: ResizeObserverCallback) { resizeCallback = callback; }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    }
+    vi.stubGlobal("ResizeObserver", ResizeObserverMock);
+    currentSearch = new URLSearchParams("section=personnel-orders&type=LEAVE.UNPAID.GRANT");
+    render(<TemplatesPageClient />);
+
+    await screen.findByTestId("personnel-order-template-detail");
+    fireEvent.click(screen.getByRole("button", { name: "Редактировать шаблон" }));
+    await screen.findByTestId("template-draft-editor");
+    const ruBody = screen.getByLabelText("Распорядительный текст RU");
+    const kkBody = screen.getByLabelText("Распорядительный текст KK");
+    const kkTitle = screen.getByLabelText("Заголовок KK");
+    vi.spyOn(ruBody, "getBoundingClientRect").mockReturnValue({ height: 276 } as DOMRect);
+
+    resizeCallback?.([{ target: ruBody } as ResizeObserverEntry], {} as ResizeObserver);
+
+    expect(kkBody).toHaveStyle({ height: "276px" });
+    expect(kkTitle).not.toHaveStyle({ height: "276px" });
+    expect(screen.getByTestId("template-draft-fields")).toHaveClass("grid-cols-1", "md:grid-cols-2");
+  });
+
+  it("saves the changed RU directive text, advances revision, and refreshes preview automatically", async () => {
+    currentSearch = new URLSearchParams("section=personnel-orders&type=LEAVE.UNPAID.GRANT");
+    const savedDraft = { ...unpaidDraft, body_template_ru: "Сохранённый распорядительный текст RU", revision: 2 };
+    vi.mocked(savePersonnelOrderTemplateDraft).mockResolvedValueOnce(savedDraft);
+    render(<TemplatesPageClient />);
+
+    await screen.findByTestId("personnel-order-template-detail");
+    fireEvent.click(screen.getByRole("button", { name: "Редактировать шаблон" }));
+    await screen.findByTestId("template-draft-editor");
+    await screen.findByTestId("template-draft-preview");
+    fireEvent.change(screen.getByLabelText("Распорядительный текст RU"), { target: { value: savedDraft.body_template_ru } });
+    vi.mocked(previewPersonnelOrderTemplateDraft).mockResolvedValueOnce({ previews: { ...draftPreview.previews, ru: { ...draftPreview.previews.ru, body: savedDraft.body_template_ru } } });
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить черновик" }));
+
+    await waitFor(() => expect(savePersonnelOrderTemplateDraft).toHaveBeenCalledWith("LEAVE.UNPAID.GRANT", {
+      title_ru: unpaidDraft.title_ru, title_kk: unpaidDraft.title_kk,
+      preamble_ru: unpaidDraft.preamble_ru, preamble_kk: unpaidDraft.preamble_kk,
+      body_template_ru: savedDraft.body_template_ru, body_template_kk: unpaidDraft.body_template_kk,
+      basis_template_ru: unpaidDraft.basis_template_ru, basis_template_kk: unpaidDraft.basis_template_kk,
+      expected_revision: 1,
+    }));
+    expect(await screen.findByTestId("template-draft-preview")).toHaveTextContent(savedDraft.body_template_ru);
+    expect(screen.getByRole("status")).toHaveTextContent("Черновик сохранён");
+    expect(screen.getByTestId("template-draft-editor")).toHaveTextContent("revision 2");
+    const saveBody = vi.mocked(savePersonnelOrderTemplateDraft).mock.calls.at(-1)?.[1];
+    expect(saveBody).not.toHaveProperty("template_version_id");
+    expect(saveBody).not.toHaveProperty("revision");
+    expect(saveBody).not.toHaveProperty("status");
+  });
+
+  it("saves the changed KK directive text and refreshes the childcare-return preview automatically", async () => {
+    currentSearch = new URLSearchParams("section=personnel-orders&type=RETURN_FROM_CHILDCARE_LEAVE");
+    const savedDraft = { ...unpaidDraft, item_type_code: "RETURN_FROM_CHILDCARE_LEAVE", body_template_kk: "Сақталған қазақша өкімдік мәтін", revision: 2 };
+    vi.mocked(createPersonnelOrderTemplateDraft).mockResolvedValueOnce(savedDraft);
+    vi.mocked(savePersonnelOrderTemplateDraft).mockResolvedValueOnce(savedDraft);
+    render(<TemplatesPageClient />);
+
+    await screen.findByTestId("personnel-order-template-detail");
+    fireEvent.click(screen.getByRole("button", { name: "Редактировать шаблон" }));
+    await screen.findByTestId("template-draft-editor");
+    await screen.findByTestId("template-draft-preview");
+    fireEvent.change(screen.getByLabelText("Распорядительный текст KK"), { target: { value: savedDraft.body_template_kk } });
+    vi.mocked(previewPersonnelOrderTemplateDraft).mockResolvedValueOnce({ previews: { ...draftPreview.previews, kk: { ...draftPreview.previews.kk, body: savedDraft.body_template_kk } } });
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить черновик" }));
+
+    await waitFor(() => expect(savePersonnelOrderTemplateDraft).toHaveBeenCalledWith("RETURN_FROM_CHILDCARE_LEAVE", expect.objectContaining({ body_template_kk: savedDraft.body_template_kk, expected_revision: 2 })));
+    expect(await screen.findByTestId("template-draft-preview")).toHaveTextContent(savedDraft.body_template_kk);
   });
 
   it("loads an existing draft through the editor action without creating another one", async () => {
@@ -276,8 +423,10 @@ describe("TemplatesPageClient", () => {
     render(<TemplatesPageClient />);
 
     await screen.findByTestId("personnel-order-template-detail");
-    fireEvent.click(screen.getByRole("button", { name: "Редактировать" }));
+    fireEvent.click(screen.getByRole("button", { name: "Редактировать шаблон" }));
     expect(await screen.findByTestId("template-draft-editor")).toBeInTheDocument();
+    expect(screen.getByLabelText("Распорядительный текст RU")).toHaveValue(unpaidDraft.body_template_ru);
+    expect(await screen.findByTestId("template-draft-preview")).toHaveTextContent(draftPreview.previews.ru.body);
     expect(createPersonnelOrderTemplateDraft).not.toHaveBeenCalled();
   });
 
@@ -285,12 +434,13 @@ describe("TemplatesPageClient", () => {
     currentSearch = new URLSearchParams("section=personnel-orders&type=LEAVE.UNPAID.GRANT");
     let resolvePreview: (value: typeof draftPreview) => void = () => undefined;
     vi.mocked(getPersonnelOrderTemplateDraft).mockResolvedValue(unpaidDraft);
-    vi.mocked(previewPersonnelOrderTemplateDraft).mockImplementationOnce(() => new Promise((resolve) => { resolvePreview = resolve; }));
     render(<TemplatesPageClient />);
 
     await screen.findByTestId("personnel-order-template-detail");
-    fireEvent.click(screen.getByRole("button", { name: "Редактировать" }));
+    fireEvent.click(screen.getByRole("button", { name: "Редактировать шаблон" }));
     await screen.findByTestId("template-draft-editor");
+    await screen.findByTestId("template-draft-preview");
+    vi.mocked(previewPersonnelOrderTemplateDraft).mockImplementationOnce(() => new Promise((resolve) => { resolvePreview = resolve; }));
     fireEvent.change(screen.getByLabelText("Заголовок RU"), { target: { value: "Мой preview" } });
     fireEvent.click(screen.getByRole("button", { name: "Предварительный просмотр" }));
     const generating = screen.getByRole("button", { name: "Формирование…" });
@@ -313,7 +463,7 @@ describe("TemplatesPageClient", () => {
     render(<TemplatesPageClient />);
 
     await screen.findByTestId("personnel-order-template-detail");
-    fireEvent.click(screen.getByRole("button", { name: "Редактировать" }));
+    fireEvent.click(screen.getByRole("button", { name: "Редактировать шаблон" }));
     const opening = screen.getByRole("button", { name: "Открытие…" });
     expect(opening).toBeDisabled();
     fireEvent.click(opening);
@@ -322,7 +472,7 @@ describe("TemplatesPageClient", () => {
     resolveLookup(null);
     expect(await screen.findByTestId("template-draft-editor")).toBeInTheDocument();
     expect(createPersonnelOrderTemplateDraft).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole("button", { name: "Редактировать" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Редактировать шаблон" })).not.toBeInTheDocument();
   });
 
   it("disables the primary save action and shows its loading label while saving", async () => {
@@ -333,7 +483,7 @@ describe("TemplatesPageClient", () => {
     render(<TemplatesPageClient />);
 
     await screen.findByTestId("personnel-order-template-detail");
-    fireEvent.click(screen.getByRole("button", { name: "Редактировать" }));
+    fireEvent.click(screen.getByRole("button", { name: "Редактировать шаблон" }));
     expect(await screen.findByTestId("template-draft-editor")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Сохранить черновик" }));
     const saving = screen.getByRole("button", { name: "Сохранение…" });
@@ -350,11 +500,12 @@ describe("TemplatesPageClient", () => {
     render(<TemplatesPageClient />);
 
     await screen.findByTestId("personnel-order-template-detail");
-    fireEvent.click(screen.getByRole("button", { name: "Редактировать" }));
+    fireEvent.click(screen.getByRole("button", { name: "Редактировать шаблон" }));
     expect(await screen.findByTestId("template-draft-editor")).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Заголовок RU"), { target: { value: "Мой текст" } });
     fireEvent.click(screen.getByRole("button", { name: "Сохранить черновик" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Черновик изменён другим пользователем.");
     expect(screen.getByLabelText("Заголовок RU")).toHaveValue("Мой текст");
+    expect(screen.queryByTestId("template-draft-preview")).not.toBeInTheDocument();
   });
 });

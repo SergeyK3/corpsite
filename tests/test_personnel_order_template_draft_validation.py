@@ -10,6 +10,7 @@ from app.api import admin_router
 from app.main import app
 from app.security.admin_guard import require_sysadmin_api
 from app.services import personnel_order_template_draft_service as draft_service
+from app.db.models.personnel_orders import ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE
 from app.services.personnel_order_template_draft_service import EDITABLE_TYPE, TemplateDraftError, _built_in, _validate, preview_draft
 
 
@@ -107,6 +108,40 @@ def test_unpaid_template_rejects_unknown_and_missing_required_variables() -> Non
         _validate(values)
 
 
+def test_childcare_return_uses_its_typed_catalog_variables_and_renders_neutral_rate_and_return_date() -> None:
+    values = _built_in(ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE)
+    _validate(values, ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE)
+    preview = preview_draft(ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE, values)
+
+    assert "{{" not in " ".join(str(value) for locale in preview.values() for value in locale.values())
+    assert all(value in preview["ru"]["body"] for value in ("«ФИО сотрудника»", "«Должность»", "«Подразделение»", "«Дата выхода»", "«Ставка»"))
+    assert all(value in preview["kk"]["body"] for value in ("«Қызметкердің аты-жөні»", "«Лауазым»", "«Бөлімше»", "«Жұмысқа шығу күні»", "«Мөлшерлеме»"))
+    assert all(value not in " ".join(str(item) for locale in preview.values() for item in locale.values()) for value in ("1.0", "15 января 2026", "2026 жылғы 15 қаңтар"))
+    invalid = dict(values)
+    invalid["body_template_ru"] += " {{specialty}}"
+    with pytest.raises(TemplateDraftError) as error:
+        _validate(invalid, ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE)
+    assert error.value.code == "TEMPLATE_VARIABLE_UNKNOWN"
+
+
+def test_childcare_return_create_load_save_noop_and_conflict_do_not_touch_personnel_data(draft_store: _DraftStore) -> None:
+    item_type = ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE
+    created = draft_service.create_draft(item_type, actor_user_id=77)
+    assert created["item_type_code"] == item_type
+    assert draft_service.create_draft(item_type, actor_user_id=88)["template_version_id"] == created["template_version_id"]
+    assert draft_service.get_draft(item_type)["template_version_id"] == created["template_version_id"]
+    assert draft_store.insert_count == 1
+
+    changed = _built_in(item_type)
+    changed["title_ru"] += " Проверка"
+    assert draft_service.save_draft(item_type, 1, changed, actor_user_id=99)["revision"] == 2
+    assert draft_service.save_draft(item_type, 2, changed, actor_user_id=100)["revision"] == 2
+    with pytest.raises(TemplateDraftError) as conflict:
+        draft_service.save_draft(item_type, 1, changed, actor_user_id=101)
+    assert conflict.value.code == "TEMPLATE_REVISION_CONFLICT"
+    statements = "\n".join(draft_store.statements).lower()
+    assert "personnel_order_template_versions" in statements
+    assert not any(name in statements for name in ("personnel_orders", "personnel_order_items", "employee_events", "assignments"))
 def test_template_editor_is_unavailable_for_other_type() -> None:
     with pytest.raises(TemplateDraftError) as error:
         preview_draft("HIRE", _built_in())

@@ -139,32 +139,143 @@ function FormalizedTemplateDetail({ detail }: { detail: PersonnelOrderTemplatePi
   );
 }
 
-function DraftEditor({ draft, onSaved }: { draft: PersonnelOrderTemplateDraft; onSaved: (draft: PersonnelOrderTemplateDraft) => void }) {
+function DraftEditor({ draft, onSaved, variables }: { draft: PersonnelOrderTemplateDraft; onSaved: (draft: PersonnelOrderTemplateDraft) => void; variables: string[] }) {
+  const [savedDraft, setSavedDraft] = useState(draft);
   const [values, setValues] = useState<PersonnelOrderTemplateDraftText>(() => editableDraftText(draft));
   const [preview, setPreview] = useState<Record<"ru" | "kk", PersonnelOrderTemplatePreview> | null>(null);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
   const [previewing, setPreviewing] = useState(false);
+  const editorRef = useRef<HTMLElement | null>(null);
   const previewRef = useRef<HTMLDivElement | null>(null);
+  const previewRequest = useRef(0);
+  const kkTextareas = useRef<Partial<Record<keyof PersonnelOrderTemplateDraftText, HTMLTextAreaElement | null>>>({});
+  useEffect(() => { setSavedDraft(draft); }, [draft]);
   useEffect(() => { if (preview) previewRef.current?.scrollIntoView?.({ behavior: "smooth", block: "nearest" }); }, [preview]);
-  const fields: Array<[keyof PersonnelOrderTemplateDraftText, string]> = [["title_ru", "Заголовок RU"], ["title_kk", "Заголовок KK"], ["preamble_ru", "Преамбула RU"], ["preamble_kk", "Преамбула KK"], ["body_template_ru", "Распорядительный текст RU"], ["body_template_kk", "Распорядительный текст KK"], ["basis_template_ru", "Основание RU"], ["basis_template_kk", "Основание KK"]];
-  const change = (key: keyof PersonnelOrderTemplateDraftText, value: string) => setValues((old) => ({ ...old, [key]: value }));
-  const showPreview = () => {
+  useEffect(() => {
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver((entries) => {
+      entries.forEach(({ target }) => {
+        const kkKey = target.getAttribute("data-kk-key") as keyof PersonnelOrderTemplateDraftText | null;
+        const kkTextarea = kkKey ? kkTextareas.current[kkKey] : null;
+        const height = target.getBoundingClientRect().height;
+        if (kkTextarea && height > 0) kkTextarea.style.height = `${height}px`;
+      });
+    });
+    editorRef.current?.querySelectorAll<HTMLTextAreaElement>("[data-kk-key]").forEach((textarea) => observer.observe(textarea));
+    return () => observer.disconnect();
+  }, []);
+  const fields: Array<{
+    ru: [keyof PersonnelOrderTemplateDraftText, string];
+    kk: [keyof PersonnelOrderTemplateDraftText, string];
+    heightClass: string;
+  }> = [
+    { ru: ["title_ru", "Заголовок RU"], kk: ["title_kk", "Заголовок KK"], heightClass: "h-16" },
+    { ru: ["preamble_ru", "Преамбула RU"], kk: ["preamble_kk", "Преамбула KK"], heightClass: "h-28" },
+    { ru: ["body_template_ru", "Распорядительный текст RU"], kk: ["body_template_kk", "Распорядительный текст KK"], heightClass: "h-48" },
+    { ru: ["basis_template_ru", "Основание RU"], kk: ["basis_template_kk", "Основание KK"], heightClass: "h-28" },
+  ];
+  const change = (key: keyof PersonnelOrderTemplateDraftText, value: string) => {
+    previewRequest.current += 1;
+    setValues((old) => ({ ...old, [key]: value }));
+    setPreview(null);
     setError("");
+    setNotice("");
+  };
+  useEffect(() => {
+    const request = ++previewRequest.current;
+    setPreviewing(true);
+    void previewPersonnelOrderTemplateDraft(draft.item_type_code, editableDraftText(draft))
+      .then((result) => { if (request === previewRequest.current) setPreview(result.previews); })
+      .catch(() => {
+        if (request !== previewRequest.current) return;
+        setPreview(null);
+        setError("Не удалось сформировать предварительный просмотр черновика.");
+      })
+      .finally(() => { if (request === previewRequest.current) setPreviewing(false); });
+  }, [draft.item_type_code]);
+  const showPreview = () => {
+    const request = ++previewRequest.current;
+    setError("");
+    setNotice("");
     setPreviewing(true);
     void previewPersonnelOrderTemplateDraft(draft.item_type_code, editableDraftText(values))
-      .then((result) => setPreview(result.previews))
-      .catch((cause) => setError(draftErrorMessage(cause)))
-      .finally(() => setPreviewing(false));
+      .then((result) => { if (request === previewRequest.current) setPreview(result.previews); })
+      .catch((cause) => { if (request === previewRequest.current) setError(draftErrorMessage(cause)); })
+      .finally(() => { if (request === previewRequest.current) setPreviewing(false); });
   };
   const save = () => {
+    const submittedValues = editableDraftText(values);
+    setError("");
+    setNotice("");
     setSaving(true);
-    void savePersonnelOrderTemplateDraft(draft.item_type_code, { ...values, expected_revision: draft.revision })
-      .then((next) => { onSaved(next); setValues(editableDraftText(next)); })
-      .catch((cause) => setError(draftErrorMessage(cause)))
+    void savePersonnelOrderTemplateDraft(savedDraft.item_type_code, { ...submittedValues, expected_revision: savedDraft.revision })
+      .then((next) => {
+        const savedValues = editableDraftText(next);
+        setSavedDraft(next);
+        onSaved(next);
+        setValues(savedValues);
+        setNotice("Черновик сохранён");
+        const request = ++previewRequest.current;
+        return previewPersonnelOrderTemplateDraft(next.item_type_code, savedValues)
+          .then((result) => { if (request === previewRequest.current) setPreview(result.previews); })
+          .catch(() => {
+            if (request !== previewRequest.current) return;
+            setPreview(null);
+            setError("Черновик сохранён, но не удалось обновить предварительный просмотр.");
+          });
+      })
+      .catch((cause) => {
+        previewRequest.current += 1;
+        setPreview(null);
+        setError(draftErrorMessage(cause));
+      })
       .finally(() => setSaving(false));
   };
-  return <section className="mt-5 rounded-xl border border-blue-200 p-4" data-testid="template-draft-editor"><h4 className="font-semibold">Черновая версия шаблона</h4><p className="text-sm">Версия {draft.version_number} · revision {draft.revision} · Черновик</p><p className="mt-2 text-sm text-amber-700">Черновик не применяется к кадровым приказам.</p><div className="mt-3 grid gap-3">{fields.map(([key, label]) => <label key={key} className="text-sm">{label}<textarea aria-label={label} value={values[key]} onChange={(e) => change(key, e.target.value)} className="mt-1 min-h-20 w-full rounded border p-2" /></label>)}</div><p className="mt-3 text-xs">Разрешённые переменные: employee.full_name, position.title_ru, position.title_kk, org_unit.title_ru, org_unit.title_kk, leave.start_ru, leave.start_kk, leave.end_ru, leave.end_kk, leave.days, basis.application_date_ru, basis.application_date_kk, basis.application_number_suffix.</p><div className="mt-5 flex flex-wrap items-center gap-3 border-t border-zinc-200 pt-4 dark:border-zinc-800" data-testid="template-draft-actions"><button type="button" onClick={showPreview} disabled={previewing} className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-800 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800">{previewing ? "Формирование…" : "Предварительный просмотр"}</button><button type="button" onClick={save} disabled={saving} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-500 dark:text-zinc-950 dark:hover:bg-blue-400">{saving ? "Сохранение…" : "Сохранить черновик"}</button>{error ? <p role="alert" className="text-sm text-red-700">{error}</p> : null}</div>{preview ? <div ref={previewRef} data-testid="template-draft-preview" className="mt-4 grid gap-3 md:grid-cols-2">{(["ru", "kk"] as const).map((locale) => <article key={locale}><b>{locale.toUpperCase()}</b><p>{preview[locale].title}</p><p>{preview[locale].preamble}</p><p className="text-center">{preview[locale].directive}</p><p>{preview[locale].body}</p><p>{preview[locale].basis}</p><PreviewFooter locale={locale} /></article>)}</div> : null}</section>;
+  return (
+    <section ref={editorRef} className="mt-5 rounded-xl border border-blue-200 p-4" data-testid="template-draft-editor">
+      <h4 className="font-semibold">Черновая версия шаблона</h4>
+      <p className="text-sm">Версия {savedDraft.version_number} · revision {savedDraft.revision} · Черновик</p>
+      <p className="mt-2 text-sm text-amber-700">Черновик не применяется к кадровым приказам.</p>
+
+      <div className="mt-3 grid grid-cols-1 gap-x-4 gap-y-3 md:grid-cols-2" data-testid="template-draft-fields">
+        <h5 className="text-base font-semibold" data-testid="template-draft-language-ru">Русский</h5>
+        <h5 className="text-base font-semibold" data-testid="template-draft-language-kk">Қазақша</h5>
+        {fields.flatMap(({ ru, kk, heightClass }) => [
+          <label key={ru[0]} className="min-w-0 text-sm" data-testid={`template-draft-field-${ru[0]}`}>
+            {ru[1]}
+            <textarea
+              aria-label={ru[1]}
+              data-kk-key={kk[0]}
+              value={values[ru[0]]}
+              onChange={(e) => change(ru[0], e.target.value)}
+              className={`mt-1 w-full resize-y rounded border p-2 ${heightClass}`}
+            />
+          </label>,
+          <label key={kk[0]} className="min-w-0 text-sm" data-testid={`template-draft-field-${kk[0]}`}>
+            {kk[1]}
+            <textarea
+              aria-label={kk[1]}
+              ref={(node) => { kkTextareas.current[kk[0]] = node; }}
+              value={values[kk[0]]}
+              onChange={(e) => change(kk[0], e.target.value)}
+              className={`mt-1 w-full resize-none rounded border p-2 ${heightClass}`}
+            />
+          </label>,
+        ])}
+      </div>
+
+      <p className="mt-3 text-xs">Разрешённые переменные: {variables.join(", ")}.</p>
+      <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-zinc-200 pt-3 dark:border-zinc-800" data-testid="template-draft-actions">
+        <button type="button" onClick={showPreview} disabled={previewing} className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-800 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800">{previewing ? "Формирование…" : "Предварительный просмотр"}</button>
+        <button type="button" onClick={save} disabled={saving} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-500 dark:text-zinc-950 dark:hover:bg-blue-400">{saving ? "Сохранение…" : "Сохранить черновик"}</button>
+        {error ? <p role="alert" className="text-sm text-red-700">{error}</p> : null}
+        {notice ? <p role="status" className="text-sm text-emerald-700">{notice}</p> : null}
+      </div>
+      {preview ? <div ref={previewRef} data-testid="template-draft-preview" className="mt-4 grid gap-3 md:grid-cols-2">{(["ru", "kk"] as const).map((locale) => <article key={locale}><b>{locale.toUpperCase()}</b><p>{preview[locale].title}</p><p>{preview[locale].preamble}</p><p className="text-center">{preview[locale].directive}</p><p>{preview[locale].body}</p><p>{preview[locale].basis}</p><PreviewFooter locale={locale} /></article>)}</div> : null}
+    </section>
+  );
 }
 
 function TemplateDetail({ item }: { item: PersonnelOrderTemplateCatalogItem }) {
@@ -188,8 +299,8 @@ function TemplateDetail({ item }: { item: PersonnelOrderTemplateCatalogItem }) {
         <p className="mt-3">Обязательные поля: {item.required_fields.join(", ") || "не формализованы"}</p>
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">{item.notes}</p>
       </>}
-      {item.editor_available && !draft ? <div className="mt-4"><button className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-500 dark:text-zinc-950 dark:hover:bg-blue-400" type="button" onClick={openEditor} disabled={openingEditor}>{openingEditor ? "Открытие…" : "Редактировать"}</button></div> : null}
-      {draft ? <DraftEditor draft={draft} onSaved={setDraft} /> : null}
+      {item.editor_available && !draft ? <div className="mt-4"><button className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-500 dark:text-zinc-950 dark:hover:bg-blue-400" type="button" onClick={openEditor} disabled={openingEditor}>{openingEditor ? "Открытие…" : "Редактировать шаблон"}</button></div> : null}
+      {draft ? <DraftEditor draft={draft} onSaved={setDraft} variables={(detail?.variables ?? []).map((variable) => variable.code)} /> : null}
     </aside>
   );
 }

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { apiFetchJson } from "@/lib/api";
 
-import { previewPersonnelOrderTemplateDraft, type PersonnelOrderTemplateDraftText } from "./personnelOrderTemplatesApi.client";
+import { previewPersonnelOrderTemplateDraft, savePersonnelOrderTemplateDraft, type PersonnelOrderTemplateDraft, type PersonnelOrderTemplateDraftText } from "./personnelOrderTemplatesApi.client";
 
 vi.mock("@/lib/api", () => ({ apiFetchJson: vi.fn() }));
 
@@ -22,6 +22,28 @@ describe("previewPersonnelOrderTemplateDraft", () => {
     expect(apiFetchJson).toHaveBeenCalledWith(
       "/admin/personnel-order-templates/LEAVE.UNPAID.GRANT/draft/preview",
       { method: "POST", body: draft },
+    );
+  });
+});
+
+describe("savePersonnelOrderTemplateDraft", () => {
+  it("sends only the eight editable fields and optimistic-lock revision", async () => {
+    vi.mocked(apiFetchJson).mockResolvedValueOnce({});
+    const draftWithMetadata: PersonnelOrderTemplateDraft = {
+      ...draft,
+      template_version_id: 17,
+      item_type_code: "LEAVE.UNPAID.GRANT",
+      version_number: 4,
+      status: "DRAFT",
+      revision: 9,
+      based_on_built_in: true,
+    };
+
+    await savePersonnelOrderTemplateDraft("LEAVE.UNPAID.GRANT", { ...draftWithMetadata, expected_revision: 9 });
+
+    expect(apiFetchJson).toHaveBeenCalledWith(
+      "/admin/personnel-order-templates/LEAVE.UNPAID.GRANT/draft",
+      { method: "PUT", body: { ...draft, expected_revision: 9 } },
     );
   });
 });

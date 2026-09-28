@@ -53,11 +53,11 @@ def _pilot_detail() -> dict[str, Any]:
     for locale in ("ru", "kk"):
         item = {
             "item_type_code": ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE,
-            "employee_name": "«ФИО сотрудника»" if locale == "ru" else "шартты адам",
-            "effective_date": "2026-01-15",
-            "org_unit_name": {"ru": "Подразделение", "kk": "Бөлімше"},
-            "position_name": {"ru": "Должность", "kk": "Лауазым"},
-            "rate": "1.0",
+            "employee_name": "«ФИО сотрудника»" if locale == "ru" else "«Қызметкердің аты-жөні»",
+            "effective_date": "«Дата выхода»" if locale == "ru" else "«Жұмысқа шығу күні»",
+            "org_unit_name": {"ru": "«Подразделение»", "kk": "«Бөлімше»"},
+            "position_name": {"ru": "«Должность»", "kk": "«Лауазым»"},
+            "rate": "«Ставка»" if locale == "ru" else "«Мөлшерлеме»",
         }
         basis_text = generate_basis_text(
             locale,
@@ -119,19 +119,19 @@ def _unpaid_leave_detail() -> dict[str, Any]:
         item = {
             "item_type_code": "LEAVE.UNPAID.GRANT",
             "employee_name": "«ФИО сотрудника»" if locale == "ru" else "«Қызметкердің аты-жөні»",
-            "org_unit_name": {"ru": "Подразделение", "kk": "Бөлімше"},
-            "position_name": {"ru": "Должность", "kk": "Лауазым"},
-            "leave_start": "2026-01-15",
-            "leave_end": "2026-01-17",
-            "leave_days": 3,
+            "org_unit_name": {"ru": "«Подразделение»", "kk": "«Бөлімше»"},
+            "position_name": {"ru": "«Должность»", "kk": "«Лауазым»"},
+            "leave_start": "«Дата начала отпуска»" if locale == "ru" else "«Демалыстың басталу күні»",
+            "leave_end": "«Дата окончания отпуска»" if locale == "ru" else "«Демалыстың аяқталу күні»",
+            "leave_days": "«Количество дней»" if locale == "ru" else "«Күн саны»",
         }
         basis_text = generate_basis_text(
             locale,
             {
                 "basis_type": BASIS_TYPE_PERSONAL_APPLICATION,
                 "item_type_code": "LEAVE.UNPAID.GRANT",
-                "document_date": "2026-01-10",
-                "document_number": "15",
+                "document_date": "«Дата заявления»" if locale == "ru" else "«Өтініш күні»",
+                "document_number": "«Номер заявления»" if locale == "ru" else "«Өтініш нөмірі»",
             },
         )["generated_text"]
         previews[locale] = {
@@ -211,7 +211,7 @@ def list_personnel_order_template_catalog() -> list[dict[str, Any]]:
             "supported_locales": locales,
             "uses_specialized_generator": type_code in DOCUMENT_TITLES,
             "is_pilot": type_code == ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE,
-            "editor_available": type_code == "LEAVE.UNPAID.GRANT",
+            "editor_available": type_code in {"LEAVE.UNPAID.GRANT", ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE},
             "required_fields": (
                 _PILOT_REQUIRED_FIELDS if type_code == ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE
                 else _UNPAID_LEAVE_REQUIRED_FIELDS if type_code == "LEAVE.UNPAID.GRANT"

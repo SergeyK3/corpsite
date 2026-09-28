@@ -13,8 +13,7 @@ def test_catalog_is_registry_backed_and_safe():
     pilot = next(item for item in items if item["type_code"] == "RETURN_FROM_CHILDCARE_LEAVE")
     assert pilot["is_pilot"] is True and pilot["support_level"] == "SUPPORTED"
     assert all(set(item) == {"type_code", "title_ru", "title_kk", "source", "support_level", "supported_locales", "uses_specialized_generator", "is_pilot", "editor_available", "required_fields", "notes", "pilot_detail", "template_detail"} for item in items)
-    assert next(item for item in items if item["type_code"] == "LEAVE.UNPAID.GRANT")["editor_available"] is True
-    assert all(not item["editor_available"] for item in items if item["type_code"] != "LEAVE.UNPAID.GRANT")
+    assert {item["type_code"] for item in items if item["editor_available"]} == {"LEAVE.UNPAID.GRANT", "RETURN_FROM_CHILDCARE_LEAVE"}
 
 
 def test_pilot_has_typed_requisites_and_non_personal_bilingual_preview():
@@ -60,7 +59,9 @@ def test_pilot_has_typed_requisites_and_non_personal_bilingual_preview():
     assert "сотруднику сотрудник" not in ru["body"].lower()
     assert "сотрудникға" not in kk["body"].lower()
     assert "«ФИО сотрудника»" in ru["body"]
-    assert "шартты адамға" in kk["body"].lower()
+    assert all(value.casefold() in ru["body"].casefold() for value in ("«ФИО сотрудника»", "«Должность»", "«Подразделение»", "«Дата выхода»", "«Ставка»"))
+    assert all(value.casefold() in kk["body"].casefold() for value in ("«Қызметкердің аты-жөні»", "«Лауазым»", "«Бөлімше»", "«Жұмысқа шығу күні»", "«Мөлшерлеме»"))
+    assert all(value not in preview_text for value in ("15 января 2026", "2026 жылғы 15 қаңтар", "1.0"))
     assert all(item["pilot_detail"] is None for item in items if not item["is_pilot"])
 
 
