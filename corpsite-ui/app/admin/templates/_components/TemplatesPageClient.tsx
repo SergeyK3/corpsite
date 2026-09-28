@@ -26,6 +26,55 @@ import {
 } from "../_lib/personnelOrderTemplatesApi.client";
 
 const TAB_CLASS = "rounded-xl border px-4 py-2 text-sm font-medium transition";
+const DRAFT_HEIGHT_STORAGE_PREFIX = "corpsite.personnel-order-template-draft-heights.v1";
+const TEXTAREA_MIN_HEIGHT = 64;
+const TEXTAREA_MAX_HEIGHT = 640;
+
+type DraftHeightPair = "title" | "preamble" | "body_template" | "basis_template";
+
+const DRAFT_HEIGHT_FIELDS: Array<{
+  pair: DraftHeightPair;
+  ru: [keyof PersonnelOrderTemplateDraftText, string];
+  kk: [keyof PersonnelOrderTemplateDraftText, string];
+  heightClass: string;
+}> = [
+  { pair: "title", ru: ["title_ru", "Заголовок RU"], kk: ["title_kk", "Заголовок KK"], heightClass: "h-16" },
+  { pair: "preamble", ru: ["preamble_ru", "Преамбула RU"], kk: ["preamble_kk", "Преамбула KK"], heightClass: "h-28" },
+  { pair: "body_template", ru: ["body_template_ru", "Распорядительный текст RU"], kk: ["body_template_kk", "Распорядительный текст KK"], heightClass: "h-48" },
+  { pair: "basis_template", ru: ["basis_template_ru", "Основание RU"], kk: ["basis_template_kk", "Основание KK"], heightClass: "h-28" },
+];
+
+function draftHeightStorageKey(itemTypeCode: string): string {
+  return `${DRAFT_HEIGHT_STORAGE_PREFIX}:${itemTypeCode}`;
+}
+
+function clampTextareaHeight(value: number): number | null {
+  if (!Number.isFinite(value) || value <= 0) return null;
+  return Math.max(TEXTAREA_MIN_HEIGHT, Math.min(TEXTAREA_MAX_HEIGHT, Math.round(value)));
+}
+
+function readDraftHeights(itemTypeCode: string): Partial<Record<DraftHeightPair, number>> {
+  try {
+    const raw = window.localStorage.getItem(draftHeightStorageKey(itemTypeCode));
+    if (!raw) return {};
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return {};
+    return Object.fromEntries(DRAFT_HEIGHT_FIELDS.flatMap(({ pair }) => {
+      const height = clampTextareaHeight((parsed as Record<string, unknown>)[pair] as number);
+      return height == null ? [] : [[pair, height]];
+    })) as Partial<Record<DraftHeightPair, number>>;
+  } catch {
+    return {};
+  }
+}
+
+function writeDraftHeights(itemTypeCode: string, heights: Partial<Record<DraftHeightPair, number>>): void {
+  try {
+    window.localStorage.setItem(draftHeightStorageKey(itemTypeCode), JSON.stringify(heights));
+  } catch {
+    // Layout preferences must never prevent editing a DRAFT.
+  }
+}
 
 function draftErrorMessage(cause: unknown): string {
   const error = cause as { message?: unknown; details?: { detail?: unknown } };
@@ -151,32 +200,48 @@ function DraftEditor({ draft, onSaved, variables, warning }: { draft: PersonnelO
   const editorRef = useRef<HTMLElement | null>(null);
   const previewRef = useRef<HTMLDivElement | null>(null);
   const previewRequest = useRef(0);
+  const ruTextareas = useRef<Partial<Record<keyof PersonnelOrderTemplateDraftText, HTMLTextAreaElement | null>>>({});
   const kkTextareas = useRef<Partial<Record<keyof PersonnelOrderTemplateDraftText, HTMLTextAreaElement | null>>>({});
   useEffect(() => { setSavedDraft(draft); }, [draft]);
   useEffect(() => { if (preview) previewRef.current?.scrollIntoView?.({ behavior: "smooth", block: "nearest" }); }, [preview]);
+  const setPairHeight = useCallback((pair: DraftHeightPair, rawHeight: number, persist: boolean) => {
+    const height = clampTextareaHeight(rawHeight);
+    if (height == null) return;
+    const field = DRAFT_HEIGHT_FIELDS.find((entry) => entry.pair === pair);
+    if (!field) return;
+    const value = `${height}px`;
+    const ruTextarea = ruTextareas.current[field.ru[0]];
+    const kkTextarea = kkTextareas.current[field.kk[0]];
+    if (ruTextarea) ruTextarea.style.height = value;
+    if (kkTextarea) kkTextarea.style.height = value;
+    if (persist) writeDraftHeights(savedDraft.item_type_code, { ...readDraftHeights(savedDraft.item_type_code), [pair]: height });
+  }, [savedDraft.item_type_code]);
+  useEffect(() => {
+    const heights = readDraftHeights(savedDraft.item_type_code);
+    DRAFT_HEIGHT_FIELDS.forEach(({ pair }) => {
+      const height = heights[pair];
+      if (height != null) setPairHeight(pair, height, false);
+    });
+  }, [savedDraft.item_type_code, setPairHeight]);
   useEffect(() => {
     if (typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver((entries) => {
       entries.forEach(({ target }) => {
-        const kkKey = target.getAttribute("data-kk-key") as keyof PersonnelOrderTemplateDraftText | null;
-        const kkTextarea = kkKey ? kkTextareas.current[kkKey] : null;
+        const pair = target.getAttribute("data-height-pair") as DraftHeightPair | null;
         const height = target.getBoundingClientRect().height;
-        if (kkTextarea && height > 0) kkTextarea.style.height = `${height}px`;
+        if (pair) setPairHeight(pair, height, true);
       });
     });
-    editorRef.current?.querySelectorAll<HTMLTextAreaElement>("[data-kk-key]").forEach((textarea) => observer.observe(textarea));
+    editorRef.current?.querySelectorAll<HTMLTextAreaElement>("[data-height-pair]").forEach((textarea) => observer.observe(textarea));
     return () => observer.disconnect();
-  }, []);
-  const fields: Array<{
-    ru: [keyof PersonnelOrderTemplateDraftText, string];
-    kk: [keyof PersonnelOrderTemplateDraftText, string];
-    heightClass: string;
-  }> = [
-    { ru: ["title_ru", "Заголовок RU"], kk: ["title_kk", "Заголовок KK"], heightClass: "h-16" },
-    { ru: ["preamble_ru", "Преамбула RU"], kk: ["preamble_kk", "Преамбула KK"], heightClass: "h-28" },
-    { ru: ["body_template_ru", "Распорядительный текст RU"], kk: ["body_template_kk", "Распорядительный текст KK"], heightClass: "h-48" },
-    { ru: ["basis_template_ru", "Основание RU"], kk: ["basis_template_kk", "Основание KK"], heightClass: "h-28" },
-  ];
+  }, [setPairHeight]);
+  const resetHeights = () => {
+    try { window.localStorage.removeItem(draftHeightStorageKey(savedDraft.item_type_code)); } catch { /* no-op */ }
+    DRAFT_HEIGHT_FIELDS.forEach(({ ru, kk }) => {
+      if (ruTextareas.current[ru[0]]) ruTextareas.current[ru[0]]!.style.height = "";
+      if (kkTextareas.current[kk[0]]) kkTextareas.current[kk[0]]!.style.height = "";
+    });
+  };
   const change = (key: keyof PersonnelOrderTemplateDraftText, value: string) => {
     previewRequest.current += 1;
     setValues((old) => ({ ...old, [key]: value }));
@@ -255,15 +320,17 @@ function DraftEditor({ draft, onSaved, variables, warning }: { draft: PersonnelO
       <div className="mt-3 grid grid-cols-1 gap-x-4 gap-y-3 md:grid-cols-2" data-testid="template-draft-fields">
         <h5 className="text-base font-semibold" data-testid="template-draft-language-ru">Русский</h5>
         <h5 className="text-base font-semibold" data-testid="template-draft-language-kk">Қазақша</h5>
-        {fields.flatMap(({ ru, kk, heightClass }) => [
+        {DRAFT_HEIGHT_FIELDS.flatMap(({ pair, ru, kk, heightClass }) => [
           <label key={ru[0]} className="min-w-0 text-sm" data-testid={`template-draft-field-${ru[0]}`}>
             {ru[1]}
             <textarea
               aria-label={ru[1]}
-              data-kk-key={kk[0]}
+              data-height-pair={pair}
+              ref={(node) => { ruTextareas.current[ru[0]] = node; }}
               value={values[ru[0]]}
               onChange={(e) => change(ru[0], e.target.value)}
               className={`mt-1 w-full resize-y rounded border p-2 ${heightClass}`}
+              style={{ minHeight: TEXTAREA_MIN_HEIGHT, maxHeight: TEXTAREA_MAX_HEIGHT }}
             />
           </label>,
           <label key={kk[0]} className="min-w-0 text-sm" data-testid={`template-draft-field-${kk[0]}`}>
@@ -274,6 +341,7 @@ function DraftEditor({ draft, onSaved, variables, warning }: { draft: PersonnelO
               value={values[kk[0]]}
               onChange={(e) => change(kk[0], e.target.value)}
               className={`mt-1 w-full resize-none rounded border p-2 ${heightClass}`}
+              style={{ minHeight: TEXTAREA_MIN_HEIGHT, maxHeight: TEXTAREA_MAX_HEIGHT }}
             />
           </label>,
         ])}
@@ -283,6 +351,7 @@ function DraftEditor({ draft, onSaved, variables, warning }: { draft: PersonnelO
       <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-zinc-200 pt-3 dark:border-zinc-800" data-testid="template-draft-actions">
         <button type="button" onClick={showPreview} disabled={previewing} className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-800 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800">{previewing ? "Формирование…" : "Предварительный просмотр"}</button>
         <button type="button" onClick={save} disabled={saving} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-500 dark:text-zinc-950 dark:hover:bg-blue-400">{saving ? "Сохранение…" : "Сохранить черновик"}</button>
+        <button type="button" onClick={resetHeights} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800">Сбросить высоту полей</button>
         {error ? <button type="button" onClick={reloadCurrentDraft} disabled={reloading} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60">{reloading ? "Загрузка…" : "Загрузить актуальную версию"}</button> : null}
         {error ? <p role="alert" className="text-sm text-red-700">{error}</p> : null}
         {notice ? <p role="status" className="text-sm text-emerald-700">{notice}</p> : null}

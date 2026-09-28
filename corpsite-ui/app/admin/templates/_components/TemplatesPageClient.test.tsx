@@ -99,6 +99,7 @@ const legacyTerminationDraft = {
 
 describe("TemplatesPageClient", () => {
   beforeEach(() => {
+    window.localStorage.clear();
     currentSearch = new URLSearchParams();
     push.mockReset();
     vi.mocked(getPersonnelOrderTemplateDraft).mockReset();
@@ -465,7 +466,74 @@ describe("TemplatesPageClient", () => {
 
     expect(kkBody).toHaveStyle({ height: "276px" });
     expect(kkTitle).not.toHaveStyle({ height: "276px" });
+    expect(JSON.parse(window.localStorage.getItem("corpsite.personnel-order-template-draft-heights.v1:LEAVE.UNPAID.GRANT") || "{}")).toEqual({ body_template: 276 });
     expect(screen.getByTestId("template-draft-fields")).toHaveClass("grid-cols-1", "md:grid-cols-2");
+  });
+
+  it("restores saved paired heights when the editor is opened again", async () => {
+    window.localStorage.setItem("corpsite.personnel-order-template-draft-heights.v1:LEAVE.UNPAID.GRANT", JSON.stringify({ title: 126, body_template: 320 }));
+    currentSearch = new URLSearchParams("section=personnel-orders&type=LEAVE.UNPAID.GRANT");
+    render(<TemplatesPageClient />);
+
+    await screen.findByTestId("personnel-order-template-detail");
+    fireEvent.click(screen.getByRole("button", { name: "Редактировать шаблон" }));
+    await screen.findByTestId("template-draft-editor");
+    expect(screen.getByLabelText("Заголовок RU")).toHaveStyle({ height: "126px" });
+    expect(screen.getByLabelText("Заголовок KK")).toHaveStyle({ height: "126px" });
+    expect(screen.getByLabelText("Распорядительный текст RU")).toHaveStyle({ height: "320px" });
+    expect(screen.getByLabelText("Распорядительный текст KK")).toHaveStyle({ height: "320px" });
+  });
+
+  it("keeps independently saved heights while switching template types and returning", async () => {
+    window.localStorage.setItem("corpsite.personnel-order-template-draft-heights.v1:LEAVE.UNPAID.GRANT", JSON.stringify({ body_template: 220 }));
+    window.localStorage.setItem("corpsite.personnel-order-template-draft-heights.v1:TERMINATION", JSON.stringify({ body_template: 360 }));
+    currentSearch = new URLSearchParams("section=personnel-orders&type=LEAVE.UNPAID.GRANT");
+    const view = render(<TemplatesPageClient />);
+    await screen.findByTestId("personnel-order-template-detail");
+    fireEvent.click(screen.getByRole("button", { name: "Редактировать шаблон" }));
+    expect(await screen.findByLabelText("Распорядительный текст RU")).toHaveStyle({ height: "220px" });
+
+    currentSearch = new URLSearchParams("section=personnel-orders&type=TERMINATION");
+    vi.mocked(getPersonnelOrderTemplateDraft).mockResolvedValueOnce(legacyTerminationDraft);
+    view.rerender(<TemplatesPageClient />);
+    await screen.findByTestId("personnel-order-template-detail");
+    fireEvent.click(screen.getByRole("button", { name: "Редактировать шаблон" }));
+    expect(await screen.findByLabelText("Распорядительный текст RU")).toHaveStyle({ height: "360px" });
+
+    currentSearch = new URLSearchParams("section=personnel-orders&type=LEAVE.UNPAID.GRANT");
+    vi.mocked(getPersonnelOrderTemplateDraft).mockResolvedValueOnce(unpaidDraft);
+    view.rerender(<TemplatesPageClient />);
+    await screen.findByTestId("personnel-order-template-detail");
+    fireEvent.click(screen.getByRole("button", { name: "Редактировать шаблон" }));
+    expect(await screen.findByLabelText("Распорядительный текст RU")).toHaveStyle({ height: "220px" });
+  });
+
+  it("resets only the current template's saved field heights", async () => {
+    const currentKey = "corpsite.personnel-order-template-draft-heights.v1:LEAVE.UNPAID.GRANT";
+    const otherKey = "corpsite.personnel-order-template-draft-heights.v1:TERMINATION";
+    window.localStorage.setItem(currentKey, JSON.stringify({ body_template: 280 }));
+    window.localStorage.setItem(otherKey, JSON.stringify({ body_template: 380 }));
+    currentSearch = new URLSearchParams("section=personnel-orders&type=LEAVE.UNPAID.GRANT");
+    render(<TemplatesPageClient />);
+
+    await screen.findByTestId("personnel-order-template-detail");
+    fireEvent.click(screen.getByRole("button", { name: "Редактировать шаблон" }));
+    expect(await screen.findByLabelText("Распорядительный текст RU")).toHaveStyle({ height: "280px" });
+    fireEvent.click(screen.getByRole("button", { name: "Сбросить высоту полей" }));
+    expect(window.localStorage.getItem(currentKey)).toBeNull();
+    expect(window.localStorage.getItem(otherKey)).toBe(JSON.stringify({ body_template: 380 }));
+    expect(screen.getByLabelText("Распорядительный текст RU")).not.toHaveStyle({ height: "280px" });
+  });
+
+  it("tolerates missing or corrupted localStorage height preferences", async () => {
+    window.localStorage.setItem("corpsite.personnel-order-template-draft-heights.v1:LEAVE.UNPAID.GRANT", "not-json");
+    currentSearch = new URLSearchParams("section=personnel-orders&type=LEAVE.UNPAID.GRANT");
+    render(<TemplatesPageClient />);
+
+    await screen.findByTestId("personnel-order-template-detail");
+    fireEvent.click(screen.getByRole("button", { name: "Редактировать шаблон" }));
+    expect(await screen.findByTestId("template-draft-editor")).toBeInTheDocument();
+    expect(screen.getByLabelText("Распорядительный текст RU")).not.toHaveStyle({ height: "900px" });
   });
 
   it("saves the changed RU directive text, advances revision, and refreshes preview automatically", async () => {
