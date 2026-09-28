@@ -32,7 +32,7 @@ const pilotDetail = {
       title: "О выходе на работу из отпуска по уходу за ребёнком",
       preamble: "В соответствии с законодательством Республики Казахстан",
       directive: "ПРИКАЗЫВАЮ:",
-      body: "«ФИО сотрудника» приступить к работе в должности «Должность» подразделения «Подразделение» на «Ставка» ставки с «Дата выхода».",
+      body: "[[ФИО сотрудника]] приступить к работе в должности [[Должность]] подразделения [[Подразделение]] на [[Ставка]] ставки с [[Дата выхода]].",
       basis: "Основание: Личное заявление.",
       footer: "С приказом ознакомлен(а): ___________________ [Фамилия И.]\n«___» ______________ 20___ г.\nИсполнитель: [Инициалы и фамилия исполнителя]",
     },
@@ -40,7 +40,7 @@ const pilotDetail = {
       title: "Бала күтіміне байланысты демалыстан жұмысқа шығу туралы",
       preamble: "Қазақстан Республикасының заңнамасына сәйкес",
       directive: "БҰЙЫРАМЫН:",
-      body: "«Қызметкердің аты-жөні» «Лауазым» лауазымында «Бөлімше» бөлімшесінде «Мөлшерлеме» мөлшерлемемен «Жұмысқа шығу күні» бастап жұмысқа кіріссін.",
+      body: "[[Қызметкердің аты-жөні]] [[Лауазым]] лауазымында [[Бөлімше]] бөлімшесінде [[Мөлшерлеме]] мөлшерлемемен [[Жұмысқа шығу күні]] бастап жұмысқа кіріссін.",
       basis: "Негіз: Жеке өтініші.",
       footer: "Бұйрықпен таныстым: ___________________ [Тегі А.]\n«___» ______________ 20___ ж.\nОрындаушы: [Орындаушының аты-жөні]",
     },
@@ -58,16 +58,16 @@ const unpaidDetail = {
       title: "О предоставлении отпуска без сохранения заработной платы",
       preamble: "В соответствии с Трудовым кодексом Республики Казахстан",
       directive: "ПРИКАЗЫВАЮ:",
-      body: "Предоставить «ФИО сотрудника», Должность подразделения «Подразделение», отпуск без сохранения заработной платы с 15 января 2026 года по 17 января 2026 года включительно продолжительностью 3 календарных дней.",
-      basis: "Основание: личное заявление от 10 января 2026 года № 15.",
+      body: "Предоставить [[ФИО сотрудника]], [[Должность]] подразделения «[[Подразделение]]», отпуск без сохранения заработной платы с [[Дата начала отпуска]] по [[Дата окончания отпуска]] включительно продолжительностью [[Количество дней]] календарных дней.",
+      basis: "Основание: личное заявление от [[Дата заявления]] № [[Номер заявления]].",
       footer: "С приказом ознакомлен(а): ___________________ [Фамилия И.]\n«___» ______________ 20___ г.\nИсполнитель: [Инициалы и фамилия исполнителя]",
     },
     kk: {
       title: "Жалақы сақталмайтын демалыс беру туралы",
       preamble: "Қазақстан Республикасының Еңбек кодексіне сәйкес",
       directive: "БҰЙЫРАМЫН:",
-      body: "«Қызметкердің аты-жөні», «Бөлімше» бөлімшесінің «Лауазым» қызметкеріне 2026 жылғы 15 қаңтар мен 2026 жылғы 17 қаңтар аралығындағы 3 күнтізбелік күнге жалақы сақталмайтын демалыс берілсін.",
-      basis: "Негіз: 2026 жылғы 10 қаңтар күнгі жеке өтініш № 15.",
+      body: "[[Қызметкердің аты-жөні]], «[[Бөлімше]]» бөлімшесінің «[[Лауазым]]» қызметкеріне [[Демалыстың басталу күні]] мен [[Демалыстың аяқталу күні]] аралығындағы [[Күн саны]] күнтізбелік күнге жалақы сақталмайтын демалыс берілсін.",
+      basis: "Негіз: [[Өтініш күні]] күнгі жеке өтініш № [[Өтініш нөмірі]].",
       footer: "Бұйрықпен таныстым: ___________________ [Тегі А.]\n«___» ______________ 20___ ж.\nОрындаушы: [Орындаушының аты-жөні]",
     },
   },
@@ -86,6 +86,15 @@ const draftPreview = {
     ru: { title: "Просмотр RU", preamble: "Преамбула RU", directive: "ПРИКАЗЫВАЮ:", body: "Текст RU", basis: "Основание: Личное заявление.", footer: "" },
     kk: { title: "Қарау KK", preamble: "Кіріспе KK", directive: "БҰЙЫРАМЫН:", body: "Мәтін KK", basis: "Негіз: Жеке өтініш.", footer: "" },
   },
+};
+
+const legacyTerminationDraft = {
+  ...unpaidDraft,
+  template_version_id: 3,
+  item_type_code: "TERMINATION",
+  revision: 1,
+  body_template_ru: "Старый текст увольнения RU {{employee.full_name}} {{effective_date}}.",
+  body_template_kk: "Ескі мәтін KK {{employee.full_name}} {{effective_date}}.",
 };
 
 describe("TemplatesPageClient", () => {
@@ -129,6 +138,30 @@ describe("TemplatesPageClient", () => {
       pilot_detail: null,
       template_detail: unpaidDetail,
     }, {
+      type_code: "TERMINATION",
+      title_ru: "Об увольнении",
+      title_kk: "Жұмыстан босату туралы",
+      source: "BUILT_IN",
+      support_level: "SUPPORTED",
+      supported_locales: ["ru", "kk"],
+      uses_specialized_generator: true,
+      is_pilot: false,
+      editor_available: true,
+      required_fields: [],
+      notes: "Формализованный read-only шаблон.",
+      pilot_detail: null,
+      template_detail: {
+        required_fields: ["ФИО сотрудника", "Дата увольнения", "Причина увольнения", "Основание"],
+        additional_fields: [],
+        document_parts: ["Заголовок", "Преамбула", "ПРИКАЗЫВАЮ: / БҰЙЫРАМЫН:", "Распорядительный текст", "Основание", "Печатный подвал"],
+        variables: [{ code: "employee.full_name", label: "ФИО сотрудника" }, { code: "effective_date", label: "Дата увольнения" }, { code: "termination.reason", label: "Причина увольнения" }, { code: "basis", label: "Основание" }],
+        specialty_note: "Должность, подразделение и ставка в текст этого приказа не включаются.",
+        previews: {
+          ru: { title: "Об увольнении", preamble: "В соответствии с Трудовым кодексом Республики Казахстан", directive: "ПРИКАЗЫВАЮ:", body: "Уволить [[ФИО сотрудника]] с [[Дата увольнения]]. Основание: [[Причина увольнения]].", basis: "[[Основание]]", footer: "" },
+          kk: { title: "Жұмыстан босату туралы", preamble: "Қазақстан Республикасының Еңбек кодексіне сәйкес", directive: "БҰЙЫРАМЫН:", body: "[[Қызметкердің аты-жөні]] [[Жұмыстан босату күні]] бастап жұмыстан босатылсын. Негіздеме: [[Жұмыстан босату себебі]].", basis: "[[Негіз]]", footer: "" },
+        },
+      },
+    }, {
       type_code: "HIRE",
       title_ru: "Приём на работу",
       title_kk: "Жұмысқа қабылдау",
@@ -137,7 +170,7 @@ describe("TemplatesPageClient", () => {
       supported_locales: ["ru", "kk"],
       uses_specialized_generator: true,
       is_pilot: false,
-      editor_available: false,
+      editor_available: true,
       required_fields: [],
       notes: "Без редактора.",
       pilot_detail: null,
@@ -175,39 +208,9 @@ describe("TemplatesPageClient", () => {
     expect(await screen.findByTestId("personnel-order-template-detail")).toHaveTextContent("Реквизиты этого шаблона");
     expect(screen.getByTestId("personnel-order-common-requirements")).toHaveTextContent("Общие требования к кадровым приказам");
     expect(screen.getByText("Специальность хранится отдельно и в тело этого приказа не включается.")).toBeInTheDocument();
-    const ru = screen.getByTestId("pilot-preview-ru");
-    const kk = screen.getByTestId("pilot-preview-kk");
-    expect(ru).toHaveTextContent("ПРИКАЗЫВАЮ:");
-    expect(kk).toHaveTextContent("БҰЙЫРАМЫН:");
-    expect(ru).toHaveTextContent("«ФИО сотрудника»");
-    expect(ru).toHaveTextContent("«Должность»");
-    expect(ru).toHaveTextContent("«Подразделение»");
-    expect(ru).toHaveTextContent("«Дата выхода»");
-    expect(ru).toHaveTextContent("«Ставка»");
-    expect(kk).toHaveTextContent("«Қызметкердің аты-жөні»");
-    expect(kk).toHaveTextContent("«Лауазым»");
-    expect(kk).toHaveTextContent("«Бөлімше»");
-    expect(kk).toHaveTextContent("«Жұмысқа шығу күні»");
-    expect(kk).toHaveTextContent("«Мөлшерлеме»");
-    expect(`${ru.textContent} ${kk.textContent}`).not.toMatch(/15 января 2026|2026 жылғы 15 қаңтар|1\.0/);
-    expect(ru).toHaveTextContent("Основание: Личное заявление.");
-    expect(kk).toHaveTextContent("Негіз: Жеке өтініші.");
-    expect(ru).toHaveTextContent("«___» ______________ 20___ г.");
-    expect(kk).toHaveTextContent("«___» ______________ 20___ ж.");
-    expect(ru).toHaveTextContent("Исполнитель: [Инициалы и фамилия исполнителя]");
-    expect(kk).toHaveTextContent("Орындаушы: [Орындаушының аты-жөні]");
-    expect(ru.textContent?.match(/Основание:/g)).toHaveLength(1);
-    expect(kk.textContent?.match(/Негіз:/g)).toHaveLength(1);
-    expect(`${ru.textContent} ${kk.textContent}`).not.toMatch(/стаж|контроль|docx/i);
-    expect(ru).not.toHaveTextContent("сотруднику Сотрудник");
-    expect(kk).not.toHaveTextContent("Сотрудникға");
-    expect(screen.getByRole("heading", { name: "Реквизиты этого шаблона" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Переменные шаблона" })).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Предварительный просмотр" })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Состав документа" })).not.toBeInTheDocument();
-    const variableLine = screen.getByText("employee.full_name:").parentElement;
-    expect(variableLine).toHaveTextContent("employee.full_name: ФИО сотрудника");
-    expect(variableLine).toHaveClass("flex", "flex-wrap");
+    expect(screen.queryByTestId("pilot-preview-ru")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("pilot-preview-kk")).not.toBeInTheDocument();
+
   });
 
   it("renders the unpaid leave detail with one separate basis and no closing block", async () => {
@@ -217,17 +220,23 @@ describe("TemplatesPageClient", () => {
     const detail = await screen.findByTestId("personnel-order-template-detail");
     expect(detail).toHaveTextContent("Реквизиты этого шаблона");
     expect(detail).toHaveTextContent("Дата заявления (если известна)");
-    const ru = screen.getByTestId("pilot-preview-ru");
-    const kk = screen.getByTestId("pilot-preview-kk");
-    expect(ru).toHaveTextContent("ПРИКАЗЫВАЮ:");
-    expect(kk).toHaveTextContent("БҰЙЫРАМЫН:");
-    expect(ru).toHaveTextContent("Основание: личное заявление от 10 января 2026 года № 15.");
-    expect(kk).toHaveTextContent("Негіз: 2026 жылғы 10 қаңтар күнгі жеке өтініш № 15.");
-    expect(kk).toHaveTextContent("17 қаңтар аралығындағы 3 күнтізбелік күнге");
-    expect(ru.textContent?.match(/Основание:/g)).toHaveLength(1);
-    expect(kk.textContent?.match(/Негіз:/g)).toHaveLength(1);
-    expect(`${ru.textContent} ${kk.textContent}`).not.toMatch(/контроль|ставка|специальность|ребён/i);
-    expect(screen.queryByRole("button", { name: /опубликовать|архивировать/i })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("pilot-preview-ru")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("pilot-preview-kk")).not.toBeInTheDocument();
+
+  });
+
+  it("renders the termination preview and offers the common edit action", async () => {
+    currentSearch = new URLSearchParams("section=personnel-orders&type=TERMINATION");
+    render(<TemplatesPageClient />);
+
+    const detail = await screen.findByTestId("personnel-order-template-detail");
+    expect(detail).toHaveTextContent("ФИО сотрудника");
+    expect(detail).toHaveTextContent("Дата увольнения");
+    expect(detail).toHaveTextContent("Причина увольнения");
+    expect(detail).toHaveTextContent("Основание");
+    expect(screen.queryByTestId("pilot-preview-ru")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("pilot-preview-kk")).not.toBeInTheDocument();
+
   });
 
   it("writes the selected section to the URL while preserving other query parameters", () => {
@@ -266,11 +275,11 @@ describe("TemplatesPageClient", () => {
     expect(editor).toHaveTextContent("Қазақша");
   });
 
-  it("does not offer the editor button for an unsupported template", async () => {
+  it("offers the editor button for every registered standalone template", async () => {
     currentSearch = new URLSearchParams("section=personnel-orders&type=HIRE");
     render(<TemplatesPageClient />);
     await screen.findByTestId("personnel-order-template-detail");
-    expect(screen.queryByRole("button", { name: "Редактировать шаблон" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Редактировать шаблон" })).toBeInTheDocument();
   });
 
   it("offers the draft editor only for unpaid leave and preserves unsaved bilingual text through preview", async () => {
@@ -341,6 +350,97 @@ describe("TemplatesPageClient", () => {
     await waitFor(() => expect(savePersonnelOrderTemplateDraft).toHaveBeenCalledWith("LEAVE.UNPAID.GRANT", expect.objectContaining({ title_ru: "Несохранённый текст", expected_revision: 1 })));
   });
 
+  it("previews the current eight fields of an existing TERMINATION draft and clears stale output", async () => {
+    currentSearch = new URLSearchParams("section=personnel-orders&type=TERMINATION");
+    vi.mocked(getPersonnelOrderTemplateDraft).mockResolvedValue(legacyTerminationDraft);
+    let resolvePreview!: (value: typeof draftPreview) => void;
+    vi.mocked(previewPersonnelOrderTemplateDraft).mockImplementationOnce(() => new Promise((resolve) => { resolvePreview = resolve; }));
+    render(<TemplatesPageClient />);
+
+    await screen.findByTestId("personnel-order-template-detail");
+    fireEvent.click(screen.getByRole("button", { name: "Редактировать шаблон" }));
+    expect(await screen.findByTestId("template-draft-editor")).toBeInTheDocument();
+    expect(createPersonnelOrderTemplateDraft).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText("Распорядительный текст RU"), { target: { value: "Новый текст RU" } });
+    fireEvent.change(screen.getByLabelText("Распорядительный текст KK"), { target: { value: "Жаңа мәтін KK" } });
+    fireEvent.click(screen.getByRole("button", { name: "Предварительный просмотр" }));
+    expect(screen.getByRole("button", { name: "Формирование…" })).toBeDisabled();
+
+    const [typeCode, body] = vi.mocked(previewPersonnelOrderTemplateDraft).mock.calls[0];
+    expect(typeCode).toBe("TERMINATION");
+    expect(Object.keys(body).sort()).toEqual([
+      "basis_template_kk", "basis_template_ru", "body_template_kk", "body_template_ru",
+      "preamble_kk", "preamble_ru", "title_kk", "title_ru",
+    ]);
+    expect(body).toMatchObject({ body_template_ru: "Новый текст RU", body_template_kk: "Жаңа мәтін KK" });
+    expect(body).not.toHaveProperty("template_version_id");
+    expect(body).not.toHaveProperty("revision");
+    expect(body).not.toHaveProperty("status");
+
+    resolvePreview({ previews: {
+      ru: { ...draftPreview.previews.ru, body: "Обновлённый RU preview" },
+      kk: { ...draftPreview.previews.kk, body: "Жаңартылған KK preview" },
+    } });
+    expect(await screen.findByTestId("template-draft-preview")).toHaveTextContent("Обновлённый RU preview");
+    expect(screen.getByTestId("template-draft-preview")).toHaveTextContent("Жаңартылған KK preview");
+
+    fireEvent.change(screen.getByLabelText("Распорядительный текст RU"), { target: { value: "Текст после preview" } });
+    expect(screen.queryByTestId("template-draft-preview")).not.toBeInTheDocument();
+    vi.mocked(previewPersonnelOrderTemplateDraft).mockRejectedValueOnce(new Error("Preview backend rejected body_template_kk"));
+    fireEvent.click(screen.getByRole("button", { name: "Предварительный просмотр" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Preview backend rejected body_template_kk");
+    expect(screen.queryByTestId("template-draft-preview")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Распорядительный текст RU")).toHaveValue("Текст после preview");
+    expect(screen.getByLabelText("Распорядительный текст KK")).toHaveValue("Жаңа мәтін KK");
+  });
+
+  it("saves and reopens TERMINATION as one confirmed eight-field snapshot", async () => {
+    currentSearch = new URLSearchParams("section=personnel-orders&type=TERMINATION");
+    const confirmed = {
+      ...legacyTerminationDraft,
+      revision: 2,
+      title_ru: "Сохранённый заголовок RU", title_kk: "Сақталған тақырып KK",
+      preamble_ru: "Сохранённая преамбула RU", preamble_kk: "Сақталған кіріспе KK",
+      body_template_ru: "Сохранённый body RU", body_template_kk: "Сақталған body KK",
+      basis_template_ru: "Сохранённое основание RU", basis_template_kk: "Сақталған негіз KK",
+    };
+    vi.mocked(getPersonnelOrderTemplateDraft).mockResolvedValueOnce(legacyTerminationDraft).mockResolvedValueOnce(confirmed);
+    vi.mocked(savePersonnelOrderTemplateDraft).mockResolvedValueOnce(confirmed);
+    render(<TemplatesPageClient />);
+
+    await screen.findByTestId("personnel-order-template-detail");
+    fireEvent.click(screen.getByRole("button", { name: "Редактировать шаблон" }));
+    await screen.findByTestId("template-draft-editor");
+    const fields = [
+      ["Заголовок RU", confirmed.title_ru], ["Заголовок KK", confirmed.title_kk],
+      ["Преамбула RU", confirmed.preamble_ru], ["Преамбула KK", confirmed.preamble_kk],
+      ["Распорядительный текст RU", confirmed.body_template_ru], ["Распорядительный текст KK", confirmed.body_template_kk],
+      ["Основание RU", confirmed.basis_template_ru], ["Основание KK", confirmed.basis_template_kk],
+    ] as const;
+    fields.forEach(([label, value]) => fireEvent.change(screen.getByLabelText(label), { target: { value } }));
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить черновик" }));
+
+    await waitFor(() => expect(savePersonnelOrderTemplateDraft).toHaveBeenCalledWith("TERMINATION", {
+      title_ru: confirmed.title_ru, title_kk: confirmed.title_kk,
+      preamble_ru: confirmed.preamble_ru, preamble_kk: confirmed.preamble_kk,
+      body_template_ru: confirmed.body_template_ru, body_template_kk: confirmed.body_template_kk,
+      basis_template_ru: confirmed.basis_template_ru, basis_template_kk: confirmed.basis_template_kk,
+      expected_revision: 1,
+    }));
+    expect(screen.getByRole("status")).toHaveTextContent("Черновик сохранён");
+    expect(screen.getByTestId("template-draft-editor")).toHaveTextContent("revision 2");
+    fields.forEach(([label, value]) => expect(screen.getByLabelText(label)).toHaveValue(value));
+
+    cleanup();
+    render(<TemplatesPageClient />);
+    await screen.findByTestId("personnel-order-template-detail");
+    fireEvent.click(screen.getByRole("button", { name: "Редактировать шаблон" }));
+    expect(await screen.findByTestId("template-draft-editor")).toHaveTextContent("revision 2");
+    fields.forEach(([label, value]) => expect(screen.getByLabelText(label)).toHaveValue(value));
+    expect(createPersonnelOrderTemplateDraft).not.toHaveBeenCalled();
+  });
+
   it("synchronizes each resized RU textarea only with its paired KK textarea", async () => {
     let resizeCallback: ResizeObserverCallback | undefined;
     class ResizeObserverMock {
@@ -377,7 +477,6 @@ describe("TemplatesPageClient", () => {
     await screen.findByTestId("personnel-order-template-detail");
     fireEvent.click(screen.getByRole("button", { name: "Редактировать шаблон" }));
     await screen.findByTestId("template-draft-editor");
-    await screen.findByTestId("template-draft-preview");
     fireEvent.change(screen.getByLabelText("Распорядительный текст RU"), { target: { value: savedDraft.body_template_ru } });
     vi.mocked(previewPersonnelOrderTemplateDraft).mockResolvedValueOnce({ previews: { ...draftPreview.previews, ru: { ...draftPreview.previews.ru, body: savedDraft.body_template_ru } } });
     fireEvent.click(screen.getByRole("button", { name: "Сохранить черновик" }));
@@ -408,7 +507,6 @@ describe("TemplatesPageClient", () => {
     await screen.findByTestId("personnel-order-template-detail");
     fireEvent.click(screen.getByRole("button", { name: "Редактировать шаблон" }));
     await screen.findByTestId("template-draft-editor");
-    await screen.findByTestId("template-draft-preview");
     fireEvent.change(screen.getByLabelText("Распорядительный текст KK"), { target: { value: savedDraft.body_template_kk } });
     vi.mocked(previewPersonnelOrderTemplateDraft).mockResolvedValueOnce({ previews: { ...draftPreview.previews, kk: { ...draftPreview.previews.kk, body: savedDraft.body_template_kk } } });
     fireEvent.click(screen.getByRole("button", { name: "Сохранить черновик" }));
@@ -426,6 +524,7 @@ describe("TemplatesPageClient", () => {
     fireEvent.click(screen.getByRole("button", { name: "Редактировать шаблон" }));
     expect(await screen.findByTestId("template-draft-editor")).toBeInTheDocument();
     expect(screen.getByLabelText("Распорядительный текст RU")).toHaveValue(unpaidDraft.body_template_ru);
+    fireEvent.click(screen.getByRole("button", { name: "Предварительный просмотр" }));
     expect(await screen.findByTestId("template-draft-preview")).toHaveTextContent(draftPreview.previews.ru.body);
     expect(createPersonnelOrderTemplateDraft).not.toHaveBeenCalled();
   });
@@ -439,7 +538,6 @@ describe("TemplatesPageClient", () => {
     await screen.findByTestId("personnel-order-template-detail");
     fireEvent.click(screen.getByRole("button", { name: "Редактировать шаблон" }));
     await screen.findByTestId("template-draft-editor");
-    await screen.findByTestId("template-draft-preview");
     vi.mocked(previewPersonnelOrderTemplateDraft).mockImplementationOnce(() => new Promise((resolve) => { resolvePreview = resolve; }));
     fireEvent.change(screen.getByLabelText("Заголовок RU"), { target: { value: "Мой preview" } });
     fireEvent.click(screen.getByRole("button", { name: "Предварительный просмотр" }));
@@ -505,7 +603,103 @@ describe("TemplatesPageClient", () => {
     fireEvent.change(screen.getByLabelText("Заголовок RU"), { target: { value: "Мой текст" } });
     fireEvent.click(screen.getByRole("button", { name: "Сохранить черновик" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Черновик изменён другим пользователем.");
+    expect(screen.getByRole("button", { name: "Загрузить актуальную версию" })).toBeInTheDocument();
     expect(screen.getByLabelText("Заголовок RU")).toHaveValue("Мой текст");
+    expect(screen.queryByTestId("template-draft-preview")).not.toBeInTheDocument();
+  });
+
+  it("clears a previous editor immediately, ignores its late response, and reloads the latest draft after switching back", async () => {
+    currentSearch = new URLSearchParams("section=personnel-orders&type=TERMINATION");
+    const latestTermination = { ...legacyTerminationDraft, revision: 9, body_template_ru: "Последняя серверная версия TERMINATION" };
+    let resolveStaleTermination!: (draft: typeof legacyTerminationDraft) => void;
+    vi.mocked(getPersonnelOrderTemplateDraft)
+      .mockResolvedValueOnce(legacyTerminationDraft)
+      .mockResolvedValueOnce(unpaidDraft)
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveStaleTermination = resolve; }))
+      .mockResolvedValueOnce(unpaidDraft)
+      .mockResolvedValueOnce(latestTermination);
+    render(<TemplatesPageClient />);
+
+    await screen.findByTestId("personnel-order-template-detail");
+    fireEvent.click(screen.getByRole("button", { name: "Редактировать шаблон" }));
+    expect(await screen.findByTestId("template-draft-editor")).toHaveTextContent("Старый текст увольнения RU");
+    fireEvent.click(screen.getByRole("button", { name: "Предварительный просмотр" }));
+    expect(await screen.findByTestId("template-draft-preview")).toBeInTheDocument();
+    vi.mocked(previewPersonnelOrderTemplateDraft).mockRejectedValueOnce(new Error("Ошибка TERMINATION"));
+    fireEvent.click(screen.getByRole("button", { name: "Предварительный просмотр" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Ошибка TERMINATION");
+
+    fireEvent.click(screen.getByTestId("personnel-order-template-LEAVE.UNPAID.GRANT"));
+    expect(push).toHaveBeenLastCalledWith("/admin/templates?section=personnel-orders&type=LEAVE.UNPAID.GRANT");
+    expect(screen.queryByTestId("template-draft-editor")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("template-draft-preview")).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByTestId("template-editor-opening")).toHaveTextContent("Открытие редактора…");
+    expect(await screen.findByTestId("template-draft-editor")).toHaveTextContent(unpaidDraft.body_template_ru);
+
+    fireEvent.click(screen.getByTestId("personnel-order-template-TERMINATION"));
+    expect(screen.getByTestId("template-editor-opening")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("personnel-order-template-LEAVE.UNPAID.GRANT"));
+    expect(await screen.findByTestId("template-draft-editor")).toHaveTextContent(unpaidDraft.body_template_ru);
+    resolveStaleTermination(legacyTerminationDraft);
+    await waitFor(() => expect(screen.getByTestId("template-draft-editor")).toHaveTextContent(unpaidDraft.body_template_ru));
+    expect(screen.getByTestId("personnel-order-template-detail")).not.toHaveTextContent("Старый текст увольнения RU");
+
+    fireEvent.click(screen.getByTestId("personnel-order-template-TERMINATION"));
+    expect(await screen.findByTestId("template-draft-editor")).toHaveTextContent("Последняя серверная версия TERMINATION");
+    expect(screen.getByTestId("template-draft-editor")).toHaveTextContent("revision 9");
+  });
+
+  it("uses only the saved TERMINATION draft after opening, saving, and switching back", async () => {
+    currentSearch = new URLSearchParams("section=personnel-orders&type=TERMINATION");
+    const serverDraft = {
+      ...legacyTerminationDraft,
+      revision: 3,
+      title_ru: "Новый title RU", title_kk: "Жаңа title KK",
+      preamble_ru: "Новая preamble RU", preamble_kk: "Жаңа preamble KK",
+      body_template_ru: "Новый body RU {{employee.full_name}} {{effective_date}}", body_template_kk: "Жаңа body KK {{employee.full_name}} {{effective_date}}",
+      basis_template_ru: "Новое basis RU {{basis}}", basis_template_kk: "Жаңа basis KK {{basis}}",
+    };
+    const savedDraft = { ...serverDraft, revision: 4, title_ru: "Последний title RU" };
+    vi.mocked(getPersonnelOrderTemplateDraft)
+      .mockResolvedValueOnce(serverDraft)
+      .mockResolvedValueOnce(unpaidDraft)
+      .mockResolvedValueOnce(savedDraft);
+    vi.mocked(savePersonnelOrderTemplateDraft).mockResolvedValueOnce(savedDraft);
+    render(<TemplatesPageClient />);
+
+    const detail = await screen.findByTestId("personnel-order-template-detail");
+    expect(detail).not.toHaveTextContent(serverDraft.title_ru);
+    expect(screen.queryByTestId("pilot-preview-ru")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Редактировать шаблон" }));
+    const editor = await screen.findByTestId("template-draft-editor");
+    expect(screen.queryByTestId("pilot-preview-ru")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("template-draft-preview")).not.toBeInTheDocument();
+    const fields = [
+      ["Заголовок RU", serverDraft.title_ru], ["Заголовок KK", serverDraft.title_kk],
+      ["Преамбула RU", serverDraft.preamble_ru], ["Преамбула KK", serverDraft.preamble_kk],
+      ["Распорядительный текст RU", serverDraft.body_template_ru], ["Распорядительный текст KK", serverDraft.body_template_kk],
+      ["Основание RU", serverDraft.basis_template_ru], ["Основание KK", serverDraft.basis_template_kk],
+    ] as const;
+    fields.forEach(([label, value]) => expect(screen.getByLabelText(label)).toHaveValue(value));
+    fireEvent.change(screen.getByLabelText("Заголовок RU"), { target: { value: savedDraft.title_ru } });
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить черновик" }));
+    expect(await screen.findByRole("status")).toHaveTextContent("Черновик сохранён");
+    expect(editor).toHaveTextContent("revision 4");
+
+    fireEvent.click(screen.getByTestId("personnel-order-template-LEAVE.UNPAID.GRANT"));
+    expect(await screen.findByTestId("template-draft-editor")).toHaveTextContent(unpaidDraft.body_template_ru);
+    fireEvent.click(screen.getByTestId("personnel-order-template-TERMINATION"));
+    expect(await screen.findByTestId("template-draft-editor")).toHaveTextContent("Последний title RU");
+    expect(screen.getByLabelText("Заголовок RU")).toHaveValue(savedDraft.title_ru);
+    expect(screen.getByLabelText("Заголовок KK")).toHaveValue(savedDraft.title_kk);
+    expect(screen.getByLabelText("Преамбула RU")).toHaveValue(savedDraft.preamble_ru);
+    expect(screen.getByLabelText("Преамбула KK")).toHaveValue(savedDraft.preamble_kk);
+    expect(screen.getByLabelText("Распорядительный текст RU")).toHaveValue(savedDraft.body_template_ru);
+    expect(screen.getByLabelText("Распорядительный текст KK")).toHaveValue(savedDraft.body_template_kk);
+    expect(screen.getByLabelText("Основание RU")).toHaveValue(savedDraft.basis_template_ru);
+    expect(screen.getByLabelText("Основание KK")).toHaveValue(savedDraft.basis_template_kk);
+    expect(screen.queryByTestId("pilot-preview-ru")).not.toBeInTheDocument();
     expect(screen.queryByTestId("template-draft-preview")).not.toBeInTheDocument();
   });
 });

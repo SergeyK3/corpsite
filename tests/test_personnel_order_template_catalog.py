@@ -1,4 +1,6 @@
 from app.services.personnel_order_template_catalog_service import list_personnel_order_template_catalog
+from app.services.personnel_order_template_catalog_data import CATALOG_PROJECTIONS
+from app.services.personnel_order_template_specs import assert_personnel_order_template_specs
 from app.services.personnel_orders_editorial.generators import generate_order_block
 from app.main import app
 from app.security.admin_guard import require_sysadmin_api
@@ -13,7 +15,16 @@ def test_catalog_is_registry_backed_and_safe():
     pilot = next(item for item in items if item["type_code"] == "RETURN_FROM_CHILDCARE_LEAVE")
     assert pilot["is_pilot"] is True and pilot["support_level"] == "SUPPORTED"
     assert all(set(item) == {"type_code", "title_ru", "title_kk", "source", "support_level", "supported_locales", "uses_specialized_generator", "is_pilot", "editor_available", "required_fields", "notes", "pilot_detail", "template_detail"} for item in items)
-    assert {item["type_code"] for item in items if item["editor_available"]} == {"LEAVE.UNPAID.GRANT", "RETURN_FROM_CHILDCARE_LEAVE"}
+    assert {item["type_code"] for item in items if item["editor_available"]} == codes
+
+
+def test_catalog_projections_match_the_migrated_golden_snapshot_for_all_types():
+    assert_personnel_order_template_specs()
+    actual = {
+        item["type_code"]: {key: value for key, value in item.items() if key != "type_code"}
+        for item in list_personnel_order_template_catalog()
+    }
+    assert actual == CATALOG_PROJECTIONS
 
 
 def test_pilot_has_typed_requisites_and_non_personal_bilingual_preview():
@@ -58,10 +69,11 @@ def test_pilot_has_typed_requisites_and_non_personal_bilingual_preview():
     assert all(real_name not in preview_text for real_name in ("райник", "оразбекова"))
     assert "сотруднику сотрудник" not in ru["body"].lower()
     assert "сотрудникға" not in kk["body"].lower()
-    assert "«ФИО сотрудника»" in ru["body"]
-    assert all(value.casefold() in ru["body"].casefold() for value in ("«ФИО сотрудника»", "«Должность»", "«Подразделение»", "«Дата выхода»", "«Ставка»"))
-    assert all(value.casefold() in kk["body"].casefold() for value in ("«Қызметкердің аты-жөні»", "«Лауазым»", "«Бөлімше»", "«Жұмысқа шығу күні»", "«Мөлшерлеме»"))
+    assert "[[ФИО сотрудника]]" in ru["body"]
+    assert all(value.casefold() in ru["body"].casefold() for value in ("[[ФИО сотрудника]]", "[[Должность]]", "[[Подразделение]]", "[[Дата выхода]]", "[[Ставка]]"))
+    assert all(value.casefold() in kk["body"].casefold() for value in ("[[Қызметкердің аты-жөні]]", "[[Лауазым]]", "[[Бөлімше]]", "[[Жұмысқа шығу күні]]", "[[Мөлшерлеме]]"))
     assert all(value not in preview_text for value in ("15 января 2026", "2026 жылғы 15 қаңтар", "1.0"))
+    assert "««" not in preview_text and "»»" not in preview_text
     assert all(item["pilot_detail"] is None for item in items if not item["is_pilot"])
 
 
@@ -100,6 +112,40 @@ def test_unpaid_leave_has_formalized_requisites_and_a_non_personal_bilingual_pre
     assert "Контроль" not in generate_order_block("closing", "ru", {"order_type_code": "LEAVE.UNPAID.GRANT"})["generated_text"]
     preview_text = " ".join(value for preview in (ru, kk) for value in preview.values()).casefold()
     assert all(forbidden not in preview_text for forbidden in ("райник", "оразбекова", "ставка", "специальность", "ребён"))
+    assert all(forbidden not in preview_text for forbidden in ("15 января 2026", "2026 жылғы 15 қаңтар", "1.0", "««", "»»"))
+    assert all(value in preview_text for value in ("[[фио сотрудника]]", "[[должность]]", "[[подразделение]]", "[[дата начала отпуска]]", "[[количество дней]]"))
+
+
+def test_termination_has_typed_requisites_and_a_neutral_bilingual_preview():
+    items = list_personnel_order_template_catalog()
+    termination = next(item for item in items if item["type_code"] == "TERMINATION")
+    detail = termination["template_detail"]
+
+    assert termination["support_level"] == "SUPPORTED"
+    assert termination["editor_available"] is True
+    assert termination["pilot_detail"] is None
+    assert termination["required_fields"] == detail["required_fields"] == [
+        "ФИО сотрудника", "Текущая должность на русском языке", "Текущая должность на казахском языке", "Текущее подразделение на русском языке", "Текущее подразделение на казахском языке", "Дата увольнения", "Причина увольнения", "Количество дней неиспользованного отпуска", "Основание",
+    ]
+    assert [variable["code"] for variable in detail["variables"]] == [
+        "employee.full_name", "position.title_ru", "position.title_kk", "org_unit.title_ru", "org_unit.title_kk", "effective_date", "termination.reason", "termination.unused_leave_days", "basis",
+    ]
+
+    ru, kk = detail["previews"]["ru"], detail["previews"]["kk"]
+    assert ru["directive"] == "ПРИКАЗЫВАЮ:"
+    assert kk["directive"] == "БҰЙЫРАМЫН:"
+    assert all(value in ru["body"] for value in ("[[ФИО сотрудника]]", "[[Должность]]", "[[Подразделение]]", "[[Дата увольнения]]", "[[Причина увольнения]]"))
+    assert all(value in kk["body"] for value in ("[[Қызметкердің аты-жөні]]", "[[Лауазым]]", "[[Бөлімше]]", "[[Жұмыстан босату күні]]", "[[Жұмыстан босату себебі]]"))
+    assert "[[Количество дней неиспользованного отпуска]]" in ru["body"]
+    assert "[[Пайдаланылмаған демалыс күндерінің саны]]" in kk["body"]
+    assert ru["basis"] == "Основание: [[Основание]]"
+    assert kk["basis"] == "Негіз: [[Негіз]]"
+    assert "Основание:" not in ru["body"]
+    assert "Негіздеме:" not in kk["body"]
+    assert "Негіз:" not in kk["body"]
+    assert kk["body"].count("еңбек шарты") == kk["body"].count("бұзылсын") == 1
+    preview_text = " ".join(value for preview in (ru, kk) for value in preview.values()).casefold()
+    assert all(forbidden not in preview_text for forbidden in ("ставка", "1.0", "15 января 2026", "2026 жылғы 15 қаңтар", "««", "»»", "райник", "оразбекова"))
 
 
 def test_catalog_endpoint_requires_existing_admin_guard():

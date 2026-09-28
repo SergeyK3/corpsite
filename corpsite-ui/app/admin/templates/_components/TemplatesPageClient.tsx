@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import RegularTasksAdminClient from "@/app/regular-tasks/_components/RegularTasksAdminClient";
@@ -81,7 +81,7 @@ function editableDraftText(source: PersonnelOrderTemplateDraftText): PersonnelOr
   };
 }
 
-function FormalizedTemplateDetail({ detail }: { detail: PersonnelOrderTemplatePilotDetail }) {
+function FormalizedTemplateDetail({ detail, showCatalogPreview }: { detail: PersonnelOrderTemplatePilotDetail; showCatalogPreview: boolean }) {
   return (
     <div className="mt-5 space-y-4" data-testid="formalized-template-detail">
       <div className="grid gap-4 lg:grid-cols-2">
@@ -115,7 +115,7 @@ function FormalizedTemplateDetail({ detail }: { detail: PersonnelOrderTemplatePi
         </section>
       </div>
 
-      <section className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800" aria-labelledby="pilot-preview-heading">
+      {showCatalogPreview ? <section className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800" aria-labelledby="pilot-preview-heading">
         <h4 id="pilot-preview-heading" className="font-semibold">Предварительный просмотр</h4>
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">Нейтральный пример без персональных данных.</p>
         <div className="mt-4 grid gap-4 lg:grid-cols-2">
@@ -134,12 +134,12 @@ function FormalizedTemplateDetail({ detail }: { detail: PersonnelOrderTemplatePi
             );
           })}
         </div>
-      </section>
+      </section> : null}
     </div>
   );
 }
 
-function DraftEditor({ draft, onSaved, variables }: { draft: PersonnelOrderTemplateDraft; onSaved: (draft: PersonnelOrderTemplateDraft) => void; variables: string[] }) {
+function DraftEditor({ draft, onSaved, variables, warning }: { draft: PersonnelOrderTemplateDraft; onSaved: (draft: PersonnelOrderTemplateDraft) => void; variables: string[]; warning?: string }) {
   const [savedDraft, setSavedDraft] = useState(draft);
   const [values, setValues] = useState<PersonnelOrderTemplateDraftText>(() => editableDraftText(draft));
   const [preview, setPreview] = useState<Record<"ru" | "kk", PersonnelOrderTemplatePreview> | null>(null);
@@ -147,6 +147,7 @@ function DraftEditor({ draft, onSaved, variables }: { draft: PersonnelOrderTempl
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
   const [previewing, setPreviewing] = useState(false);
+  const [reloading, setReloading] = useState(false);
   const editorRef = useRef<HTMLElement | null>(null);
   const previewRef = useRef<HTMLDivElement | null>(null);
   const previewRequest = useRef(0);
@@ -183,26 +184,20 @@ function DraftEditor({ draft, onSaved, variables }: { draft: PersonnelOrderTempl
     setError("");
     setNotice("");
   };
-  useEffect(() => {
-    const request = ++previewRequest.current;
-    setPreviewing(true);
-    void previewPersonnelOrderTemplateDraft(draft.item_type_code, editableDraftText(draft))
-      .then((result) => { if (request === previewRequest.current) setPreview(result.previews); })
-      .catch(() => {
-        if (request !== previewRequest.current) return;
-        setPreview(null);
-        setError("Не удалось сформировать предварительный просмотр черновика.");
-      })
-      .finally(() => { if (request === previewRequest.current) setPreviewing(false); });
-  }, [draft.item_type_code]);
   const showPreview = () => {
     const request = ++previewRequest.current;
+    const submittedValues = editableDraftText(values);
     setError("");
     setNotice("");
+    setPreview(null);
     setPreviewing(true);
-    void previewPersonnelOrderTemplateDraft(draft.item_type_code, editableDraftText(values))
+    void previewPersonnelOrderTemplateDraft(savedDraft.item_type_code, submittedValues)
       .then((result) => { if (request === previewRequest.current) setPreview(result.previews); })
-      .catch((cause) => { if (request === previewRequest.current) setError(draftErrorMessage(cause)); })
+      .catch((cause) => {
+        if (request !== previewRequest.current) return;
+        setPreview(null);
+        setError(draftErrorMessage(cause));
+      })
       .finally(() => { if (request === previewRequest.current) setPreviewing(false); });
   };
   const save = () => {
@@ -233,11 +228,29 @@ function DraftEditor({ draft, onSaved, variables }: { draft: PersonnelOrderTempl
       })
       .finally(() => setSaving(false));
   };
+  const reloadCurrentDraft = () => {
+    setReloading(true);
+    setError("");
+    setNotice("");
+    void getPersonnelOrderTemplateDraft(savedDraft.item_type_code)
+      .then((next) => {
+        if (!next) throw new Error("Актуальная черновая версия не найдена.");
+        const reloadedValues = editableDraftText(next);
+        setSavedDraft(next);
+        onSaved(next);
+        setValues(reloadedValues);
+        setPreview(null);
+        setNotice("Загружена актуальная версия черновика.");
+      })
+      .catch((cause) => setError(draftErrorMessage(cause)))
+      .finally(() => setReloading(false));
+  };
   return (
     <section ref={editorRef} className="mt-5 rounded-xl border border-blue-200 p-4" data-testid="template-draft-editor">
       <h4 className="font-semibold">Черновая версия шаблона</h4>
       <p className="text-sm">Версия {savedDraft.version_number} · revision {savedDraft.revision} · Черновик</p>
       <p className="mt-2 text-sm text-amber-700">Черновик не применяется к кадровым приказам.</p>
+      {warning ? <p className="mt-2 text-sm font-medium text-amber-700" role="note">{warning}</p> : null}
 
       <div className="mt-3 grid grid-cols-1 gap-x-4 gap-y-3 md:grid-cols-2" data-testid="template-draft-fields">
         <h5 className="text-base font-semibold" data-testid="template-draft-language-ru">Русский</h5>
@@ -270,6 +283,7 @@ function DraftEditor({ draft, onSaved, variables }: { draft: PersonnelOrderTempl
       <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-zinc-200 pt-3 dark:border-zinc-800" data-testid="template-draft-actions">
         <button type="button" onClick={showPreview} disabled={previewing} className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-800 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800">{previewing ? "Формирование…" : "Предварительный просмотр"}</button>
         <button type="button" onClick={save} disabled={saving} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-500 dark:text-zinc-950 dark:hover:bg-blue-400">{saving ? "Сохранение…" : "Сохранить черновик"}</button>
+        {error ? <button type="button" onClick={reloadCurrentDraft} disabled={reloading} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60">{reloading ? "Загрузка…" : "Загрузить актуальную версию"}</button> : null}
         {error ? <p role="alert" className="text-sm text-red-700">{error}</p> : null}
         {notice ? <p role="status" className="text-sm text-emerald-700">{notice}</p> : null}
       </div>
@@ -278,29 +292,36 @@ function DraftEditor({ draft, onSaved, variables }: { draft: PersonnelOrderTempl
   );
 }
 
-function TemplateDetail({ item }: { item: PersonnelOrderTemplateCatalogItem }) {
+function TemplateDetail({ item, autoOpen }: { item: PersonnelOrderTemplateCatalogItem; autoOpen: boolean }) {
   const detail = item.template_detail ?? item.pilot_detail;
   const [draft, setDraft] = useState<PersonnelOrderTemplateDraft | null>(null);
   const [openingEditor, setOpeningEditor] = useState(false);
-  const openEditor = () => {
+  const openRequest = useRef(0);
+  const openEditor = useCallback(() => {
+    const request = ++openRequest.current;
+    setDraft(null);
     setOpeningEditor(true);
     void getPersonnelOrderTemplateDraft(item.type_code)
       .then((existing) => existing ?? createPersonnelOrderTemplateDraft(item.type_code))
-      .then(setDraft)
-      .finally(() => setOpeningEditor(false));
-  };
+      .then((next) => { if (request === openRequest.current) setDraft(next); })
+      .finally(() => { if (request === openRequest.current) setOpeningEditor(false); });
+  }, [item.type_code]);
+  useEffect(() => {
+    if (autoOpen && item.editor_available) openEditor();
+  }, [autoOpen, item.editor_available, openEditor]);
+  useEffect(() => () => { openRequest.current += 1; }, []);
   return (
     <aside data-testid="personnel-order-template-detail" className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
       <h3 className="text-lg font-semibold">{item.title_ru}</h3>
       <p className="mt-1">{item.title_kk}</p>
       <p className="mt-2 text-sm">{item.type_code} · {item.support_level}</p>
       <p className="mt-1 text-sm">{item.uses_specialized_generator ? "Специализированный генератор" : "Общий fallback"}</p>
-      {detail ? <FormalizedTemplateDetail detail={detail} /> : <>
+      {detail ? <FormalizedTemplateDetail detail={detail} showCatalogPreview={!item.editor_available} /> : <>
         <p className="mt-3">Обязательные поля: {item.required_fields.join(", ") || "не формализованы"}</p>
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">{item.notes}</p>
       </>}
-      {item.editor_available && !draft ? <div className="mt-4"><button className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-500 dark:text-zinc-950 dark:hover:bg-blue-400" type="button" onClick={openEditor} disabled={openingEditor}>{openingEditor ? "Открытие…" : "Редактировать шаблон"}</button></div> : null}
-      {draft ? <DraftEditor draft={draft} onSaved={setDraft} variables={(detail?.variables ?? []).map((variable) => variable.code)} /> : null}
+      {item.editor_available && !draft ? <div className="mt-4"><button className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-500 dark:text-zinc-950 dark:hover:bg-blue-400" type="button" onClick={openEditor} disabled={openingEditor}>{openingEditor ? "Открытие…" : "Редактировать шаблон"}</button>{openingEditor ? <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400" data-testid="template-editor-opening">Открытие редактора…</p> : null}</div> : null}
+      {draft ? <DraftEditor draft={draft} onSaved={setDraft} variables={(detail?.variables ?? []).map((variable) => variable.code)} warning={item.support_level === "PARTIAL" ? "Шаблон требует дальнейшей предметной формализации; неподтверждённые реквизиты не добавлены." : undefined} /> : null}
     </aside>
   );
 }
@@ -312,8 +333,14 @@ export default function TemplatesPageClient() {
   const [items, setItems] = useState<PersonnelOrderTemplateCatalogItem[]>([]);
   const [query, setQuery] = useState("");
   const [level, setLevel] = useState("ALL");
+  const [switchingType, setSwitchingType] = useState<string | null>(null);
   const selectedType = searchParams.get("type") || "";
-  const selectedItem = items.find((item) => item.type_code === selectedType);
+  const displayedType = switchingType ?? selectedType;
+  const selectedItem = items.find((item) => item.type_code === displayedType);
+
+  useEffect(() => {
+    if (switchingType && selectedType === switchingType) setSwitchingType(null);
+  }, [selectedType, switchingType]);
 
   useEffect(() => {
     if (activeSection !== TEMPLATE_SECTIONS.personnelOrders) return;
@@ -331,6 +358,8 @@ export default function TemplatesPageClient() {
   }
 
   function selectType(type: string) {
+    if (type === displayedType) return;
+    setSwitchingType(type);
     const params = new URLSearchParams(searchParams.toString());
     params.set("section", TEMPLATE_SECTIONS.personnelOrders);
     params.set("type", type);
@@ -354,7 +383,7 @@ export default function TemplatesPageClient() {
           <GeneralPersonnelOrderRequirements />
           <div className="flex gap-2"><input aria-label="Поиск шаблонов кадровых приказов" value={query} onChange={(e) => setQuery(e.target.value)} className="rounded border px-2 py-1" /><select aria-label="Уровень поддержки" value={level} onChange={(e) => setLevel(e.target.value)} className="rounded border px-2 py-1"><option value="ALL">Все уровни</option><option value="SUPPORTED">SUPPORTED</option><option value="PARTIAL">PARTIAL</option><option value="NOT_IMPLEMENTED">NOT_IMPLEMENTED</option></select></div>
           <div className="grid gap-2 md:grid-cols-2" data-testid="personnel-order-template-list">{visibleItems.map((item) => <button type="button" key={item.type_code} onClick={() => selectType(item.type_code)} className="rounded border p-3 text-left" data-testid={`personnel-order-template-${item.type_code}`}><div className="font-medium">{item.title_ru}</div><div>{item.title_kk}</div><div className="font-mono text-xs">{item.type_code}</div><div>{item.support_level} · {item.supported_locales.join(", ")} · Встроенный шаблон {item.is_pilot ? "· Пилот" : ""}</div></button>)}</div>
-          {selectedItem ? <TemplateDetail item={selectedItem} /> : null}
+          {selectedItem ? <TemplateDetail key={selectedItem.type_code} item={selectedItem} autoOpen={switchingType === selectedItem.type_code} /> : null}
         </section>
       )}
     </div>
