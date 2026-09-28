@@ -201,6 +201,32 @@ def test_missing_employee_uses_dash() -> None:
     assert "Уволить" in ru["generated_text"]
 
 
+def test_termination_body_uses_position_org_reason_and_optional_settlement_in_both_locales() -> None:
+    context = {
+        "item_type_code": "TERMINATION",
+        "employee_name": "Иванов И.И.",
+        "org_unit_name": {"ru": "Отдел кадров", "kk": "Кадрлар бөлімі"},
+        "position_name": {"ru": "Специалист", "kk": "Маман"},
+        "effective_date": "2026-07-07",
+        "termination_reason": "по соглашению сторон",
+        "termination_unused_leave_days": 12,
+    }
+
+    ru = generate_item_body("ru", context)["generated_text"]
+    kk = generate_item_body("kk", context)["generated_text"]
+
+    assert all(value in ru for value in ("Специалист", "Отдел кадров", "Причина увольнения", "12"))
+    assert all(value in kk for value in ("Маман", "Кадрлар бөлімі", "еңбек шарты", "бұзылсын", "12"))
+    assert "Основание:" not in ru and "Негіздеме:" not in kk
+    assert "29" not in f"{ru} {kk}"
+
+    mapped = build_item_ctx(
+        {"item_type_code": "TERMINATION", "payload": {"termination_unused_leave_days": 12}},
+        "Иванов И.И.",
+    )
+    assert mapped["termination_unused_leave_days"] == 12
+
+
 def test_position_dictionary_translates_only_approved_pair_and_preserves_saved_kk() -> None:
     base = {
         "item_type_code": "HIRE",

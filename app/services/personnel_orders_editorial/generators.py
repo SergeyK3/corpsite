@@ -518,12 +518,17 @@ def generate_item_body(locale: str, item_ctx: Mapping[str, Any]) -> Dict[str, st
             )
     elif item_type == ORDER_TYPE_TERMINATION:
         reason = _clean(termination_reason) or None
+        org = _localized_name(org_unit_name, lang)
+        position = _localized_position(position_name, lang)
+        unused_leave_days = _clean(item_ctx.get("termination_unused_leave_days"))
         if lang == "kk":
-            reason_part = f" Негіздеме: {reason}." if reason else ""
-            text = f"{fio} {date} бастап жұмыстан босатылсын.{reason_part}"
+            reason_part = f" Себебі: {reason}." if reason else ""
+            settlement = f" Бухгалтерлік есеп бөлімі пайдаланылмаған еңбек демалысының {unused_leave_days} күнтізбелік күніне есеп айырысу жүргізсін." if unused_leave_days else ""
+            text = f"{org} бөлімшесінің {position} қызметкері {fio} еңбек шарты {date} бастап бұзылсын.{reason_part}{settlement}"
         else:
-            reason_part = f" Основание: {reason}." if reason else ""
-            text = f"Уволить {fio} с {date}.{reason_part}"
+            reason_part = f" Причина увольнения: {reason}." if reason else ""
+            settlement = f" Бухгалтерии произвести расчёт за {unused_leave_days} календарных дней неиспользованного трудового отпуска." if unused_leave_days else ""
+            text = f"Уволить {fio}, {position} подразделения «{org}», {date}.{reason_part}{settlement}"
     elif item_type == ORDER_TYPE_CONCURRENT_DUTY_START:
         concurrent_value = _format_rate_value(concurrent_rate)
         total = (

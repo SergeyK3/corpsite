@@ -84,6 +84,9 @@ def build_item_ctx(item: Mapping[str, Any], employee_name: Optional[str]) -> Dic
         "termination_reason": pick_payload_value(
             payload, "termination_reason", "terminationReason", "reason"
         ),
+        "termination_unused_leave_days": pick_payload_value(
+            payload, "termination_unused_leave_days"
+        ),
         # Leave data is kept in the item payload. It is deliberately passed
         # through as one structured source for both editorial locales.
         "leave_start": pick_payload_value(payload, "leave_start"),
