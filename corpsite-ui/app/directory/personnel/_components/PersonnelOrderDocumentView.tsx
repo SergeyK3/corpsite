@@ -131,7 +131,9 @@ export default function PersonnelOrderDocumentView({
         <div className="grid gap-3 sm:grid-cols-[1fr_auto_auto]">
           <div className="font-medium">
             {printModel.signatory.position?.[language]
-              || (detail.order.signed_by_position ? signatoryPosition(detail.order.signed_by_position, language) : "Директор")}
+              || (detail.order.signed_by_position
+                ? signatoryPosition(detail.order.signed_by_position, language)
+                : personnelOrderSignatoryRoleLabel("DIRECTOR", language))}
           </div>
           <div className="border-b border-zinc-500 px-12" aria-label="Подпись директора" />
           <div>{printModel.signatory.fio || detail.order.signed_by_name || ""}</div>

@@ -320,12 +320,14 @@ export function renderPersonnelOrderDocument(
   };
   const automaticPoints = items.map((item) => oneItemDocument(item).points[0]);
   if (templateKey === "personnel.termination.employee-initiative-unused-leave") {
-    automaticPoints.push({
-      text: language === "kk"
-        ? "Бухгалтерлік есеп бөлімі жұмыстан босатылатын қызметкерлердің пайдаланылмаған еңбек демалысы күндері үшін есеп айырысу жүргізсін."
-        : "Бухгалтерии произвести расчёт за неиспользованные дни отпуска увольняемых работников.",
-      basis: [],
-    });
+    for (const item of items) {
+      const unusedLeaveDays = scalarText(payload(item).termination_unused_leave_days);
+      if (!unusedLeaveDays) continue;
+      automaticPoints.push({
+        text: terminationLeaveInstruction(unusedLeaveDays, language),
+        basis: [],
+      });
+    }
   }
   const points = automaticPoints.map((point, index) => {
     const item = items[index];
@@ -535,14 +537,19 @@ function permanentTransferWithConcurrentDutyForLanguage(detail: PersonnelOrderDe
   };
 }
 
+function terminationLeaveInstruction(
+  unusedLeaveDays: string,
+  language: PersonnelOrderDocumentLanguage,
+): string {
+  return language === "kk"
+    ? `Бухгалтерлік есеп бөлімі пайдаланылмаған еңбек демалысының ${unusedLeaveDays} күнтізбелік күніне есеп айырысу жүргізсін.`
+    : `Бухгалтерии произвести расчёт за ${unusedLeaveDays} календарных дней неиспользованного отпуска.`;
+}
+
 function terminationByEmployeeInitiativeForLanguage(detail: PersonnelOrderDetailResponse, language: PersonnelOrderDocumentLanguage): RenderedOrderDocument {
   const termination = detail.items.find((item) => String(item.item_type_code).toUpperCase() === "TERMINATION")!;
   const name = employeeName(termination);
   const date = effectiveDate(termination.effective_date, language);
-  const unusedLeaveDays = scalarText(payload(termination).unused_leave_days);
-  const russianLeaveInstruction = unusedLeaveDays
-    ? `Бухгалтерии произвести расчёт за ${unusedLeaveDays} календарных дней неиспользованного отпуска.`
-    : "Бухгалтерии произвести расчёт за неиспользованные дни отпуска.";
   return {
     templateKey: "personnel.termination.employee-initiative-unused-leave",
     templateVersion: 1,
@@ -552,9 +559,6 @@ function terminationByEmployeeInitiativeForLanguage(detail: PersonnelOrderDetail
     points: [{
       text: language === "kk" ? `${name} еңбек шарты ${date} бастап бұзылсын.` : `Расторгнуть трудовой договор с работником ${name} с ${date}.`,
       basis: renderBasis(detail, termination, language),
-    }, {
-      text: language === "kk" ? `Бухгалтерлік есеп бөлімі пайдаланылмаған еңбек демалысының ${unusedLeaveDays || "—"} күнтізбелік күніне есеп айырысу жүргізсін.` : russianLeaveInstruction,
-      basis: [],
     }],
     additionalInstructions: [],
   };

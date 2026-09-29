@@ -4,6 +4,7 @@ No React, HTML, or PDF — plain bilingual templates ported from the print spike
 """
 from __future__ import annotations
 
+from datetime import date
 from typing import Any, Dict, Mapping
 
 from app.db.models.personnel_orders import (
@@ -39,6 +40,7 @@ from app.services.personnel_orders_editorial.constants import (
 )
 from app.services.personnel_orders_editorial.fingerprint import compute_fingerprint
 from app.services.personnel_orders_editorial.position_dictionary import localized_personnel_order_position
+from app.services.personnel_order_termination_reason import termination_reason_text
 
 DOCUMENT_TITLES: Dict[str, Dict[str, str]] = {
     ORDER_TYPE_HIRE: {
@@ -131,6 +133,17 @@ def _locale(locale: str) -> str:
     if normalized not in {"kk", "ru"}:
         raise ValueError(f"Unsupported locale: {locale}")
     return normalized
+
+
+def format_personnel_order_date_numeric(value: Any) -> str:
+    """Common numeric date formatter for bilingual personnel-order templates."""
+    raw = _clean(value)
+    if not raw:
+        return ""
+    try:
+        return date.fromisoformat(raw[:10]).strftime("%d.%m.%Y")
+    except ValueError:
+        return raw
 
 
 def _format_date(value: Any, locale: str) -> str:
@@ -517,7 +530,7 @@ def generate_item_body(locale: str, item_ctx: Mapping[str, Any]) -> Dict[str, st
                 f"«{position}»{rate_part} с {date}."
             )
     elif item_type == ORDER_TYPE_TERMINATION:
-        reason = _clean(termination_reason) or None
+        reason = _clean(termination_reason_text(termination_reason, lang)) or None
         org = _localized_name(org_unit_name, lang)
         position = _localized_position(position_name, lang)
         unused_leave_days = _clean(item_ctx.get("termination_unused_leave_days"))

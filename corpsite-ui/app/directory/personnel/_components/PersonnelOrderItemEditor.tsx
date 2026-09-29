@@ -44,6 +44,7 @@ import {
   orderTypeLabelForItemHint,
   resolveDefaultItemFormTypeForOrder,
   resolveBackendItemTypeCode,
+  requiresEmployeeForFormType,
   type ItemFormSection,
   type PersonnelOrderItemFormType,
   usesActiveEmployeeSearch,
@@ -101,6 +102,31 @@ function sourceEmployeeName(item: PersonnelOrderItem): string {
     }
   }
   return "Не указан";
+}
+
+function persistedEffectiveDate(item: PersonnelOrderItem): string {
+  const payloadDate = item.payload?.effective_date;
+  const value = item.effective_date ?? (typeof payloadDate === "string" ? payloadDate : null);
+  // A date input only accepts YYYY-MM-DD. Do not fall back to the order date:
+  // the item date is a separate personnel record and may genuinely be absent.
+  return typeof value === "string" ? value.slice(0, 10) : "";
+}
+
+function hasPersonalApplicationBasis(
+  payload: Record<string, unknown>,
+  basisDocuments: Array<{ basis_id?: unknown; document_type?: unknown; description?: unknown }>,
+): boolean {
+  const basis = payload.basis;
+  if (basis && typeof basis === "object" && String((basis as Record<string, unknown>).kind || "").toUpperCase() === "PERSONAL_APPLICATION") return true;
+  if (String(payload.basis_type || "").toUpperCase() === "PERSONAL_APPLICATION") return true;
+  const linkedIds = Array.isArray(payload.basis_ids) ? payload.basis_ids.map(String) : [];
+  const entryTypes = Array.isArray(payload.basis_entries)
+    ? payload.basis_entries.map((entry) => String((entry as Record<string, unknown>)?.document_type || ""))
+    : [];
+  return [...entryTypes, ...basisDocuments
+    .filter((document) => linkedIds.includes(String(document.basis_id || "")))
+    .map((document) => String(document.document_type || ""))]
+    .some((type) => ["PERSONAL_APPLICATION", "EMPLOYEE_APPLICATION"].includes(type.toUpperCase()));
 }
 
 function assignmentSummary(value: unknown): string | null {
@@ -244,6 +270,10 @@ export default function PersonnelOrderItemEditor({
   const [itemTypeCode, setItemTypeCode] = React.useState<PersonnelOrderItemFormType>(defaultItemType);
   const [employeeId, setEmployeeId] = React.useState("");
   const [employeeQuery, setEmployeeQuery] = React.useState("");
+  // An existing historical item can reference an employee who is no longer
+  // returned by the active-only employee search.
+  const [selectedEmployeeId, setSelectedEmployeeId] = React.useState<number | null>(null);
+  const [changingEmployee, setChangingEmployee] = React.useState(false);
   const [pendingNewEmployee, setPendingNewEmployee] = React.useState(false);
   const [employeeOptions, setEmployeeOptions] = React.useState<EmployeeSearchOption[]>([]);
   const [currentPlacement, setCurrentPlacement] = React.useState<CurrentPlacementView | null>(null);
@@ -252,6 +282,8 @@ export default function PersonnelOrderItemEditor({
   const [leavePreviewLocale, setLeavePreviewLocale] = React.useState<"ru" | "kk">("ru");
   const [effectiveDate, setEffectiveDate] = React.useState("");
   const [payloadDraft, setPayloadDraft] = React.useState<ItemPayloadDraft>(emptyItemPayloadDraft());
+  const [terminationReasonSuggested, setTerminationReasonSuggested] = React.useState(false);
+  const [editingBasis, setEditingBasis] = React.useState(false);
   const [targetOrgGroupId, setTargetOrgGroupId] = React.useState<number | null>(null);
   const [hireOrgGroupId, setHireOrgGroupId] = React.useState<number | null>(null);
   const [saving, setSaving] = React.useState(false);
@@ -330,7 +362,8 @@ export default function PersonnelOrderItemEditor({
   const pendingNewEmployeeAllowed =
     allowsPendingNewEmployee(itemTypeCode) && !savedEmployeeIdBlocksPendingReset;
   const showEmployeePicker =
-    formConfig?.employeePicker && !(pendingNewEmployee && pendingNewEmployeeAllowed);
+    formConfig?.employeePicker && !(pendingNewEmployee && pendingNewEmployeeAllowed)
+    && (!savedEmployeeIdBlocksPendingReset || changingEmployee);
 
   React.useEffect(() => {
     if (editingItemId != null) return;
@@ -407,10 +440,14 @@ export default function PersonnelOrderItemEditor({
     setItemTypeCode(typeCode);
     setEmployeeId("");
     setEmployeeQuery("");
+    setSelectedEmployeeId(null);
+    setChangingEmployee(false);
     setPendingNewEmployee(false);
     setCurrentPlacement(null);
     setEffectiveDate("");
     setPayloadDraft(emptyItemPayloadDraft());
+    setTerminationReasonSuggested(false);
+    setEditingBasis(false);
     setTargetOrgGroupId(null);
     setHireOrgGroupId(null);
     setError(null);
@@ -420,6 +457,7 @@ export default function PersonnelOrderItemEditor({
     setPendingNewEmployee(false);
     setEmployeeId(String(option.employee_id));
     setEmployeeQuery(option.full_name);
+    setSelectedEmployeeId(option.employee_id);
     setEmployeeOptions([]);
 
     const config = getItemFormRegistry(itemTypeCode);
@@ -464,6 +502,10 @@ export default function PersonnelOrderItemEditor({
         draft.basis_entries.push({ document_type: "OTHER", basis_id: "", other_text: draft.basis_other_text });
       }
     }
+    const suggestedReason = normalizedUiType === "TERMINATION"
+      && !String(draft.termination_reason || "").trim()
+      && hasPersonalApplicationBasis(item.payload || {}, basisDocuments);
+    if (suggestedReason) draft.termination_reason = "EMPLOYEE_INITIATIVE";
     const savedEmployeeId =
       item.employee_id != null && Number(item.employee_id) > 0 ? Number(item.employee_id) : null;
     setEditingItemId(item.item_id);
@@ -471,11 +513,15 @@ export default function PersonnelOrderItemEditor({
     setItemTypeCode(normalizedUiType);
     setEmployeeId(item.employee_id ? String(item.employee_id) : "");
     setEmployeeQuery(item.employee_name || "");
+    setSelectedEmployeeId(savedEmployeeId);
+    setChangingEmployee(false);
     setPendingNewEmployee(
       savedEmployeeId == null && allowsPendingNewEmployee(normalizedUiType),
     );
-    setEffectiveDate(item.effective_date || "");
+    setEffectiveDate(persistedEffectiveDate(item));
     setPayloadDraft(draft);
+    setTerminationReasonSuggested(suggestedReason);
+    setEditingBasis(false);
     setError(null);
     setCurrentPlacement(null);
 
@@ -506,6 +552,9 @@ export default function PersonnelOrderItemEditor({
   function handleItemTypeChange(nextType: PersonnelOrderItemFormType) {
     setItemTypeCode(nextType);
     setPayloadDraft(emptyItemPayloadDraft());
+    setSelectedEmployeeId(null);
+    setTerminationReasonSuggested(false);
+    setEditingBasis(false);
     setTargetOrgGroupId(null);
     setHireOrgGroupId(null);
     setPendingNewEmployee(
@@ -532,6 +581,7 @@ export default function PersonnelOrderItemEditor({
 
   function updatePayloadField<K extends keyof ItemPayloadDraft>(key: K, value: string) {
     setPayloadDraft((prev) => ({ ...prev, [key]: value }));
+    if (key === "termination_reason") setTerminationReasonSuggested(false);
   }
 
   function handleTargetOrgGroupChange(nextGroupId: number | null) {
@@ -557,12 +607,29 @@ export default function PersonnelOrderItemEditor({
     if (disabled) return;
     setError(null);
 
-    const employeeRequiredMessage = requireEmployeeIdForItemType(itemTypeCode, employeeId, {
-      pendingNewEmployee: pendingNewEmployee && pendingNewEmployeeAllowed,
-      personId: payloadDraft.person_id,
-    });
+    const employeeNumeric = Number(employeeId);
+    const savedEmployeeIsUnchanged =
+      editingItemId != null &&
+      editingItemSavedEmployeeId != null &&
+      Number.isFinite(employeeNumeric) &&
+      employeeNumeric === editingItemSavedEmployeeId;
+    const employeeRequiredMessage = savedEmployeeIsUnchanged
+      ? null
+      : requireEmployeeIdForItemType(itemTypeCode, employeeId, {
+          pendingNewEmployee: pendingNewEmployee && pendingNewEmployeeAllowed,
+          personId: payloadDraft.person_id,
+        });
     if (employeeRequiredMessage) {
       setError(employeeRequiredMessage);
+      return;
+    }
+    if (
+      !savedEmployeeIsUnchanged &&
+      requiresEmployeeForFormType(itemTypeCode) &&
+      !pendingNewEmployee &&
+      selectedEmployeeId !== employeeNumeric
+    ) {
+      setError("Выберите действующего сотрудника из результатов поиска.");
       return;
     }
 
@@ -577,7 +644,6 @@ export default function PersonnelOrderItemEditor({
         setSaving(false);
         return;
       }
-      const employeeNumeric = Number(employeeId);
       let resolvedEmployeeId =
         Number.isFinite(employeeNumeric) && employeeNumeric > 0 ? employeeNumeric : null;
       if (savedEmployeeIdBlocksPendingReset && resolvedEmployeeId == null) {
@@ -585,14 +651,9 @@ export default function PersonnelOrderItemEditor({
       }
       const savedItem = editingItemId == null ? null : items.find((item) => item.item_id === editingItemId);
       const savedPayload = savedItem?.payload || {};
-      // Structured source attributes are not form controls. Keep them when an
-      // imported draft is edited, including its source employee identity.
-      const preservedSourcePayload = Object.fromEntries(
-        ["action_id", "employee", "assignment", "from_assignment", "to_assignment", "legal_basis"]
-          .filter((key) => savedPayload[key] !== undefined)
-          .map((key) => [key, savedPayload[key]]),
-      );
-      const payload = { ...preservedSourcePayload, ...buildItemPayload(backendType, payloadDraft) };
+      // Updating a form field must not erase imported context, placement,
+      // basis ids, or other payload attributes not represented by inputs.
+      const payload = { ...savedPayload, ...buildItemPayload(backendType, payloadDraft) };
       if (isLeave && currentPlacement) {
         payload.org_unit_name = currentPlacement.org_unit_name || null;
         payload.position_name = currentPlacement.position_name || null;
@@ -782,6 +843,13 @@ export default function PersonnelOrderItemEditor({
           </div>
         ) : null}
 
+        {savedEmployeeIdBlocksPendingReset && !changingEmployee ? (
+          <div className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 px-3 py-2 dark:border-zinc-800" data-testid="personnel-order-linked-employee-card">
+            <div className="min-w-0"><div className="truncate text-sm font-medium">{employeeQuery || "Сотрудник"}</div><div className="text-xs text-zinc-500">ID: {editingItemSavedEmployeeId}</div></div>
+            <button type="button" className="shrink-0 text-sm font-medium text-blue-700 hover:underline dark:text-blue-300" onClick={() => { setChangingEmployee(true); setSelectedEmployeeId(null); setEmployeeOptions([]); }}>Сменить сотрудника</button>
+          </div>
+        ) : null}
+
         {showEmployeePicker ? (
           <FormField
             label="Сотрудник"
@@ -794,7 +862,7 @@ export default function PersonnelOrderItemEditor({
             <div className="flex flex-wrap gap-2">
               <input
                 value={employeeQuery}
-                onChange={(e) => setEmployeeQuery(e.target.value)}
+                onChange={(e) => { setEmployeeQuery(e.target.value); setSelectedEmployeeId(null); }}
                 placeholder="Поиск по ФИО…"
                 autoComplete="off"
                 data-testid="personnel-order-employee-search-input"
@@ -802,7 +870,7 @@ export default function PersonnelOrderItemEditor({
               />
               <input
                 value={employeeId}
-                onChange={(e) => setEmployeeId(e.target.value)}
+                onChange={(e) => { setEmployeeId(e.target.value); setSelectedEmployeeId(null); }}
                 placeholder="ID"
                 aria-label="Идентификатор сотрудника"
                 data-testid="personnel-order-employee-id-input"
@@ -958,12 +1026,16 @@ export default function PersonnelOrderItemEditor({
 
         {formConfig?.showTerminationReason ? (
           <FormField label="Причина увольнения" className="sm:col-span-2">
-            <input
-              data-testid="personnel-order-termination-reason-input"
-              value={payloadDraft.termination_reason || ""}
-              onChange={(e) => updatePayloadField("termination_reason", e.target.value)}
-              className={FIELD_INPUT_CLASS}
-            />
+              <select
+                data-testid="personnel-order-termination-reason-input"
+                value={payloadDraft.termination_reason || ""}
+                onChange={(e) => updatePayloadField("termination_reason", e.target.value)}
+                className={FIELD_INPUT_CLASS}
+              >
+                <option value="">Выберите причину</option>
+                <option value="EMPLOYEE_INITIATIVE">по инициативе работника / жұмыскердің бастамасы бойынша</option>
+              </select>
+              {terminationReasonSuggested ? <p className={FIELD_HINT_CLASS} data-testid="personnel-order-termination-reason-suggestion">Определено по основанию: личное заявление работника</p> : null}
           </FormField>
         ) : null}
 
@@ -1019,6 +1091,17 @@ export default function PersonnelOrderItemEditor({
         basis_entries: (previous.basis_entries || []).map((entry, entryIndex) => entryIndex === index ? { ...entry, ...next } : entry),
       }));
     };
+    if (editingItemId != null && entries.length > 0 && !editingBasis) {
+      return <div className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800" data-testid="personnel-order-basis-compact">
+        <div className="flex items-center justify-between gap-3"><div className="text-sm font-medium">Основание</div><button type="button" className="text-sm font-medium text-blue-700 hover:underline dark:text-blue-300" onClick={() => setEditingBasis(true)}>Изменить основание</button></div>
+        <div className="mt-2 space-y-2 text-sm">{entries.map((entry, index) => {
+          const linked = basisDocuments.find((document) => String(document.basis_id || "") === entry.basis_id);
+          const description = linked?.description && typeof linked.description === "object" ? linked.description as Record<string, unknown> : {};
+          const linkedLabel = typeof description.ru === "string" ? description.ru : typeof description.kk === "string" ? description.kk : entry.basis_id;
+          return <div key={index} className="rounded bg-zinc-50 px-2 py-1.5 dark:bg-zinc-900/50"><span className="font-medium">{basisTypeLabel(entry.document_type)}</span>{linkedLabel ? <span className="text-zinc-600 dark:text-zinc-300"> · {linkedLabel}</span> : null}{entry.other_text ? <span className="text-zinc-600 dark:text-zinc-300"> · {entry.other_text}</span> : null}</div>;
+        })}</div>
+      </div>;
+    }
     return (
       <div className="space-y-3 rounded-lg border border-zinc-200 p-3 dark:border-zinc-800" data-testid="personnel-order-basis-selector">
         <div className="text-sm font-medium">Основания</div>
@@ -1166,7 +1249,6 @@ export default function PersonnelOrderItemEditor({
 
           <div className="space-y-4">
             {sectionOrder.map((section) => renderFormSection(section))}
-            {renderBasisDocumentSection()}
           </div>
 
           {error ? (

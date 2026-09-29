@@ -45,6 +45,23 @@ describe("PersonnelOrderDocumentRequisitesPreview", () => {
     expect(screen.getByTestId("personnel-order-requisites-signatory-missing")).toBeInTheDocument();
   });
 
+  it("localizes the persisted DIRECTOR role for the Kazakh requisites preview", () => {
+    render(
+      <PersonnelOrderDocumentRequisitesPreview
+        order={{
+          order_date: "2026-07-18",
+          signed_by_name: "М. Тулеутаев",
+          signed_by_position: "DIRECTOR",
+        }}
+        locale="kk"
+      />,
+    );
+
+    const position = screen.getByTestId("personnel-order-requisites-signatory-position");
+    expect(position).toHaveTextContent("Директоры");
+    expect(position).not.toHaveTextContent("DIRECTOR");
+  });
+
   it("shows empty hint when both requisites are missing", () => {
     render(
       <PersonnelOrderDocumentRequisitesPreview

@@ -5,6 +5,10 @@
 
 import type { PersonnelOrderEditorialUiLocale } from "./personnelOrderEditorialUi";
 import { formatPersonnelOrderPrintDate } from "./personnelOrderPrintFormat";
+import {
+  normalizePersonnelOrderSignatoryRole,
+  personnelOrderSignatoryRoleLabel,
+} from "./personnelOrderSignatoryRole";
 import type { PersonnelOrderHeader } from "./personnelOrdersApi.client";
 
 export type PersonnelOrderRequisitesSnapshot = Pick<
@@ -32,9 +36,12 @@ function optionalTrim(value: string | null | undefined): string | null {
 /** Resolve signatory from frozen order header snapshots (not live employee directory). */
 export function resolvePersonnelOrderSignatoryDisplay(
   order: Pick<PersonnelOrderHeader, "signed_by_name" | "signed_by_position">,
+  locale: PersonnelOrderEditorialUiLocale = "ru",
 ): PersonnelOrderSignatoryDisplay {
+  const savedPosition = optionalTrim(order.signed_by_position);
+  const role = normalizePersonnelOrderSignatoryRole(savedPosition);
   return {
-    position: optionalTrim(order.signed_by_position),
+    position: role ? personnelOrderSignatoryRoleLabel(role, locale) : savedPosition,
     fio: optionalTrim(order.signed_by_name),
   };
 }
@@ -62,7 +69,7 @@ export function buildPersonnelOrderDocumentRequisitesDisplay(
   locale: PersonnelOrderEditorialUiLocale,
 ): PersonnelOrderDocumentRequisitesDisplay {
   const orderDate = optionalTrim(order.order_date);
-  const signatory = resolvePersonnelOrderSignatoryDisplay(order);
+  const signatory = resolvePersonnelOrderSignatoryDisplay(order, locale);
   const formattedDate = orderDate ? formatPersonnelOrderPrintDate(orderDate, locale) : null;
   return { orderDate, formattedDate, signatory };
 }

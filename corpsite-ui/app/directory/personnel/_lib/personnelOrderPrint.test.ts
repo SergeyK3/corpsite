@@ -254,15 +254,15 @@ describe("buildPersonnelOrderPrintViewModel", () => {
     expect(model.title.kk).toBe("Бала күтіміне байланысты демалыстан жұмысқа шығу туралы");
     expect(resolveLocalizedLines(model.preamble || {}, "ru")).toEqual([
       "В соответствии с Трудовым кодексом Республики Казахстан",
-      "ПРИКАЗЫВАЮ:",
     ]);
     expect(resolveLocalizedLines(model.preamble || {}, "kk")).toEqual([
       "Қазақстан Республикасының Еңбек кодексіне сәйкес",
-      "БҰЙЫРАМЫН:",
     ]);
     const html = buildPersonnelOrderPrintDocumentHtml(model, "ru");
+    expect(html.match(/personnel-order-print-order-verb/g) ?? []).toHaveLength(1);
+    expect(html).toContain("ПРИКАЗЫВАЮ:");
     expect(html).toContain("Разрешить сотруднику");
-    expect(html).toContain("Стаж работы ещё не определён.");
+    expect(html).not.toContain("Стаж работы ещё не определён.");
     expect(html).not.toContain("RETURN_FROM_CHILDCARE_LEAVE");
   });
 
@@ -272,6 +272,14 @@ describe("buildPersonnelOrderPrintViewModel", () => {
       { signatoryPosition: "Директор" },
     );
     expect(model.signatory.position?.ru).toBe("Директор");
+  });
+
+  it("localizes the DIRECTOR system role from a directory fallback in both print languages", () => {
+    const model = buildPersonnelOrderPrintViewModel(
+      sampleDetail({ signed_by_position: null }),
+      { signatoryPosition: "DIRECTOR" },
+    );
+    expect(model.signatory.position).toEqual({ kk: "Директоры", ru: "Директор" });
   });
 
   it("prefers editorial effective title/body/basis over legacy and templates", () => {
@@ -504,7 +512,7 @@ describe("buildPersonnelOrderPrintViewModel", () => {
     expect(html).toContain("10 июля 2026 года");
   });
 
-  it("detects embedded order verb in editorial preamble to avoid duplication", () => {
+  it("keeps one standalone directive when a legacy editorial preamble embeds it", () => {
     const preamble = {
       ru: "В соответствии с Трудовым кодексом Республики Казахстан ПРИКАЗЫВАЮ:",
       kk: null,
@@ -536,7 +544,8 @@ describe("buildPersonnelOrderPrintViewModel", () => {
     });
     const html = buildPersonnelOrderPrintDocumentHtml(model, "ru");
     const verbMatches = html.match(/personnel-order-print-order-verb/g) ?? [];
-    expect(verbMatches).toHaveLength(0);
+    expect(verbMatches).toHaveLength(1);
+    expect(html).toContain("ПРИКАЗЫВАЮ:");
   });
 
   it("preserves item numbering for many active items", () => {
@@ -614,7 +623,7 @@ describe("personnelOrderPrint item text", () => {
       },
       "ru",
     )[0];
-    expect(text).toContain("Бухгалтерии произвести расчёт за неиспользованные дни отпуска.");
+    expect(text).not.toContain("Бухгалтерии произвести расчёт");
     expect(text).not.toContain("календарных дней");
     expect(text).not.toContain("— календарных");
   });

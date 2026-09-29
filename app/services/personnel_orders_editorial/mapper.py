@@ -110,6 +110,7 @@ def serialize_block(
 ) -> Dict[str, Any]:
     override = row.get("override_text")
     generated = row.get("generated_text")
+    suppressed = row.get("block_type") == "closing" and override == ""
     out: Dict[str, Any] = {
         "block_id": int(row["block_id"]),
         "scope": scope,
@@ -118,7 +119,8 @@ def serialize_block(
         "block_type": row["block_type"],
         "generated_text": generated,
         "override_text": override,
-        "effective_text": effective_text(override, generated),
+        "effective_text": "" if suppressed else effective_text(override, generated),
+        "suppressed": suppressed,
         "generator_key": row.get("generator_key"),
         "generator_version": row.get("generator_version"),
         "source_fingerprint": row.get("source_fingerprint"),

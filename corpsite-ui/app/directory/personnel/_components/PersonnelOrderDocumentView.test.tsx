@@ -209,12 +209,15 @@ describe("PersonnelOrderDocumentView", () => {
     expect(renderPersonnelOrderDocument(order, "kk")?.points[0].text).toContain("мейіргер");
     expect(renderPersonnelOrderDocument(order, "kk")?.points[0].text).not.toContain("Медсестра");
     expect(renderPersonnelOrderDocument(order, "ru")?.title).toBe("О переводе");
+    order.order.signed_by_position = "DIRECTOR";
     render(<PersonnelOrderDocumentView detail={order} language="ru" />);
     const document = screen.getByTestId("personnel-order-document");
     expect(document).toHaveTextContent("Директор");
+    expect(document).not.toHaveTextContent("DIRECTOR");
     expect(document).not.toHaveTextContent("Подписант");
     render(<PersonnelOrderDocumentView detail={order} language="kk" />);
     expect(screen.getAllByTestId("personnel-order-document")[1]).toHaveTextContent("Директоры");
+    expect(screen.getAllByTestId("personnel-order-document")[1]).not.toHaveTextContent("DIRECTOR");
     order.order.signed_by_position = "ACTING_DIRECTOR";
     render(<PersonnelOrderDocumentView detail={order} language="kk" />);
     render(<PersonnelOrderDocumentView detail={order} language="ru" />);
@@ -229,7 +232,7 @@ describe("PersonnelOrderDocumentView", () => {
       payload: {
         employee: { name: { canonical: "Айжан Солтан" } },
         legal_basis: "Қазақстан Республикасы Еңбек Кодексінің 49-бабының 5-тармағы және 56-бабының 2-тармағы",
-        unused_leave_days: 6, basis_ids: ["application"],
+        termination_unused_leave_days: 6, basis_ids: ["application"],
       },
     }], application);
 
@@ -237,20 +240,19 @@ describe("PersonnelOrderDocumentView", () => {
     const document = screen.getByTestId("personnel-order-document");
     expect(document).toHaveTextContent("49-бабының 5-тармағына");
     expect(document.querySelectorAll("ol > li")).toHaveLength(2);
-    expect(document).toHaveTextContent("6 күнтізбелік күніне есеп айырысу жүргізсін");
+    expect(document).toHaveTextContent("пайдаланылмаған еңбек демалысының 6 күнтізбелік күніне есеп айырысу жүргізсін");
     expect(document).not.toHaveTextContent("Қосымша өкімдер");
     expect(document).toHaveTextContent("Негіз: Қызметкердің жеке өтініші.");
   });
 
-  it("uses the universal Russian leave instruction when days are not confirmed", () => {
+  it("omits the leave compensation instruction when days are not confirmed", () => {
     const order = detail([{
       item_id: 1, order_id: 4826, item_number: 1, item_type_code: "TERMINATION", item_status: "ACTIVE", employee_id: null, employee_name: "Сотрудник", effective_date: "2026-02-01",
       payload: { basis_ids: ["application"] },
     }], application);
     const text = renderPersonnelOrderDocument(order, "ru")?.points.map((point) => point.text).join(" ");
-    expect(text).toContain("Бухгалтерии произвести расчёт за неиспользованные дни отпуска.");
+    expect(text).not.toContain("Бухгалтерии произвести расчёт");
     expect(text).not.toContain("календарных дней");
-    expect(text).not.toContain("—");
   });
 
   it("uses Russian employee and assignment forms for concurrent duty", () => {

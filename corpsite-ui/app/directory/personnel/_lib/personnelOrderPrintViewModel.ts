@@ -254,24 +254,31 @@ function resolveSignatoryPosition(
   orderPosition: string | null,
   maps: PersonnelOrderPrintNameMaps,
 ): LocalizedText | null {
-  if (orderPosition) {
-    const role = normalizePersonnelOrderSignatoryRole(orderPosition);
+  const localizedRole = (value: string | null): LocalizedText | null => {
+    const role = normalizePersonnelOrderSignatoryRole(value);
     return role
       ? localizedText(
           personnelOrderSignatoryRoleLabel(role, "kk"),
           personnelOrderSignatoryRoleLabel(role, "ru"),
         )
-      : localizedFromSingle(orderPosition);
+      : null;
+  };
+  if (orderPosition) {
+    return localizedRole(orderPosition) ?? localizedFromSingle(orderPosition);
   }
   const fromMap = maps.signatoryPosition;
   if (fromMap == null) return null;
   if (typeof fromMap === "string") {
     const text = optionalString(fromMap);
-    return text ? localizedFromSingle(text) : null;
+    return text ? localizedRole(text) ?? localizedFromSingle(text) : null;
   }
   const kk = optionalString(fromMap.kk);
   const ru = optionalString(fromMap.ru);
   if (!kk && !ru) return null;
+  // Directory fallbacks may contain the system role in either locale.  Use the
+  // same print-role dictionary as an explicitly saved order role.
+  const role = localizedRole(kk) ?? localizedRole(ru);
+  if (role) return role;
   return localizedText(kk, ru);
 }
 
