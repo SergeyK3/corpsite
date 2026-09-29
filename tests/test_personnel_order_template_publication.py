@@ -25,7 +25,7 @@ def _seed(conn, suffix):
     old=_insert(conn,code,900001,"PUBLISHED",values); draft=_insert(conn,code,900002,"DRAFT",changed)
     return code,old,draft,values,changed
 
-def test_publish_and_create_next_draft_uses_published_snapshot(monkeypatch):
+def test_publish_does_not_create_next_draft(monkeypatch):
     engine=create_engine(URL); conn=engine.connect(); outer=conn.begin()
     try:
         actor=conn.execute(text("select user_id from users order by user_id limit 1")).scalar_one()
@@ -46,12 +46,9 @@ def test_publish_and_create_next_draft_uses_published_snapshot(monkeypatch):
         assert all(published[field]==changed[field] for field in TEXT_FIELDS)
         assert published["template_version_id"] == draft and published["status"] == "PUBLISHED"
         assert conn.execute(text("select count(*) from personnel_order_template_versions where item_type_code=:type and status='PUBLISHED'"),{"type":code}).scalar_one()==1
-        # Publishing is terminal for the draft: a subsequent editable revision
-        # exists only after the explicit create_draft command below.
+        # Publishing is terminal for the draft; opening the editor cannot make
+        # a clone of the immutable PUBLISHED version.
         assert conn.execute(text("select count(*) from personnel_order_template_versions where item_type_code=:type and status='DRAFT'"), {"type": code}).scalar_one() == 0
-        next_draft=service.create_draft(code,actor)
-        assert next_draft["version_number"]==900003 and all(next_draft[field]==changed[field] for field in TEXT_FIELDS)
-        assert service.create_draft(code,actor)["template_version_id"]==next_draft["template_version_id"]
     finally:
         outer.rollback(); conn.close(); engine.dispose()
 

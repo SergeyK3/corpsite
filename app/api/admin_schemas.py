@@ -4,7 +4,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class PersonnelOrderTemplateVariable(BaseModel):
@@ -71,6 +71,15 @@ class PersonnelOrderTemplateWorkingCopySave(PersonnelOrderTemplateDraftText):
     base_source: Literal["PUBLISHED", "INITIAL"]
     base_published_template_version_id: Optional[int] = Field(default=None, ge=1)
     base_published_revision: Optional[int] = Field(default=None, ge=1)
+
+    @model_validator(mode="after")
+    def validate_typed_base(self) -> "PersonnelOrderTemplateWorkingCopySave":
+        if self.base_source == "PUBLISHED":
+            if self.base_published_template_version_id is None or self.base_published_revision is None:
+                raise ValueError("PUBLISHED base requires template version id and revision")
+        elif self.base_published_template_version_id is not None or self.base_published_revision is not None:
+            raise ValueError("INITIAL base must not include published version metadata")
+        return self
 
 
 class PersonnelOrderTemplateDraftOut(PersonnelOrderTemplateDraftText):

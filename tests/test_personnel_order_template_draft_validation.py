@@ -172,9 +172,8 @@ def test_unpaid_leave_draft_preview_uses_unquoted_technical_placeholders() -> No
 
 def test_childcare_return_create_load_save_noop_and_conflict_do_not_touch_personnel_data(draft_store: _DraftStore) -> None:
     item_type = ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE
-    created = draft_service.create_draft(item_type, actor_user_id=77)
+    created = draft_service.create_draft_from_working_copy(item_type, "INITIAL", None, None, _initial_texts(item_type), actor_user_id=77)
     assert created["item_type_code"] == item_type
-    assert draft_service.create_draft(item_type, actor_user_id=88)["template_version_id"] == created["template_version_id"]
     assert draft_service.get_draft(item_type)["template_version_id"] == created["template_version_id"]
     assert draft_store.insert_count == 1
 
@@ -193,7 +192,7 @@ def test_childcare_return_create_load_save_noop_and_conflict_do_not_touch_person
 def test_termination_save_uses_safe_required_lookup_and_succeeds(draft_store: _DraftStore) -> None:
     """Regression: TERMINATION was absent from _REQUIRED_BY_TYPE and save raised KeyError."""
     item_type = "TERMINATION"
-    created = draft_service.create_draft(item_type, actor_user_id=77)
+    created = draft_service.create_draft_from_working_copy(item_type, "INITIAL", None, None, _initial_texts(item_type), actor_user_id=77)
     values = _initial_texts(item_type)
     values["body_template_ru"] += "\nПроверка сохранения."
 
@@ -258,7 +257,7 @@ def test_termination_draft_http_save_reload_noop_conflict_and_preview(draft_stor
     try:
         # Existing persisted DRAFTs continue through the PUT revision contract;
         # first working-copy creation has its own typed POST contract.
-        initial = draft_service.create_draft("TERMINATION", actor_user_id=2)
+        initial = draft_service.create_draft_from_working_copy("TERMINATION", "INITIAL", None, None, _initial_texts("TERMINATION"), actor_user_id=2)
         payload = _initial_texts("TERMINATION")
         for field in tuple(payload):
             payload[field] += f"\nПроверка полного снимка {field}."
@@ -303,11 +302,10 @@ def test_template_editor_is_unavailable_for_composite_header_type() -> None:
 
 
 def test_draft_create_load_save_noop_and_conflict_are_isolated_to_template_versions(draft_store: _DraftStore) -> None:
-    created = draft_service.create_draft(EDITABLE_TYPE, actor_user_id=77)
-    repeated = draft_service.create_draft(EDITABLE_TYPE, actor_user_id=88)
+    created = draft_service.create_draft_from_working_copy(EDITABLE_TYPE, "INITIAL", None, None, _initial_texts(), actor_user_id=77)
     loaded = draft_service.get_draft(EDITABLE_TYPE)
 
-    assert created["template_version_id"] == repeated["template_version_id"] == loaded["template_version_id"]
+    assert created["template_version_id"] == loaded["template_version_id"]
     assert draft_store.insert_count == 1
     assert draft_store.row is not None
     assert draft_store.row["created_by_user_id"] == draft_store.row["updated_by_user_id"] == 77
@@ -332,7 +330,7 @@ def test_draft_create_load_save_noop_and_conflict_are_isolated_to_template_versi
 def test_common_draft_flow_has_the_same_load_save_preview_and_revision_contract_for_each_type(
     draft_store: _DraftStore, item_type: str,
 ) -> None:
-    created = draft_service.create_draft(item_type, actor_user_id=77)
+    created = draft_service.create_draft_from_working_copy(item_type, "INITIAL", None, None, _initial_texts(item_type), actor_user_id=77)
     values = _initial_texts(item_type)
     values["title_ru"] += " Проверка общего потока."
 

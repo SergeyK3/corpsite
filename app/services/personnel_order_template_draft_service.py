@@ -5,7 +5,6 @@ import re
 from typing import Any, Mapping
 
 from sqlalchemy import text
-from sqlalchemy.exc import IntegrityError
 
 from app.db.engine import engine
 from app.services.personnel_order_template_specs import get_personnel_order_template_spec
@@ -84,27 +83,6 @@ def get_editor_base(item_type_code: str) -> dict[str, Any]:
     return {"source": "INITIAL", "item_type_code": item_type_code,
             "template_version_id": None, "version_number": None, "revision": None,
             **dict(get_personnel_order_template_spec(item_type_code).initial_texts)}
-
-
-def create_draft(item_type_code: str, actor_user_id: int) -> dict[str, Any]:
-    _assert_type(item_type_code)
-    with engine.begin() as conn:
-        existing = conn.execute(text("SELECT * FROM public.personnel_order_template_versions WHERE item_type_code=:type AND status='DRAFT'"), {"type": item_type_code}).mappings().first()
-        if existing:
-            return _row(existing)
-        published = conn.execute(text("SELECT * FROM public.personnel_order_template_versions WHERE item_type_code=:type AND status='PUBLISHED'"), {"type": item_type_code}).mappings().first()
-        fields = ("title_ru", "title_kk", "preamble_ru", "preamble_kk", "body_template_ru", "body_template_kk", "basis_template_ru", "basis_template_kk")
-        values = {field: published[field] for field in fields} if published else dict(get_personnel_order_template_spec(item_type_code).initial_texts)
-        try:
-            row = conn.execute(text("""
-                INSERT INTO public.personnel_order_template_versions
-                (item_type_code, version_number, status, title_ru, title_kk, preamble_ru, preamble_kk, body_template_ru, body_template_kk, basis_template_ru, basis_template_kk, created_by_user_id, updated_by_user_id)
-                VALUES (:type, (SELECT COALESCE(MAX(version_number), 0) + 1 FROM public.personnel_order_template_versions WHERE item_type_code=:type), 'DRAFT', :title_ru, :title_kk, :preamble_ru, :preamble_kk, :body_template_ru, :body_template_kk, :basis_template_ru, :basis_template_kk, :actor, :actor)
-                RETURNING *
-            """), {**values, "type": item_type_code, "actor": actor_user_id}).mappings().one()
-        except IntegrityError:
-            row = conn.execute(text("SELECT * FROM public.personnel_order_template_versions WHERE item_type_code=:type AND status='DRAFT'"), {"type": item_type_code}).mappings().one()
-    return _row(row)
 
 
 def create_draft_from_working_copy(
