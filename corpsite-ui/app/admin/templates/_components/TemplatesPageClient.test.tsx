@@ -846,6 +846,26 @@ describe("TemplatesPageClient", () => {
     expect(createPersonnelOrderTemplateDraft).not.toHaveBeenCalled();
   });
 
+  it("does not recreate a missing TERMINATION draft on production-style mount or reload", async () => {
+    currentSearch = new URLSearchParams("section=personnel-orders&type=TERMINATION");
+    const publishedV2 = { ...legacyTerminationDraft, template_version_id: 902, version_number: 2, status: "PUBLISHED" };
+    const createdV3 = { ...legacyTerminationDraft, template_version_id: 903, version_number: 3, status: "DRAFT", revision: 1 };
+    vi.mocked(getPersonnelOrderTemplatePublished).mockResolvedValue(publishedV2);
+    vi.mocked(getPersonnelOrderTemplateDraft).mockResolvedValue(null);
+    vi.mocked(createPersonnelOrderTemplateDraft).mockResolvedValue(createdV3);
+
+    const view = render(<TemplatesPageClient />);
+    await screen.findByTestId("template-published-read-only");
+    view.rerender(<TemplatesPageClient />);
+    await screen.findByTestId("template-published-read-only");
+
+    expect(createPersonnelOrderTemplateDraft).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("template-draft-editor")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Редактировать шаблон" }));
+    await waitFor(() => expect(createPersonnelOrderTemplateDraft).toHaveBeenCalledTimes(1));
+    expect(await screen.findByTestId("template-draft-editor")).toHaveTextContent("Версия 3");
+  });
+
   it("labels an existing draft as continue and does not create a duplicate", async () => {
     currentSearch = new URLSearchParams("section=personnel-orders&type=TERMINATION");
     vi.mocked(getPersonnelOrderTemplateDraft).mockResolvedValue(legacyTerminationDraft);
@@ -853,6 +873,7 @@ describe("TemplatesPageClient", () => {
     render(<TemplatesPageClient />);
     expect(await screen.findByText("Продолжить редактирование")).toBeInTheDocument();
     expect(createPersonnelOrderTemplateDraft).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("template-draft-editor")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Продолжить редактирование" }));
     expect(await screen.findByTestId("template-draft-editor")).toBeInTheDocument();
     expect(createPersonnelOrderTemplateDraft).not.toHaveBeenCalled();

@@ -382,7 +382,11 @@ function TemplateDetail({ item }: { item: PersonnelOrderTemplateCatalogItem }) {
   const [draftExists, setDraftExists] = useState(false);
   const [openingEditor, setOpeningEditor] = useState(false);
   const openRequest = useRef(0);
-  const openEditor = useCallback(() => {
+  const openEditor = useCallback((userInitiated = false) => {
+    // Creation of a DRAFT is deliberately reachable only from an explicit
+    // button click.  Effects and publish callbacks may refresh read-only data,
+    // but cannot turn a page load into a write.
+    if (!userInitiated) return;
     const request = ++openRequest.current;
     setDraft(null);
     setOpeningEditor(true);
@@ -423,8 +427,8 @@ function TemplateDetail({ item }: { item: PersonnelOrderTemplateCatalogItem }) {
         <p className="mt-3">Обязательные поля: {item.required_fields.join(", ") || "не формализованы"}</p>
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">{item.notes}</p>
       </>}
-      {item.editor_available && !draft ? <div className="mt-4"><button aria-label={openingEditor ? "Открытие…" : draftExists ? "Продолжить редактирование" : "Редактировать шаблон"} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-500 dark:text-zinc-950 dark:hover:bg-blue-400" type="button" onClick={openEditor} disabled={openingEditor}>{openingEditor ? "Открытие…" : draftExists ? "Продолжить редактирование" : "Редактировать шаблон"}</button>{openingEditor ? <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400" data-testid="template-editor-opening">Открытие редактора…</p> : null}</div> : null}
-      {draft ? <DraftEditor draft={draft} onSaved={setDraft} onEditPublished={openEditor} onPublished={(next) => { setPublished(next); setDraft(null); setDraftExists(false); }} variables={(detail?.variables ?? []).map((variable) => variable.code)} warning={item.support_level === "PARTIAL" ? "Шаблон требует дальнейшей предметной формализации; неподтверждённые реквизиты не добавлены." : undefined} /> : null}
+      {item.editor_available && !draft ? <div className="mt-4"><button aria-label={openingEditor ? "Открытие…" : draftExists ? "Продолжить редактирование" : "Редактировать шаблон"} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-500 dark:text-zinc-950 dark:hover:bg-blue-400" type="button" onClick={() => openEditor(true)} disabled={openingEditor}>{openingEditor ? "Открытие…" : draftExists ? "Продолжить редактирование" : "Редактировать шаблон"}</button>{openingEditor ? <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400" data-testid="template-editor-opening">Открытие редактора…</p> : null}</div> : null}
+      {draft ? <DraftEditor draft={draft} onSaved={setDraft} onEditPublished={() => openEditor(true)} onPublished={(next) => { setPublished(next); setDraft(null); setDraftExists(false); }} variables={(detail?.variables ?? []).map((variable) => variable.code)} warning={item.support_level === "PARTIAL" ? "Шаблон требует дальнейшей предметной формализации; неподтверждённые реквизиты не добавлены." : undefined} /> : null}
     </aside>
   );
 }
