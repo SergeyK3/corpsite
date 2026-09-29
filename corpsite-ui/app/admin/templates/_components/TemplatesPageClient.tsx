@@ -317,7 +317,9 @@ function DraftEditor({ draft, onSaved, onEditPublished, onPublished, variables, 
     if (!window.confirm("Опубликовать эту версию шаблона?")) return;
     setPublishing(true); setError("");
     void publishPersonnelOrderTemplateDraft(savedDraft.item_type_code, savedDraft.revision)
-      .then((next) => { onSaved(next); onPublished(next); })
+      // Publishing returns an immutable snapshot, never the next editable
+      // draft.  Let the parent replace and close the editor atomically.
+      .then((next) => { onPublished(next); })
       .catch((cause) => setError(draftErrorMessage(cause))).finally(() => setPublishing(false));
   };
   return (

@@ -802,6 +802,8 @@ describe("TemplatesPageClient", () => {
     expect(await screen.findByTestId("template-published-read-only")).toHaveTextContent("PUBLISHED");
     expect(screen.queryByTestId("template-draft-editor")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Опубликовать версию" })).not.toBeInTheDocument();
+    expect(createPersonnelOrderTemplateDraft).not.toHaveBeenCalled();
+    expect(getPersonnelOrderTemplateDraft).toHaveBeenCalledTimes(1);
     confirm.mockRestore();
   });
 

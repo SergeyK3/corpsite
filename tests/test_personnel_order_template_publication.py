@@ -44,7 +44,11 @@ def test_publish_and_create_next_draft_uses_published_snapshot(monkeypatch):
         assert by_id[draft]["published_at"] is not None and by_id[draft]["published_by_user_id"]==actor
         assert by_id[other_id]["status"]=="PUBLISHED"
         assert all(published[field]==changed[field] for field in TEXT_FIELDS)
+        assert published["template_version_id"] == draft and published["status"] == "PUBLISHED"
         assert conn.execute(text("select count(*) from personnel_order_template_versions where item_type_code=:type and status='PUBLISHED'"),{"type":code}).scalar_one()==1
+        # Publishing is terminal for the draft: a subsequent editable revision
+        # exists only after the explicit create_draft command below.
+        assert conn.execute(text("select count(*) from personnel_order_template_versions where item_type_code=:type and status='DRAFT'"), {"type": code}).scalar_one() == 0
         next_draft=service.create_draft(code,actor)
         assert next_draft["version_number"]==900003 and all(next_draft[field]==changed[field] for field in TEXT_FIELDS)
         assert service.create_draft(code,actor)["template_version_id"]==next_draft["template_version_id"]
