@@ -49,6 +49,7 @@ export type PersonnelOrderTemplateDraft = {
   title_ru: string; title_kk: string; preamble_ru: string; preamble_kk: string; body_template_ru: string; body_template_kk: string; basis_template_ru: string; basis_template_kk: string;
 };
 export type PersonnelOrderTemplateDraftText = Pick<PersonnelOrderTemplateDraft, "title_ru" | "title_kk" | "preamble_ru" | "preamble_kk" | "body_template_ru" | "body_template_kk" | "basis_template_ru" | "basis_template_kk">;
+export type PersonnelOrderTemplateEditorBase = PersonnelOrderTemplateDraftText & { source: "PUBLISHED" | "INITIAL"; item_type_code: string; template_version_id: number | null; version_number: number | null; revision: number | null; };
 export function editablePersonnelOrderTemplateDraftText(source: PersonnelOrderTemplateDraftText): PersonnelOrderTemplateDraftText {
   return {
     title_ru: source.title_ru,
@@ -63,7 +64,8 @@ export function editablePersonnelOrderTemplateDraftText(source: PersonnelOrderTe
 }
 export const getPersonnelOrderTemplateDraft = (type: string) => apiFetchJson<PersonnelOrderTemplateDraft | null>(`/admin/personnel-order-templates/${type}/draft`);
 export const getPersonnelOrderTemplatePublished = (type: string) => apiFetchJson<PersonnelOrderTemplateDraft | null>(`/admin/personnel-order-templates/${type}/published`);
-export const createPersonnelOrderTemplateDraft = (type: string) => apiFetchJson<PersonnelOrderTemplateDraft>(`/admin/personnel-order-templates/${type}/draft`, { method: "POST" });
+export const getPersonnelOrderTemplateEditorBase = (type: string) => apiFetchJson<PersonnelOrderTemplateEditorBase>(`/admin/personnel-order-templates/${type}/editor-base`);
+export const createPersonnelOrderTemplateDraft = (type: string, body: PersonnelOrderTemplateDraftText & { base_source: "PUBLISHED" | "INITIAL"; base_published_template_version_id?: number; base_published_revision?: number }) => apiFetchJson<PersonnelOrderTemplateDraft>(`/admin/personnel-order-templates/${type}/draft`, { method: "POST", body: { ...editablePersonnelOrderTemplateDraftText(body), base_source: body.base_source, base_published_template_version_id: body.base_published_template_version_id, base_published_revision: body.base_published_revision } });
 export const savePersonnelOrderTemplateDraft = (type: string, body: PersonnelOrderTemplateDraftText & { expected_revision: number }) => apiFetchJson<PersonnelOrderTemplateDraft>(`/admin/personnel-order-templates/${type}/draft`, { method: "PUT", body: { ...editablePersonnelOrderTemplateDraftText(body), expected_revision: body.expected_revision } });
 export const publishPersonnelOrderTemplateDraft = (type: string, expected_revision: number) => apiFetchJson<PersonnelOrderTemplateDraft>(`/admin/personnel-order-templates/${type}/draft/publish`, { method: "POST", body: { expected_revision } });
 export const previewPersonnelOrderTemplateDraft = (type: string, body: PersonnelOrderTemplateDraftText) => apiFetchJson<{ previews: Record<"ru" | "kk", PersonnelOrderTemplatePreview> }>(`/admin/personnel-order-templates/${type}/draft/preview`, { method: "POST", body: editablePersonnelOrderTemplateDraftText(body) });

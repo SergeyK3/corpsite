@@ -22,6 +22,7 @@ import {
   createPersonnelOrderTemplateDraft,
   getPersonnelOrderTemplateDraft,
   getPersonnelOrderTemplatePublished,
+  getPersonnelOrderTemplateEditorBase,
   previewPersonnelOrderTemplateDraft,
   savePersonnelOrderTemplateDraft,
   publishPersonnelOrderTemplateDraft,
@@ -190,7 +191,7 @@ function FormalizedTemplateDetail({ detail, showCatalogPreview }: { detail: Pers
   );
 }
 
-function DraftEditor({ draft, onSaved, onEditPublished, onPublished, variables, warning }: { draft: PersonnelOrderTemplateDraft; onSaved: (draft: PersonnelOrderTemplateDraft) => void; onEditPublished: () => void; onPublished: (draft: PersonnelOrderTemplateDraft) => void; variables: string[]; warning?: string }) {
+function DraftEditor({ draft, onSaved, onPublished, variables, warning }: { draft: PersonnelOrderTemplateDraft; onSaved: (draft: PersonnelOrderTemplateDraft) => void; onPublished: (draft: PersonnelOrderTemplateDraft) => void; variables: string[]; warning?: string }) {
   const [savedDraft, setSavedDraft] = useState(draft);
   const [values, setValues] = useState<PersonnelOrderTemplateDraftText>(() => editableDraftText(draft));
   const [preview, setPreview] = useState<Record<"ru" | "kk", PersonnelOrderTemplatePreview> | null>(null);
@@ -252,6 +253,8 @@ function DraftEditor({ draft, onSaved, onEditPublished, onPublished, variables, 
     setError("");
     setNotice("");
   };
+  const isWorkingCopy = savedDraft.status === "WORKING_COPY";
+  const isDirty = DRAFT_HEIGHT_FIELDS.some(({ ru, kk }) => values[ru[0]] !== savedDraft[ru[0]] || values[kk[0]] !== savedDraft[kk[0]]);
   const showPreview = () => {
     const request = ++previewRequest.current;
     const submittedValues = editableDraftText(values);
@@ -273,7 +276,10 @@ function DraftEditor({ draft, onSaved, onEditPublished, onPublished, variables, 
     setError("");
     setNotice("");
     setSaving(true);
-    void savePersonnelOrderTemplateDraft(savedDraft.item_type_code, { ...submittedValues, expected_revision: savedDraft.revision })
+    const persist = isWorkingCopy
+      ? createPersonnelOrderTemplateDraft(savedDraft.item_type_code, { ...submittedValues, base_source: (savedDraft as PersonnelOrderTemplateDraft & { base_source?: "PUBLISHED" | "INITIAL" }).base_source ?? "PUBLISHED", ...((savedDraft as PersonnelOrderTemplateDraft & { base_source?: string }).base_source === "INITIAL" ? {} : { base_published_template_version_id: savedDraft.template_version_id, base_published_revision: savedDraft.revision }) })
+      : savePersonnelOrderTemplateDraft(savedDraft.item_type_code, { ...submittedValues, expected_revision: savedDraft.revision });
+    void persist
       .then((next) => {
         const savedValues = editableDraftText(next);
         setSavedDraft(next);
@@ -324,7 +330,7 @@ function DraftEditor({ draft, onSaved, onEditPublished, onPublished, variables, 
   };
   return (
     <section ref={editorRef} className="mt-5 rounded-xl border border-blue-200 p-4" data-testid="template-draft-editor">
-      <h4 className="font-semibold">Черновая версия шаблона</h4>
+      <h4 className="font-semibold">{isWorkingCopy ? "Несохранённая рабочая копия опубликованной версии" : "Черновая версия шаблона"}</h4>
       <p className="text-sm">Версия {savedDraft.version_number} · revision {savedDraft.revision} · {savedDraft.status}</p>
       <p className="mt-2 text-sm text-amber-700">Черновик не применяется к кадровым приказам.</p>
       {warning ? <p className="mt-2 text-sm font-medium text-amber-700" role="note">{warning}</p> : null}
@@ -340,7 +346,7 @@ function DraftEditor({ draft, onSaved, onEditPublished, onPublished, variables, 
               data-height-pair={pair}
               ref={(node) => { ruTextareas.current[ru[0]] = node; }}
               value={values[ru[0]]}
-              onChange={(e) => change(ru[0], e.target.value)} disabled={savedDraft.status !== "DRAFT"}
+              onChange={(e) => change(ru[0], e.target.value)} disabled={savedDraft.status !== "DRAFT" && !isWorkingCopy}
               className={`mt-1 w-full resize-y rounded border p-2 ${heightClass}`}
               style={{ minHeight: TEXTAREA_MIN_HEIGHT, maxHeight: TEXTAREA_MAX_HEIGHT }}
             />
@@ -351,7 +357,7 @@ function DraftEditor({ draft, onSaved, onEditPublished, onPublished, variables, 
               aria-label={kk[1]}
               ref={(node) => { kkTextareas.current[kk[0]] = node; }}
               value={values[kk[0]]}
-              onChange={(e) => change(kk[0], e.target.value)} disabled={savedDraft.status !== "DRAFT"}
+              onChange={(e) => change(kk[0], e.target.value)} disabled={savedDraft.status !== "DRAFT" && !isWorkingCopy}
               className={`mt-1 w-full resize-none rounded border p-2 ${heightClass}`}
               style={{ minHeight: TEXTAREA_MIN_HEIGHT, maxHeight: TEXTAREA_MAX_HEIGHT }}
             />
@@ -361,10 +367,9 @@ function DraftEditor({ draft, onSaved, onEditPublished, onPublished, variables, 
 
       <p className="mt-3 text-xs">Разрешённые переменные: {variables.join(", ")}.</p>
       <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-zinc-200 pt-3 dark:border-zinc-800" data-testid="template-draft-actions">
-        <button type="button" onClick={showPreview} disabled={previewing || savedDraft.status !== "DRAFT"} className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-800 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800">{previewing ? "Формирование…" : "Предварительный просмотр"}</button>
-        <button type="button" onClick={save} disabled={saving || savedDraft.status !== "DRAFT"} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-500 dark:text-zinc-950 dark:hover:bg-blue-400">{saving ? "Сохранение…" : "Сохранить черновик"}</button>
-        <button type="button" onClick={publish} disabled={publishing || savedDraft.status !== "DRAFT"} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">{publishing ? "Публикация…" : "Опубликовать версию"}</button>
-        {savedDraft.status === "PUBLISHED" ? <button type="button" onClick={onEditPublished} className="rounded-lg border border-blue-700 px-4 py-2 text-sm font-semibold text-blue-700">Редактировать шаблон</button> : null}
+        <button type="button" onClick={showPreview} disabled={previewing || (savedDraft.status !== "DRAFT" && !isWorkingCopy)} className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-800 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800">{previewing ? "Формирование…" : "Предварительный просмотр"}</button>
+        <button type="button" onClick={save} disabled={saving || (isWorkingCopy && !isDirty) || (savedDraft.status !== "DRAFT" && !isWorkingCopy)} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-500 dark:text-zinc-950 dark:hover:bg-blue-400">{saving ? "Сохранение…" : "Сохранить черновик"}</button>
+        <button type="button" onClick={publish} disabled={publishing || isDirty || savedDraft.status !== "DRAFT"} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">{publishing ? "Публикация…" : "Опубликовать версию"}</button>
         <button type="button" onClick={resetHeights} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800">Сбросить высоту полей</button>
         {error ? <button type="button" onClick={reloadCurrentDraft} disabled={reloading} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60">{reloading ? "Загрузка…" : "Загрузить актуальную версию"}</button> : null}
         {error ? <p role="alert" className="text-sm text-red-700">{error}</p> : null}
@@ -393,11 +398,12 @@ function TemplateDetail({ item }: { item: PersonnelOrderTemplateCatalogItem }) {
     void getPersonnelOrderTemplateDraft(item.type_code)
       .then((existing) => {
         if (existing) return existing;
-        return createPersonnelOrderTemplateDraft(item.type_code);
+        return getPersonnelOrderTemplateEditorBase(item.type_code).then((base) => ({ ...base, template_version_id: base.template_version_id ?? 0, version_number: base.version_number ?? 0, revision: base.revision ?? 0, based_on_built_in: base.source === "INITIAL", status: "WORKING_COPY", base_source: base.source } as unknown as PersonnelOrderTemplateDraft));
       })
       .then((next) => { if (request === openRequest.current) { setDraft(next); setDraftExists(true); } })
+      .catch(() => { /* The page remains read-only until a published snapshot is available. */ })
       .finally(() => { if (request === openRequest.current) setOpeningEditor(false); });
-  }, [item.type_code]);
+  }, [item.type_code, published]);
   useEffect(() => {
     let active = true;
     setDraft(null); setDraftExists(false); setPublished(null);
@@ -427,8 +433,13 @@ function TemplateDetail({ item }: { item: PersonnelOrderTemplateCatalogItem }) {
         <p className="mt-3">Обязательные поля: {item.required_fields.join(", ") || "не формализованы"}</p>
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">{item.notes}</p>
       </>}
-      {item.editor_available && !draft ? <div className="mt-4"><button aria-label={openingEditor ? "Открытие…" : draftExists ? "Продолжить редактирование" : "Редактировать шаблон"} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-500 dark:text-zinc-950 dark:hover:bg-blue-400" type="button" onClick={() => openEditor(true)} disabled={openingEditor}>{openingEditor ? "Открытие…" : draftExists ? "Продолжить редактирование" : "Редактировать шаблон"}</button>{openingEditor ? <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400" data-testid="template-editor-opening">Открытие редактора…</p> : null}</div> : null}
-      {draft ? <DraftEditor draft={draft} onSaved={setDraft} onEditPublished={() => openEditor(true)} onPublished={(next) => { setPublished(next); setDraft(null); setDraftExists(false); }} variables={(detail?.variables ?? []).map((variable) => variable.code)} warning={item.support_level === "PARTIAL" ? "Шаблон требует дальнейшей предметной формализации; неподтверждённые реквизиты не добавлены." : undefined} /> : null}
+      {item.editor_available && !draft ? <div className="mt-4"><button aria-label={openingEditor ? "Открытие…" : "Редактировать шаблон"} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-500 dark:text-zinc-950 dark:hover:bg-blue-400" type="button" onClick={() => openEditor(true)} disabled={openingEditor}>{openingEditor ? "Открытие…" : "Редактировать шаблон"}</button>{openingEditor ? <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400" data-testid="template-editor-opening">Открытие редактора…</p> : null}</div> : null}
+      {draft ? <DraftEditor draft={draft} onSaved={setDraft} onPublished={(next) => {
+        setDraft(null); setDraftExists(false);
+        void Promise.all([getPersonnelOrderTemplatePublished(item.type_code), getPersonnelOrderTemplateDraft(item.type_code)])
+          .then(([actualPublished, actualDraft]) => { setPublished(actualPublished); setDraftExists(Boolean(actualDraft)); })
+          .catch(() => setPublished(next));
+      }} variables={(detail?.variables ?? []).map((variable) => variable.code)} warning={item.support_level === "PARTIAL" ? "Шаблон требует дальнейшей предметной формализации; неподтверждённые реквизиты не добавлены." : undefined} /> : null}
     </aside>
   );
 }

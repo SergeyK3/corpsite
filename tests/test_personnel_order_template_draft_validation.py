@@ -256,9 +256,9 @@ def test_termination_draft_http_save_reload_noop_conflict_and_preview(draft_stor
     client = TestClient(app)
     path = "/admin/personnel-order-templates/TERMINATION/draft"
     try:
-        created = client.post(path)
-        assert created.status_code == 200
-        initial = created.json()
+        # Existing persisted DRAFTs continue through the PUT revision contract;
+        # first working-copy creation has its own typed POST contract.
+        initial = draft_service.create_draft("TERMINATION", actor_user_id=2)
         payload = _initial_texts("TERMINATION")
         for field in tuple(payload):
             payload[field] += f"\nПроверка полного снимка {field}."
@@ -356,11 +356,13 @@ def test_template_text_rejects_html_script_and_expressions() -> None:
 
 
 def test_router_derives_actor_from_admin_dependency(monkeypatch: pytest.MonkeyPatch) -> None:
-    seen: list[tuple[str, int]] = []
-    monkeypatch.setattr(admin_router, "create_draft", lambda item_type_code, actor_user_id: seen.append((item_type_code, actor_user_id)) or {"ok": True})
-
-    assert admin_router.admin_create_personnel_order_template_draft(EDITABLE_TYPE, {"user_id": 42}) == {"ok": True}
-    assert seen == [(EDITABLE_TYPE, 42)]
+    seen: list[tuple[str, int, int, int]] = []
+    values = _initial_texts()
+    monkeypatch.setattr(admin_router, "create_draft_from_working_copy", lambda item_type_code, source, base_id, base_revision, payload, actor: seen.append((item_type_code, base_id, base_revision, actor)) or {"ok": True})
+    from app.api.admin_schemas import PersonnelOrderTemplateWorkingCopySave
+    body = PersonnelOrderTemplateWorkingCopySave(**values, base_source="PUBLISHED", base_published_template_version_id=7, base_published_revision=3)
+    assert admin_router.admin_create_personnel_order_template_draft(EDITABLE_TYPE, body, {"user_id": 42}) == {"ok": True}
+    assert seen == [(EDITABLE_TYPE, 7, 3, 42)]
 
 
 def test_preview_endpoint_accepts_the_complete_initial_texts_draft_shape() -> None:

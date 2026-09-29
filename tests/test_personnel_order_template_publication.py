@@ -67,6 +67,30 @@ def test_publish_rejects_stale_revision_without_changes(monkeypatch):
         assert rows[0]["title_ru"]==before_old["title_ru"] and rows[1]["title_ru"]==before_draft["title_ru"]
     finally: outer.rollback(); conn.close(); engine.dispose()
 
+
+def test_first_working_copy_save_is_atomic_and_never_clones_published(monkeypatch):
+    engine=create_engine(URL); conn=engine.connect(); outer=conn.begin()
+    try:
+        actor=conn.execute(text("select user_id from users order by user_id limit 1")).scalar_one()
+        code="HIRE"; values=dict(get_personnel_order_template_spec(code).initial_texts)
+        published_id=_insert(conn, code, 910001, "PUBLISHED", values)
+        monkeypatch.setattr(service,"engine",_TransactionEngine(conn))
+        assert service.get_draft(code) is None
+        # Read-only editor opening does not call a command and GET remains row-count neutral.
+        assert service.get_published(code)["template_version_id"] == published_id and service.get_draft(code) is None
+        changed=dict(values); changed["title_ru"] += " changed working copy"
+        draft=service.create_draft_from_working_copy(code, "PUBLISHED", published_id, 1, changed, actor)
+        assert draft["status"] == "DRAFT" and all(draft[field] == changed[field] for field in TEXT_FIELDS)
+        assert conn.execute(text("select count(*) from personnel_order_template_versions where item_type_code=:type and status='DRAFT'"), {"type": code}).scalar_one() == 1
+        with pytest.raises(service.TemplateDraftError) as identical:
+            service.create_draft_from_working_copy(code, "PUBLISHED", published_id, 1, values, actor)
+        assert identical.value.code == "TEMPLATE_DRAFT_IDENTICAL_TO_PUBLISHED"
+        with pytest.raises(service.TemplateDraftError) as stale:
+            service.create_draft_from_working_copy(code, "PUBLISHED", published_id + 1, 1, changed, actor)
+        assert stale.value.conflict
+        assert conn.execute(text("select count(*) from personnel_order_template_versions where item_type_code=:type and status='DRAFT'"), {"type": code}).scalar_one() == 1
+    finally: outer.rollback(); conn.close(); engine.dispose()
+
 def test_save_flow_rejects_published_snapshot(monkeypatch):
     engine=create_engine(URL); conn=engine.connect(); outer=conn.begin()
     try:

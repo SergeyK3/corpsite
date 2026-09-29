@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -66,6 +66,13 @@ class PersonnelOrderTemplateDraftSave(PersonnelOrderTemplateDraftText):
     expected_revision: int = Field(..., ge=1)
 
 
+class PersonnelOrderTemplateWorkingCopySave(PersonnelOrderTemplateDraftText):
+    model_config = ConfigDict(extra="ignore")
+    base_source: Literal["PUBLISHED", "INITIAL"]
+    base_published_template_version_id: Optional[int] = Field(default=None, ge=1)
+    base_published_revision: Optional[int] = Field(default=None, ge=1)
+
+
 class PersonnelOrderTemplateDraftOut(PersonnelOrderTemplateDraftText):
     template_version_id: int
     item_type_code: str
@@ -77,6 +84,14 @@ class PersonnelOrderTemplateDraftOut(PersonnelOrderTemplateDraftText):
     updated_at: datetime
     published_at: Optional[datetime] = None
     published_by_user_id: Optional[int] = None
+
+
+class PersonnelOrderTemplateEditorBase(PersonnelOrderTemplateDraftText):
+    source: Literal["PUBLISHED", "INITIAL"]
+    item_type_code: str
+    template_version_id: Optional[int] = None
+    version_number: Optional[int] = None
+    revision: Optional[int] = None
 
 
 class PersonnelOrderTemplatePublish(BaseModel):

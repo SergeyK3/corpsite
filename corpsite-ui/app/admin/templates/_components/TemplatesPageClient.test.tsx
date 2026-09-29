@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import TemplatesPageClient from "./TemplatesPageClient";
-import { createPersonnelOrderTemplateDraft, getPersonnelOrderTemplateDraft, getPersonnelOrderTemplatePublished, listPersonnelOrderTemplateCatalog, previewPersonnelOrderTemplateDraft, publishPersonnelOrderTemplateDraft, savePersonnelOrderTemplateDraft } from "../_lib/personnelOrderTemplatesApi.client";
+import { createPersonnelOrderTemplateDraft, getPersonnelOrderTemplateDraft, getPersonnelOrderTemplatePublished, getPersonnelOrderTemplateEditorBase, listPersonnelOrderTemplateCatalog, previewPersonnelOrderTemplateDraft, publishPersonnelOrderTemplateDraft, savePersonnelOrderTemplateDraft } from "../_lib/personnelOrderTemplatesApi.client";
 
 let currentSearch = new URLSearchParams();
 const push = vi.fn();
@@ -19,7 +19,7 @@ vi.mock("@/app/regular-tasks/_components/RegularTasksAdminClient", () => ({
     </div>
   ),
 }));
-vi.mock("../_lib/personnelOrderTemplatesApi.client", () => ({ listPersonnelOrderTemplateCatalog: vi.fn(), getPersonnelOrderTemplateDraft: vi.fn(), getPersonnelOrderTemplatePublished: vi.fn(), createPersonnelOrderTemplateDraft: vi.fn(), savePersonnelOrderTemplateDraft: vi.fn(), previewPersonnelOrderTemplateDraft: vi.fn(), publishPersonnelOrderTemplateDraft: vi.fn() }));
+vi.mock("../_lib/personnelOrderTemplatesApi.client", () => ({ listPersonnelOrderTemplateCatalog: vi.fn(), getPersonnelOrderTemplateDraft: vi.fn(), getPersonnelOrderTemplatePublished: vi.fn(), getPersonnelOrderTemplateEditorBase: vi.fn(), createPersonnelOrderTemplateDraft: vi.fn(), savePersonnelOrderTemplateDraft: vi.fn(), previewPersonnelOrderTemplateDraft: vi.fn(), publishPersonnelOrderTemplateDraft: vi.fn() }));
 
 const pilotDetail = {
   required_fields: ["ФИО сотрудника", "Должность на русском языке", "Дата выхода на работу"],
@@ -105,12 +105,14 @@ describe("TemplatesPageClient", () => {
     push.mockReset();
     vi.mocked(getPersonnelOrderTemplateDraft).mockReset();
     vi.mocked(getPersonnelOrderTemplatePublished).mockReset();
+    vi.mocked(getPersonnelOrderTemplateEditorBase).mockReset();
     vi.mocked(createPersonnelOrderTemplateDraft).mockReset();
     vi.mocked(savePersonnelOrderTemplateDraft).mockReset();
     vi.mocked(previewPersonnelOrderTemplateDraft).mockReset();
     vi.mocked(publishPersonnelOrderTemplateDraft).mockReset();
-    vi.mocked(getPersonnelOrderTemplateDraft).mockResolvedValue(null);
+    vi.mocked(getPersonnelOrderTemplateDraft).mockResolvedValue(unpaidDraft);
     vi.mocked(getPersonnelOrderTemplatePublished).mockResolvedValue(null);
+    vi.mocked(getPersonnelOrderTemplateEditorBase).mockResolvedValue({ ...unpaidDraft, source: "INITIAL", template_version_id: null, version_number: null, revision: null });
     vi.mocked(createPersonnelOrderTemplateDraft).mockResolvedValue(unpaidDraft);
     vi.mocked(savePersonnelOrderTemplateDraft).mockResolvedValue({ ...unpaidDraft, revision: 2 });
     vi.mocked(previewPersonnelOrderTemplateDraft).mockResolvedValue(draftPreview);
@@ -275,7 +277,7 @@ describe("TemplatesPageClient", () => {
     const button = screen.getByRole("button", { name: "Редактировать шаблон" });
     expect(button).toHaveClass("bg-blue-700", "text-white", "rounded-lg");
     fireEvent.click(button);
-    await waitFor(() => expect(createPersonnelOrderTemplateDraft).toHaveBeenCalledWith("RETURN_FROM_CHILDCARE_LEAVE"));
+    await waitFor(() => expect(createPersonnelOrderTemplateDraft).not.toHaveBeenCalled());
     const editor = await screen.findByTestId("template-draft-editor");
     expect(editor).toHaveTextContent("Русский");
     expect(editor).toHaveTextContent("Қазақша");
@@ -295,7 +297,7 @@ describe("TemplatesPageClient", () => {
     await screen.findByTestId("personnel-order-template-detail");
     expect(screen.getByRole("button", { name: "Редактировать шаблон" })).toHaveClass("bg-blue-700", "text-white", "rounded-lg");
     fireEvent.click(screen.getByRole("button", { name: "Редактировать шаблон" }));
-    await waitFor(() => expect(createPersonnelOrderTemplateDraft).toHaveBeenCalledWith("LEAVE.UNPAID.GRANT"));
+    await waitFor(() => expect(createPersonnelOrderTemplateDraft).not.toHaveBeenCalled());
 
     expect(await screen.findByTestId("template-draft-editor")).toHaveTextContent("Черновик не применяется к кадровым приказам.");
     expect(screen.getByLabelText("Заголовок RU")).toHaveValue("Заголовок RU");
@@ -525,7 +527,7 @@ describe("TemplatesPageClient", () => {
 
     await screen.findByTestId("personnel-order-template-detail");
     fireEvent.click(screen.getByRole("button", { name: "Редактировать шаблон" }));
-    expect(await screen.findByLabelText("Распорядительный текст RU")).toHaveStyle({ height: "280px" });
+    await waitFor(() => expect(screen.getByLabelText("Распорядительный текст RU")).toHaveStyle({ height: "280px" }));
     fireEvent.click(screen.getByRole("button", { name: "Сбросить высоту полей" }));
     expect(window.localStorage.getItem(currentKey)).toBeNull();
     expect(window.localStorage.getItem(otherKey)).toBe(JSON.stringify({ body_template: 380 }));
@@ -575,6 +577,7 @@ describe("TemplatesPageClient", () => {
   it("saves the changed KK directive text and refreshes the childcare-return preview automatically", async () => {
     currentSearch = new URLSearchParams("section=personnel-orders&type=RETURN_FROM_CHILDCARE_LEAVE");
     const savedDraft = { ...unpaidDraft, item_type_code: "RETURN_FROM_CHILDCARE_LEAVE", body_template_kk: "Сақталған қазақша өкімдік мәтін", revision: 2 };
+    vi.mocked(getPersonnelOrderTemplateDraft).mockResolvedValue({ ...unpaidDraft, item_type_code: "RETURN_FROM_CHILDCARE_LEAVE", revision: 2 });
     vi.mocked(createPersonnelOrderTemplateDraft).mockResolvedValueOnce(savedDraft);
     vi.mocked(savePersonnelOrderTemplateDraft).mockResolvedValueOnce(savedDraft);
     render(<TemplatesPageClient />);
@@ -642,9 +645,9 @@ describe("TemplatesPageClient", () => {
     fireEvent.click(opening);
     expect(getPersonnelOrderTemplateDraft).toHaveBeenCalledTimes(1);
     expect(createPersonnelOrderTemplateDraft).not.toHaveBeenCalled();
-    resolveLookup(null);
+    resolveLookup(unpaidDraft);
     expect(await screen.findByTestId("template-draft-editor")).toBeInTheDocument();
-    expect(createPersonnelOrderTemplateDraft).toHaveBeenCalledTimes(1);
+    expect(createPersonnelOrderTemplateDraft).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: "Редактировать шаблон" })).not.toBeInTheDocument();
   });
 
@@ -792,7 +795,10 @@ describe("TemplatesPageClient", () => {
 
   it("publishes only after explicit confirmation and keeps the published version read-only", async () => {
     currentSearch = new URLSearchParams("section=personnel-orders&type=LEAVE.UNPAID.GRANT");
-    vi.mocked(getPersonnelOrderTemplateDraft).mockResolvedValue(unpaidDraft);
+    const published = { ...unpaidDraft, status: "PUBLISHED", published_at: "2026-01-01T00:00:00", published_by_user_id: 1 };
+    vi.mocked(getPersonnelOrderTemplateDraft).mockResolvedValueOnce(unpaidDraft).mockResolvedValueOnce(unpaidDraft).mockResolvedValue(null);
+    vi.mocked(getPersonnelOrderTemplatePublished).mockResolvedValue(published);
+    vi.mocked(publishPersonnelOrderTemplateDraft).mockResolvedValue(published);
     const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
     render(<TemplatesPageClient />);
     fireEvent.click(await screen.findByRole("button", { name: "Редактировать шаблон" }));
@@ -803,7 +809,7 @@ describe("TemplatesPageClient", () => {
     expect(screen.queryByTestId("template-draft-editor")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Опубликовать версию" })).not.toBeInTheDocument();
     expect(createPersonnelOrderTemplateDraft).not.toHaveBeenCalled();
-    expect(getPersonnelOrderTemplateDraft).toHaveBeenCalledTimes(1);
+    expect(getPersonnelOrderTemplateDraft).toHaveBeenCalledTimes(3);
     confirm.mockRestore();
   });
 
@@ -819,7 +825,7 @@ describe("TemplatesPageClient", () => {
     confirm.mockRestore();
   });
 
-  it("uses only GET on mount and creates a draft only after an explicit edit click", async () => {
+  it("uses only GET on mount and opens an unsaved working copy after an explicit edit click", async () => {
     currentSearch = new URLSearchParams("section=personnel-orders&type=TERMINATION");
     vi.mocked(getPersonnelOrderTemplateDraft).mockResolvedValue(null);
     vi.mocked(getPersonnelOrderTemplatePublished).mockResolvedValue({ ...legacyTerminationDraft, status: "PUBLISHED", version_number: 1 });
@@ -828,7 +834,8 @@ describe("TemplatesPageClient", () => {
     expect(createPersonnelOrderTemplateDraft).not.toHaveBeenCalled();
     expect(screen.queryByTestId("template-draft-editor")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Редактировать шаблон" }));
-    await waitFor(() => expect(createPersonnelOrderTemplateDraft).toHaveBeenCalledWith("TERMINATION"));
+    expect(await screen.findByTestId("template-draft-editor")).toHaveTextContent("Несохранённая рабочая копия");
+    expect(createPersonnelOrderTemplateDraft).not.toHaveBeenCalled();
   });
 
   it("does not create a draft on reload or while switching template types", async () => {
@@ -849,10 +856,8 @@ describe("TemplatesPageClient", () => {
   it("does not recreate a missing TERMINATION draft on production-style mount or reload", async () => {
     currentSearch = new URLSearchParams("section=personnel-orders&type=TERMINATION");
     const publishedV2 = { ...legacyTerminationDraft, template_version_id: 902, version_number: 2, status: "PUBLISHED" };
-    const createdV3 = { ...legacyTerminationDraft, template_version_id: 903, version_number: 3, status: "DRAFT", revision: 1 };
     vi.mocked(getPersonnelOrderTemplatePublished).mockResolvedValue(publishedV2);
     vi.mocked(getPersonnelOrderTemplateDraft).mockResolvedValue(null);
-    vi.mocked(createPersonnelOrderTemplateDraft).mockResolvedValue(createdV3);
 
     const view = render(<TemplatesPageClient />);
     await screen.findByTestId("template-published-read-only");
@@ -862,19 +867,19 @@ describe("TemplatesPageClient", () => {
     expect(createPersonnelOrderTemplateDraft).not.toHaveBeenCalled();
     expect(screen.queryByTestId("template-draft-editor")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Редактировать шаблон" }));
-    await waitFor(() => expect(createPersonnelOrderTemplateDraft).toHaveBeenCalledTimes(1));
-    expect(await screen.findByTestId("template-draft-editor")).toHaveTextContent("Версия 3");
+    expect(await screen.findByTestId("template-draft-editor")).toHaveTextContent("Несохранённая рабочая копия");
+    expect(createPersonnelOrderTemplateDraft).not.toHaveBeenCalled();
   });
 
-  it("labels an existing draft as continue and does not create a duplicate", async () => {
+  it("opens an existing saved draft without creating a duplicate", async () => {
     currentSearch = new URLSearchParams("section=personnel-orders&type=TERMINATION");
     vi.mocked(getPersonnelOrderTemplateDraft).mockResolvedValue(legacyTerminationDraft);
     vi.mocked(getPersonnelOrderTemplatePublished).mockResolvedValue({ ...legacyTerminationDraft, status: "PUBLISHED", version_number: 1 });
     render(<TemplatesPageClient />);
-    expect(await screen.findByText("Продолжить редактирование")).toBeInTheDocument();
+    expect(await screen.findByText("Редактировать шаблон")).toBeInTheDocument();
     expect(createPersonnelOrderTemplateDraft).not.toHaveBeenCalled();
     expect(screen.queryByTestId("template-draft-editor")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Продолжить редактирование" }));
+    fireEvent.click(screen.getByRole("button", { name: "Редактировать шаблон" }));
     expect(await screen.findByTestId("template-draft-editor")).toBeInTheDocument();
     expect(createPersonnelOrderTemplateDraft).not.toHaveBeenCalled();
   });

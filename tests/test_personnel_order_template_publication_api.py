@@ -57,3 +57,16 @@ def test_published_snapshot_is_read_only_get(monkeypatch):
         assert calls==["TERMINATION"]
     finally:
         app.dependency_overrides.clear()
+
+
+def test_first_save_passes_only_snapshot_and_server_actor(monkeypatch):
+    calls=[]
+    values={key: "text" for key in ("title_ru", "title_kk", "preamble_ru", "preamble_kk", "body_template_ru", "body_template_kk", "basis_template_ru", "basis_template_kk")}
+    monkeypatch.setattr(admin_router, "create_draft_from_working_copy", lambda code, source, base_id, base_revision, payload, actor: calls.append((code, base_id, base_revision, payload, actor)) or {**OUT, **values, "status": "DRAFT"})
+    app.dependency_overrides[require_sysadmin_api]=lambda:{"user_id":42,"role_id":1}
+    try:
+        response=TestClient(app).post("/admin/personnel-order-templates/TERMINATION/draft", json={**values, "base_source":"PUBLISHED", "base_published_template_version_id":9, "base_published_revision":3, "actor":999})
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 200
+    assert calls == [("TERMINATION", 9, 3, values, 42)]
