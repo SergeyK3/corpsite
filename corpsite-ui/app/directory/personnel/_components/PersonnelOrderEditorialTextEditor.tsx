@@ -46,6 +46,8 @@ type Props = {
   basisDocuments?: Array<{ basis_id?: unknown; document_type?: unknown; description?: unknown; source_text?: unknown }>;
   onOrderChanged?: (detail: PersonnelOrderDetailResponse) => void;
   onEditorialChanged?: (state: PersonnelOrderEditorialState) => void;
+  /** Parent-owned editorial snapshot, including the response from template apply. */
+  editorialState?: PersonnelOrderEditorialState | null;
   /** Drawer-supplied locale keeps document and editorial editing synchronized. */
   locale?: PersonnelOrderEditorialUiLocale;
 };
@@ -110,13 +112,22 @@ function PositionTextOverrideEditor({ item, editable, onChanged, manualBody }: {
   const stored = (item.payload?.position_text_override || {}) as Record<string, unknown>;
   const [ru, setRu] = React.useState(String(stored.ru || ""));
   const [kk, setKk] = React.useState(String(stored.kk || ""));
+  const ruRef = React.useRef(ru);
+  const kkRef = React.useRef(kk);
   const [saving, setSaving] = React.useState(false);
-  React.useEffect(() => { setRu(String(stored.ru || "")); setKk(String(stored.kk || "")); }, [item.item_id, stored.ru, stored.kk]);
+  React.useEffect(() => {
+    const nextRu = String(stored.ru || "");
+    const nextKk = String(stored.kk || "");
+    ruRef.current = nextRu;
+    kkRef.current = nextKk;
+    setRu(nextRu);
+    setKk(nextKk);
+  }, [item.item_id, stored.ru, stored.kk]);
   if (!editable) return null;
   async function save() {
     setSaving(true);
     try {
-      const payload = { ...(item.payload || {}), position_text_override: { ru: ru.trim(), kk: kk.trim() } };
+      const payload = { ...(item.payload || {}), position_text_override: { ru: ruRef.current.trim(), kk: kkRef.current.trim() } };
       const detail = await updatePersonnelOrderItem(item.order_id, item.item_id, {
         item_type_code: item.item_type_code, employee_id: item.employee_id ?? null,
         effective_date: item.effective_date ?? null, period_start: item.period_start ?? null,
@@ -125,7 +136,16 @@ function PositionTextOverrideEditor({ item, editable, onChanged, manualBody }: {
       onChanged?.(detail);
     } finally { setSaving(false); }
   }
-  return <div className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800" data-testid="personnel-order-position-text-override">
+  return <div
+    className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800"
+    data-testid="personnel-order-position-text-override"
+    onChangeCapture={(event) => {
+      const input = event.target as HTMLInputElement;
+      if (input.tagName !== "INPUT") return;
+      if (input.getAttribute("list") === `personnel-position-ru-options-${item.item_id}`) ruRef.current = input.value;
+      else kkRef.current = input.value;
+    }}
+  >
     <p className="text-sm font-semibold">Название должности в тексте приказа</p>
     <label className="mt-2 block text-sm">Русский<input list={`personnel-position-ru-options-${item.item_id}`} value={ru} onChange={(event) => setRu(event.target.value)} className="mt-1 w-full rounded border p-2" /></label>
     <datalist id={`personnel-position-ru-options-${item.item_id}`}><option value="медицинская сестра" /><option value="медицинский брат" /><option value="Другое" /></datalist>
@@ -161,6 +181,7 @@ function BlockEditor({
   busy,
   onSave,
   onReset,
+  closingAction,
 }: {
   label: string;
   block: PersonnelOrderEditorialBlock | null;
@@ -168,6 +189,7 @@ function BlockEditor({
   busy: boolean;
   onSave: (blockId: number, text: string, revision: number) => Promise<void>;
   onReset: (blockId: number) => Promise<void>;
+  closingAction?: { suppressed: boolean; onToggle: () => Promise<void> };
 }) {
   const [editing, setEditing] = React.useState(false);
   const [draft, setDraft] = React.useState("");
@@ -303,6 +325,17 @@ function BlockEditor({
           >
             Вернуть автоматически сгенерированный текст
           </button>
+          {closingAction ? (
+            <button
+              type="button"
+              onClick={() => void closingAction.onToggle()}
+              disabled={saving || busy}
+              className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm disabled:opacity-40 dark:border-zinc-700"
+              data-testid="personnel-order-editorial-closing-toggle"
+            >
+              {closingAction.suppressed ? "Вернуть в документ" : "Не включать в документ"}
+            </button>
+          ) : null}
         </div>
       ) : null}
     </div>
@@ -317,9 +350,11 @@ export default function PersonnelOrderEditorialTextEditor({
   basisDocuments = [],
   onOrderChanged,
   onEditorialChanged,
+  editorialState,
   locale,
 }: Props) {
   const [state, setState] = React.useState<PersonnelOrderEditorialState | null>(null);
+  const externalStateRef = React.useRef<PersonnelOrderEditorialState | null | undefined>(editorialState);
   const [uncontrolledLocale, setUncontrolledLocale] = React.useState<PersonnelOrderEditorialUiLocale>("kk");
   const activeLocale = locale ?? uncontrolledLocale;
   const [loading, setLoading] = React.useState(true);
@@ -327,14 +362,28 @@ export default function PersonnelOrderEditorialTextEditor({
   const [error, setError] = React.useState<string | null>(null);
   const [message, setMessage] = React.useState<string | null>(null);
 
+  React.useEffect(() => {
+    externalStateRef.current = editorialState;
+    if (!editorialState) return;
+    setState(editorialState);
+    setLoading(false);
+    setError(null);
+  }, [editorialState]);
+
   const load = React.useCallback(async () => {
+    if (externalStateRef.current) return;
     setLoading(true);
     setError(null);
     try {
       let next = await getPersonnelOrderEditorial(orderId);
+      // A template-application response may arrive while this older GET is in
+      // flight.  It is authoritative and must not be overwritten or followed
+      // by the legacy generate endpoint.
+      if (externalStateRef.current) return;
       if (editable && !hasRequiredEditorialLocales(next)) {
         // Full generate (kk + ru) so READY gate remains satisfiable.
         next = await generatePersonnelOrderEditorial(orderId);
+        if (externalStateRef.current) return;
       }
       setState(next);
       onEditorialChanged?.(next);
@@ -395,6 +444,33 @@ export default function PersonnelOrderEditorialTextEditor({
       setState(next);
       onEditorialChanged?.(next);
       setMessage("Восстановлен автоматически сформированный текст.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleClosingToggle() {
+    const closings = (state?.order_blocks || []).filter(
+      (block) => block.block_type === "closing" && (block.locale === "ru" || block.locale === "kk"),
+    );
+    if (closings.length !== 2) return;
+    const suppressed = closings.every((block) => block.override_text === "");
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      let next: PersonnelOrderEditorialState | null = null;
+      for (const block of closings) {
+        next = await patchPersonnelOrderEditorialBlock(orderId, block.block_id, suppressed
+          ? { clear_override: true, expected_revision: block.revision }
+          : { override_text: "", expected_revision: block.revision });
+      }
+      if (next) {
+        setState(next);
+        onEditorialChanged?.(next);
+      }
+    } catch (err) {
+      setError(mapPersonnelOrdersApiError(err, "Не удалось изменить заключительную часть."));
     } finally {
       setBusy(false);
     }
@@ -479,6 +555,9 @@ export default function PersonnelOrderEditorialTextEditor({
           {sections.map((section) => {
             if (section.kind === "order") {
               const isClosing = section.blockType === "closing";
+              const closingSuppressed = isClosing && (state?.order_blocks || [])
+                .filter((block) => block.block_type === "closing" && (block.locale === "ru" || block.locale === "kk"))
+                .every((block) => block.override_text === "");
               return (
                 <div
                   key={section.key}
@@ -491,6 +570,7 @@ export default function PersonnelOrderEditorialTextEditor({
                     busy={busy}
                     onSave={handleSave}
                     onReset={handleReset}
+                    closingAction={isClosing ? { suppressed: closingSuppressed, onToggle: handleClosingToggle } : undefined}
                   />
                   {isClosing ? (
                     <div className="mt-4 space-y-2" data-testid="personnel-order-editorial-requisites">
@@ -530,8 +610,15 @@ export default function PersonnelOrderEditorialTextEditor({
                   onSave={handleSave}
                   onReset={handleReset}
                 />
+                <BlockEditor
+                  label={activeLocale === "kk" ? "Негіз (мәтін құжатта)" : "Основание (текст в документе)"}
+                  block={section.basis}
+                  editable={canWrite}
+                  busy={busy}
+                  onSave={handleSave}
+                  onReset={handleReset}
+                />
                 <PositionTextOverrideEditor item={items.find((item) => item.item_id === section.orderItemId)!} editable={canWrite} onChanged={onOrderChanged} manualBody={Boolean(section.body?.override_text?.trim())} />
-                <StructuredBasisBlockEditor item={items.find((item) => item.item_id === section.orderItemId)!} block={section.basis} editable={canWrite} documents={basisDocuments} onChanged={onOrderChanged} locale={activeLocale} />
               </div>
             );
           })}

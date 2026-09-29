@@ -55,7 +55,13 @@ export default function PersonnelOrdersPageClient() {
     const numeric = Number(raw);
     return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
   }, [searchParams]);
-  const drawerInitialTab = searchParams.get("tab") === "data" ? "data" : undefined;
+  // `items` is the previous deep-link value for the document correction tab.
+  // The drawer resolves it to Corrections for REGISTERED/SIGNED and to Data
+  // for all other states after loading the order.
+  const requestedDrawerTab = searchParams.get("tab");
+  const drawerInitialTab = requestedDrawerTab === "data" || requestedDrawerTab === "items"
+    ? requestedDrawerTab
+    : undefined;
 
   const [items, setItems] = React.useState<PersonnelOrderListItem[]>([]);
   const [total, setTotal] = React.useState(0);

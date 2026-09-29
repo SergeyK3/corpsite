@@ -32,7 +32,6 @@ import {
 import { getEmployees } from "@/app/directory/employees/_lib/api.client";
 import type { EmployeeDTO } from "@/app/directory/employees/_lib/types";
 import PersonnelOrderDocumentItemsForm from "./PersonnelOrderDocumentItemsForm";
-import PersonnelOrderBasisForm from "./PersonnelOrderBasisForm";
 import {
   hasPersonnelOrderSignatory,
   mergePersonnelOrderRequisitesForPreview,
@@ -46,6 +45,7 @@ import {
 import PersonnelOrderAppliedBadge from "./PersonnelOrderAppliedBadge";
 import PersonnelOrderArchivedBadge from "./PersonnelOrderArchivedBadge";
 import PersonnelOrderEditorialTextEditor from "./PersonnelOrderEditorialTextEditor";
+import PersonnelOrderTemplateApplication from "./PersonnelOrderTemplateApplication";
 import PersonnelOrderHeaderEditor from "./PersonnelOrderHeaderEditor";
 import PersonnelOrderItemEditor from "./PersonnelOrderItemEditor";
 import PersonnelOrderLifecycleActions from "./PersonnelOrderLifecycleActions";
@@ -65,14 +65,23 @@ import {
   openPersonnelOrderPrintPreview,
 } from "../_lib/personnelOrderPrintPreview.client";
 
+type DrawerTab = "document" | "data" | "items";
+
 type Props = {
   orderId: number | null;
   open: boolean;
   onClose: () => void;
   onChanged?: (detail: PersonnelOrderDetailResponse) => void;
   hirePersonId?: number | null;
-  initialTab?: "document" | "data" | "requisites" | "items";
+  /** `items` is retained as the legacy deep-link value for document corrections. */
+  initialTab?: DrawerTab;
 };
+
+const DOCUMENT_CORRECTION_STATUSES = new Set(["REGISTERED", "SIGNED"]);
+
+function supportsDocumentItemCorrections(status: string | null | undefined): boolean {
+  return status != null && DOCUMENT_CORRECTION_STATUSES.has(status);
+}
 
 const SOURCE_TITLE_LOCALES = ["kk", "ru", "unknown"] as const;
 type SourceTitleLocale = (typeof SOURCE_TITLE_LOCALES)[number];
@@ -83,6 +92,18 @@ function isSourceTitleLocale(value: unknown): value is SourceTitleLocale {
 
 function sourceTitleLocale(value: unknown): SourceTitleLocale {
   return isSourceTitleLocale(value) ? value : "unknown";
+}
+
+function journalOrImportSourceTitle(storage: unknown): { title: string; locale: string } {
+  if (!storage || typeof storage !== "object") return { title: "", locale: "" };
+  const root = storage as Record<string, unknown>;
+  const provenance = root.journal_provenance || root.import_provenance;
+  if (!provenance || typeof provenance !== "object") return { title: "", locale: "" };
+  const entry = provenance as Record<string, unknown>;
+  return {
+    title: typeof entry.title === "string" ? entry.title.trim() : "",
+    locale: typeof entry.title_locale === "string" ? entry.title_locale : "",
+  };
 }
 
 function PersonnelOrderAcknowledgements({ detail, onChanged }: { detail: PersonnelOrderDetailResponse; onChanged: (next: PersonnelOrderDetailResponse) => void }) {
@@ -130,7 +151,7 @@ function PersonnelOrderDocumentHeaderForm({ detail, onSaved }: { detail: Personn
   const order = detail.order;
   const [number, setNumber] = React.useState(order.order_number || "");
   const [orderDate, setOrderDate] = React.useState(order.order_date || "");
-  const [title, setTitle] = React.useState(order.source_title || "");
+  const [title, setTitle] = React.useState(journalOrImportSourceTitle(order.storage_json).title);
   const [locale, setLocaleState] = React.useState<SourceTitleLocale>(() => sourceTitleLocale(order.source_title_locale));
   const setLocale = (value: unknown) => setLocaleState(sourceTitleLocale(value));
   const [reasonCode, setReasonCode] = React.useState(""); const [reasonText, setReasonText] = React.useState("");
@@ -299,6 +320,7 @@ export default function PersonnelOrderDetailDrawer({
   initialTab,
 }: Props) {
   const [detail, setDetail] = React.useState<PersonnelOrderDetailResponse | null>(null);
+  const [templatePreviewRefresh, setTemplatePreviewRefresh] = React.useState(0);
   const [editorial, setEditorial] = React.useState<PersonnelOrderEditorialState | null>(null);
   const [documentReview, setDocumentReview] = React.useState<PersonnelOrderDocumentReview | null>(null);
   const [loading, setLoading] = React.useState(false);
@@ -309,13 +331,24 @@ export default function PersonnelOrderDetailDrawer({
   const [printError, setPrintError] = React.useState<string | null>(null);
   const [headerRequisitesDraft, setHeaderRequisitesDraft] =
     React.useState<PersonnelOrderRequisitesSnapshot | null>(null);
-  const [activeTab, setActiveTab] = React.useState<"document" | "data" | "requisites" | "items">("document");
+  const [activeTab, setActiveTab] = React.useState<DrawerTab>("document");
   const [orderLanguage, setOrderLanguage] = React.useState<PersonnelOrderDocumentLanguage>("kk");
   const [printLanguage, setPrintLanguage] = React.useState<PersonnelOrderDocumentLanguage | null>(null);
 
   React.useEffect(() => {
     if (open && initialTab) setActiveTab(initialTab);
   }, [initialTab, open, orderId]);
+
+  const correctionsAvailable = supportsDocumentItemCorrections(detail?.order.status);
+
+  // A legacy `tab=items` deep link is meaningful only while the document
+  // correction API is available.  Once the order is known, fall back to Data
+  // instead of leaving the drawer on an unrendered tab.
+  React.useEffect(() => {
+    if (activeTab === "items" && !correctionsAvailable && detail) {
+      setActiveTab("data");
+    }
+  }, [activeTab, correctionsAvailable, detail]);
 
   React.useEffect(() => {
     if (!printLanguage) return;
@@ -375,16 +408,39 @@ export default function PersonnelOrderDetailDrawer({
     };
   }, [open, orderId, reload]);
 
-  function handleChanged(next: PersonnelOrderDetailResponse) {
-    setDetail(next);
+  const handleChanged = React.useCallback((next: PersonnelOrderDetailResponse) => {
     setHeaderRequisitesDraft(null);
-    onChanged?.(next);
-  }
+    // The item mutation response is useful for the rest of the drawer, but the
+    // template preview must be based on a freshly read persisted order.  This
+    // prevents a local form draft (or an intermediary mutation response) from
+    // being mistaken for the data used by the server-side preview.
+    void reload(next.order.order_id).then((persisted) => {
+      if (!persisted) return;
+      setTemplatePreviewRefresh((value) => value + 1);
+      onChanged?.(persisted);
+    });
+  }, [onChanged, reload]);
 
   const handleEditorialChanged = React.useCallback((next: PersonnelOrderEditorialState) => {
     setEditorial(next);
-    void reload(next.order_id);
-  }, [reload]);
+    setTemplatePreviewRefresh((value) => value + 1);
+    // Applying a template returns the complete, committed editorial snapshot.
+    // Keep it as the drawer's source of truth while reloading only the order
+    // detail needed by the remaining child components.  A separate editorial
+    // GET here could race the POST response and put stale blocks back into the
+    // editor (or trigger its legacy generator).
+    void Promise.all([
+      getPersonnelOrder(next.order_id),
+      getPersonnelOrderDocumentReview(next.order_id).catch(() => null),
+    ]).then(([body, review]) => {
+      setDetail(body);
+      setDocumentReview(review);
+      onChanged?.(body);
+    }).catch(() => {
+      // The committed editorial response remains usable even if auxiliary
+      // order-detail refresh fails; do not replace it with stale state.
+    });
+  }, [onChanged]);
 
   const handleHeaderRequisitesChange = React.useCallback(
     (snapshot: PersonnelOrderRequisitesSnapshot) => {
@@ -409,7 +465,9 @@ export default function PersonnelOrderDetailDrawer({
   const linkedEventCount = detail?.events.length || 0;
   const applied = isPersonnelOrderApplied(linkedEventCount);
   const editable = order ? isWritablePersonnelOrder(order.status, order.is_archived) : false;
-  const sourceTitle = detail?.localized_texts.find((text) => text.title?.trim())?.title?.trim() || "—";
+  const journalSource = journalOrImportSourceTitle(order?.storage_json);
+  const sourceTitle = journalSource.title;
+  const currentTitle = editorial?.order_blocks.find((block) => block.block_type === "title" && block.locale === orderLanguage)?.effective_text?.trim() || "—";
   const documentAvailable = personnelOrderDocumentAvailable(detail, orderLanguage, editorial);
   const basisDocuments = Array.isArray(order?.storage_json?.basis_documents)
     ? order.storage_json.basis_documents
@@ -473,8 +531,7 @@ export default function PersonnelOrderDetailDrawer({
           >
             Документ
           </button>
-          <button type="button" role="tab" aria-selected={activeTab === "requisites"} onClick={() => setActiveTab("requisites")} className={`rounded-t-lg px-3 py-2 text-sm font-medium ${activeTab === "requisites" ? "bg-zinc-100 text-zinc-950" : "text-zinc-500"}`}>Реквизиты</button>
-          <button type="button" role="tab" aria-selected={activeTab === "items"} onClick={() => setActiveTab("items")} className={`rounded-t-lg px-3 py-2 text-sm font-medium ${activeTab === "items" ? "bg-zinc-100 text-zinc-950" : "text-zinc-500"}`}>Пункты</button>
+          {correctionsAvailable ? <button type="button" role="tab" aria-selected={activeTab === "items"} onClick={() => setActiveTab("items")} className={`rounded-t-lg px-3 py-2 text-sm font-medium ${activeTab === "items" ? "bg-zinc-100 text-zinc-950" : "text-zinc-500"}`}>Корректировки</button> : null}
           <button
             type="button"
             role="tab"
@@ -532,8 +589,7 @@ export default function PersonnelOrderDetailDrawer({
           {order && activeTab === "document" ? (
             <PersonnelOrderDocumentView detail={detail} language={orderLanguage} editorial={editorial} />
           ) : null}
-          {order && activeTab === "requisites" && detail ? <PersonnelOrderDocumentHeaderForm detail={detail} onSaved={async () => { const next = await reload(order.order_id); if (next) onChanged?.(next); }} /> : null}
-          {order && activeTab === "items" && detail ? <PersonnelOrderDocumentItemsForm detail={detail} onSaved={async () => { const next = await reload(order.order_id); if (next) onChanged?.(next); }} /> : null}
+          {order && correctionsAvailable && activeTab === "items" && detail ? <PersonnelOrderDocumentItemsForm detail={detail} onSaved={async () => { const next = await reload(order.order_id); if (next) onChanged?.(next); }} /> : null}
 
           {order && activeTab === "data" ? (
             <>
@@ -559,8 +615,19 @@ export default function PersonnelOrderDetailDrawer({
               <section>
                 <h3 className="mb-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100">Заголовок</h3>
                 <div className="mb-3">
-                  <Field label="Исходное название" value={sourceTitle} />
+                  <Field label="Текущее название приказа" value={currentTitle} />
                 </div>
+                <details className="mb-3 rounded border border-zinc-200 p-3 dark:border-zinc-800" data-testid="personnel-order-provenance">
+                  <summary className="cursor-pointer text-sm font-medium">Источник и история восстановления</summary>
+                  <dl className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <Field label="Название из журнала (исходное)" value={sourceTitle} />
+                    <Field label="Язык исходного названия" value={journalSource.locale} />
+                    <Field label="Причина исправления" value={String(order.storage_json?.correction_reason || "—")} />
+                    <Field label="Пояснение" value={String(order.storage_json?.correction_explanation || "—")} />
+                    <Field label="Источник" value={personnelOrderSourceModeLabel(order.source_mode)} />
+                    <Field label="Статус восстановления" value={String(order.storage_json?.reconstruction_status || "—")} />
+                  </dl>
+                </details>
                 {editable ? (
                   <PersonnelOrderHeaderEditor
                     order={order}
@@ -625,7 +692,6 @@ export default function PersonnelOrderDetailDrawer({
                   disabled={!editable}
                   onChanged={handleChanged}
                   hirePersonId={hirePersonId}
-                  basisDocuments={basisDocuments}
                 />
               </section>
 
@@ -665,6 +731,7 @@ export default function PersonnelOrderDetailDrawer({
               </section>
 
               <section>
+                <PersonnelOrderTemplateApplication orderId={order.order_id} refreshKey={templatePreviewRefresh} onApplied={handleEditorialChanged} />
                 <PersonnelOrderEditorialTextEditor
                   orderId={order.order_id}
                   order={previewRequisites ?? order}
@@ -673,6 +740,7 @@ export default function PersonnelOrderDetailDrawer({
                   basisDocuments={basisDocuments}
                   onOrderChanged={handleChanged}
                   onEditorialChanged={handleEditorialChanged}
+                  editorialState={editorial}
                   locale={orderLanguage}
                 />
               </section>
@@ -696,15 +764,6 @@ export default function PersonnelOrderDetailDrawer({
                   </div>
                 ) : null}
               </section>
-              {detail ? (
-                <PersonnelOrderBasisForm
-                  detail={detail}
-                  onSaved={async () => {
-                    const next = await reload(order.order_id);
-                    if (next) onChanged?.(next);
-                  }}
-                />
-              ) : null}
             </>
           ) : null}
         </div>

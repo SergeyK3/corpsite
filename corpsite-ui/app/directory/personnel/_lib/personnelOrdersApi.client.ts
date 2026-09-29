@@ -215,6 +215,7 @@ export type PersonnelOrderEditorialBlock = {
   generated_text?: string | null;
   override_text?: string | null;
   effective_text: string;
+  suppressed?: boolean;
   generator_key?: string | null;
   generator_version?: string | null;
   source_fingerprint?: string | null;
@@ -631,6 +632,37 @@ export async function createPersonnelOrder(
     fallback: "Не удалось создать приказ.",
   });
 }
+
+export type PersonnelOrderTemplateApplicationBlock = {
+  block_id: number;
+  scope: "ORDER" | "ITEM";
+  block_type: "TITLE" | "PREAMBLE" | "BODY" | "BASIS";
+  language: "RU" | "KK";
+  order_item_id: number | null;
+};
+export type PersonnelOrderTemplateApplicationCurrentBlock = {
+  block_id?: number;
+  scope?: "ORDER" | "ITEM";
+  order_item_id?: number | null;
+  locale?: "ru" | "kk";
+  block_type?: "title" | "preamble" | "body" | "basis";
+  generated_text?: string | null;
+  override_text?: string | null;
+  revision?: number;
+};
+export type PersonnelOrderTemplateApplicationPreview = {
+  available: boolean;
+  template: { template_version_id: number; version_number: number; item_type_code: string };
+  has_overrides: boolean;
+  override_blocks: PersonnelOrderTemplateApplicationBlock[];
+  has_prior_application: boolean;
+  last_application: { application_id: number; template_version_id: number; template_version_number: number; applied_at: string; applied_by_user_id: number } | null;
+  current: Record<string, PersonnelOrderTemplateApplicationCurrentBlock>;
+  proposed: Record<string, string>;
+  order_revision: number;
+};
+export const previewPersonnelOrderTemplateApplication = (orderId: number) => requestJson<PersonnelOrderTemplateApplicationPreview>("GET", `/directory/personnel-orders/${orderId}/template-application/preview`, { fallback: "Не удалось подготовить сравнение шаблона." });
+export const applyPersonnelOrderTemplateApplication = (orderId: number, body: { expected_document_revision: number; confirm_replace_overrides: boolean; confirm_reapply: boolean }) => requestJson<PersonnelOrderEditorialState>("POST", `/directory/personnel-orders/${orderId}/template-application`, { body, fallback: "Не удалось применить шаблон." });
 
 export async function createManualPersonnelOrderDraft(
   payload: PersonnelOrderManualDraftCreatePayload,

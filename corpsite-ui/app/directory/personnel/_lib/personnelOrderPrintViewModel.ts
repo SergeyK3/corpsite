@@ -189,6 +189,9 @@ function pickManualOverrideByLocale(
   if (!blocks?.length) return null;
   const manual = (locale: "kk" | "ru") => {
     const block = blocks.find((b) => b.block_type === blockType && String(b.locale).toLowerCase() === locale);
+    // Empty override is the reversible suppression marker for order closing.
+    // It is intentionally distinct from null (restore generated text).
+    if (blockType === "closing" && block?.override_text === "") return null;
     // The same effective/current block must power both the HR drawer and the
     // official print.  Only orders without a current editorial block fall
     // back to legacy localized text or a deterministic type template.

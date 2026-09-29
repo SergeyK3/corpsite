@@ -298,8 +298,10 @@ export function renderPersonnelOrderDocument(
   // correction.  Prefer its effective/current text over an old payload-based
   // template whenever it is available; deterministic templates are only a
   // fallback for legacy orders without editorial blocks.
-  const manualBlockText = (block: { override_text?: string | null; generated_text?: string | null; effective_text?: string | null } | undefined) =>
-    block?.override_text?.trim() || block?.generated_text?.trim() || block?.effective_text?.trim() || null;
+  const closingSuppressed = (block: { block_type?: string; override_text?: string | null } | undefined) =>
+    block?.block_type === "closing" && block.override_text === "";
+  const manualBlockText = (block: { block_type?: string; override_text?: string | null; generated_text?: string | null; effective_text?: string | null } | undefined) =>
+    closingSuppressed(block) ? null : block?.override_text?.trim() || block?.generated_text?.trim() || block?.effective_text?.trim() || null;
   const orderBlockOverride = (blockType: string) => manualBlockText(editorial?.order_blocks.find(
     (block) => block.block_type === blockType && block.locale === language,
   ));
@@ -318,7 +320,9 @@ export function renderPersonnelOrderDocument(
               ? returnFromChildcareLeaveForLanguage(oneItemDetail, language)
               : rendered;
   };
-  const automaticPoints = items.map((item) => oneItemDocument(item).points[0]);
+  const automaticPoints = templateKey === "personnel.transfer.permanent-with-concurrent-duty"
+    ? rendered.points
+    : items.map((item) => oneItemDocument(item).points[0]);
   if (templateKey === "personnel.termination.employee-initiative-unused-leave") {
     for (const item of items) {
       const unusedLeaveDays = scalarText(payload(item).termination_unused_leave_days);
@@ -344,7 +348,9 @@ export function renderPersonnelOrderDocument(
         : effectiveBasis,
     };
   });
+  const closingBlock = editorial?.order_blocks.find((block) => block.block_type === "closing" && block.locale === language);
   const closing = orderBlockOverride("closing");
+  const closingIsSuppressed = closingSuppressed(closingBlock);
   const isChildcareReturn = String(detail.order.order_type_code).toUpperCase() === "RETURN_FROM_CHILDCARE_LEAVE";
   return {
     ...rendered,
@@ -354,7 +360,7 @@ export function renderPersonnelOrderDocument(
     preamble: preambleWithoutOrderVerb(orderBlockOverride("preamble") || rendered.preamble, language),
     directive: orderVerb(language),
     points,
-    additionalInstructions: isChildcareReturn
+    additionalInstructions: isChildcareReturn || closingIsSuppressed
       ? []
       : closing ? [...rendered.additionalInstructions, closing] : rendered.additionalInstructions,
   };

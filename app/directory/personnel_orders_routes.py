@@ -38,6 +38,8 @@ from app.directory.personnel_orders_schemas import (
     PersonnelOrderRestoreIn,
     PersonnelOrderSignatoryDefaultOut,
     PersonnelOrderUpdateIn,
+    PersonnelOrderTemplateApplicationIn,
+    PersonnelOrderTemplateApplicationPreviewOut,
     PersonnelOrderVoidIn,
 )
 from app.directory.rbac import require_personnel_admin_or_403
@@ -85,6 +87,7 @@ from app.services.personnel_orders_editorial_service import (
     patch_editorial_block,
     reset_block_to_generated,
 )
+from app.services.personnel_order_template_application_service import TemplateApplicationError, preview_template_application, apply_template_application
 from app.services.personnel_orders_query_service import (
     PersonnelOrderNotFoundError,
     PersonnelOrderValidationError,
@@ -532,6 +535,24 @@ def mark_personnel_order_ready_for_signature_route(
         raise
     except Exception as exc:
         raise as_http500(exc)
+
+
+@router.get("/personnel-orders/{order_id}/template-application/preview", response_model=PersonnelOrderTemplateApplicationPreviewOut)
+def preview_personnel_order_template_application_route(order_id: int = Path(..., ge=1), user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    try:
+        require_personnel_admin_or_403(user)
+        return call_service(preview_template_application, order_id=order_id)
+    except TemplateApplicationError as exc:
+        raise HTTPException(status_code=409 if exc.conflict else 422, detail=str(exc))
+
+
+@router.post("/personnel-orders/{order_id}/template-application", response_model=EditorialStateResponse)
+def apply_personnel_order_template_application_route(payload: PersonnelOrderTemplateApplicationIn, order_id: int = Path(..., ge=1), user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    try:
+        require_personnel_admin_or_403(user)
+        return call_service(apply_template_application, order_id=order_id, actor_user_id=_require_user_id(user), expected_document_revision=payload.expected_document_revision, confirm_replace_overrides=payload.confirm_replace_overrides, confirm_reapply=payload.confirm_reapply)
+    except TemplateApplicationError as exc:
+        raise HTTPException(status_code=409 if exc.conflict else 422, detail=str(exc))
 
 
 @router.get(

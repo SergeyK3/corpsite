@@ -288,6 +288,7 @@ class EditorialBlockOut(BaseModel):
     generated_text: Optional[str] = None
     override_text: Optional[str] = None
     effective_text: str = ""
+    suppressed: bool = False
     generator_key: Optional[str] = None
     generator_version: Optional[str] = None
     source_fingerprint: Optional[str] = None
@@ -331,6 +332,24 @@ class EditorialBlockPatchIn(BaseModel):
     override_text: Optional[str] = None
     clear_override: bool = False
     expected_revision: Optional[int] = Field(default=None, ge=1)
+
+
+class PersonnelOrderTemplateApplicationIn(BaseModel):
+    expected_document_revision: int = Field(..., ge=1)
+    confirm_replace_overrides: bool = False
+    confirm_reapply: bool = False
+
+
+class PersonnelOrderTemplateApplicationPreviewOut(BaseModel):
+    available: bool
+    template: Dict[str, Any]
+    has_overrides: bool
+    override_blocks: List[Dict[str, Any]] = Field(default_factory=list)
+    has_prior_application: bool
+    last_application: Optional[Dict[str, Any]] = None
+    current: Dict[str, Dict[str, Any]]
+    proposed: Dict[str, str]
+    order_revision: int
 
 
 PersonnelOrderVoidKind = Literal["CANCEL", "ANNUL"]

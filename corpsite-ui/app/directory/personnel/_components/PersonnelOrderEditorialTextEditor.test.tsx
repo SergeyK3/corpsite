@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import PersonnelOrderEditorialTextEditor from "./PersonnelOrderEditorialTextEditor";
-import type { PersonnelOrderEditorialState, PersonnelOrderItem } from "../_lib/personnelOrdersApi.client";
+import type { PersonnelOrderDetailResponse, PersonnelOrderEditorialState, PersonnelOrderItem } from "../_lib/personnelOrdersApi.client";
 
 vi.mock("../_lib/personnelOrdersApi.client", async () => {
   const actual = await vi.importActual<typeof import("../_lib/personnelOrdersApi.client")>(
@@ -218,7 +218,9 @@ describe("PersonnelOrderEditorialTextEditor", () => {
     expect(screen.getByText("Преамбула")).toBeInTheDocument();
     expect(screen.getByText("Пункт №1")).toBeInTheDocument();
     expect(screen.getByText("Петрова Анна")).toBeInTheDocument();
-    expect(screen.getByText("Негіз")).toBeInTheDocument();
+    expect(screen.getByText("Негіз (мәтін құжатта)")).toBeInTheDocument();
+    expect(screen.getByText("Негіз: жеке өтініш.")).toBeInTheDocument();
+    expect(screen.queryByTestId("personnel-order-editorial-basis-block")).not.toBeInTheDocument();
     expect(screen.getByText("Заключительная часть")).toBeInTheDocument();
 
     expect(screen.queryByText(/fingerprint/i)).not.toBeInTheDocument();
@@ -311,23 +313,14 @@ describe("PersonnelOrderEditorialTextEditor", () => {
     expect(screen.queryByText("Жұмысқа қабылдау туралы")).not.toBeInTheDocument();
   });
 
-  it("localizes the structured basis editor without changing its shared document code", async () => {
+  it("shows the editorial BASIS as document text without a second structural editor", async () => {
     vi.mocked(getPersonnelOrderEditorial).mockResolvedValue(sampleState());
-    vi.mocked(updatePersonnelOrderItem).mockResolvedValue({} as never);
-    render(<PersonnelOrderEditorialTextEditor orderId={42} order={sampleOrder} items={items} editable basisDocuments={[{ basis_id: "application-1", document_type: "EMPLOYEE_APPLICATION", description: { kk: "Қызметкердің өтініші", ru: "Заявление работника" }, source_text: "Негіз: жеке өтініш." }]} />);
+    render(<PersonnelOrderEditorialTextEditor orderId={42} order={sampleOrder} items={items} editable />);
 
-    const kkEdit = await screen.findByTestId("personnel-order-editorial-basis-edit");
-    fireEvent.click(kkEdit);
-    expect(screen.getByTestId("personnel-order-editorial-basis-editor")).toHaveTextContent("Негіз түрі");
-    expect(screen.getByTestId("personnel-order-editorial-basis-editor")).toHaveTextContent("Қызметкердің өтініші");
-    expect(screen.getByTestId("personnel-order-editorial-basis-editor")).toHaveTextContent("Негіз қосу");
-
-    fireEvent.click(screen.getByTestId("personnel-order-editorial-locale-ru"));
-    const ruEdit = await screen.findByTestId("personnel-order-editorial-basis-edit");
-    fireEvent.click(ruEdit);
-    expect(screen.getByTestId("personnel-order-editorial-basis-editor")).toHaveTextContent("Вид основания");
-    expect(screen.getByTestId("personnel-order-editorial-basis-editor")).toHaveTextContent("Заявление работника");
-    expect(screen.getByTestId("personnel-order-editorial-basis-editor")).toHaveTextContent("Добавить основание");
+    expect(await screen.findByText("Негіз (мәтін құжатта)")).toBeInTheDocument();
+    expect(screen.getByText("Негіз: жеке өтініш.")).toBeInTheDocument();
+    expect(screen.queryByTestId("personnel-order-editorial-basis-edit")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("personnel-order-editorial-basis-editor")).not.toBeInTheDocument();
   });
 
   it("saves Russian override with expected revision", async () => {
