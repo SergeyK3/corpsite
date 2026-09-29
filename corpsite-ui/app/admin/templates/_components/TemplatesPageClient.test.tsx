@@ -41,6 +41,8 @@ describe("TemplatesPageClient draft lifecycle", () => {
   it("opens a PUBLISHED working copy without POST, without draftExists, and with disabled actions", async () => {
     setup(); const editor = await open();
     expect(editor).toHaveTextContent("Несохранённая рабочая копия опубликованной версии 2"); expect(editor).not.toHaveTextContent("revision 0"); expect(screen.getByLabelText("Заголовок RU")).toHaveValue(texts.title_ru);
+    expect(screen.getByTestId("template-editor-application-notice")).toHaveTextContent("Рабочая копия не сохранена и не применяется к кадровым приказам");
+    expect(screen.getByTestId("template-editor-application-notice")).not.toHaveTextContent("Черновик не применяется к кадровым приказам.");
     expect(screen.getByTestId("template-published-read-only")).not.toHaveTextContent("Имеется черновик следующей версии"); expect(screen.getByRole("button", { name: "Сохранить черновик" })).toBeDisabled(); expect(screen.getByRole("button", { name: "Опубликовать версию" })).toBeDisabled(); expect(createPersonnelOrderTemplateDraft).not.toHaveBeenCalled();
   });
 
@@ -52,6 +54,8 @@ describe("TemplatesPageClient draft lifecycle", () => {
 
   it("server DRAFT continues only by click and blocks publish while dirty", async () => {
     vi.mocked(getPersonnelOrderTemplateDraft).mockResolvedValue(draft); setup(); await open("Продолжить редактирование");
+    expect(screen.getByTestId("template-editor-application-notice")).toHaveTextContent("Черновик не применяется к кадровым приказам.");
+    expect(screen.getByTestId("template-editor-application-notice")).not.toHaveTextContent("Рабочая копия не сохранена");
     expect(screen.getByRole("button", { name: "Сохранить черновик" })).toBeDisabled(); expect(screen.getByRole("button", { name: "Опубликовать версию" })).toBeEnabled(); changeTitle("Ещё не сохранено"); expect(screen.getByRole("button", { name: "Опубликовать версию" })).toBeDisabled(); fireEvent.click(screen.getByRole("button", { name: "Сохранить черновик" }));
     await waitFor(() => expect(savePersonnelOrderTemplateDraft).toHaveBeenCalledWith("TERMINATION", expect.objectContaining({ expected_revision: 1, title_ru: "Ещё не сохранено" })));
   });
@@ -78,6 +82,28 @@ describe("TemplatesPageClient draft lifecycle", () => {
 
   it("keeps typed values after a validation or stale-base error", async () => {
     vi.mocked(createPersonnelOrderTemplateDraft).mockRejectedValue({ status: 409, message: "Конфликт базы" }); setup(); await open(); changeTitle("Не потерять"); fireEvent.click(screen.getByRole("button", { name: "Сохранить черновик" })); expect(await screen.findByRole("alert")).toHaveTextContent("Конфликт базы"); expect(screen.getByLabelText("Заголовок RU")).toHaveValue("Не потерять");
+  });
+
+  it.each([404, 500])("shows a safe editor-base %i error without creating a DRAFT", async (status) => {
+    vi.mocked(getPersonnelOrderTemplateEditorBase).mockRejectedValueOnce({ status, message: "internal backend detail" });
+    setup();
+    await screen.findByRole("button", { name: "Редактировать шаблон" });
+    fireEvent.click(screen.getByRole("button", { name: "Редактировать шаблон" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Не удалось открыть редактор. Повторите попытку.");
+    expect(screen.queryByTestId("template-draft-editor")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Редактировать шаблон" })).toBeEnabled();
+    expect(createPersonnelOrderTemplateDraft).not.toHaveBeenCalled();
+  });
+
+  it("opens a WORKING_COPY when a retry succeeds after editor-base failure", async () => {
+    vi.mocked(getPersonnelOrderTemplateEditorBase).mockRejectedValueOnce({ status: 500, message: "internal backend detail" }).mockResolvedValue(publishedBase);
+    setup();
+    await screen.findByRole("button", { name: "Редактировать шаблон" });
+    fireEvent.click(screen.getByRole("button", { name: "Редактировать шаблон" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Не удалось открыть редактор. Повторите попытку.");
+    fireEvent.click(screen.getByRole("button", { name: "Редактировать шаблон" }));
+    expect(await screen.findByTestId("template-draft-editor")).toHaveTextContent("Несохранённая рабочая копия опубликованной версии 2");
+    expect(createPersonnelOrderTemplateDraft).not.toHaveBeenCalled();
   });
 
   it("restores paired textarea height for the current type without creating a DRAFT", async () => {

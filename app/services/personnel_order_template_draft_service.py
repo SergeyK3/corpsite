@@ -79,7 +79,18 @@ def get_editor_base(item_type_code: str) -> dict[str, Any]:
     """Read-only source for a client working copy; never creates a DRAFT."""
     published = get_published(item_type_code)
     if published is not None:
-        return {"source": "PUBLISHED", **published}
+        # The editor-base response is intentionally narrower than a version
+        # response.  In particular, do not leak DRAFT/PUBLISHED lifecycle
+        # metadata into a client-only working copy (and keep it compatible
+        # with the strict editor-base response schema).
+        return {
+            "source": "PUBLISHED",
+            "item_type_code": published["item_type_code"],
+            "template_version_id": published["template_version_id"],
+            "version_number": published["version_number"],
+            "revision": published["revision"],
+            **{field: published[field] for field in TEXT_FIELDS},
+        }
     return {"source": "INITIAL", "item_type_code": item_type_code,
             "template_version_id": None, "version_number": None, "revision": None,
             **dict(get_personnel_order_template_spec(item_type_code).initial_texts)}

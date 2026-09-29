@@ -364,7 +364,7 @@ function DraftEditor({ editor, published, onSaved, onPublished, variables, warni
     <section ref={editorRef} className="mt-5 rounded-xl border border-blue-200 p-4" data-testid="template-draft-editor">
       <h4 className="font-semibold">{isWorkingCopy ? (isInitialWorkingCopy ? "Первая версия шаблона ещё не сохранена" : `Несохранённая рабочая копия опубликованной версии ${editor.workingCopy.base.version_number}`) : "Черновая версия шаблона"}</h4>
       {serverDraft ? <p className="text-sm">Версия {serverDraft.version_number} · revision {serverDraft.revision} · {serverDraft.status}</p> : null}
-      <p className="mt-2 text-sm text-amber-700">Черновик не применяется к кадровым приказам.</p>
+      <p className="mt-2 text-sm text-amber-700" data-testid="template-editor-application-notice">{isWorkingCopy ? "Рабочая копия не сохранена и не применяется к кадровым приказам" : "Черновик не применяется к кадровым приказам."}</p>
       {warning ? <p className="mt-2 text-sm font-medium text-amber-700" role="note">{warning}</p> : null}
 
       <div className="mt-3 grid grid-cols-1 gap-x-4 gap-y-3 md:grid-cols-2" data-testid="template-draft-fields">
@@ -419,6 +419,7 @@ function TemplateDetail({ item }: { item: PersonnelOrderTemplateCatalogItem }) {
   const [serverDraft, setServerDraft] = useState<PersonnelOrderTemplateDraft | null>(null);
   const [published, setPublished] = useState<PersonnelOrderTemplateDraft | null>(null);
   const [openingEditor, setOpeningEditor] = useState(false);
+  const [openError, setOpenError] = useState("");
   const openRequest = useRef(0);
   const loadRequest = useRef(0);
   const draftExists = serverDraft?.status === "DRAFT";
@@ -440,6 +441,7 @@ function TemplateDetail({ item }: { item: PersonnelOrderTemplateCatalogItem }) {
   }, [item.type_code]);
   const openEditor = useCallback(() => {
     const request = ++openRequest.current;
+    setOpenError("");
     setOpeningEditor(true);
     void getPersonnelOrderTemplateDraft(item.type_code)
       .then(async (existing): Promise<EditorDocument> => {
@@ -448,11 +450,17 @@ function TemplateDetail({ item }: { item: PersonnelOrderTemplateCatalogItem }) {
         return { kind: "WORKING_COPY", workingCopy: { kind: "WORKING_COPY", item_type_code: base.item_type_code, base, ...editableDraftText(base) } };
       })
       .then((next) => { if (request === openRequest.current) setEditor(next); })
-      .catch(() => { /* keep the read-only state on a failed bootstrap request */ })
+      .catch(() => {
+        if (request === openRequest.current) {
+          // Do not expose backend detail here: it can contain implementation
+          // diagnostics. The user can safely retry the read-only bootstrap.
+          setOpenError("Не удалось открыть редактор. Повторите попытку.");
+        }
+      })
       .finally(() => { if (request === openRequest.current) setOpeningEditor(false); });
   }, [item.type_code]);
   useEffect(() => {
-    setEditor(null); setPublished(null); setServerDraft(null);
+    setEditor(null); setPublished(null); setServerDraft(null); setOpenError("");
     if (item.editor_available) reloadState();
     return () => { loadRequest.current += 1; openRequest.current += 1; };
   }, [item.type_code, item.editor_available, reloadState]);
@@ -467,7 +475,7 @@ function TemplateDetail({ item }: { item: PersonnelOrderTemplateCatalogItem }) {
         <p className="mt-3">Обязательные поля: {item.required_fields.join(", ") || "не формализованы"}</p>
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">{item.notes}</p>
       </>}
-      {item.editor_available && !editor ? <div className="mt-4"><button aria-label={openingEditor ? "Открытие…" : (draftExists ? "Продолжить редактирование" : "Редактировать шаблон")} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-500 dark:text-zinc-950 dark:hover:bg-blue-400" type="button" onClick={openEditor} disabled={openingEditor}>{openingEditor ? "Открытие…" : (draftExists ? "Продолжить редактирование" : "Редактировать шаблон")}</button>{openingEditor ? <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400" data-testid="template-editor-opening">Открытие редактора…</p> : null}</div> : null}
+      {item.editor_available && !editor ? <div className="mt-4"><button aria-label={openingEditor ? "Открытие…" : (draftExists ? "Продолжить редактирование" : "Редактировать шаблон")} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-500 dark:text-zinc-950 dark:hover:bg-blue-400" type="button" onClick={openEditor} disabled={openingEditor}>{openingEditor ? "Открытие…" : (draftExists ? "Продолжить редактирование" : "Редактировать шаблон")}</button>{openingEditor ? <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400" data-testid="template-editor-opening">Открытие редактора…</p> : null}{openError ? <p className="mt-2 text-sm text-red-700" role="alert">{openError}</p> : null}</div> : null}
       {editor ? <DraftEditor editor={editor} published={published} onSaved={(next) => { setEditor({ kind: "DRAFT", draft: next }); setServerDraft(next); }} onPublished={() => { setEditor(null); setServerDraft(null); reloadState(); }} variables={(detail?.variables ?? []).map((variable) => variable.code)} warning={item.support_level === "PARTIAL" ? "Шаблон требует дальнейшей предметной формализации; неподтверждённые реквизиты не добавлены." : undefined} /> : null}
     </aside>
   );
