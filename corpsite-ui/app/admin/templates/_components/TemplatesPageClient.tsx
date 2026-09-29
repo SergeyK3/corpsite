@@ -21,8 +21,10 @@ import {
   type PersonnelOrderTemplateDraftText,
   createPersonnelOrderTemplateDraft,
   getPersonnelOrderTemplateDraft,
+  getPersonnelOrderTemplatePublished,
   previewPersonnelOrderTemplateDraft,
   savePersonnelOrderTemplateDraft,
+  publishPersonnelOrderTemplateDraft,
 } from "../_lib/personnelOrderTemplatesApi.client";
 
 const TAB_CLASS = "rounded-xl border px-4 py-2 text-sm font-medium transition";
@@ -188,7 +190,7 @@ function FormalizedTemplateDetail({ detail, showCatalogPreview }: { detail: Pers
   );
 }
 
-function DraftEditor({ draft, onSaved, variables, warning }: { draft: PersonnelOrderTemplateDraft; onSaved: (draft: PersonnelOrderTemplateDraft) => void; variables: string[]; warning?: string }) {
+function DraftEditor({ draft, onSaved, onEditPublished, onPublished, variables, warning }: { draft: PersonnelOrderTemplateDraft; onSaved: (draft: PersonnelOrderTemplateDraft) => void; onEditPublished: () => void; onPublished: (draft: PersonnelOrderTemplateDraft) => void; variables: string[]; warning?: string }) {
   const [savedDraft, setSavedDraft] = useState(draft);
   const [values, setValues] = useState<PersonnelOrderTemplateDraftText>(() => editableDraftText(draft));
   const [preview, setPreview] = useState<Record<"ru" | "kk", PersonnelOrderTemplatePreview> | null>(null);
@@ -197,6 +199,7 @@ function DraftEditor({ draft, onSaved, variables, warning }: { draft: PersonnelO
   const [saving, setSaving] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const [reloading, setReloading] = useState(false);
+  const [publishing, setPublishing] = useState(false);
   const editorRef = useRef<HTMLElement | null>(null);
   const previewRef = useRef<HTMLDivElement | null>(null);
   const previewRequest = useRef(0);
@@ -310,10 +313,17 @@ function DraftEditor({ draft, onSaved, variables, warning }: { draft: PersonnelO
       .catch((cause) => setError(draftErrorMessage(cause)))
       .finally(() => setReloading(false));
   };
+  const publish = () => {
+    if (!window.confirm("Опубликовать эту версию шаблона?")) return;
+    setPublishing(true); setError("");
+    void publishPersonnelOrderTemplateDraft(savedDraft.item_type_code, savedDraft.revision)
+      .then((next) => { onSaved(next); onPublished(next); })
+      .catch((cause) => setError(draftErrorMessage(cause))).finally(() => setPublishing(false));
+  };
   return (
     <section ref={editorRef} className="mt-5 rounded-xl border border-blue-200 p-4" data-testid="template-draft-editor">
       <h4 className="font-semibold">Черновая версия шаблона</h4>
-      <p className="text-sm">Версия {savedDraft.version_number} · revision {savedDraft.revision} · Черновик</p>
+      <p className="text-sm">Версия {savedDraft.version_number} · revision {savedDraft.revision} · {savedDraft.status}</p>
       <p className="mt-2 text-sm text-amber-700">Черновик не применяется к кадровым приказам.</p>
       {warning ? <p className="mt-2 text-sm font-medium text-amber-700" role="note">{warning}</p> : null}
 
@@ -328,7 +338,7 @@ function DraftEditor({ draft, onSaved, variables, warning }: { draft: PersonnelO
               data-height-pair={pair}
               ref={(node) => { ruTextareas.current[ru[0]] = node; }}
               value={values[ru[0]]}
-              onChange={(e) => change(ru[0], e.target.value)}
+              onChange={(e) => change(ru[0], e.target.value)} disabled={savedDraft.status !== "DRAFT"}
               className={`mt-1 w-full resize-y rounded border p-2 ${heightClass}`}
               style={{ minHeight: TEXTAREA_MIN_HEIGHT, maxHeight: TEXTAREA_MAX_HEIGHT }}
             />
@@ -339,7 +349,7 @@ function DraftEditor({ draft, onSaved, variables, warning }: { draft: PersonnelO
               aria-label={kk[1]}
               ref={(node) => { kkTextareas.current[kk[0]] = node; }}
               value={values[kk[0]]}
-              onChange={(e) => change(kk[0], e.target.value)}
+              onChange={(e) => change(kk[0], e.target.value)} disabled={savedDraft.status !== "DRAFT"}
               className={`mt-1 w-full resize-none rounded border p-2 ${heightClass}`}
               style={{ minHeight: TEXTAREA_MIN_HEIGHT, maxHeight: TEXTAREA_MAX_HEIGHT }}
             />
@@ -349,8 +359,10 @@ function DraftEditor({ draft, onSaved, variables, warning }: { draft: PersonnelO
 
       <p className="mt-3 text-xs">Разрешённые переменные: {variables.join(", ")}.</p>
       <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-zinc-200 pt-3 dark:border-zinc-800" data-testid="template-draft-actions">
-        <button type="button" onClick={showPreview} disabled={previewing} className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-800 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800">{previewing ? "Формирование…" : "Предварительный просмотр"}</button>
-        <button type="button" onClick={save} disabled={saving} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-500 dark:text-zinc-950 dark:hover:bg-blue-400">{saving ? "Сохранение…" : "Сохранить черновик"}</button>
+        <button type="button" onClick={showPreview} disabled={previewing || savedDraft.status !== "DRAFT"} className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-800 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800">{previewing ? "Формирование…" : "Предварительный просмотр"}</button>
+        <button type="button" onClick={save} disabled={saving || savedDraft.status !== "DRAFT"} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-500 dark:text-zinc-950 dark:hover:bg-blue-400">{saving ? "Сохранение…" : "Сохранить черновик"}</button>
+        <button type="button" onClick={publish} disabled={publishing || savedDraft.status !== "DRAFT"} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">{publishing ? "Публикация…" : "Опубликовать версию"}</button>
+        {savedDraft.status === "PUBLISHED" ? <button type="button" onClick={onEditPublished} className="rounded-lg border border-blue-700 px-4 py-2 text-sm font-semibold text-blue-700">Редактировать шаблон</button> : null}
         <button type="button" onClick={resetHeights} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800">Сбросить высоту полей</button>
         {error ? <button type="button" onClick={reloadCurrentDraft} disabled={reloading} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60">{reloading ? "Загрузка…" : "Загрузить актуальную версию"}</button> : null}
         {error ? <p role="alert" className="text-sm text-red-700">{error}</p> : null}
@@ -361,9 +373,11 @@ function DraftEditor({ draft, onSaved, variables, warning }: { draft: PersonnelO
   );
 }
 
-function TemplateDetail({ item, autoOpen }: { item: PersonnelOrderTemplateCatalogItem; autoOpen: boolean }) {
+function TemplateDetail({ item }: { item: PersonnelOrderTemplateCatalogItem }) {
   const detail = item.template_detail ?? item.pilot_detail;
   const [draft, setDraft] = useState<PersonnelOrderTemplateDraft | null>(null);
+  const [published, setPublished] = useState<PersonnelOrderTemplateDraft | null>(null);
+  const [draftExists, setDraftExists] = useState(false);
   const [openingEditor, setOpeningEditor] = useState(false);
   const openRequest = useRef(0);
   const openEditor = useCallback(() => {
@@ -371,26 +385,44 @@ function TemplateDetail({ item, autoOpen }: { item: PersonnelOrderTemplateCatalo
     setDraft(null);
     setOpeningEditor(true);
     void getPersonnelOrderTemplateDraft(item.type_code)
-      .then((existing) => existing ?? createPersonnelOrderTemplateDraft(item.type_code))
-      .then((next) => { if (request === openRequest.current) setDraft(next); })
+      .then((existing) => {
+        if (existing) return existing;
+        return createPersonnelOrderTemplateDraft(item.type_code);
+      })
+      .then((next) => { if (request === openRequest.current) { setDraft(next); setDraftExists(true); } })
       .finally(() => { if (request === openRequest.current) setOpeningEditor(false); });
   }, [item.type_code]);
   useEffect(() => {
-    if (autoOpen && item.editor_available) openEditor();
-  }, [autoOpen, item.editor_available, openEditor]);
+    let active = true;
+    setDraft(null); setDraftExists(false); setPublished(null);
+    if (!item.editor_available) return () => { active = false; };
+    void getPersonnelOrderTemplatePublished(item.type_code)
+      .then(async (nextPublished) => {
+        const nextDraft = nextPublished ? await getPersonnelOrderTemplateDraft(item.type_code) : null;
+        return [nextPublished, nextDraft] as const;
+      })
+      .then(([nextPublished, nextDraft]) => {
+        if (!active) return;
+        setPublished(nextPublished);
+        setDraftExists(Boolean(nextDraft));
+      })
+      .catch(() => { if (active) { setPublished(null); setDraftExists(false); } });
+    return () => { active = false; };
+  }, [item.type_code, item.editor_available]);
   useEffect(() => () => { openRequest.current += 1; }, []);
   return (
     <aside data-testid="personnel-order-template-detail" className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
       <h3 className="text-lg font-semibold">{item.title_ru}</h3>
       <p className="mt-1">{item.title_kk}</p>
       <p className="mt-2 text-sm">{item.type_code} · {item.support_level}</p>
+      {published ? <section className="mt-4 rounded-lg border border-emerald-200 p-3" data-testid="template-published-read-only"><h4 className="font-semibold">Опубликованная версия шаблона</h4><p className="text-sm">Версия {published.version_number} · {published.status}</p><p className="mt-2 whitespace-pre-wrap text-sm">{published.title_ru}</p>{draftExists ? <p className="mt-2 text-sm text-amber-700">Имеется черновик следующей версии.</p> : null}</section> : null}
       <p className="mt-1 text-sm">{item.uses_specialized_generator ? "Специализированный генератор" : "Общий fallback"}</p>
       {detail ? <FormalizedTemplateDetail detail={detail} showCatalogPreview={!item.editor_available} /> : <>
         <p className="mt-3">Обязательные поля: {item.required_fields.join(", ") || "не формализованы"}</p>
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">{item.notes}</p>
       </>}
-      {item.editor_available && !draft ? <div className="mt-4"><button className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-500 dark:text-zinc-950 dark:hover:bg-blue-400" type="button" onClick={openEditor} disabled={openingEditor}>{openingEditor ? "Открытие…" : "Редактировать шаблон"}</button>{openingEditor ? <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400" data-testid="template-editor-opening">Открытие редактора…</p> : null}</div> : null}
-      {draft ? <DraftEditor draft={draft} onSaved={setDraft} variables={(detail?.variables ?? []).map((variable) => variable.code)} warning={item.support_level === "PARTIAL" ? "Шаблон требует дальнейшей предметной формализации; неподтверждённые реквизиты не добавлены." : undefined} /> : null}
+      {item.editor_available && !draft ? <div className="mt-4"><button aria-label={openingEditor ? "Открытие…" : draftExists ? "Продолжить редактирование" : "Редактировать шаблон"} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-500 dark:text-zinc-950 dark:hover:bg-blue-400" type="button" onClick={openEditor} disabled={openingEditor}>{openingEditor ? "Открытие…" : draftExists ? "Продолжить редактирование" : "Редактировать шаблон"}</button>{openingEditor ? <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400" data-testid="template-editor-opening">Открытие редактора…</p> : null}</div> : null}
+      {draft ? <DraftEditor draft={draft} onSaved={setDraft} onEditPublished={openEditor} onPublished={(next) => { setPublished(next); setDraft(null); setDraftExists(false); }} variables={(detail?.variables ?? []).map((variable) => variable.code)} warning={item.support_level === "PARTIAL" ? "Шаблон требует дальнейшей предметной формализации; неподтверждённые реквизиты не добавлены." : undefined} /> : null}
     </aside>
   );
 }
@@ -452,7 +484,7 @@ export default function TemplatesPageClient() {
           <GeneralPersonnelOrderRequirements />
           <div className="flex gap-2"><input aria-label="Поиск шаблонов кадровых приказов" value={query} onChange={(e) => setQuery(e.target.value)} className="rounded border px-2 py-1" /><select aria-label="Уровень поддержки" value={level} onChange={(e) => setLevel(e.target.value)} className="rounded border px-2 py-1"><option value="ALL">Все уровни</option><option value="SUPPORTED">SUPPORTED</option><option value="PARTIAL">PARTIAL</option><option value="NOT_IMPLEMENTED">NOT_IMPLEMENTED</option></select></div>
           <div className="grid gap-2 md:grid-cols-2" data-testid="personnel-order-template-list">{visibleItems.map((item) => <button type="button" key={item.type_code} onClick={() => selectType(item.type_code)} className="rounded border p-3 text-left" data-testid={`personnel-order-template-${item.type_code}`}><div className="font-medium">{item.title_ru}</div><div>{item.title_kk}</div><div className="font-mono text-xs">{item.type_code}</div><div>{item.support_level} · {item.supported_locales.join(", ")} · Встроенный шаблон {item.is_pilot ? "· Пилот" : ""}</div></button>)}</div>
-          {selectedItem ? <TemplateDetail key={selectedItem.type_code} item={selectedItem} autoOpen={switchingType === selectedItem.type_code} /> : null}
+          {selectedItem ? <TemplateDetail key={selectedItem.type_code} item={selectedItem} /> : null}
         </section>
       )}
     </div>

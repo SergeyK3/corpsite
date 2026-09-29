@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { apiFetchJson } from "@/lib/api";
 
-import { previewPersonnelOrderTemplateDraft, savePersonnelOrderTemplateDraft, type PersonnelOrderTemplateDraft, type PersonnelOrderTemplateDraftText } from "./personnelOrderTemplatesApi.client";
+import { getPersonnelOrderTemplatePublished, previewPersonnelOrderTemplateDraft, savePersonnelOrderTemplateDraft, type PersonnelOrderTemplateDraft, type PersonnelOrderTemplateDraftText } from "./personnelOrderTemplatesApi.client";
 
 vi.mock("@/lib/api", () => ({ apiFetchJson: vi.fn() }));
 
@@ -45,5 +45,15 @@ describe("savePersonnelOrderTemplateDraft", () => {
       "/admin/personnel-order-templates/LEAVE.UNPAID.GRANT/draft",
       { method: "PUT", body: { ...draft, expected_revision: 9 } },
     );
+  });
+});
+
+describe("getPersonnelOrderTemplatePublished", () => {
+  it("uses the read-only GET endpoint", async () => {
+    vi.mocked(apiFetchJson).mockResolvedValueOnce(null);
+
+    await getPersonnelOrderTemplatePublished("TERMINATION");
+
+    expect(apiFetchJson).toHaveBeenCalledWith("/admin/personnel-order-templates/TERMINATION/published");
   });
 });

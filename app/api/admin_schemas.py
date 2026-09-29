@@ -75,6 +75,12 @@ class PersonnelOrderTemplateDraftOut(PersonnelOrderTemplateDraftText):
     based_on_built_in: bool
     created_at: datetime
     updated_at: datetime
+    published_at: Optional[datetime] = None
+    published_by_user_id: Optional[int] = None
+
+
+class PersonnelOrderTemplatePublish(BaseModel):
+    expected_revision: int = Field(..., ge=1)
 
 
 class PersonnelOrderTemplateDraftPreview(PersonnelOrderTemplateDraftText):

@@ -41,7 +41,7 @@ def _spec(code: str, variables: tuple[str, ...], *, required: RequiredVariables 
 
 PERSONNEL_ORDER_TEMPLATE_SPECS = {
     "HIRE": _spec("HIRE", _COMMON), "TRANSFER": _spec("TRANSFER", _COMMON),
-    "TERMINATION": _spec("TERMINATION", ("employee.full_name", "employee.full_name_instrumental_kk", "position.title_ru", "position.title_kk", "org_unit.title_ru", "org_unit.title_kk", "effective_date", "termination.reason", "termination.unused_leave_days", "basis"), preview={"ru": {"effective_date": "[[Дата увольнения]]"}, "kk": {"effective_date": "[[Жұмыстан босату күні]]"}}),
+    "TERMINATION": _spec("TERMINATION", ("employee.full_name", "position.title_ru", "position.title_kk", "org_unit.title_ru", "org_unit.title_kk", "effective_date", "effective_date_local", "termination.reason", "termination.unused_leave_days", "basis"), preview={"ru": {"effective_date": "[[Дата увольнения]]", "effective_date_local": "[[Дата увольнения]]"}, "kk": {"effective_date": "[[Жұмыстан босату күні]]", "effective_date_local": "[[Жұмыстан босату күні]]"}}),
     "CONCURRENT_DUTY_START": _spec("CONCURRENT_DUTY_START", ("employee.full_name", "effective_date", "concurrent.rate", "total.rate", "basis")),
     "CONCURRENT_DUTY_END": _spec("CONCURRENT_DUTY_END", ("employee.full_name", "effective_date", "concurrent.rate", "remaining.rate", "basis")),
     "LEAVE.ANNUAL.GRANT": _spec("LEAVE.ANNUAL.GRANT", _LEAVE),

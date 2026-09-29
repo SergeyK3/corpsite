@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import TemplatesPageClient from "./TemplatesPageClient";
-import { createPersonnelOrderTemplateDraft, getPersonnelOrderTemplateDraft, listPersonnelOrderTemplateCatalog, previewPersonnelOrderTemplateDraft, savePersonnelOrderTemplateDraft } from "../_lib/personnelOrderTemplatesApi.client";
+import { createPersonnelOrderTemplateDraft, getPersonnelOrderTemplateDraft, getPersonnelOrderTemplatePublished, listPersonnelOrderTemplateCatalog, previewPersonnelOrderTemplateDraft, publishPersonnelOrderTemplateDraft, savePersonnelOrderTemplateDraft } from "../_lib/personnelOrderTemplatesApi.client";
 
 let currentSearch = new URLSearchParams();
 const push = vi.fn();
@@ -19,7 +19,7 @@ vi.mock("@/app/regular-tasks/_components/RegularTasksAdminClient", () => ({
     </div>
   ),
 }));
-vi.mock("../_lib/personnelOrderTemplatesApi.client", () => ({ listPersonnelOrderTemplateCatalog: vi.fn(), getPersonnelOrderTemplateDraft: vi.fn(), createPersonnelOrderTemplateDraft: vi.fn(), savePersonnelOrderTemplateDraft: vi.fn(), previewPersonnelOrderTemplateDraft: vi.fn() }));
+vi.mock("../_lib/personnelOrderTemplatesApi.client", () => ({ listPersonnelOrderTemplateCatalog: vi.fn(), getPersonnelOrderTemplateDraft: vi.fn(), getPersonnelOrderTemplatePublished: vi.fn(), createPersonnelOrderTemplateDraft: vi.fn(), savePersonnelOrderTemplateDraft: vi.fn(), previewPersonnelOrderTemplateDraft: vi.fn(), publishPersonnelOrderTemplateDraft: vi.fn() }));
 
 const pilotDetail = {
   required_fields: ["ФИО сотрудника", "Должность на русском языке", "Дата выхода на работу"],
@@ -98,18 +98,23 @@ const legacyTerminationDraft = {
 };
 
 describe("TemplatesPageClient", () => {
+  afterEach(() => { vi.unstubAllGlobals(); });
   beforeEach(() => {
     window.localStorage.clear();
     currentSearch = new URLSearchParams();
     push.mockReset();
     vi.mocked(getPersonnelOrderTemplateDraft).mockReset();
+    vi.mocked(getPersonnelOrderTemplatePublished).mockReset();
     vi.mocked(createPersonnelOrderTemplateDraft).mockReset();
     vi.mocked(savePersonnelOrderTemplateDraft).mockReset();
     vi.mocked(previewPersonnelOrderTemplateDraft).mockReset();
+    vi.mocked(publishPersonnelOrderTemplateDraft).mockReset();
     vi.mocked(getPersonnelOrderTemplateDraft).mockResolvedValue(null);
+    vi.mocked(getPersonnelOrderTemplatePublished).mockResolvedValue(null);
     vi.mocked(createPersonnelOrderTemplateDraft).mockResolvedValue(unpaidDraft);
     vi.mocked(savePersonnelOrderTemplateDraft).mockResolvedValue({ ...unpaidDraft, revision: 2 });
     vi.mocked(previewPersonnelOrderTemplateDraft).mockResolvedValue(draftPreview);
+    vi.mocked(publishPersonnelOrderTemplateDraft).mockResolvedValue({ ...unpaidDraft, status: "PUBLISHED", published_at: "2026-01-01T00:00:00", published_by_user_id: 1 });
     vi.mocked(listPersonnelOrderTemplateCatalog).mockResolvedValue({ items: [{
       type_code: "RETURN_FROM_CHILDCARE_LEAVE",
       title_ru: "О выходе на работу из отпуска по уходу за ребёнком",
@@ -325,7 +330,7 @@ describe("TemplatesPageClient", () => {
     expect(screen.getByLabelText("Распорядительный текст KK")).toHaveValue(unpaidDraft.body_template_kk);
     expect(screen.getByLabelText("Основание RU")).toHaveValue(unpaidDraft.basis_template_ru);
     expect(screen.getByLabelText("Основание KK")).toHaveValue(unpaidDraft.basis_template_kk);
-    expect(screen.queryByRole("button", { name: /Опубликовать/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Опубликовать/i })).toBeInTheDocument();
     expect(screen.getByTestId("template-draft-actions")).toHaveClass("border-t", "pt-3");
     expect(screen.getByRole("button", { name: "Предварительный просмотр" })).toHaveClass("border", "bg-white");
     expect(screen.getByRole("button", { name: "Сохранить черновик" })).toHaveClass("bg-blue-700", "text-white", "rounded-lg");
@@ -462,7 +467,7 @@ describe("TemplatesPageClient", () => {
     const kkTitle = screen.getByLabelText("Заголовок KK");
     vi.spyOn(ruBody, "getBoundingClientRect").mockReturnValue({ height: 276 } as DOMRect);
 
-    resizeCallback?.([{ target: ruBody } as ResizeObserverEntry], {} as ResizeObserver);
+    resizeCallback?.([{ target: ruBody } as unknown as ResizeObserverEntry], {} as ResizeObserver);
 
     expect(kkBody).toHaveStyle({ height: "276px" });
     expect(kkTitle).not.toHaveStyle({ height: "276px" });
@@ -478,10 +483,12 @@ describe("TemplatesPageClient", () => {
     await screen.findByTestId("personnel-order-template-detail");
     fireEvent.click(screen.getByRole("button", { name: "Редактировать шаблон" }));
     await screen.findByTestId("template-draft-editor");
-    expect(screen.getByLabelText("Заголовок RU")).toHaveStyle({ height: "126px" });
-    expect(screen.getByLabelText("Заголовок KK")).toHaveStyle({ height: "126px" });
-    expect(screen.getByLabelText("Распорядительный текст RU")).toHaveStyle({ height: "320px" });
-    expect(screen.getByLabelText("Распорядительный текст KK")).toHaveStyle({ height: "320px" });
+    await waitFor(() => {
+      expect(screen.getByLabelText("Заголовок RU")).toHaveStyle({ height: "126px" });
+      expect(screen.getByLabelText("Заголовок KK")).toHaveStyle({ height: "126px" });
+      expect(screen.getByLabelText("Распорядительный текст RU")).toHaveStyle({ height: "320px" });
+      expect(screen.getByLabelText("Распорядительный текст KK")).toHaveStyle({ height: "320px" });
+    });
   });
 
   it("keeps independently saved heights while switching template types and returning", async () => {
@@ -491,21 +498,21 @@ describe("TemplatesPageClient", () => {
     const view = render(<TemplatesPageClient />);
     await screen.findByTestId("personnel-order-template-detail");
     fireEvent.click(screen.getByRole("button", { name: "Редактировать шаблон" }));
-    expect(await screen.findByLabelText("Распорядительный текст RU")).toHaveStyle({ height: "220px" });
+    await waitFor(() => expect(screen.getByLabelText("Распорядительный текст RU")).toHaveStyle({ height: "220px" }));
 
     currentSearch = new URLSearchParams("section=personnel-orders&type=TERMINATION");
     vi.mocked(getPersonnelOrderTemplateDraft).mockResolvedValueOnce(legacyTerminationDraft);
     view.rerender(<TemplatesPageClient />);
     await screen.findByTestId("personnel-order-template-detail");
     fireEvent.click(screen.getByRole("button", { name: "Редактировать шаблон" }));
-    expect(await screen.findByLabelText("Распорядительный текст RU")).toHaveStyle({ height: "360px" });
+    await waitFor(() => expect(screen.getByLabelText("Распорядительный текст RU")).toHaveStyle({ height: "360px" }));
 
     currentSearch = new URLSearchParams("section=personnel-orders&type=LEAVE.UNPAID.GRANT");
     vi.mocked(getPersonnelOrderTemplateDraft).mockResolvedValueOnce(unpaidDraft);
     view.rerender(<TemplatesPageClient />);
     await screen.findByTestId("personnel-order-template-detail");
     fireEvent.click(screen.getByRole("button", { name: "Редактировать шаблон" }));
-    expect(await screen.findByLabelText("Распорядительный текст RU")).toHaveStyle({ height: "220px" });
+    await waitFor(() => expect(screen.getByLabelText("Распорядительный текст RU")).toHaveStyle({ height: "220px" }));
   });
 
   it("resets only the current template's saved field heights", async () => {
@@ -702,18 +709,26 @@ describe("TemplatesPageClient", () => {
     expect(screen.queryByTestId("template-draft-editor")).not.toBeInTheDocument();
     expect(screen.queryByTestId("template-draft-preview")).not.toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    await screen.findByTestId("personnel-order-template-detail");
+    fireEvent.click(screen.getByRole("button", { name: "Редактировать шаблон" }));
     expect(screen.getByTestId("template-editor-opening")).toHaveTextContent("Открытие редактора…");
     expect(await screen.findByTestId("template-draft-editor")).toHaveTextContent(unpaidDraft.body_template_ru);
 
     fireEvent.click(screen.getByTestId("personnel-order-template-TERMINATION"));
+    await screen.findByTestId("personnel-order-template-detail");
+    fireEvent.click(screen.getByRole("button", { name: "Редактировать шаблон" }));
     expect(screen.getByTestId("template-editor-opening")).toBeInTheDocument();
     fireEvent.click(screen.getByTestId("personnel-order-template-LEAVE.UNPAID.GRANT"));
+    await screen.findByTestId("personnel-order-template-detail");
+    fireEvent.click(screen.getByRole("button", { name: "Редактировать шаблон" }));
     expect(await screen.findByTestId("template-draft-editor")).toHaveTextContent(unpaidDraft.body_template_ru);
     resolveStaleTermination(legacyTerminationDraft);
     await waitFor(() => expect(screen.getByTestId("template-draft-editor")).toHaveTextContent(unpaidDraft.body_template_ru));
     expect(screen.getByTestId("personnel-order-template-detail")).not.toHaveTextContent("Старый текст увольнения RU");
 
     fireEvent.click(screen.getByTestId("personnel-order-template-TERMINATION"));
+    await screen.findByTestId("personnel-order-template-detail");
+    fireEvent.click(screen.getByRole("button", { name: "Редактировать шаблон" }));
     expect(await screen.findByTestId("template-draft-editor")).toHaveTextContent("Последняя серверная версия TERMINATION");
     expect(screen.getByTestId("template-draft-editor")).toHaveTextContent("revision 9");
   });
@@ -756,8 +771,12 @@ describe("TemplatesPageClient", () => {
     expect(editor).toHaveTextContent("revision 4");
 
     fireEvent.click(screen.getByTestId("personnel-order-template-LEAVE.UNPAID.GRANT"));
+    await screen.findByTestId("personnel-order-template-detail");
+    fireEvent.click(screen.getByRole("button", { name: "Редактировать шаблон" }));
     expect(await screen.findByTestId("template-draft-editor")).toHaveTextContent(unpaidDraft.body_template_ru);
     fireEvent.click(screen.getByTestId("personnel-order-template-TERMINATION"));
+    await screen.findByTestId("personnel-order-template-detail");
+    fireEvent.click(screen.getByRole("button", { name: "Редактировать шаблон" }));
     expect(await screen.findByTestId("template-draft-editor")).toHaveTextContent("Последний title RU");
     expect(screen.getByLabelText("Заголовок RU")).toHaveValue(savedDraft.title_ru);
     expect(screen.getByLabelText("Заголовок KK")).toHaveValue(savedDraft.title_kk);
@@ -769,5 +788,71 @@ describe("TemplatesPageClient", () => {
     expect(screen.getByLabelText("Основание KK")).toHaveValue(savedDraft.basis_template_kk);
     expect(screen.queryByTestId("pilot-preview-ru")).not.toBeInTheDocument();
     expect(screen.queryByTestId("template-draft-preview")).not.toBeInTheDocument();
+  });
+
+  it("publishes only after explicit confirmation and keeps the published version read-only", async () => {
+    currentSearch = new URLSearchParams("section=personnel-orders&type=LEAVE.UNPAID.GRANT");
+    vi.mocked(getPersonnelOrderTemplateDraft).mockResolvedValue(unpaidDraft);
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<TemplatesPageClient />);
+    fireEvent.click(await screen.findByRole("button", { name: "Редактировать шаблон" }));
+    await screen.findByTestId("template-draft-editor");
+    fireEvent.click(screen.getByRole("button", { name: "Опубликовать версию" }));
+    await waitFor(() => expect(publishPersonnelOrderTemplateDraft).toHaveBeenCalledWith("LEAVE.UNPAID.GRANT", 1));
+    expect(await screen.findByTestId("template-published-read-only")).toHaveTextContent("PUBLISHED");
+    expect(screen.queryByTestId("template-draft-editor")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Опубликовать версию" })).not.toBeInTheDocument();
+    confirm.mockRestore();
+  });
+
+  it("does not call publish when the confirmation is cancelled", async () => {
+    currentSearch = new URLSearchParams("section=personnel-orders&type=LEAVE.UNPAID.GRANT");
+    vi.mocked(getPersonnelOrderTemplateDraft).mockResolvedValue(unpaidDraft);
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    render(<TemplatesPageClient />);
+    fireEvent.click(await screen.findByRole("button", { name: "Редактировать шаблон" }));
+    await screen.findByTestId("template-draft-editor");
+    fireEvent.click(screen.getByRole("button", { name: "Опубликовать версию" }));
+    expect(publishPersonnelOrderTemplateDraft).not.toHaveBeenCalled();
+    confirm.mockRestore();
+  });
+
+  it("uses only GET on mount and creates a draft only after an explicit edit click", async () => {
+    currentSearch = new URLSearchParams("section=personnel-orders&type=TERMINATION");
+    vi.mocked(getPersonnelOrderTemplateDraft).mockResolvedValue(null);
+    vi.mocked(getPersonnelOrderTemplatePublished).mockResolvedValue({ ...legacyTerminationDraft, status: "PUBLISHED", version_number: 1 });
+    render(<TemplatesPageClient />);
+    await screen.findByTestId("template-published-read-only");
+    expect(createPersonnelOrderTemplateDraft).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("template-draft-editor")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Редактировать шаблон" }));
+    await waitFor(() => expect(createPersonnelOrderTemplateDraft).toHaveBeenCalledWith("TERMINATION"));
+  });
+
+  it("does not create a draft on reload or while switching template types", async () => {
+    currentSearch = new URLSearchParams("section=personnel-orders&type=TERMINATION");
+    vi.mocked(getPersonnelOrderTemplatePublished).mockResolvedValue(null);
+    vi.mocked(getPersonnelOrderTemplateDraft).mockResolvedValue(null);
+    const view = render(<TemplatesPageClient />);
+    await screen.findByTestId("personnel-order-template-detail");
+    view.rerender(<TemplatesPageClient />);
+    await screen.findByTestId("personnel-order-template-detail");
+    fireEvent.click(screen.getByTestId("personnel-order-template-LEAVE.UNPAID.GRANT"));
+    await screen.findByTestId("personnel-order-template-detail");
+    fireEvent.click(screen.getByTestId("personnel-order-template-TERMINATION"));
+    await screen.findByTestId("personnel-order-template-detail");
+    expect(createPersonnelOrderTemplateDraft).not.toHaveBeenCalled();
+  });
+
+  it("labels an existing draft as continue and does not create a duplicate", async () => {
+    currentSearch = new URLSearchParams("section=personnel-orders&type=TERMINATION");
+    vi.mocked(getPersonnelOrderTemplateDraft).mockResolvedValue(legacyTerminationDraft);
+    vi.mocked(getPersonnelOrderTemplatePublished).mockResolvedValue({ ...legacyTerminationDraft, status: "PUBLISHED", version_number: 1 });
+    render(<TemplatesPageClient />);
+    expect(await screen.findByText("Продолжить редактирование")).toBeInTheDocument();
+    expect(createPersonnelOrderTemplateDraft).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Продолжить редактирование" }));
+    expect(await screen.findByTestId("template-draft-editor")).toBeInTheDocument();
+    expect(createPersonnelOrderTemplateDraft).not.toHaveBeenCalled();
   });
 });

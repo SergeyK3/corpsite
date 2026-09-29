@@ -128,7 +128,7 @@ def test_termination_has_typed_requisites_and_a_neutral_bilingual_preview():
         "ФИО сотрудника", "Текущая должность на русском языке", "Текущая должность на казахском языке", "Текущее подразделение на русском языке", "Текущее подразделение на казахском языке", "Дата увольнения", "Причина увольнения", "Количество дней неиспользованного отпуска", "Основание",
     ]
     assert [variable["code"] for variable in detail["variables"]] == [
-        "employee.full_name", "position.title_ru", "position.title_kk", "org_unit.title_ru", "org_unit.title_kk", "effective_date", "termination.reason", "termination.unused_leave_days", "basis",
+        "employee.full_name", "position.title_ru", "position.title_kk", "org_unit.title_ru", "org_unit.title_kk", "effective_date", "effective_date_local", "termination.reason", "termination.unused_leave_days", "basis",
     ]
 
     ru, kk = detail["previews"]["ru"], detail["previews"]["kk"]

@@ -27,7 +27,7 @@ def test_readable_initial_texts_match_the_ten_type_golden_snapshot() -> None:
     expected_hashes = {
         "HIRE": "96444278a247538672dfb544559359d08cc3b54e0de182d2d3fb0617320658fa",
         "TRANSFER": "3a6d711e7484839479a98697da7e91a6a2f27b5fab315ad38c3f295722005995",
-        "TERMINATION": "edb661c9c65bb73cd16e8e2aa771a28ce154bdee4cd8a6dc7b7e8344363b6e51",
+        "TERMINATION": "bc34ed5af9bbc3e3e1fd7dd874aeebecc9b2d2b918692526c59abaabfc2c78a2",
         "CONCURRENT_DUTY_START": "6d3af87099855f0270cc9c015e24fa44dfc98bcd8ea7f7ebccb2848dd77fcdce",
         "CONCURRENT_DUTY_END": "6f9dc6cd6a6424d061d1d154142e18a4f02bdaaaa581f2d3fb96370bade07fc0",
         "LEAVE.ANNUAL.GRANT": "9ac3b1e220d4f174350626cb65d97949abcdce9ddadb6ba02c4846242e7bb96d",
@@ -215,6 +215,39 @@ def test_legacy_termination_without_unused_leave_days_still_previews() -> None:
     assert "termination_unused_leave_days" not in values["body_template_kk"]
     assert "Количество дней неиспользованного отпуска" not in preview["ru"]["body"]
     assert "Пайдаланылмаған демалыс күндерінің саны" not in preview["kk"]["body"]
+
+
+def test_termination_draft_body_uses_contract_termination_wording_without_basis_or_leave_settlement() -> None:
+    values = _initial_texts("TERMINATION")
+    values.update({
+        "title_ru": "О расторжении трудового договора",
+        "title_kk": "Еңбек шартын бұзу туралы",
+        "body_template_ru": (
+            "Уволить сотрудника {{employee.full_name}}, должность: {{position.title_ru}}, "
+            "отделение: {{org_unit.title_ru}}, с {{effective_date_local}}. "
+            "Причина увольнения: {{termination.reason}}."
+        ),
+        "body_template_kk": (
+            "Қызметкер {{employee.full_name}}, лауазымы: {{position.title_kk}}, "
+            "бөлімшесі: {{org_unit.title_kk}}, {{effective_date_local}} бастап жұмыстан босатылсын. "
+            "Жұмыстан босату себебі: {{termination.reason}}."
+        ),
+        "basis_template_ru": "Личное заявление",
+        "basis_template_kk": "Жеке өтініш",
+    })
+
+    _validate(values, "TERMINATION")
+    preview = preview_draft("TERMINATION", values)
+
+    assert "уволить сотрудника" in preview["ru"]["body"].casefold()
+    assert "Основание:" not in preview["ru"]["body"]
+    assert "Личное заявление" not in preview["ru"]["body"]
+    assert "жұмыстан босатылсын" in preview["kk"]["body"]
+    assert "Негіздеме:" not in preview["kk"]["body"]
+    assert "Жеке өтініш" not in preview["kk"]["body"]
+    assert "пайдаланылмаған" not in preview["kk"]["body"].casefold()
+    assert preview["ru"]["basis"] == "Личное заявление"
+    assert preview["kk"]["basis"] == "Жеке өтініш"
 
 
 def test_termination_draft_http_save_reload_noop_conflict_and_preview(draft_store: _DraftStore) -> None:

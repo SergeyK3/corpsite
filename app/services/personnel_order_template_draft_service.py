@@ -22,11 +22,14 @@ class TemplateDraftError(ValueError):
 
 
 def _row(row: Mapping[str, Any]) -> dict[str, Any]:
-    return {key: row[key] for key in (
+    result = {key: row[key] for key in (
         "template_version_id", "item_type_code", "version_number", "status", "revision",
         "title_ru", "title_kk", "preamble_ru", "preamble_kk", "body_template_ru", "body_template_kk",
         "basis_template_ru", "basis_template_kk", "based_on_built_in", "created_at", "updated_at",
     )}
+    result["published_at"] = row.get("published_at")
+    result["published_by_user_id"] = row.get("published_by_user_id")
+    return result
 
 
 def _assert_type(item_type_code: str) -> None:
@@ -61,22 +64,46 @@ def get_draft(item_type_code: str) -> dict[str, Any] | None:
     return _row(row) if row else None
 
 
+def get_published(item_type_code: str) -> dict[str, Any] | None:
+    """Read the immutable published snapshot without creating a DRAFT."""
+    _assert_type(item_type_code)
+    with engine.connect() as conn:
+        row = conn.execute(
+            text("SELECT * FROM public.personnel_order_template_versions WHERE item_type_code=:type AND status='PUBLISHED'"),
+            {"type": item_type_code},
+        ).mappings().first()
+    return _row(row) if row else None
+
+
 def create_draft(item_type_code: str, actor_user_id: int) -> dict[str, Any]:
     _assert_type(item_type_code)
-    values = dict(get_personnel_order_template_spec(item_type_code).initial_texts)
     with engine.begin() as conn:
         existing = conn.execute(text("SELECT * FROM public.personnel_order_template_versions WHERE item_type_code=:type AND status='DRAFT'"), {"type": item_type_code}).mappings().first()
         if existing:
             return _row(existing)
+        published = conn.execute(text("SELECT * FROM public.personnel_order_template_versions WHERE item_type_code=:type AND status='PUBLISHED'"), {"type": item_type_code}).mappings().first()
+        fields = ("title_ru", "title_kk", "preamble_ru", "preamble_kk", "body_template_ru", "body_template_kk", "basis_template_ru", "basis_template_kk")
+        values = {field: published[field] for field in fields} if published else dict(get_personnel_order_template_spec(item_type_code).initial_texts)
         try:
             row = conn.execute(text("""
                 INSERT INTO public.personnel_order_template_versions
                 (item_type_code, version_number, status, title_ru, title_kk, preamble_ru, preamble_kk, body_template_ru, body_template_kk, basis_template_ru, basis_template_kk, created_by_user_id, updated_by_user_id)
-                VALUES (:type, 1, 'DRAFT', :title_ru, :title_kk, :preamble_ru, :preamble_kk, :body_template_ru, :body_template_kk, :basis_template_ru, :basis_template_kk, :actor, :actor)
+                VALUES (:type, (SELECT COALESCE(MAX(version_number), 0) + 1 FROM public.personnel_order_template_versions WHERE item_type_code=:type), 'DRAFT', :title_ru, :title_kk, :preamble_ru, :preamble_kk, :body_template_ru, :body_template_kk, :basis_template_ru, :basis_template_kk, :actor, :actor)
                 RETURNING *
             """), {**values, "type": item_type_code, "actor": actor_user_id}).mappings().one()
         except IntegrityError:
             row = conn.execute(text("SELECT * FROM public.personnel_order_template_versions WHERE item_type_code=:type AND status='DRAFT'"), {"type": item_type_code}).mappings().one()
+    return _row(row)
+
+
+def publish_draft(item_type_code: str, expected_revision: int, actor_user_id: int) -> dict[str, Any]:
+    _assert_type(item_type_code)
+    with engine.begin() as conn:
+        draft = conn.execute(text("SELECT * FROM public.personnel_order_template_versions WHERE item_type_code=:type AND status='DRAFT' FOR UPDATE"), {"type": item_type_code}).mappings().first()
+        if draft is None: raise TemplateDraftError("TEMPLATE_DRAFT_NOT_FOUND", "Черновая версия не создана.")
+        if int(draft["revision"]) != expected_revision: raise TemplateDraftError("TEMPLATE_REVISION_CONFLICT", "Черновик изменён другим пользователем.", conflict=True)
+        conn.execute(text("UPDATE public.personnel_order_template_versions SET status='ARCHIVED', updated_at=now() WHERE item_type_code=:type AND status='PUBLISHED'"), {"type": item_type_code})
+        row = conn.execute(text("UPDATE public.personnel_order_template_versions SET status='PUBLISHED', published_at=now(), published_by_user_id=:actor, updated_by_user_id=:actor, updated_at=now() WHERE template_version_id=:id RETURNING *"), {"actor": actor_user_id, "id": draft["template_version_id"]}).mappings().one()
     return _row(row)
 
 
@@ -105,11 +132,11 @@ def preview_draft(item_type_code: str, values: Mapping[str, str]) -> dict[str, A
         "leave.start_ru": "[[Дата начала отпуска]]", "leave.start_kk": "[[Демалыстың басталу күні]]", "leave.end_ru": "[[Дата окончания отпуска]]", "leave.end_kk": "[[Демалыстың аяқталу күні]]", "leave.days": "[[Количество дней]]",
         "basis.application_date_ru": " от [[Дата заявления]]", "basis.application_date_kk": "", "basis.application_number_suffix": " № [[Номер заявления]]",
         "rate": "[[Ставка]]",
-        "termination.reason": "[[Причина увольнения]]", "termination.unused_leave_days": "[[Количество дней неиспользованного отпуска]]", "employee.full_name_instrumental_kk": "[[ФИО сотрудника в творительном падеже]]", "concurrent.rate": "[[Ставка совмещения]]", "total.rate": "[[Итоговая ставка]]", "remaining.rate": "[[Остающаяся ставка]]",
+        "termination.reason": "[[Причина увольнения]]", "termination.unused_leave_days": "[[Количество дней неиспользованного отпуска]]", "effective_date_local": "[[Дата увольнения]]", "concurrent.rate": "[[Ставка совмещения]]", "total.rate": "[[Итоговая ставка]]", "remaining.rate": "[[Остающаяся ставка]]",
     }
     locale_samples = {
-        "ru": {**samples, "effective_date": "[[Дата выхода]]", "basis": "[[Основание]]"},
-        "kk": {**samples, "employee.full_name": "[[Қызметкердің аты-жөні]]", "employee.full_name_instrumental_kk": "[[Қызметкердің аты-жөні (көмектес септік)]]", "position.title_ru": "[[Лауазым]]", "position.title_kk": "[[Лауазым]]", "org_unit.title_ru": "[[Бөлімше]]", "org_unit.title_kk": "[[Бөлімше]]", "leave.days": "[[Күн саны]]", "basis.application_date_kk": " [[Өтініш күні]]", "basis.application_number_suffix": " № [[Өтініш нөмірі]]", "effective_date": "[[Жұмысқа шығу күні]]", "rate": "[[Мөлшерлеме]]", "basis": "[[Негіз]]", "termination.reason": "[[Жұмыстан босату себебі]]", "termination.unused_leave_days": "[[Пайдаланылмаған демалыс күндерінің саны]]", "concurrent.rate": "[[Қоса атқару мөлшерлемесі]]", "total.rate": "[[Жалпы мөлшерлеме]]", "remaining.rate": "[[Қалған мөлшерлеме]]"},
+        "ru": {**samples, "effective_date": "[[Дата выхода]]", "effective_date_local": "[[Дата выхода]]", "basis": "[[Основание]]"},
+        "kk": {**samples, "employee.full_name": "[[Қызметкердің аты-жөні]]", "position.title_ru": "[[Лауазым]]", "position.title_kk": "[[Лауазым]]", "org_unit.title_ru": "[[Бөлімше]]", "org_unit.title_kk": "[[Бөлімше]]", "leave.days": "[[Күн саны]]", "basis.application_date_kk": " [[Өтініш күні]]", "basis.application_number_suffix": " № [[Өтініш нөмірі]]", "effective_date": "[[Жұмысқа шығу күні]]", "effective_date_local": "[[Жұмыстан босату күні]]", "rate": "[[Мөлшерлеме]]", "basis": "[[Негіз]]", "termination.reason": "[[Жұмыстан босату себебі]]", "termination.unused_leave_days": "[[Пайдаланылмаған демалыс күндерінің саны]]", "concurrent.rate": "[[Қоса атқару мөлшерлемесі]]", "total.rate": "[[Жалпы мөлшерлеме]]", "remaining.rate": "[[Қалған мөлшерлеме]]"},
     }
     for locale, overrides in spec.preview_context.items():
         locale_samples[locale].update(overrides)

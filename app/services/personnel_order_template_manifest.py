@@ -19,8 +19,21 @@ SCHEMA_VERSION = 1
 TEXT_FIELDS = ("title_ru", "title_kk", "preamble_ru", "preamble_kk", "body_template_ru", "body_template_kk", "basis_template_ru", "basis_template_kk")
 MANIFEST_FIELDS = ("schema_version", "item_type_code", *TEXT_FIELDS, "allowed_variables", "required_variables", "base_content_sha256", "content_sha256")
 _FILENAME = re.compile(r"^draft-v([1-9][0-9]*)\.json$")
+_TOKEN = re.compile(r"\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}")
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST_ROOT = REPOSITORY_ROOT / "app" / "resources" / "personnel_order_templates"
+_HISTORICAL_TERMINATION_ALLOWED_VARIABLES = (
+    "employee.full_name", "employee.full_name_instrumental_kk",
+    "position.title_ru", "position.title_kk", "org_unit.title_ru",
+    "org_unit.title_kk", "effective_date", "termination.reason",
+    "termination.unused_leave_days", "basis",
+)
+_HISTORICAL_MANIFESTS = {
+    ("TERMINATION", 1, "5dc8c6dda024ec1ae9ffd84a6e73afbc06af49278017f798a5caa6d3c29d2e36"):
+        ("1ad82a8101f6a205bb13d7565d77c14d81f33a3824895c5b69d209b84b3a503a", _HISTORICAL_TERMINATION_ALLOWED_VARIABLES),
+    ("TERMINATION", 2, "3dffc622255ca91a0301333714f0b6ee3dc48c52c34e78a1e28714622c3b4b1a"):
+        ("5dc8c6dda024ec1ae9ffd84a6e73afbc06af49278017f798a5caa6d3c29d2e36", _HISTORICAL_TERMINATION_ALLOWED_VARIABLES),
+}
 
 
 class ManifestError(ValueError):
@@ -42,6 +55,43 @@ def _built_in_hash(item_type_code: str) -> str:
 def _spec_variables(item_type_code: str) -> tuple[list[str], dict[str, list[str]]]:
     spec = get_personnel_order_template_spec(item_type_code)
     return list(spec.allowed_variables), {key: list(value) for key, value in sorted(spec.required_variables.items())}
+
+
+def _validate_declared_variable_contract(
+    path: Path,
+    item_type_code: str,
+    values: Mapping[str, str],
+    allowed_variables: Any,
+    required_variables: Any,
+    content_hash: str,
+    base_hash: str,
+) -> None:
+    """Validate current manifests strictly and two frozen historical snapshots."""
+    if not isinstance(allowed_variables, list) or not all(isinstance(value, str) for value in allowed_variables):
+        raise ManifestError(f"{item_type_code}: invalid allowed_variables")
+    if len(set(allowed_variables)) != len(allowed_variables):
+        raise ManifestError(f"{item_type_code}: duplicate allowed_variables")
+    if not isinstance(required_variables, dict) or any(
+        not isinstance(field, str)
+        or not isinstance(required, list)
+        or not all(isinstance(value, str) for value in required)
+        for field, required in required_variables.items()
+    ):
+        raise ManifestError(f"{item_type_code}: invalid required_variables")
+    current_allowed, current_required = _spec_variables(item_type_code)
+    if allowed_variables == current_allowed and required_variables == current_required:
+        return
+    key = (item_type_code, _version(path), content_hash)
+    historical = _HISTORICAL_MANIFESTS.get(key)
+    if historical is None:
+        raise ManifestError(f"{path}: variable contract does not match PersonnelOrderTemplateSpec")
+    expected_base, expected_allowed = historical
+    if base_hash != expected_base or tuple(allowed_variables) != expected_allowed or required_variables != {}:
+        raise ManifestError(f"{path}: historical manifest contract does not match its immutable snapshot")
+    declared = set(allowed_variables)
+    referenced = {token for value in values.values() for token in _TOKEN.findall(value)}
+    if not referenced <= declared:
+        raise ManifestError(f"{path}: historical template uses undeclared variables")
 
 
 def build_manifest(item_type_code: str, values: Mapping[str, str], *, base_content_sha256: str | None = None) -> dict[str, Any]:
@@ -88,12 +138,12 @@ def load_manifest(path: Path) -> dict[str, Any]:
     if not isinstance(item_type_code, str) or manifest["schema_version"] != SCHEMA_VERSION: raise ManifestError(f"{path}: unsupported schema or item type")
     values = {field: manifest[field] for field in TEXT_FIELDS}
     try:
-        validate_template_texts(item_type_code, values); allowed, required = _spec_variables(item_type_code)
+        validate_template_texts(item_type_code, values)
     except (TemplateValidationError, ValueError) as exc:
         raise ManifestError(f"{path}: {exc}") from exc
-    if manifest["allowed_variables"] != allowed or manifest["required_variables"] != required: raise ManifestError(f"{path}: variable contract does not match PersonnelOrderTemplateSpec")
     if manifest["content_sha256"] != content_sha256(item_type_code, values): raise ManifestError(f"{path}: content_sha256 mismatch")
     if not isinstance(manifest["base_content_sha256"], str) or not re.fullmatch(r"[0-9a-f]{64}", manifest["base_content_sha256"]): raise ManifestError(f"{path}: invalid base_content_sha256")
+    _validate_declared_variable_contract(path, item_type_code, values, manifest["allowed_variables"], manifest["required_variables"], manifest["content_sha256"], manifest["base_content_sha256"])
     return manifest
 
 
@@ -109,7 +159,12 @@ def load_manifest_chains(root: Path = MANIFEST_ROOT) -> dict[str, list[dict[str,
         entries.sort(key=lambda entry: entry[0]); versions = [entry[0] for entry in entries]
         if versions != list(range(1, len(entries) + 1)): raise ManifestError(f"{item_type_code}: manifest versions must be continuous from v1")
         manifests = [entry[2] for entry in entries]
-        if manifests[0]["base_content_sha256"] != _built_in_hash(item_type_code): raise ManifestError(f"{item_type_code}: v1 base must be the built-in content hash")
+        first_version, first_path, first = entries[0]
+        if first["base_content_sha256"] != _built_in_hash(item_type_code):
+            key = (item_type_code, first_version, first["content_sha256"])
+            historical = _HISTORICAL_MANIFESTS.get(key)
+            if historical is None or historical[0] != first["base_content_sha256"]:
+                raise ManifestError(f"{item_type_code}: v1 base must be the built-in content hash")
         for previous, current in zip(manifests, manifests[1:]):
             if current["base_content_sha256"] != previous["content_sha256"]: raise ManifestError(f"{item_type_code}: manifest base chain is broken")
         chains[item_type_code] = manifests
@@ -141,13 +196,54 @@ def export_drafts(item_types: Sequence[str], *, db_engine: Any = default_engine,
     return {item_type_code: write_manifest(item_type_code, values, root) for item_type_code, values in drafts.items()}
 
 
+def export_published(
+    item_type_code: str,
+    *,
+    expected_template_version_id: int,
+    db_engine: Any = default_engine,
+    root: Path = MANIFEST_ROOT,
+) -> dict[str, str]:
+    """Export one explicitly identified immutable PUBLISHED snapshot to a manifest.
+
+    This is intentionally separate from ``export_drafts``: it never creates a
+    DRAFT or mutates the source row, and refuses any id/type/status mismatch.
+    """
+    get_personnel_order_template_spec(item_type_code)
+    if expected_template_version_id <= 0:
+        raise ManifestError("expected_template_version_id must be positive")
+    with db_engine.connect() as connection:
+        row = connection.execute(
+            text(
+                """SELECT template_version_id, item_type_code, status,
+                          title_ru, title_kk, preamble_ru, preamble_kk,
+                          body_template_ru, body_template_kk,
+                          basis_template_ru, basis_template_kk
+                   FROM public.personnel_order_template_versions
+                   WHERE template_version_id=:template_version_id"""
+            ),
+            {"template_version_id": expected_template_version_id},
+        ).mappings().first()
+    if row is None:
+        raise ManifestError(f"Template version {expected_template_version_id} was not found")
+    if int(row["template_version_id"]) != expected_template_version_id:
+        raise ManifestError("Template version id mismatch")
+    if str(row["item_type_code"]) != item_type_code:
+        raise ManifestError("Template version item type does not match requested item type")
+    if str(row["status"]) != "PUBLISHED":
+        raise ManifestError("Template version must have PUBLISHED status")
+    values = {field: row[field] for field in TEXT_FIELDS}
+    return {item_type_code: write_manifest(item_type_code, values, root)}
+
+
 def _sync_plan(chain: Sequence[Mapping[str, Any]], row: Mapping[str, Any] | None) -> tuple[str, Sequence[Mapping[str, Any]]]:
     if row is None: return "CREATE", [chain[-1]]
     item_type_code = str(chain[-1]["item_type_code"])
     current_hash = content_sha256(item_type_code, {field: row[field] for field in TEXT_FIELDS})
-    if current_hash == chain[0]["base_content_sha256"]: return "UPDATE", chain
+    if current_hash == chain[0]["base_content_sha256"]: return ("CREATE", [chain[-1]]) if row.get("status") == "PUBLISHED" else ("UPDATE", chain)
     for index, manifest in enumerate(chain):
-        if current_hash == manifest["content_sha256"]: return ("NO_OP", []) if index == len(chain) - 1 else ("UPDATE", chain[index + 1:])
+        if current_hash == manifest["content_sha256"]:
+            if index == len(chain) - 1: return "NO_OP", []
+            return ("CREATE", [chain[-1]]) if row.get("status") == "PUBLISHED" else ("UPDATE", chain[index + 1:])
     return "CONFLICT", []
 
 
@@ -157,13 +253,13 @@ def sync_manifests(*, apply: bool, db_engine: Any = default_engine, root: Path =
     if not apply:
         with db_engine.connect() as connection:
             for item_type_code, chain in chains.items():
-                row = connection.execute(text("SELECT * FROM public.personnel_order_template_versions WHERE item_type_code=:type AND status='DRAFT'"), {"type": item_type_code}).mappings().first()
+                row = connection.execute(text("SELECT * FROM public.personnel_order_template_versions WHERE item_type_code=:type AND status='DRAFT' UNION ALL SELECT * FROM public.personnel_order_template_versions WHERE item_type_code=:type AND status='PUBLISHED' LIMIT 1"), {"type": item_type_code}).mappings().first()
                 results[item_type_code] = _sync_plan(chain, row)[0]
         return results
     with db_engine.begin() as connection:
         planned: list[tuple[str, Sequence[Mapping[str, Any]], Mapping[str, Any] | None, str]] = []
         for item_type_code, chain in chains.items():
-            row = connection.execute(text("SELECT * FROM public.personnel_order_template_versions WHERE item_type_code=:type AND status='DRAFT' FOR UPDATE"), {"type": item_type_code}).mappings().first()
+            row = connection.execute(text("SELECT * FROM public.personnel_order_template_versions WHERE item_type_code=:type AND status IN ('DRAFT','PUBLISHED') ORDER BY CASE status WHEN 'DRAFT' THEN 0 ELSE 1 END FOR UPDATE"), {"type": item_type_code}).mappings().first()
             status, manifests = _sync_plan(chain, row); results[item_type_code] = status; planned.append((item_type_code, manifests, row, status))
         if any(status == "CONFLICT" for _, _, _, status in planned): return results
         for item_type_code, manifests, row, status in planned:
