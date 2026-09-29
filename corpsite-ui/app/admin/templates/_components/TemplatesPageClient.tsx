@@ -364,7 +364,7 @@ function DraftEditor({ editor, published, onSaved, onPublished, variables, warni
     <section ref={editorRef} className="mt-5 rounded-xl border border-blue-200 p-4" data-testid="template-draft-editor">
       <h4 className="font-semibold">{isWorkingCopy ? (isInitialWorkingCopy ? "Первая версия шаблона ещё не сохранена" : `Несохранённая рабочая копия опубликованной версии ${editor.workingCopy.base.version_number}`) : "Черновая версия шаблона"}</h4>
       {serverDraft ? <p className="text-sm">Версия {serverDraft.version_number} · revision {serverDraft.revision} · {serverDraft.status}</p> : null}
-      <p className="mt-2 text-sm text-amber-700" data-testid="template-editor-application-notice">{isWorkingCopy ? "Рабочая копия не сохранена и не применяется к кадровым приказам" : "Черновик не применяется к кадровым приказам."}</p>
+      <p className="mt-2 text-sm text-amber-700" data-testid="template-editor-application-notice">Эта версия не применяется к кадровым приказам.</p>
       {warning ? <p className="mt-2 text-sm font-medium text-amber-700" role="note">{warning}</p> : null}
 
       <div className="mt-3 grid grid-cols-1 gap-x-4 gap-y-3 md:grid-cols-2" data-testid="template-draft-fields">

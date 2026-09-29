@@ -41,8 +41,8 @@ describe("TemplatesPageClient draft lifecycle", () => {
   it("opens a PUBLISHED working copy without POST, without draftExists, and with disabled actions", async () => {
     setup(); const editor = await open();
     expect(editor).toHaveTextContent("Несохранённая рабочая копия опубликованной версии 2"); expect(editor).not.toHaveTextContent("revision 0"); expect(screen.getByLabelText("Заголовок RU")).toHaveValue(texts.title_ru);
-    expect(screen.getByTestId("template-editor-application-notice")).toHaveTextContent("Рабочая копия не сохранена и не применяется к кадровым приказам");
-    expect(screen.getByTestId("template-editor-application-notice")).not.toHaveTextContent("Черновик не применяется к кадровым приказам.");
+    expect(screen.getByTestId("template-editor-application-notice")).toHaveTextContent("Эта версия не применяется к кадровым приказам.");
+    expect(editor).not.toHaveTextContent("Черновая версия шаблона");
     expect(screen.getByTestId("template-published-read-only")).not.toHaveTextContent("Имеется черновик следующей версии"); expect(screen.getByRole("button", { name: "Сохранить черновик" })).toBeDisabled(); expect(screen.getByRole("button", { name: "Опубликовать версию" })).toBeDisabled(); expect(createPersonnelOrderTemplateDraft).not.toHaveBeenCalled();
   });
 
@@ -54,8 +54,9 @@ describe("TemplatesPageClient draft lifecycle", () => {
 
   it("server DRAFT continues only by click and blocks publish while dirty", async () => {
     vi.mocked(getPersonnelOrderTemplateDraft).mockResolvedValue(draft); setup(); await open("Продолжить редактирование");
-    expect(screen.getByTestId("template-editor-application-notice")).toHaveTextContent("Черновик не применяется к кадровым приказам.");
-    expect(screen.getByTestId("template-editor-application-notice")).not.toHaveTextContent("Рабочая копия не сохранена");
+    expect(screen.getByTestId("template-editor-application-notice")).toHaveTextContent("Эта версия не применяется к кадровым приказам.");
+    expect(screen.getByTestId("template-draft-editor")).toHaveTextContent("Черновая версия шаблона");
+    expect(screen.getByTestId("template-draft-editor")).not.toHaveTextContent("Несохранённая рабочая копия опубликованной версии");
     expect(screen.getByRole("button", { name: "Сохранить черновик" })).toBeDisabled(); expect(screen.getByRole("button", { name: "Опубликовать версию" })).toBeEnabled(); changeTitle("Ещё не сохранено"); expect(screen.getByRole("button", { name: "Опубликовать версию" })).toBeDisabled(); fireEvent.click(screen.getByRole("button", { name: "Сохранить черновик" }));
     await waitFor(() => expect(savePersonnelOrderTemplateDraft).toHaveBeenCalledWith("TERMINATION", expect.objectContaining({ expected_revision: 1, title_ru: "Ещё не сохранено" })));
   });
