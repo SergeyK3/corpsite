@@ -106,6 +106,11 @@ const PRIMARY_ADMIN_NAV: NavItem[] = [
     matchPrefixes: ["/admin/sync"],
   },
   {
+    href: "/admin/data-exchange",
+    title: "Импорт и экспорт данных",
+    matchPrefixes: ["/admin/data-exchange"],
+  },
+  {
     href: "/tasks",
     title: "Задачи",
     matchPrefixes: ["/tasks"],

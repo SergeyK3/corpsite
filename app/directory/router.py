@@ -29,6 +29,7 @@ from .employee_onboarding_routes import router as employee_onboarding_router
 from .hr_import_routes import router as hr_import_router
 from .mrd_routes import router as mrd_router
 from .hr_sync_routes import router as hr_sync_router
+from .data_exchange_routes import router as data_exchange_router
 from .employee_access_routes import router as employee_access_router
 from .hiring_document_checklist_routes import router as hiring_document_checklist_router
 
@@ -70,3 +71,4 @@ router.include_router(employee_onboarding_router)
 router.include_router(hr_import_router)
 router.include_router(mrd_router)
 router.include_router(hr_sync_router)
+router.include_router(data_exchange_router)
