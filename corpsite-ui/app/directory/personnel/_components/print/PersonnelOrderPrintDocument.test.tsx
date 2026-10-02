@@ -93,6 +93,39 @@ describe("PersonnelOrderPrintToolbar", () => {
 });
 
 describe("PersonnelOrderPrintDocument", () => {
+  it("renders labelled unpaid-leave BASIS once and with one terminal full stop for RU and KK", () => {
+    const leave = {
+      ...detail,
+      order: { ...detail.order, order_type_code: "LEAVE.UNPAID.GRANT" },
+      items: [
+        { ...detail.items[0], item_id: 1, item_number: 1, item_type_code: "LEAVE.UNPAID.GRANT" },
+        { ...detail.items[0], item_id: 2, item_number: 2, item_type_code: "LEAVE.UNPAID.GRANT" },
+      ],
+    };
+    const model = buildPersonnelOrderPrintViewModel(leave, {
+      editorial: {
+        order_blocks: [],
+        items: [1, 2].map((itemId) => ({
+          order_item_id: itemId,
+          item_number: itemId,
+          item_type_code: "LEAVE.UNPAID.GRANT",
+          basis_required: true,
+          blocks: [
+            { block_id: itemId * 10 + 1, scope: "item", order_item_id: itemId, locale: "ru", block_type: "basis", generated_text: "\u041e\u0441\u043d\u043e\u0432\u0430\u043d\u0438\u0435: \u041b\u0438\u0447\u043d\u043e\u0435 \u0437\u0430\u044f\u0432\u043b\u0435\u043d\u0438\u0435.", effective_text: "\u041e\u0441\u043d\u043e\u0432\u0430\u043d\u0438\u0435: \u041b\u0438\u0447\u043d\u043e\u0435 \u0437\u0430\u044f\u0432\u043b\u0435\u043d\u0438\u0435.", review_status: "CURRENT", editable: true, revision: 2 },
+            { block_id: itemId * 10 + 2, scope: "item", order_item_id: itemId, locale: "kk", block_type: "basis", generated_text: "\u041d\u0435\u0433\u0456\u0437: \u0410\u0441\u0441\u0435\u043b\u044c \u0410\u0434\u0438\u043b\u043e\u0432\u043d\u0430 \u0418\u043b\u044c\u044f\u0441\u043e\u0432\u0430\u043d\u044b\u04a3 \u0436\u0435\u043a\u0435 \u04e9\u0442\u0456\u043d\u0456\u0448\u0456.", effective_text: "\u041d\u0435\u0433\u0456\u0437: \u0410\u0441\u0441\u0435\u043b\u044c \u0410\u0434\u0438\u043b\u043e\u0432\u043d\u0430 \u0418\u043b\u044c\u044f\u0441\u043e\u0432\u0430\u043d\u044b\u04a3 \u0436\u0435\u043a\u0435 \u04e9\u0442\u0456\u043d\u0456\u0448\u0456.", review_status: "CURRENT", editable: true, revision: 2 },
+          ],
+        })),
+      } as never,
+    });
+    for (const language of ["ru", "kk"] as const) {
+      const { unmount } = render(<PersonnelOrderPrintDocument model={model} language={language} />);
+      const basis = screen.getByTestId("personnel-order-print-basis");
+      expect(basis.textContent).not.toMatch(/(\u041e\u0441\u043d\u043e\u0432\u0430\u043d\u0438\u0435:|\u041d\u0435\u0433\u0456\u0437:)\s*\1/);
+      expect(basis.textContent).not.toContain("..");
+      unmount();
+    }
+  });
+
   it("keeps acknowledgement initials and executor in RU and KK without a recorded date", () => {
     const model = buildPersonnelOrderPrintViewModel({ ...detail, acknowledgements: [] }, {});
     for (const language of ["ru", "kk"] as const) {

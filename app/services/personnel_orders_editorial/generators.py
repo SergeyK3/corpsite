@@ -398,6 +398,7 @@ def generate_item_body(locale: str, item_ctx: Mapping[str, Any]) -> Dict[str, st
     leave_start = item_ctx.get("leave_start")
     leave_end = item_ctx.get("leave_end")
     leave_days = item_ctx.get("leave_days")
+    leave_period_type = item_ctx.get("leave_period_type")
     work_periods = _leave_work_periods(item_ctx)
     vacation_benefit_applicable = bool(item_ctx.get("vacation_benefit_applicable"))
     vacation_benefit_rule = _clean(item_ctx.get("vacation_benefit_rule"))
@@ -446,19 +447,27 @@ def generate_item_body(locale: str, item_ctx: Mapping[str, Any]) -> Dict[str, st
     elif item_type == "LEAVE.UNPAID.GRANT":
         org = _localized_name(org_unit_name, lang)
         position = _localized_position(position_name, lang)
-        leave_start_text = _format_date(leave_start, lang)
-        leave_end_text = _format_date(leave_end, lang)
         days = _dash(leave_days)
+        if leave_period_type == "SINGLE_DAY":
+            period_phrase = _format_date(leave_start, lang)
+        else:
+            leave_start_text = _format_date(leave_start, lang)
+            leave_end_text = _format_date(leave_end, lang)
+            period_phrase = (
+                f"{leave_start_text} мен {leave_end_text} аралығында"
+                if lang == "kk"
+                else f"с {leave_start_text} по {leave_end_text} включительно"
+            )
         if lang == "kk":
             text = (
                 f"{fio}, «{org}» бөлімшесінің «{position}» қызметкеріне "
-                f"{leave_start_text} мен {leave_end_text} аралығындағы {days} күнтізбелік күнге "
+                f"{period_phrase} {days} күнтізбелік күнге "
                 "жалақы сақталмайтын демалыс берілсін."
             )
         else:
             text = (
                 f"Предоставить {fio}, {position} подразделения «{org}», отпуск без сохранения "
-                f"заработной платы с {leave_start_text} по {leave_end_text} включительно "
+                f"заработной платы {period_phrase} "
                 f"продолжительностью {days} календарных дней."
             )
     elif item_type == ORDER_TYPE_LEAVE_CHILDCARE_GRANT:
@@ -626,6 +635,7 @@ def generate_item_body(locale: str, item_ctx: Mapping[str, Any]) -> Dict[str, st
             "leave_start": _clean(leave_start) or None,
             "leave_end": _clean(leave_end) or None,
             "leave_days": leave_days if leave_days not in (None, "") else None,
+            "leave_period_type": _clean(leave_period_type) or None,
             "work_periods": work_periods or None,
             "basis": item_ctx.get("basis") if isinstance(item_ctx.get("basis"), Mapping) else None,
             "vacation_benefit_applicable": vacation_benefit_applicable,

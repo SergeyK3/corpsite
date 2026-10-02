@@ -14,7 +14,7 @@ const BLOCKS = [["title", "Заголовок"], ["preamble", "Преамбул�
 type PreviewProblem = { kind: "missing" | "unpublished" | "readonly" | "unexpected"; message: string };
 
 function currentText(preview: PersonnelOrderTemplateApplicationPreview, locale: "ru" | "kk", block: string) {
-  const entry = preview.current[`${locale}:${block}`];
+  const entry = preview.current?.[`${locale}:${block}`];
   return entry?.override_text ?? entry?.generated_text ?? "—";
 }
 
@@ -22,7 +22,22 @@ function proposedText(preview: PersonnelOrderTemplateApplicationPreview, locale:
   const templateKey = block === "body" || block === "basis"
     ? `${block}_template_${locale}`
     : `${block}_${locale}`;
-  return preview.proposed[templateKey] ?? "—";
+  return preview.proposed?.[templateKey] ?? "—";
+}
+
+type TemplateApplicationItem = NonNullable<PersonnelOrderTemplateApplicationPreview["items"]>[number];
+
+function ItemComparison({ item }: { item: TemplateApplicationItem }) {
+  const text = (locale: "ru" | "kk", block: "body" | "basis", proposed: boolean) => proposed
+    ? item.proposed[`${block}_${locale}`] ?? "—"
+    : item.current[`${locale}:${block}`]?.override_text ?? item.current[`${locale}:${block}`]?.generated_text ?? "—";
+  return <section className="space-y-2 border-t border-zinc-200 pt-3 dark:border-zinc-800" data-testid={`template-application-item-${item.item_number}`}>
+    <h4 className="text-sm font-semibold">Пункт {item.item_number}</h4>
+    {item.warnings.map((warning) => <p key={warning.code} role="alert" className="text-sm text-amber-700">{warning.message}</p>)}
+    {(["body", "basis"] as const).map((block) => <div key={block} className="grid gap-2 md:grid-cols-4" data-testid={`template-application-item-${item.item_number}-${block}`}>
+      {(["ru", "kk"] as const).flatMap((locale) => [<div key={`${locale}-new`} className="rounded border border-emerald-300 bg-emerald-50 p-2 text-sm dark:bg-emerald-950/30">{locale.toUpperCase()} · по шаблону<br />{text(locale, block, true)}</div>, <div key={`${locale}-old`} className="rounded border border-amber-300 bg-amber-50 p-2 text-sm dark:bg-amber-950/30">{locale.toUpperCase()} · было<br />{text(locale, block, false)}</div>])}
+    </div>)}
+  </section>;
 }
 
 function ComparisonRow({ preview, block, label }: { preview: PersonnelOrderTemplateApplicationPreview; block: string; label: string }) {
@@ -52,7 +67,7 @@ function previewProblem(error: unknown): PreviewProblem {
     return { kind: "missing", message: `Не хватает реквизита: ${fields.join(", ")}.` };
   }
   if (/No PUBLISHED template/i.test(detail)) return { kind: "unpublished", message: "Опубликованный шаблон не найден." };
-  if (/available only for a non-archived DRAFT order|requires exactly one ACTIVE item/i.test(detail)) {
+  if (/available only for a non-archived DRAFT order|requires at least one ACTIVE item/i.test(detail)) {
     return { kind: "readonly", message: "Предпросмотр шаблона недоступен для текущего состояния приказа." };
   }
   return { kind: "unexpected", message: "Не удалось проверить шаблон приказа. Повторите попытку позже или обратитесь к администратору." };
@@ -99,8 +114,14 @@ export default function PersonnelOrderTemplateApplication({ orderId, refreshKey 
       <p className="mt-2 text-sm" data-testid="template-application-template-meta">Тип: {preview.template.item_type_code} · PUBLISHED · версия {preview.template.version_number}</p>
       {preview.has_overrides ? <div className="mt-2 text-sm text-amber-700" role="alert"><p>Ручные изменения будут заменены только после подтверждения.</p><ul data-testid="template-application-override-blocks">{preview.override_blocks.map((block) => <li key={`${block.scope}-${block.block_id}`}>{block.scope} · {block.block_type} · {block.language}</li>)}</ul><label className="mt-2 flex gap-2"><input type="checkbox" checked={replaceOverrides} onChange={(e) => setReplaceOverrides(e.target.checked)} disabled={busy} /> Подтверждаю замену ручных правок</label></div> : null}
       {preview.has_prior_application ? <div className="mt-2 text-sm text-amber-700" role="alert"><p>Шаблон уже применялся: версия {preview.last_application?.template_version_number ?? "—"} · {preview.last_application?.applied_at ?? "—"}.</p><label className="mt-2 flex gap-2"><input type="checkbox" checked={confirmReapply} onChange={(e) => setConfirmReapply(e.target.checked)} disabled={busy} /> Подтверждаю повторное применение</label></div> : null}
-      <div className="mt-3 space-y-3" data-testid="template-application-diff">{BLOCKS.map(([block, label]) => <ComparisonRow key={block} preview={preview} block={block} label={label} />)}</div>
-      <button type="button" className="mt-3 rounded bg-emerald-700 px-3 py-2 text-sm text-white disabled:opacity-60" onClick={apply} disabled={busy || (preview.has_overrides && !replaceOverrides) || (preview.has_prior_application && !confirmReapply)}>{busy ? "Применение…" : "Применить шаблон"}</button>
+      <div className="mt-3 space-y-3" data-testid="template-application-diff">
+        {preview.items ? <>
+          <ComparisonRow preview={{ ...preview, current: preview.order_current ?? preview.current, proposed: preview.order_proposed ?? preview.proposed }} block="title" label="Заголовок" />
+          <ComparisonRow preview={{ ...preview, current: preview.order_current ?? preview.current, proposed: preview.order_proposed ?? preview.proposed }} block="preamble" label="Преамбула" />
+          {preview.items.map((item) => <ItemComparison key={item.order_item_id} item={item} />)}
+        </> : BLOCKS.map(([block, label]) => <ComparisonRow key={block} preview={preview} block={block} label={label} />)}
+      </div>
+      <button type="button" className="mt-3 rounded bg-emerald-700 px-3 py-2 text-sm text-white disabled:opacity-60" onClick={apply} disabled={busy || (preview.items ?? []).some((item) => item.missing_data.length > 0) || (preview.has_overrides && !replaceOverrides) || (preview.has_prior_application && !confirmReapply)}>{busy ? "Применение…" : "Применить шаблон"}</button>
     </> : null}
     {applyError ? <p role="alert" className="mt-2 text-sm text-red-700">{applyError}</p> : null}
   </section>;

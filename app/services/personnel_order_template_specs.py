@@ -47,7 +47,16 @@ PERSONNEL_ORDER_TEMPLATE_SPECS = {
     "LEAVE.ANNUAL.GRANT": _spec("LEAVE.ANNUAL.GRANT", _LEAVE),
     "LEAVE.CHILDCARE.GRANT": _spec("LEAVE.CHILDCARE.GRANT", _LEAVE[:-2]),
     "SUPPLEMENTARY_PAY": _spec("SUPPLEMENTARY_PAY", ("employee.full_name",)),
-    "LEAVE.UNPAID.GRANT": _spec("LEAVE.UNPAID.GRANT", _LEAVE[:-1] + ("basis.application_date_ru", "basis.application_date_kk", "basis.application_number_suffix"), required={"body_template_ru": ("employee.full_name", "position.title_ru", "org_unit.title_ru", "leave.start_ru", "leave.end_ru", "leave.days"), "body_template_kk": ("employee.full_name", "position.title_kk", "org_unit.title_kk", "leave.start_kk", "leave.end_kk", "leave.days")}, ),
+    "LEAVE.UNPAID.GRANT": _spec("LEAVE.UNPAID.GRANT", _LEAVE[:-1] + (
+        "leave.period_text_ru", "leave.period_text_kk", "leave.period_clause_ru", "leave.period_clause_kk",
+        "org_unit.document_genitive_kk", "position.document_possessive_kk", "position.document_nominative_ru",
+        "employee.full_name_dative_ru", "employee.full_name_dative_kk", "employee.full_name_genitive_kk",
+        "basis.application_date_ru", "basis.application_date_kk", "basis.application_number_suffix",
+    ), required={
+        "body_template_ru": ("employee.full_name_dative_ru", "position.document_nominative_ru", "org_unit.title_ru", "leave.period_clause_ru", "leave.days"),
+        "body_template_kk": ("org_unit.document_genitive_kk", "position.document_possessive_kk", "employee.full_name_dative_kk", "leave.period_clause_kk"),
+        "basis_template_kk": ("employee.full_name_genitive_kk",),
+    }),
     "RETURN_FROM_CHILDCARE_LEAVE": _spec("RETURN_FROM_CHILDCARE_LEAVE", _COMMON, required={"body_template_ru": ("employee.full_name", "position.title_ru", "org_unit.title_ru", "rate", "effective_date"), "body_template_kk": ("employee.full_name", "position.title_kk", "org_unit.title_kk", "rate", "effective_date"), "basis_template_ru": ("basis",), "basis_template_kk": ("basis",)}),
 }
 

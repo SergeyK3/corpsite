@@ -77,7 +77,7 @@ def _selected_employee_payload(conn: Any, *, employee_id: int, effective_date: d
     }
 
 
-def create_manual_draft(*, created_by: int, order_number: str, order_date: date, source_title: str, source_title_locale: str, item_type_code: str, employee_id: Optional[int], effective_date: date, unresolved_subject: Optional[Mapping[str, Any]] = None, document_subject_context: Optional[Mapping[str, Any]] = None) -> dict[str, Any]:
+def create_manual_draft(*, created_by: int, order_number: str, order_date: date, source_title: str, source_title_locale: str, item_type_code: str, employee_id: Optional[int], effective_date: date, period_start: Optional[date] = None, period_end: Optional[date] = None, item_payload: Optional[Mapping[str, Any]] = None, unresolved_subject: Optional[Mapping[str, Any]] = None, document_subject_context: Optional[Mapping[str, Any]] = None) -> dict[str, Any]:
     number = str(order_number or "").strip()
     title = str(source_title or "").strip()
     if not number or not title:
@@ -90,7 +90,7 @@ def create_manual_draft(*, created_by: int, order_number: str, order_date: date,
     if duplicate["blocking"]:
         raise PersonnelOrderConflictError("DUPLICATE_ORDER_NUMBER_DATE")
     with engine.begin() as conn:
-        item_payload = (
+        base_payload = (
             _unresolved_subject_payload(unresolved_subject)
             if unresolved_subject is not None
             else _selected_employee_payload(
@@ -100,6 +100,15 @@ def create_manual_draft(*, created_by: int, order_number: str, order_date: date,
                 context=document_subject_context,
             )
         )
+        if item_type_code == "LEAVE.UNPAID.GRANT":
+            from app.services.personnel_order_unpaid_leave_contract import unpaid_leave_period
+
+            supplied = dict(item_payload or {})
+            supplied_leave = supplied.get("leave") if isinstance(supplied.get("leave"), Mapping) else {}
+            period = unpaid_leave_period({"leave": supplied_leave})
+            if period_start != period["start"] or period_end != period["end"] or effective_date != period_start:
+                raise PersonnelOrderValidationError("UNPAID_LEAVE_PERIOD_MISMATCH")
+            base_payload.update(supplied)
         # Recheck inside the write transaction; browser preview is never authoritative.
         duplicate = duplicate_preview(order_number=number, order_date=order_date)
         if duplicate["blocking"]:
@@ -110,9 +119,9 @@ def create_manual_draft(*, created_by: int, order_number: str, order_date: date,
             RETURNING order_id
         """), {"number": number, "order_date": order_date, "item_type": item_type_code, "source_mode": SOURCE_MODE_MANUAL, "title": title, "locale": source_title_locale, "created_by": created_by}).scalar_one())
         conn.execute(text("""
-            INSERT INTO personnel_order_items(order_id,item_number,item_type_code,item_status,employee_id,effective_date,payload)
-            VALUES(:order_id,1,:item_type,'ACTIVE',:employee_id,:effective_date,CAST(:payload AS jsonb))
-        """), {"order_id": order_id, "item_type": item_type_code, "employee_id": employee_id, "effective_date": effective_date, "payload": json.dumps(item_payload, ensure_ascii=False)})
+            INSERT INTO personnel_order_items(order_id,item_number,item_type_code,item_status,employee_id,effective_date,period_start,period_end,payload)
+            VALUES(:order_id,1,:item_type,'ACTIVE',:employee_id,:effective_date,:period_start,:period_end,CAST(:payload AS jsonb))
+        """), {"order_id": order_id, "item_type": item_type_code, "employee_id": employee_id, "effective_date": effective_date, "period_start": period_start, "period_end": period_end, "payload": json.dumps(base_payload, ensure_ascii=False)})
         create_personnel_order_evidence_scope_tx(conn, order_id=order_id)
         generate_editorial(order_id, user_id=created_by, conn=conn)
     return {"order_id": order_id, "order_number": number, "order_type_code": item_type_code, "status": "DRAFT", "source_mode": SOURCE_MODE_MANUAL, "document_revision": 1, "document_review_state": "NEEDS_REVIEW"}

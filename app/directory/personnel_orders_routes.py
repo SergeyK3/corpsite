@@ -29,6 +29,7 @@ from app.directory.personnel_orders_schemas import (
     PersonnelOrderDocumentItemListResponse,
     PersonnelOrderManualDraftCreateIn,
     PersonnelOrderManualDraftCreateOut,
+    PersonnelOrderPublishedTemplateTitleOut,
     PersonnelOrderItemCreateIn,
     PersonnelOrderItemUpdateIn,
     PersonnelOrderLifecycleAuditListResponse,
@@ -108,6 +109,7 @@ from app.services.personnel_order_document_review_service import (
 from app.services.personnel_order_document_header_service import duplicate_preview, patch_document_header
 from app.services.personnel_order_document_item_service import list_document_items, patch_document_item
 from app.services.personnel_order_manual_draft_service import create_manual_draft
+from app.services.personnel_order_template_draft_service import TemplateDraftError, get_published
 from app.db.models.personnel_orders import (
     LIFECYCLE_AUDIT_ACTION_DOCUMENT_CONFIRMED,
     LIFECYCLE_AUDIT_ACTION_DOCUMENT_REOPENED,
@@ -120,6 +122,18 @@ from app.services.personnel_order_acknowledgement_service import (
 )
 
 router = APIRouter()
+
+
+@router.get("/personnel-orders/templates/{item_type_code}/published-title", response_model=PersonnelOrderPublishedTemplateTitleOut)
+def get_personnel_order_published_template_title(item_type_code: str, _user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    require_personnel_admin_or_403(_user)
+    try:
+        template = get_published(item_type_code)
+    except TemplateDraftError as exc:
+        raise validation_error_to_http422(PersonnelOrderValidationError(str(exc))) from exc
+    if template is None:
+        raise HTTPException(status_code=404, detail={"code": "PUBLISHED_TEMPLATE_NOT_FOUND"})
+    return {"item_type_code": template["item_type_code"], "title_ru": template["title_ru"], "title_kk": template["title_kk"]}
 
 
 @router.post("/personnel-orders/manual-draft", response_model=PersonnelOrderManualDraftCreateOut, status_code=201)

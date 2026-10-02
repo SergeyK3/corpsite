@@ -31,7 +31,7 @@ def test_readable_initial_texts_match_the_ten_type_golden_snapshot() -> None:
         "CONCURRENT_DUTY_START": "6d3af87099855f0270cc9c015e24fa44dfc98bcd8ea7f7ebccb2848dd77fcdce",
         "CONCURRENT_DUTY_END": "6f9dc6cd6a6424d061d1d154142e18a4f02bdaaaa581f2d3fb96370bade07fc0",
         "LEAVE.ANNUAL.GRANT": "9ac3b1e220d4f174350626cb65d97949abcdce9ddadb6ba02c4846242e7bb96d",
-        "LEAVE.UNPAID.GRANT": "a84040860971e14d1abf5eb27002c170a6ed26f8eb6c13b2df1a1e35727923fd",
+        "LEAVE.UNPAID.GRANT": "df3b6b2c648e392e99cba29ce45ed9f15272f50e253420d4a37f0b62f13a3eed",
         "LEAVE.CHILDCARE.GRANT": "ae26f701f695f8b5e92f1ff613463656098ad7bad746791ad617978c4df5d088",
         "SUPPLEMENTARY_PAY": "bc5b0cfcb36a7bd4606ac327c896268ab020bc959a4ccdeb8ebde5d9a1cbad54",
         "RETURN_FROM_CHILDCARE_LEAVE": "bf6c0f6daf69edbf77df33015aedc20d253e15d68c84ad9f6c743edb41c7c3e3",
@@ -163,10 +163,10 @@ def test_unpaid_leave_draft_preview_uses_unquoted_technical_placeholders() -> No
     preview = preview_draft(EDITABLE_TYPE, _initial_texts(EDITABLE_TYPE))
     preview_text = " ".join(str(item) for locale in preview.values() for item in locale.values())
 
-    assert all(value in preview["ru"]["body"] for value in ("[[ФИО сотрудника]]", "[[Должность]]", "[[Подразделение]]", "[[Дата начала отпуска]]", "[[Количество дней]]"))
-    assert all(value in preview["kk"]["body"] for value in ("[[Қызметкердің аты-жөні]]", "[[Лауазым]]", "[[Бөлімше]]", "[[Демалыстың басталу күні]]", "[[Күн саны]]"))
+    assert all(value in preview["ru"]["body"] for value in ("[[ФИО сотрудника в дательном падеже]]", "[[Должность в именительном падеже]]", "[[Подразделение]]", "7 июля 2026 года", "[[Количество дней]]"))
+    assert all(value in preview["kk"]["body"] for value in ("[[Бөлімшенің құжаттық нысаны]]", "[[Лауазымның құжаттық нысаны]]", "[[Қызметкердің барыс септігі]]", "2026 жылғы 7 шілде күніне"))
+    assert "[[Қызметкердің ілік септігі]]" in preview["kk"]["basis"]
     assert "[[Дата заявления]]" in preview["ru"]["basis"]
-    assert "[[Өтініш күні]]" in preview["kk"]["basis"]
     assert all(value not in preview_text for value in ("1.0", "15 января 2026", "2026 жылғы 15 қаңтар", "««", "»»"))
 
 

@@ -12,6 +12,7 @@ import type {
   PersonnelOrderPrintItemViewModel,
   PersonnelOrderPrintViewModel,
 } from "./personnelOrderPrintViewModel";
+import { normalizePersonnelOrderBasisText } from "./personnelOrderBasisText";
 
 /** Escape text for trusted internal HTML templates (ViewModel → markup). */
 export function escapePersonnelOrderPrintHtml(value: string): string {
@@ -164,12 +165,13 @@ function renderBasis(
     : joined.includes("личн") && joined.includes("заявлен");
   // Legacy blocks can carry an old label or employee name. The print owns the
   // label, so canonicalize this approved basis before rendering it.
-  const isUnpaidLeave = String(model.documentTypeCode).toUpperCase() === "LEAVE.UNPAID.GRANT";
-  const lines = isChildcareReturn && personalApplication
+  const sourceLines = isChildcareReturn && personalApplication
     ? [language === "kk" ? "Жеке өтініші." : "Личное заявление."]
-    : isUnpaidLeave
-      ? rawLines.map((line) => line.replace(language === "kk" ? /^\s*Негіз:\s*/i : /^\s*Основание:\s*/i, ""))
-      : rawLines;
+    : rawLines;
+  const normalizedLanguage = language === "kk" ? "kk" : "ru";
+  const lines = sourceLines
+    .map((line) => normalizePersonnelOrderBasisText(line, normalizedLanguage))
+    .filter(Boolean);
   if (!lines.length) return "";
 
   const headings = dictionaries
@@ -178,7 +180,7 @@ function renderBasis(
     )}:</div>`)
     .join("");
   const list = lines
-    .map((line) => `<li>${escapePersonnelOrderPrintHtml(line)}</li>`)
+    .map((line) => `<li>${escapePersonnelOrderPrintHtml(line)}.</li>`)
     .join("");
 
   return `<section class="personnel-order-print-block personnel-order-print-basis" data-testid="personnel-order-print-basis">

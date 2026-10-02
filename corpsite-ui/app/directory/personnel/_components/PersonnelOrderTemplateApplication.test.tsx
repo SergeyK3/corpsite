@@ -100,4 +100,26 @@ describe("PersonnelOrderTemplateApplication", () => {
     fireEvent.click(screen.getByLabelText("Подтверждаю повторное применение"));
     expect(screen.getByRole("button", { name: "Применить шаблон" })).toBeEnabled();
   });
+
+  it("renders four item comparisons in item-number order and blocks an incomplete item", async () => {
+    vi.mocked(previewPersonnelOrderTemplateApplication).mockResolvedValue({
+      ...preview(),
+      order_current: { "ru:title": { generated_text: "old title", override_text: null, revision: 1 } },
+      order_proposed: { title_ru: "new title", title_kk: "new kk", preamble_ru: "new preamble", preamble_kk: "new kk preamble" },
+      items: [1, 2, 3, 4].map((item_number) => ({
+        order_item_id: item_number, item_number,
+        current: { "ru:body": { generated_text: `old ${item_number}`, override_text: null, revision: 1 } },
+        proposed: { body_ru: `new ${item_number}`, body_kk: `new kk ${item_number}`, basis_ru: "basis", basis_kk: "basis kk" },
+        warnings: item_number === 3 ? [{ code: "ORG_UNIT_KK_UNCONFIRMED", message: "KK missing" }] : [],
+        missing_data: item_number === 3 ? ["org_unit.title_kk"] : [],
+      })),
+    });
+    render(<PersonnelOrderTemplateApplication orderId={42} onApplied={vi.fn()} />);
+    await screen.findByTestId("template-application-item-1");
+    expect(screen.getAllByTestId(/template-application-item-\d+$/).map((node) => node.getAttribute("data-testid"))).toEqual([
+      "template-application-item-1", "template-application-item-2", "template-application-item-3", "template-application-item-4",
+    ]);
+    expect(screen.getByTestId("template-application-item-3")).toHaveTextContent("KK missing");
+    expect(screen.getByRole("button", { name: "Применить шаблон" })).toBeDisabled();
+  });
 });

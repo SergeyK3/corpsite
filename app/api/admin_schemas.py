@@ -40,6 +40,7 @@ class PersonnelOrderTemplateCatalogItem(BaseModel):
     uses_specialized_generator: bool
     is_pilot: bool
     editor_available: bool
+    allowed_variables: List[str]
     required_fields: List[str]
     notes: str
     pilot_detail: Optional[PersonnelOrderTemplatePilotDetail] = None

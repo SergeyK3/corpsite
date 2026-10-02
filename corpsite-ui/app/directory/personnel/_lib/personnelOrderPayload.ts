@@ -13,6 +13,10 @@ export type ItemPayloadDraft = {
   vacation_benefit_applicable?: boolean;
   vacation_benefit_rule?: string;
   leave_note?: string;
+  org_unit_document_genitive_kk?: string;
+  position_document_possessive_kk?: string;
+  employee_full_name_dative_kk?: string;
+  employee_full_name_genitive_kk?: string;
   person_id?: string;
   org_unit_id?: string;
   position_id?: string;
@@ -41,6 +45,7 @@ export function emptyItemPayloadDraft(): ItemPayloadDraft {
   return {
     leave_start: "", leave_end: "", leave_days: "", work_period_start: "", work_period_end: "", work_period_days: "", work_periods: [{ start: "", end: "", days: "" }],
     application_date: "", application_number: "", vacation_benefit_applicable: false, vacation_benefit_rule: "", leave_note: "",
+    org_unit_document_genitive_kk: "", position_document_possessive_kk: "", employee_full_name_dative_kk: "", employee_full_name_genitive_kk: "",
     org_unit_id: "",
     position_id: "",
     employment_rate: "1",
@@ -64,6 +69,25 @@ export function itemPayloadDraftFromRecord(payload: Record<string, unknown> | nu
     source[key] == null || source[key] === "" ? fallback : String(source[key]);
 
   const sourcePeriods = Array.isArray(source.work_periods) ? source.work_periods : [];
+  const documentForms = source.document_forms_kk && typeof source.document_forms_kk === "object" && !Array.isArray(source.document_forms_kk)
+    ? source.document_forms_kk as Record<string, unknown> : {};
+  const nestedForm = (entity: "org_unit_name" | "position_name" | "employee", keys: string[]): string => {
+    const raw = source[entity];
+    const value = entity === "employee" && raw && typeof raw === "object" ? (raw as Record<string, unknown>).name : raw;
+    if (!value || typeof value !== "object") return "";
+    for (const key of keys) {
+      const candidate = (value as Record<string, unknown>)[key];
+      if (typeof candidate === "string" && candidate.trim()) return candidate.trim();
+    }
+    return "";
+  };
+  const documentForm = (keys: string[], entity: "org_unit_name" | "position_name" | "employee", nestedKeys: string[]): string => {
+    for (const key of keys) {
+      const candidate = documentForms[key] ?? source[key];
+      if (typeof candidate === "string" && candidate.trim()) return candidate.trim();
+    }
+    return nestedForm(entity, nestedKeys);
+  };
   const workPeriods = sourcePeriods
     .filter((period): period is Record<string, unknown> => Boolean(period) && typeof period === "object")
     .map((period) => ({ start: String(period.start || ""), end: String(period.end || ""), days: String(period.days || "") }));
@@ -72,11 +96,15 @@ export function itemPayloadDraftFromRecord(payload: Record<string, unknown> | nu
   }
   return {
     work_periods: workPeriods.length ? workPeriods : [{ start: "", end: "", days: "" }],
-    leave_start: asString("leave_start"), leave_end: asString("leave_end"), leave_days: asString("leave_days"),
+    leave_start: asString("leave_start", source.leave && typeof source.leave === "object" ? String((source.leave as Record<string, unknown>).start || "") : ""), leave_end: asString("leave_end", source.leave && typeof source.leave === "object" ? String((source.leave as Record<string, unknown>).end || "") : ""), leave_days: asString("leave_days", source.leave && typeof source.leave === "object" ? String((source.leave as Record<string, unknown>).days || "") : ""),
     work_period_start: asString("work_period_start"), work_period_end: asString("work_period_end"), work_period_days: asString("work_period_days"),
     application_date: asString("basis_date", asString("application_date")), application_number: asString("basis_number", asString("application_number")),
     vacation_benefit_applicable: source.vacation_benefit_applicable === true,
     vacation_benefit_rule: asString("vacation_benefit_rule"), leave_note: asString("note"),
+    org_unit_document_genitive_kk: documentForm(["org_unit_document_genitive_kk", "org_unit_genitive", "document_genitive_kk"], "org_unit_name", ["document_genitive_kk", "genitive_kk"]),
+    position_document_possessive_kk: documentForm(["position_document_possessive_kk", "position_possessive", "document_possessive_kk"], "position_name", ["document_possessive_kk", "possessive_kk"]),
+    employee_full_name_dative_kk: documentForm(["employee_full_name_dative_kk", "employee_dative", "full_name_dative_kk"], "employee", ["full_name_dative_kk", "dative_kk"]),
+    employee_full_name_genitive_kk: documentForm(["employee_full_name_genitive_kk", "employee_genitive", "full_name_genitive_kk"], "employee", ["full_name_genitive_kk", "genitive_kk"]),
     org_unit_id: asString("org_unit_id"),
     position_id: asString("position_id"),
     employment_rate: asString("employment_rate", "1"),
@@ -147,11 +175,26 @@ export function buildItemPayload(
     const startMs = Date.parse(`${leaveStart}T00:00:00`);
     const endMs = Date.parse(`${leaveEnd}T00:00:00`);
     const leaveDays = explicitLeaveDays ?? (Number.isFinite(startMs) && Number.isFinite(endMs) ? Math.floor((endMs - startMs) / 86400000) + 1 : undefined);
-    payload.leave_start = leaveStart;
-    payload.leave_end = leaveEnd;
-    if (leaveDays != null) payload.leave_days = leaveDays;
+    if (type === "LEAVE.UNPAID.GRANT") {
+      const periodType = leaveStart && leaveStart === leaveEnd ? "SINGLE_DAY" : "CONTINUOUS_RANGE";
+      payload.leave = { period_type: periodType, start: leaveStart, end: leaveEnd, days: leaveDays };
+    } else {
+      payload.leave_start = leaveStart;
+      payload.leave_end = leaveEnd;
+    }
+    // The versioned unpaid contract intentionally has no legacy fields.
+    if (type === "LEAVE.ANNUAL.GRANT" && leaveDays != null) payload.leave_days = leaveDays;
     payload.basis = { kind: "PERSONAL_APPLICATION", date: String(draft.application_date || "").trim(), number: String(draft.application_number || "").trim() || null };
     if (String(draft.leave_note || "").trim()) payload.note = String(draft.leave_note).trim();
+    if (type === "LEAVE.UNPAID.GRANT") {
+      const document_forms_kk = {
+        org_unit_document_genitive_kk: String(draft.org_unit_document_genitive_kk || "").trim(),
+        position_document_possessive_kk: String(draft.position_document_possessive_kk || "").trim(),
+        employee_full_name_dative_kk: String(draft.employee_full_name_dative_kk || "").trim(),
+        employee_full_name_genitive_kk: String(draft.employee_full_name_genitive_kk || "").trim(),
+      };
+      if (Object.values(document_forms_kk).some(Boolean)) payload.document_forms_kk = document_forms_kk;
+    }
     if (type === "LEAVE.ANNUAL.GRANT") {
       const periods = (draft.work_periods && draft.work_periods.length ? draft.work_periods : [{ start: String(draft.work_period_start || ""), end: String(draft.work_period_end || ""), days: String(draft.work_period_days || "") }])
         .map((period) => ({ start: String(period.start || "").trim(), end: String(period.end || "").trim(), days: optionalNumber(period.days) }));

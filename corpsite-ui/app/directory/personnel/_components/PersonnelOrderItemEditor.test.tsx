@@ -308,6 +308,37 @@ describe("PersonnelOrderItemEditor draft item deletion", () => {
   });
 });
 
+describe("PersonnelOrderItemEditor unpaid-leave period", () => {
+  it("uses start and end dates only, defaulting the end date to the selected start", async () => {
+    render(<PersonnelOrderItemEditor orderId={1} items={[]} onChanged={vi.fn()} />);
+    fireEvent.change(screen.getByTestId("personnel-order-item-type-select"), {
+      target: { value: "LEAVE.UNPAID.GRANT" },
+    });
+
+    const start = screen.getByTestId("leave-start");
+    const end = screen.getByTestId("leave-end");
+    fireEvent.change(start, { target: { value: "2026-07-07" } });
+
+    expect(end).toHaveValue("2026-07-07");
+  });
+
+  it("rejects an end date earlier than the start date before saving", async () => {
+    render(<PersonnelOrderItemEditor orderId={1} items={[]} onChanged={vi.fn()} />);
+    fireEvent.change(screen.getByTestId("personnel-order-item-type-select"), {
+      target: { value: "LEAVE.UNPAID.GRANT" },
+    });
+    await selectEmployeeFromSearch();
+
+    fireEvent.change(screen.getByTestId("leave-start"), { target: { value: "2026-07-17" } });
+    fireEvent.change(screen.getByTestId("leave-end"), { target: { value: "2026-07-10" } });
+    fireEvent.change(screen.getByTestId("leave-application-date"), { target: { value: "2026-07-01" } });
+    fireEvent.click(screen.getByRole("button", { name: "Добавить пункт" }));
+
+    expect(await screen.findByText("Дата окончания отпуска не может быть раньше даты начала.")).toBeInTheDocument();
+    expect(createPersonnelOrderItem).not.toHaveBeenCalled();
+  });
+});
+
 describe("PersonnelOrderItemEditor TRANSFER", () => {
   it("shows source read-only and separate target placement cascade", async () => {
     render(<PersonnelOrderItemEditor orderId={1} items={[]} onChanged={vi.fn()} />);

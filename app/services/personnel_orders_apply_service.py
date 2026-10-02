@@ -766,6 +766,11 @@ def _apply_item_events(
     created_by: int,
 ) -> None:
     payload = _parse_payload(item.get("payload"))
+    if str(item["item_type_code"]) == "LEAVE.UNPAID.GRANT":
+        # Operational employee-event application has no representation for a
+        from app.services.personnel_order_unpaid_leave_contract import unpaid_leave_period
+
+        unpaid_leave_period(payload)
     event_types = _resolve_event_types(str(item["item_type_code"]), payload)
 
     for event_type in event_types:

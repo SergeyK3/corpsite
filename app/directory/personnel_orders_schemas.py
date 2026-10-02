@@ -347,8 +347,12 @@ class PersonnelOrderTemplateApplicationPreviewOut(BaseModel):
     override_blocks: List[Dict[str, Any]] = Field(default_factory=list)
     has_prior_application: bool
     last_application: Optional[Dict[str, Any]] = None
-    current: Dict[str, Dict[str, Any]]
-    proposed: Dict[str, str]
+    # Legacy aliases are supplied for one-item orders only.
+    current: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
+    proposed: Dict[str, str] = Field(default_factory=dict)
+    order_current: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
+    order_proposed: Dict[str, str] = Field(default_factory=dict)
+    items: List[Dict[str, Any]] = Field(default_factory=list)
     order_revision: int
 
 
@@ -495,12 +499,28 @@ class PersonnelOrderManualDraftCreateIn(BaseModel):
     unresolved_subject: Optional[PersonnelOrderUnresolvedSubjectIn] = None
     document_subject_context: Optional[PersonnelOrderDocumentSubjectContextIn] = None
     effective_date: date
+    period_start: Optional[date] = None
+    period_end: Optional[date] = None
+    item_payload: Optional[Dict[str, Any]] = None
 
     @model_validator(mode="after")
     def require_exactly_one_subject(self) -> "PersonnelOrderManualDraftCreateIn":
         if (self.employee_id is None) == (self.unresolved_subject is None):
             raise ValueError("Specify either employee_id or unresolved_subject.")
+        if self.item_type_code == "LEAVE.UNPAID.GRANT":
+            if self.period_start is None or self.period_end is None:
+                raise ValueError("Unpaid leave requires period_start and period_end.")
+            if self.period_end < self.period_start:
+                raise ValueError("period_end must not be earlier than period_start.")
+            if self.effective_date != self.period_start:
+                raise ValueError("effective_date must equal period_start for unpaid leave.")
         return self
+
+
+class PersonnelOrderPublishedTemplateTitleOut(BaseModel):
+    item_type_code: str
+    title_ru: str
+    title_kk: str
 
 
 class PersonnelOrderManualDraftCreateOut(BaseModel):

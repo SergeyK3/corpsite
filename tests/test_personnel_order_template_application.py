@@ -56,7 +56,7 @@ def test_termination_template_apply_updates_blocks_and_writes_audit(monkeypatch)
         for locale in ("ru","kk"):
             assert actual[f"{locale}:title"]["generated_text"]==preview["proposed"][f"title_{locale}"] and actual[f"{locale}:preamble"]["generated_text"]==preview["proposed"][f"preamble_{locale}"]
             assert actual[f"{locale}:body"]["generated_text"]==preview["proposed"][f"body_template_{locale}"] and actual[f"{locale}:basis"]["generated_text"]==preview["proposed"][f"basis_template_{locale}"]
-        audit=c.execute(text("select * from personnel_order_template_applications where order_id=:o"),{"o":order}).mappings().one(); assert audit["order_item_id"]==item and audit["template_version_id"]==template and audit["applied_by_user_id"]==actor and audit["applied_at"] and all(audit["template_snapshot"][k]==values[k] for k in values) and sorted(audit["previous_editorial_blocks"],key=lambda x:(x["locale"],x["block_type"]))==[dict(x) for x in before]
+        audit=c.execute(text("select * from personnel_order_template_applications where order_id=:o"),{"o":order}).mappings().one(); assert audit["order_item_id"]==item and audit["template_version_id"]==template and audit["applied_by_user_id"]==actor and audit["applied_at"] and all(audit["template_snapshot"][k]==values[k] for k in values) and {(x["scope"],x["locale"],x["block_type"],x["order_item_id"],x["generated_text"],x["override_text"],x["revision"]) for x in audit["previous_editorial_blocks"]}=={("ORDER" if x["block_type"] in {"title","preamble"} else "ITEM",x["locale"],x["block_type"],None if x["block_type"] in {"title","preamble"} else item,x["generated_text"],x["override_text"],x["revision"]) for x in before}
         assert "{{" not in str(audit["rendered_snapshot"]) and "[[" not in str(audit["rendered_snapshot"]) and result["order_id"]==order
     finally: outer.rollback(); c.close(); e.dispose()
 
@@ -89,7 +89,7 @@ def test_reapply_requires_confirmation_and_preserves_first_audit(monkeypatch):
         p=preview_service.preview_template_application(oid); assert p['has_prior_application'] and p['last_application']['application_id']==first_id and p['last_application']['template_version_id']==tid and p['last_application']['template_version_number']==880301 and p['last_application']['applied_by_user_id']==actor and p['last_application']['applied_at']
         with pytest.raises(preview_service.TemplateApplicationError) as exc: preview_service.apply_template_application(oid,actor,expected_document_revision=1)
         assert exc.value.conflict and c.execute(text("select count(*) from personnel_order_template_applications where order_id=:o"),{'o':oid}).scalar_one()==1 and c.execute(text("select to_jsonb(x) from personnel_order_template_applications x where template_application_id=:id"),{'id':first_id}).scalar_one()==first
-        preview_service.apply_template_application(oid,actor,expected_document_revision=1,confirm_reapply=True); audits=c.execute(text("select * from personnel_order_template_applications where order_id=:o order by template_application_id"),{'o':oid}).mappings().all(); assert len(audits)==2 and audits[0]['template_application_id']==first_id and audits[1]['template_application_id']>first_id and audits[1]['previous_editorial_blocks']==[dict(x) for x in blocks]
+        preview_service.apply_template_application(oid,actor,expected_document_revision=1,confirm_reapply=True); audits=c.execute(text("select * from personnel_order_template_applications where order_id=:o order by template_application_id"),{'o':oid}).mappings().all(); assert len(audits)==2 and audits[0]['template_application_id']==first_id and audits[1]['template_application_id']>first_id and {(x["scope"],x["locale"],x["block_type"],x["order_item_id"],x["generated_text"],x["override_text"],x["revision"]) for x in audits[1]['previous_editorial_blocks']}=={("ORDER" if x["block_type"] in {"title","preamble"} else "ITEM",x["locale"],x["block_type"],None if x["block_type"] in {"title","preamble"} else iid,x["generated_text"],x["override_text"],x["revision"]) for x in blocks}
         assert preview_service.preview_template_application(oid)['last_application']['application_id']==audits[1]['template_application_id']
     finally: outer.rollback(); c.close(); e.dispose()
 
@@ -104,13 +104,13 @@ def test_preview_rejects_non_draft_or_archived_without_writes(monkeypatch,status
         assert c.execute(text("select to_jsonb(x) from personnel_orders x where order_id=:id"),{"id":order}).scalar_one()==before
     finally: outer.rollback(); c.close(); e.dispose()
 
-@pytest.mark.parametrize("case",["no_active","two_active","type_mismatch","no_published"])
+@pytest.mark.parametrize("case",["no_active","type_mismatch","no_published"])
 def test_preview_rejects_invalid_item_or_template_shape_without_audit(monkeypatch,case):
     e=create_engine(URL); c=e.connect(); outer=c.begin()
     try:
         actor=c.execute(text("select user_id from users order by user_id limit 1")).scalar_one(); employee=c.execute(text("select employee_id from employees order by employee_id limit 1")).scalar_one(); order=c.execute(text("insert into personnel_orders(order_type_code,status,source_mode,created_by) values('TERMINATION','DRAFT','MANUAL',:a) returning order_id"),{"a":actor}).scalar_one()
         if case!="no_active":
-            typ="HIRE" if case=="type_mismatch" else "TERMINATION"; count=2 if case=="two_active" else 1
+            typ="HIRE" if case=="type_mismatch" else "TERMINATION"; count=1
             for n in range(count): c.execute(text("insert into personnel_order_items(order_id,item_number,item_type_code,employee_id,item_status,payload) values(:o,:n,:t,:e,'ACTIVE','{}'::jsonb)"),{"o":order,"n":n+1,"t":typ,"e":employee})
         if case=="type_mismatch":
             vals=dict(get_personnel_order_template_spec("TERMINATION").initial_texts); c.execute(text("insert into personnel_order_template_versions(item_type_code,version_number,status,title_ru,title_kk,preamble_ru,preamble_kk,body_template_ru,body_template_kk,basis_template_ru,basis_template_kk) values('TERMINATION',870001,'PUBLISHED',:title_ru,:title_kk,:preamble_ru,:preamble_kk,:body_template_ru,:body_template_kk,:basis_template_ru,:basis_template_kk)"),vals)

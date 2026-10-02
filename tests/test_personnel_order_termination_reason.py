@@ -10,7 +10,7 @@ from app.services import personnel_orders_query_service as query_service
 from app.services.personnel_order_template_application_service import _render
 from app.services.personnel_order_template_specs import get_personnel_order_template_spec
 from app.services.personnel_order_termination_reason import EMPLOYEE_INITIATIVE, termination_reason_text
-from app.services.personnel_orders_editorial.position_dictionary import localized_personnel_order_position
+from app.services.personnel_orders_editorial.position_dictionary import document_nominative_personnel_order_position, localized_personnel_order_position
 from app.services.personnel_orders_editorial.generators import format_personnel_order_date_numeric
 
 
@@ -54,6 +54,8 @@ def test_employee_initiative_reason_has_bilingual_rendering_for_template_preview
 
 def test_termination_template_uses_dictionary_position_and_short_basis_without_employee_name():
     assert localized_personnel_order_position("Старшая медсестра", "kk") == "Аға мейіргер"
+    assert document_nominative_personnel_order_position("Врач") == "врач"
+    assert document_nominative_personnel_order_position("Врач") != "врачу"
     template = dict(get_personnel_order_template_spec("TERMINATION").initial_texts)
     template["item_type_code"] = "TERMINATION"
     template["basis_template_ru"] = "Личное заявление"

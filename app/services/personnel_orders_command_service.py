@@ -120,21 +120,43 @@ def _validate_leave_draft_item(
         return
     if employee_id is None:
         raise PersonnelOrderValidationError("Leave item requires employee_id.")
-    if effective_date is None or period_start is None or period_end is None:
-        raise PersonnelOrderValidationError("Leave item requires effective_date, period_start and period_end.")
-    if period_end < period_start:
-        raise PersonnelOrderValidationError("Leave period_end cannot be earlier than period_start.")
-    if str(payload.get("leave_start") or "") != period_start.isoformat():
-        raise PersonnelOrderValidationError("Leave payload.leave_start must match period_start.")
-    if str(payload.get("leave_end") or "") != period_end.isoformat():
-        raise PersonnelOrderValidationError("Leave payload.leave_end must match period_end.")
     try:
-        leave_days = int(payload.get("leave_days"))
-    except (TypeError, ValueError):
-        raise PersonnelOrderValidationError("Leave item requires integer payload.leave_days.")
-    if item_type_code == "LEAVE.UNPAID.GRANT" and leave_days != (period_end - period_start).days + 1:
-        raise PersonnelOrderValidationError("Unpaid leave payload.leave_days must equal inclusive leave period days.")
-    if payload.get("work_periods") is not None and leave_days != (period_end - period_start).days + 1:
+        if item_type_code == "LEAVE.UNPAID.GRANT":
+            from app.services.personnel_order_unpaid_leave_contract import unpaid_leave_period
+
+            period = unpaid_leave_period(payload)
+            if effective_date is None or period_start is None or period_end is None:
+                raise PersonnelOrderValidationError(
+                    "Leave item requires effective_date, period_start and period_end."
+                )
+            if period_end < period_start:
+                raise PersonnelOrderValidationError("Leave period_end cannot be earlier than period_start.")
+            if period_start != period["start"] or period_end != period["end"]:
+                raise PersonnelOrderValidationError(
+                    "Leave period_start/period_end must match the leave period."
+                )
+            if effective_date != period_start:
+                raise PersonnelOrderValidationError(
+                    "Leave effective_date must equal period_start."
+                )
+            leave_days = int(period["days"])
+        else:
+            if effective_date is None or period_start is None or period_end is None:
+                raise PersonnelOrderValidationError("Leave item requires effective_date, period_start and period_end.")
+            if period_end < period_start:
+                raise PersonnelOrderValidationError("Leave period_end cannot be earlier than period_start.")
+            if str(payload.get("leave_start") or "") != period_start.isoformat():
+                raise PersonnelOrderValidationError("Leave payload.leave_start must match period_start.")
+            if str(payload.get("leave_end") or "") != period_end.isoformat():
+                raise PersonnelOrderValidationError("Leave payload.leave_end must match period_end.")
+            leave_days = int(payload.get("leave_days"))
+    except (ValueError, TypeError) as exc:
+        raise PersonnelOrderValidationError(str(exc) or "Leave payload is invalid.") from exc
+    if (
+        item_type_code != "LEAVE.UNPAID.GRANT"
+        and payload.get("work_periods") is not None
+        and leave_days != (period_end - period_start).days + 1
+    ):
         raise PersonnelOrderValidationError("Leave payload.leave_days must equal inclusive leave period days.")
     basis = payload.get("basis") if isinstance(payload.get("basis"), dict) else {}
     if basis and (str(basis.get("kind") or "").strip() != "PERSONAL_APPLICATION" or not str(basis.get("date") or "").strip()):

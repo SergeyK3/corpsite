@@ -81,18 +81,16 @@ INITIAL_TEXTS_BY_TYPE: Final[dict[str, InitialTexts]] = {'HIRE': {'title_ru': '�
                         'title_kk': 'Жалақы сақталмайтын демалыс беру туралы',
                         'preamble_ru': 'В соответствии с Трудовым кодексом Республики Казахстан',
                         'preamble_kk': 'Қазақстан Республикасының Еңбек кодексіне сәйкес',
-                        'body_template_ru': 'Предоставить {{employee.full_name}}, {{position.title_ru}} подразделения '
-                                            '«{{org_unit.title_ru}}», отпуск без сохранения заработной платы с '
-                                            '{{leave.start_ru}} по {{leave.end_ru}} включительно продолжительностью '
-                                            '{{leave.days}} календарных дней.',
-                        'body_template_kk': '{{employee.full_name}}, «{{org_unit.title_kk}}» бөлімшесінің '
-                                            '«{{position.title_kk}}» қызметкеріне {{leave.start_kk}} мен '
-                                            '{{leave.end_kk}} аралығындағы {{leave.days}} күнтізбелік күнге жалақы '
-                                            'сақталмайтын демалыс берілсін.',
+                        'body_template_ru': 'Предоставить работнику {{employee.full_name_dative_ru}}, '
+                                            '{{position.document_nominative_ru}} подразделения '
+                                            '«{{org_unit.title_ru}}», отпуск без сохранения заработной платы '
+                                            '{{leave.period_clause_ru}} продолжительностью {{leave.days}} календарных дней.',
+                        'body_template_kk': '{{org_unit.document_genitive_kk}} {{position.document_possessive_kk}} '
+                                            '{{employee.full_name_dative_kk}} {{leave.period_clause_kk}} '
+                                            'еңбекақысы сақталмайтын демалыс берілсін.',
                         'basis_template_ru': 'Основание: Личное '
                                              'заявление{{basis.application_date_ru}}{{basis.application_number_suffix}}.',
-                        'basis_template_kk': 'Негіз: Жеке '
-                                             'өтініш{{basis.application_date_kk}}{{basis.application_number_suffix}}.'},
+                        'basis_template_kk': 'Негіз: {{employee.full_name_genitive_kk}} жеке өтініші.'},
  'LEAVE.CHILDCARE.GRANT': {'title_ru': 'О предоставлении отпуска без сохранения заработной платы по уходу за ребёнком '
                                        'до достижения им возраста трёх лет',
                            'title_kk': 'Бала үш жасқа толғанға дейін оның күтіміне байланысты жалақы сақталмайтын '

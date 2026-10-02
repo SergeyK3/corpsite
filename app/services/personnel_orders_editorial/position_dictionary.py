@@ -26,6 +26,26 @@ _RU_TO_KK = {
     "медсестра-анестезистка": "анестезист мейіргері",
 }
 
+# Document wording is nominative: it is a controlled display form, not a
+# morphological transformation.  Keys are normalized source dictionary names.
+_RU_DOCUMENT_NOMINATIVE = {
+    "врач": "врач",
+}
+
+
+def document_nominative_personnel_order_position(value: Any) -> str:
+    """Return the approved Russian document form in lower-case nominative."""
+    source = localized_personnel_order_position(value, "ru")
+    if source == "—":
+        return ""
+    normalized = _normalized_russian_position(source)
+    approved = _RU_DOCUMENT_NOMINATIVE.get(normalized)
+    if approved:
+        return approved
+    # Positions absent from the narrow override dictionary retain their source
+    # spelling, with only the leading letter adjusted for sentence position.
+    return source[:1].lower() + source[1:]
+
 
 def localized_personnel_order_position(value: Any, locale: str) -> str:
     """Resolve a position without overwriting an explicitly saved localization."""

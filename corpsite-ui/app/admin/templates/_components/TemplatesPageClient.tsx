@@ -397,7 +397,7 @@ function DraftEditor({ editor, published, onSaved, onPublished, variables, warni
         ])}
       </div>
 
-      <p className="mt-3 text-xs">Разрешённые переменные: {variables.join(", ")}.</p>
+      <p className="mt-3 text-xs" data-testid="template-editor-allowed-variables">Разрешённые переменные: {variables.join(", ")}.</p>
       <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-zinc-200 pt-3 dark:border-zinc-800" data-testid="template-draft-actions">
         <button type="button" onClick={showPreview} disabled={previewing} className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-800 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800">{previewing ? "Формирование…" : "Предварительный просмотр"}</button>
         <button type="button" onClick={save} disabled={!canSave} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-500 dark:text-zinc-950 dark:hover:bg-blue-400">{saving ? "Сохранение…" : "Сохранить черновик"}</button>
@@ -476,7 +476,7 @@ function TemplateDetail({ item }: { item: PersonnelOrderTemplateCatalogItem }) {
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">{item.notes}</p>
       </>}
       {item.editor_available && !editor ? <div className="mt-4"><button aria-label={openingEditor ? "Открытие…" : (draftExists ? "Продолжить редактирование" : "Редактировать шаблон")} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-500 dark:text-zinc-950 dark:hover:bg-blue-400" type="button" onClick={openEditor} disabled={openingEditor}>{openingEditor ? "Открытие…" : (draftExists ? "Продолжить редактирование" : "Редактировать шаблон")}</button>{openingEditor ? <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400" data-testid="template-editor-opening">Открытие редактора…</p> : null}{openError ? <p className="mt-2 text-sm text-red-700" role="alert">{openError}</p> : null}</div> : null}
-      {editor ? <DraftEditor editor={editor} published={published} onSaved={(next) => { setEditor({ kind: "DRAFT", draft: next }); setServerDraft(next); }} onPublished={() => { setEditor(null); setServerDraft(null); reloadState(); }} variables={(detail?.variables ?? []).map((variable) => variable.code)} warning={item.support_level === "PARTIAL" ? "Шаблон требует дальнейшей предметной формализации; неподтверждённые реквизиты не добавлены." : undefined} /> : null}
+      {editor ? <DraftEditor editor={editor} published={published} onSaved={(next) => { setEditor({ kind: "DRAFT", draft: next }); setServerDraft(next); }} onPublished={() => { setEditor(null); setServerDraft(null); reloadState(); }} variables={item.allowed_variables} warning={item.support_level === "PARTIAL" ? "Шаблон требует дальнейшей предметной формализации; неподтверждённые реквизиты не добавлены." : undefined} /> : null}
     </aside>
   );
 }

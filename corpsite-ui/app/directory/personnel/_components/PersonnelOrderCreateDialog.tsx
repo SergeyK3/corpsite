@@ -1,51 +1,470 @@
 "use client";
+
 import * as React from "react";
-import { PERSONNEL_ORDER_CREATE_TYPE_OPTIONS, createManualPersonnelOrderDraft, mapPersonnelOrdersApiError, previewPersonnelOrderHeaderDuplicate, type PersonnelOrderManualDraftCreateResult } from "../_lib/personnelOrdersApi.client";
+
+import {
+  PERSONNEL_ORDER_CREATE_TYPE_OPTIONS,
+  createManualPersonnelOrderDraft,
+  getPersonnelOrderPublishedTemplateTitle,
+  mapPersonnelOrdersApiError,
+  previewPersonnelOrderHeaderDuplicate,
+  type PersonnelOrderManualDraftCreateResult,
+} from "../_lib/personnelOrdersApi.client";
+import { personnelOrderCanonicalTitle } from "../_lib/personnelOrderCanonicalTitles";
+import { resolvePersonnelOrderDocumentForms } from "../_lib/personnelOrderDocumentForms";
 import { getEmployee, getEmployees } from "@/app/directory/employees/_lib/api.client";
 import type { EmployeeDTO } from "@/app/directory/employees/_lib/types";
 
-type Props = { open: boolean; onClose: () => void; onCreated: (result: PersonnelOrderManualDraftCreateResult) => void; initialEmployeeId?: number | null; initialEmployeeQuery?: string | null; initialOrgUnitId?: number | null };
-const clean = (value: string) => value.trim();
-function specialty(employee: EmployeeDTO): string { const raw = employee as EmployeeDTO & Record<string, unknown>; return String(raw.specialty ?? raw.specialty_name ?? raw.medical_specialty_name ?? "").trim(); }
+type Props = {
+  open: boolean;
+  onClose: () => void;
+  onCreated: (result: PersonnelOrderManualDraftCreateResult) => void;
+  initialEmployeeId?: number | null;
+  initialEmployeeQuery?: string | null;
+  initialOrgUnitId?: number | null;
+};
 
-export default function PersonnelOrderCreateDialog({ open, onClose, onCreated, initialEmployeeId = null, initialEmployeeQuery = null, initialOrgUnitId = null }: Props) {
-  const [number, setNumber] = React.useState(""); const [orderDate, setOrderDate] = React.useState(""); const [title, setTitle] = React.useState(""); const [locale, setLocale] = React.useState<"kk" | "ru">("kk"); const [itemType, setItemType] = React.useState("HIRE");
-  const [employeeQuery, setEmployeeQuery] = React.useState(""); const [selectedEmployee, setSelectedEmployee] = React.useState<EmployeeDTO | null>(null); const [employeeMatches, setEmployeeMatches] = React.useState<EmployeeDTO[]>([]); const [searchingEmployees, setSearchingEmployees] = React.useState(false);
-  const [manualSubject, setManualSubject] = React.useState(false); const [manualFullName, setManualFullName] = React.useState(""); const [manualOrgUnit, setManualOrgUnit] = React.useState(""); const [manualPosition, setManualPosition] = React.useState(""); const [manualSpecialty, setManualSpecialty] = React.useState("");
-  const [documentOrgUnit, setDocumentOrgUnit] = React.useState(""); const [documentPosition, setDocumentPosition] = React.useState(""); const [documentSpecialty, setDocumentSpecialty] = React.useState(""); const [effectiveDate, setEffectiveDate] = React.useState(""); const [submitting, setSubmitting] = React.useState(false); const [error, setError] = React.useState<string | null>(null);
-  const requestId = React.useRef(0); const wasOpen = React.useRef(false); const autoSelectQuery = React.useRef<string | null>(null);
-  const clearManual = React.useCallback(() => { setManualSubject(false); setManualFullName(""); setManualOrgUnit(""); setManualPosition(""); setManualSpecialty(""); }, []);
-  const clearDocumentContext = React.useCallback(() => { setDocumentOrgUnit(""); setDocumentPosition(""); setDocumentSpecialty(""); }, []);
-  const chooseEmployee = React.useCallback((employee: EmployeeDTO) => { setSelectedEmployee(employee); setEmployeeQuery(employee.fio || ""); setEmployeeMatches([]); setDocumentPosition(employee.position?.name || ""); setDocumentOrgUnit(employee.org_unit?.name || ""); setDocumentSpecialty(specialty(employee)); }, []);
+type Forms = {
+  org_unit_document_genitive_kk: string;
+  position_document_possessive_kk: string;
+  position_document_nominative_ru: string;
+  employee_full_name_dative_kk: string;
+  employee_full_name_genitive_kk: string;
+  employee_full_name_dative_ru: string;
+};
+
+const blankForms = (): Forms => ({
+  org_unit_document_genitive_kk: "",
+  position_document_possessive_kk: "",
+  position_document_nominative_ru: "",
+  employee_full_name_dative_kk: "",
+  employee_full_name_genitive_kk: "",
+  employee_full_name_dative_ru: "",
+});
+
+const inputClassName =
+  "mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm text-zinc-950 shadow-sm outline-none transition focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 disabled:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-50";
+
+function asText(value: unknown) {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function documentForms(employee: EmployeeDTO): Forms {
+  const record = employee as EmployeeDTO & Record<string, unknown>;
+  const dictionary = resolvePersonnelOrderDocumentForms(employee.org_unit?.unit_id, employee.position);
+
+  return {
+    org_unit_document_genitive_kk:
+      asText(record.org_unit_document_genitive_kk) || dictionary.org_unit_document_genitive_kk,
+    position_document_possessive_kk:
+      asText(record.position_document_possessive_kk) || dictionary.position_document_possessive_kk,
+    position_document_nominative_ru:
+      asText(record.position_document_nominative_ru) || dictionary.position_document_nominative_ru,
+    employee_full_name_dative_kk: asText(record.employee_full_name_dative_kk) || suggestedKazakhNameForm(record, "dative"),
+    employee_full_name_genitive_kk: asText(record.employee_full_name_genitive_kk) || suggestedKazakhNameForm(record, "genitive"),
+    employee_full_name_dative_ru: asText(record.employee_full_name_dative_ru) || suggestedRussianNameDative(record),
+  };
+}
+
+function kazakhNameForm(fullName: string, form: "dative" | "genitive") {
+  const [surname, ...rest] = fullName.split(/\s+/).filter(Boolean);
+  if (!surname) return "";
+  const vowelFinal = /[аеёиіоуыұүэюя]$/iu.test(surname);
+  const suffix = form === "dative" ? (vowelFinal ? "ға" : /[қкг]$/iu.test(surname) ? "ке" : "ге") : (vowelFinal ? "ның" : /[қкг]$/iu.test(surname) ? "нің" : "дың");
+  return [surname + suffix, ...rest].join(" ");
+}
+
+function russianNameDative(fullName: string) {
+  const [surname, ...rest] = fullName.split(/\s+/).filter(Boolean);
+  if (!surname) return "";
+  const dative = /а$/iu.test(surname) ? `${surname.slice(0, -1)}ой` : /я$/iu.test(surname) ? `${surname.slice(0, -1)}е` : `${surname}у`;
+  return [dative, ...rest].join(" ");
+}
+
+function structuredName(record: Record<string, unknown>) {
+  const parts = [asText(record.first_name), asText(record.middle_name), asText(record.last_name)];
+  if (parts.every(Boolean)) return parts as [string, string, string];
+  const [last = "", first = "", middle = ""] = asText(record.fio).split(/\s+/).filter(Boolean);
+  return [first, middle, last] as [string, string, string];
+}
+
+function suggestedKazakhNameForm(record: Record<string, unknown>, form: "dative" | "genitive") {
+  const [first, middle, surname] = structuredName(record);
+  if (!surname) return "";
+  const vowel = /[аеёиіоуыұүэюя]$/iu.test(surname);
+  const suffix = form === "dative" ? (vowel ? "ға" : /[қкг]$/iu.test(surname) ? "ке" : "ге") : (vowel ? "ның" : /[қкг]$/iu.test(surname) ? "нің" : "дың");
+  return [first, middle, surname + suffix].filter(Boolean).join(" ");
+}
+
+function suggestedRussianNameDative(record: Record<string, unknown>) {
+  const [first, middle, surname] = structuredName(record);
+  const inflect = (v: string) => /а$/iu.test(v) ? `${v.slice(0, -1)}е` : /я$/iu.test(v) ? `${v.slice(0, -1)}е` : /ич$/iu.test(v) ? `${v}у` : v;
+  const family = /а$/iu.test(surname) ? `${surname.slice(0, -1)}ой` : /я$/iu.test(surname) ? `${surname.slice(0, -1)}е` : `${surname}у`;
+  return [family, inflect(first), inflect(middle)].filter(Boolean).join(" ");
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block space-y-1 text-sm font-medium leading-5 text-zinc-800 dark:text-zinc-100">
+      <span>{label}</span>
+      {children}
+    </label>
+  );
+}
+
+function focusableElements(container: HTMLElement) {
+  return Array.from(
+    container.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    ),
+  ).filter((element) => !element.hasAttribute("hidden"));
+}
+
+export default function PersonnelOrderCreateDialog({
+  open,
+  onClose,
+  onCreated,
+  initialEmployeeId = null,
+  initialEmployeeQuery = null,
+  initialOrgUnitId = null,
+}: Props) {
+  const [type, setType] = React.useState("");
+  const [number, setNumber] = React.useState("");
+  const [orderDate, setOrderDate] = React.useState("");
+  const [locale, setLocale] = React.useState<"kk" | "ru">("kk");
+  const [title, setTitle] = React.useState("");
+  const [published, setPublished] = React.useState<{ kk: string; ru: string } | null>(null);
+  const [publishedTitleError, setPublishedTitleError] = React.useState<string | null>(null);
+  const [query, setQuery] = React.useState(initialEmployeeQuery ?? "");
+  const [employee, setEmployee] = React.useState<EmployeeDTO | null>(null);
+  const [matches, setMatches] = React.useState<EmployeeDTO[]>([]);
+  const [org, setOrg] = React.useState("");
+  const [position, setPosition] = React.useState("");
+  const [start, setStart] = React.useState("");
+  const [end, setEnd] = React.useState("");
+  const [effective, setEffective] = React.useState("");
+  const [kk, setKk] = React.useState<Forms>(blankForms);
+  const [formsExpanded, setFormsExpanded] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [busy, setBusy] = React.useState(false);
+  const searchId = React.useRef(0);
+  const employeeSelectionId = React.useRef(0);
+  const templateId = React.useRef(0);
+  const dialogRef = React.useRef<HTMLElement>(null);
+  const restoreFocusRef = React.useRef<HTMLElement | null>(null);
+
+  const unpaid = type === "LEAVE.UNPAID.GRANT";
+  const formsComplete = Object.values(kk).every((value) => value.trim());
+  const missingFormLabels = ([
+    ["org_unit_document_genitive_kk", "Подразделение в тексте приказа (KK)"],
+    ["position_document_possessive_kk", "Должность в тексте приказа (KK)"],
+    ["position_document_nominative_ru", "Должность в тексте приказа (RU)"],
+    ["employee_full_name_dative_kk", "ФИО в дательном падеже (KK)"],
+    ["employee_full_name_genitive_kk", "ФИО в родительном падеже (KK)"],
+    ["employee_full_name_dative_ru", "ФИО в дательном падеже (RU)"],
+  ] as Array<[keyof Forms, string]>).filter(([key]) => !kk[key].trim()).map(([, label]) => label);
+  const resolvedTitle = published?.[locale].trim() || personnelOrderCanonicalTitle(type, locale);
+  const canSubmit = Boolean(
+    !busy &&
+      type &&
+      number.trim() &&
+      orderDate &&
+      resolvedTitle &&
+      employee?.id &&
+      (unpaid ? start && end && end >= start && formsComplete : effective),
+  );
+
+  const requestClose = React.useCallback(() => {
+    if (!busy) onClose();
+  }, [busy, onClose]);
+
+  const choose = React.useCallback(async (candidate: EmployeeDTO) => {
+    const requestId = ++employeeSelectionId.current;
+    const selected = candidate.id
+      ? await getEmployee(String(candidate.id)).catch(() => candidate)
+      : candidate;
+    if (requestId !== employeeSelectionId.current) return;
+    setEmployee(selected);
+    setQuery(selected.fio || "");
+    setMatches([]);
+    setOrg(selected.active_assignment_id ? selected.org_unit?.name || "" : "");
+    setPosition(selected.active_assignment_id ? selected.position?.name || "" : "");
+    const forms = documentForms(selected);
+    setKk(forms);
+    setFormsExpanded(!Object.values(forms).every((value) => value.trim()));
+  }, []);
 
   React.useEffect(() => {
-    if (!open || wasOpen.current) { wasOpen.current = open; return; }
-    setNumber(""); setOrderDate(""); setTitle(""); setLocale("kk"); setItemType("HIRE"); setSelectedEmployee(null); setEmployeeMatches([]); clearManual(); clearDocumentContext(); setEffectiveDate(""); setError(null); autoSelectQuery.current = null;
-    const exactId = Number(initialEmployeeId);
-    if (Number.isFinite(exactId) && exactId > 0) void getEmployee(String(exactId)).then(chooseEmployee).catch(() => undefined);
-    else { const query = clean(initialEmployeeQuery || ""); setEmployeeQuery(query); autoSelectQuery.current = query.length >= 2 ? query : null; }
-    wasOpen.current = true;
-  }, [chooseEmployee, clearDocumentContext, clearManual, initialEmployeeId, initialEmployeeQuery, open]);
+    const id = ++templateId.current;
+    if (!open || !type) {
+      setPublished(null);
+      setPublishedTitleError(null);
+      setTitle("");
+      return;
+    }
+    setPublished(null);
+    setPublishedTitleError(null);
+    setTitle("");
+    void getPersonnelOrderPublishedTemplateTitle(type)
+      .then((result) => {
+        if (id !== templateId.current) return;
+        const titles = { kk: result.title_kk, ru: result.title_ru };
+        if (!titles[locale].trim()) {
+          setPublished(null);
+          setPublishedTitleError("Для выбранного типа нет опубликованного шаблона на выбранном языке.");
+          return;
+        }
+        setPublished(titles);
+        setTitle(titles[locale].trim() || personnelOrderCanonicalTitle(type, locale));
+      })
+      .catch(() => {
+        if (id !== templateId.current) return;
+        setPublished(null);
+        setTitle(personnelOrderCanonicalTitle(type, locale));
+        setPublishedTitleError("Для выбранного типа отсутствует опубликованный шаблон: будет создан черновик без автоматического применения полного шаблона.");
+      });
+  }, [locale, open, type]);
+
   React.useEffect(() => {
-    const query = employeeQuery.trim();
-    if (manualSubject || selectedEmployee || query.length < 2) { setEmployeeMatches([]); setSearchingEmployees(false); return; }
-    const id = ++requestId.current; setSearchingEmployees(true);
-    void getEmployees({ q: query, status: "active", org_unit_id: initialOrgUnitId, limit: 10, offset: 0 }).then((result) => { if (id !== requestId.current) return; setEmployeeMatches(result.items); if (autoSelectQuery.current === query && result.items.length === 1) chooseEmployee(result.items[0]); autoSelectQuery.current = null; }).catch(() => { if (id === requestId.current) setEmployeeMatches([]); }).finally(() => { if (id === requestId.current) setSearchingEmployees(false); });
-  }, [chooseEmployee, employeeQuery, initialOrgUnitId, manualSubject, selectedEmployee]);
+    setTitle(published?.[locale].trim() || personnelOrderCanonicalTitle(type, locale));
+  }, [locale, published, type]);
+
+  React.useEffect(() => {
+    if (!open || !type) return;
+    const trimmedQuery = query.trim();
+    if (employee || trimmedQuery.length < 2) {
+      setMatches([]);
+      return;
+    }
+    const id = ++searchId.current;
+    void getEmployees({
+      q: trimmedQuery,
+      status: "active",
+      org_unit_id: initialOrgUnitId,
+      limit: 10,
+      offset: 0,
+    })
+      .then((result) => {
+        if (id === searchId.current) setMatches(result.items);
+      })
+      .catch(() => undefined);
+  }, [employee, initialOrgUnitId, open, query, type]);
+
+  React.useEffect(() => {
+    if (!open || !type || !initialEmployeeId) return;
+    void getEmployee(String(initialEmployeeId)).then(choose).catch(() => undefined);
+  }, [choose, initialEmployeeId, open, type]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    restoreFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    requestAnimationFrame(() => dialogRef.current?.focus());
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      restoreFocusRef.current?.focus();
+      restoreFocusRef.current = null;
+    };
+  }, [open]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        requestClose();
+        return;
+      }
+      if (event.key !== "Tab" || !dialogRef.current) return;
+      const elements = focusableElements(dialogRef.current);
+      if (elements.length === 0) return;
+      const first = elements[0];
+      const last = elements[elements.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [open, requestClose]);
+
   if (!open) return null;
-  async function submit(event: React.FormEvent) {
-    event.preventDefault(); setSubmitting(true); setError(null);
-    try {
-      if (!selectedEmployee?.id && !manualSubject) { setError("Выберите сотрудника из списка или укажите его вручную."); return; }
-      if (manualSubject && ![manualFullName, manualOrgUnit, manualPosition, manualSpecialty].every(clean)) { setError("Заполните ФИО, отделение, должность и специальность вручную."); return; }
-      const duplicate = await previewPersonnelOrderHeaderDuplicate({ order_number: number, order_date: orderDate });
-      if (duplicate.blocking) { setError("Найден приказ с таким же номером и датой."); return; }
-      if (duplicate.warnings.length && !window.confirm("Есть приказ с тем же номером и другой датой. Продолжить?")) return;
-      const result = await createManualPersonnelOrderDraft({ order_number: number, order_date: orderDate, source_title: title, source_title_locale: locale, item_type_code: itemType, employee_id: selectedEmployee?.id ? Number(selectedEmployee.id) : null, document_subject_context: selectedEmployee ? { org_unit_name: clean(documentOrgUnit) || null, position_name: clean(documentPosition) || null, specialty: clean(documentSpecialty) || null } : undefined, unresolved_subject: manualSubject ? { full_name: clean(manualFullName), org_unit_name: clean(manualOrgUnit), position_name: clean(manualPosition), specialty: clean(manualSpecialty) } : undefined, effective_date: effectiveDate }); onCreated(result); onClose();
-    } catch (err) { setError(mapPersonnelOrdersApiError(err, "Не удалось создать приказ.")); } finally { setSubmitting(false); }
+
+  function changeType(nextType: string) {
+    ++templateId.current;
+    setType(nextType);
+    setPublished(null);
+    setPublishedTitleError(null);
+    setTitle("");
+    setStart("");
+    setEnd("");
+    setEffective("");
+    setKk(blankForms());
+    setFormsExpanded(Boolean(employee) && nextType === "LEAVE.UNPAID.GRANT");
+    setError(null);
   }
-  const selectedView = selectedEmployee ? <div className="space-y-2"><div className="flex gap-2"><input aria-label="Сотрудник" readOnly value={selectedEmployee.fio || ""} className="min-w-0 flex-1 rounded border border-zinc-300 bg-zinc-50 p-2" /><button type="button" aria-label="Очистить выбранного сотрудника" className="text-sm text-blue-700 underline" onClick={() => { setSelectedEmployee(null); clearDocumentContext(); setEmployeeQuery(""); }}>Очистить</button></div><p className="text-sm text-zinc-600">{selectedEmployee.position?.name || "Должность не указана"} · {selectedEmployee.org_unit?.name || "Отделение не указано"}</p><input aria-label="Должность в приказе" value={documentPosition} onChange={(e) => setDocumentPosition(e.target.value)} placeholder="Должность в приказе" className="w-full rounded border p-2" /><input aria-label="Отделение в приказе" value={documentOrgUnit} onChange={(e) => setDocumentOrgUnit(e.target.value)} placeholder="Отделение в приказе" className="w-full rounded border p-2" /><input aria-label="Специальность" value={documentSpecialty} onChange={(e) => setDocumentSpecialty(e.target.value)} placeholder="Специальность" className="w-full rounded border p-2" /></div> : null;
-  const manualView = <div className="space-y-2 rounded border border-amber-200 bg-amber-50 p-3"><p className="text-sm text-amber-900">Фигурант не привязан к справочнику и потребует последующей привязки.</p><input aria-label="ФИО вручную" required value={manualFullName} onChange={(e) => setManualFullName(e.target.value)} placeholder="ФИО" className="w-full rounded border p-2" /><input aria-label="Отделение вручную" required value={manualOrgUnit} onChange={(e) => setManualOrgUnit(e.target.value)} placeholder="Отделение" className="w-full rounded border p-2" /><input aria-label="Должность вручную" required value={manualPosition} onChange={(e) => setManualPosition(e.target.value)} placeholder="Должность" className="w-full rounded border p-2" /><input aria-label="Специальность вручную" required value={manualSpecialty} onChange={(e) => setManualSpecialty(e.target.value)} placeholder="Специальность" className="w-full rounded border p-2" /><button type="button" className="text-sm text-blue-700 underline" onClick={() => { clearManual(); setEmployeeQuery(""); }}>Вернуться к поиску</button></div>;
-  const searchView = <><input aria-label="Сотрудник" autoComplete="off" value={employeeQuery} onChange={(e) => { autoSelectQuery.current = null; setEmployeeQuery(e.target.value); setEmployeeMatches([]); }} placeholder="Начните вводить фамилию" className="w-full rounded border p-2" />{employeeQuery.trim().length >= 2 ? <div className="mt-1 rounded border border-zinc-200 bg-white" role="listbox" aria-label="Результаты поиска сотрудников">{searchingEmployees ? <p className="p-2 text-sm text-zinc-500">Поиск…</p> : employeeMatches.length ? employeeMatches.map((employee) => <button key={employee.id} type="button" role="option" className="block w-full border-b border-zinc-100 px-3 py-2 text-left last:border-b-0 hover:bg-blue-50" onClick={() => chooseEmployee(employee)}><span className="block font-medium">{employee.fio || "—"}</span><span className="block text-sm text-zinc-600">{employee.position?.name || "Должность не указана"} · {employee.org_unit?.name || "Отделение не указано"}</span></button>) : <div className="p-2"><p className="text-sm text-zinc-500">Сотрудники не найдены.</p><button type="button" className="mt-2 text-sm text-blue-700 underline" onClick={() => { setManualSubject(true); }}>Указать сотрудника вручную</button></div>}</div> : null}</>;
-  return <div className="fixed inset-0 z-[60] flex items-center justify-center p-4" data-testid="personnel-order-create-dialog"><button type="button" aria-label="Закрыть" className="absolute inset-0 bg-black/40" onClick={onClose} /><div className="relative flex max-h-[calc(100vh-2rem)] w-full max-w-md flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-xl"><div className="shrink-0 px-5 pt-5"><h2 className="text-lg font-semibold">Создать приказ</h2><p className="mt-1 text-sm text-zinc-500">Ручной черновик с одним пунктом; кадровые последствия не создаются.</p></div><form className="mt-4 flex min-h-0 flex-1 flex-col" onSubmit={submit}><div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 pb-4"><label className="block text-sm">Номер приказа<input aria-label="Номер приказа" required value={number} onChange={(e) => setNumber(e.target.value)} className="mt-1 w-full rounded border p-2" /></label><label className="block text-sm">Дата приказа<input aria-label="Дата приказа" type="date" required value={orderDate} onChange={(e) => setOrderDate(e.target.value)} className="mt-1 w-full rounded border p-2" /></label><label className="block text-sm">Исходное название<textarea aria-label="Исходное название" required value={title} onChange={(e) => setTitle(e.target.value)} className="mt-1 w-full rounded border p-2" /></label><label className="block text-sm">Язык исходного названия<select aria-label="Язык исходного названия" value={locale} onChange={(e) => setLocale(e.target.value as "kk" | "ru")} className="mt-1 w-full rounded border p-2"><option value="kk">Қазақша</option><option value="ru">Русский</option></select></label><label className="block text-sm">Тип пункта<select aria-label="Тип пункта" value={itemType} onChange={(e) => setItemType(e.target.value)} className="mt-1 w-full rounded border p-2">{PERSONNEL_ORDER_CREATE_TYPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label><div className="block text-sm">Сотрудник<div className="relative mt-1">{manualSubject ? manualView : selectedView || searchView}</div></div><label className="block text-sm">Дата действия<input aria-label="Дата действия" type="date" required value={effectiveDate} onChange={(e) => setEffectiveDate(e.target.value)} className="mt-1 w-full rounded border p-2" /></label>{error ? <p role="alert" className="text-sm text-red-700">{error}</p> : null}</div><footer className="shrink-0 border-t border-zinc-200 bg-white px-5 py-4" data-testid="personnel-order-create-footer"><div className="flex justify-end gap-2"><button type="button" onClick={onClose} className="rounded border px-3 py-2 text-sm">Отмена</button><button type="submit" disabled={submitting} className="rounded bg-blue-600 px-3 py-2 text-sm text-white">{submitting ? "Создание…" : "Создать приказ"}</button></div></footer></form></div></div>;
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    if (busy) return;
+    setError(null);
+    setBusy(true);
+    try {
+      if (!employee?.id) throw Error("Выберите сотрудника из списка.");
+      if (unpaid && (!start || !end)) throw Error("Для отпуска укажите дату начала и дату окончания.");
+      if (unpaid && end < start) throw Error("Дата окончания отпуска не может быть раньше даты начала.");
+      const duplicate = await previewPersonnelOrderHeaderDuplicate({ order_number: number, order_date: orderDate });
+      if (duplicate.blocking) throw Error("Найден приказ с таким же номером и датой.");
+      const days = unpaid
+        ? Math.floor((Date.parse(`${end}T00:00:00`) - Date.parse(`${start}T00:00:00`)) / 86400000) + 1
+        : undefined;
+      const result = await createManualPersonnelOrderDraft({
+        order_number: number,
+        order_date: orderDate,
+        source_title: resolvedTitle,
+        source_title_locale: locale,
+        item_type_code: type,
+        employee_id: Number(employee.id),
+        document_subject_context: { org_unit_name: org || null, position_name: position || null },
+        effective_date: unpaid ? start : effective,
+        period_start: unpaid ? start : null,
+        period_end: unpaid ? end : null,
+        item_payload: unpaid
+          ? {
+              leave: { period_type: start === end ? "SINGLE_DAY" : "CONTINUOUS_RANGE", start, end, days },
+              document_forms_kk: {
+                org_unit_document_genitive_kk: kk.org_unit_document_genitive_kk,
+                position_document_possessive_kk: kk.position_document_possessive_kk,
+                employee_full_name_dative_kk: kk.employee_full_name_dative_kk,
+                employee_full_name_genitive_kk: kk.employee_full_name_genitive_kk,
+              },
+              document_forms_ru: {
+                employee_full_name_dative_ru: kk.employee_full_name_dative_ru,
+                position_document_nominative_ru: kk.position_document_nominative_ru,
+              },
+              assignment: { org_unit: { id: employee.org_unit?.unit_id || null, name: org || null }, position: { id: employee.position?.id || null, name: position || null } },
+              basis: { kind: "PERSONAL_APPLICATION" },
+            }
+          : undefined,
+      });
+      onCreated(result);
+      onClose();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : mapPersonnelOrdersApiError(caught, "Не удалось создать приказ."));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const selectedEmployee = employee ? (
+    <>
+      <input aria-label="Сотрудник" readOnly value={employee.fio || ""} className={inputClassName} />
+      <Field label="Подразделение">
+        <select aria-label="Подразделение" value={org} onChange={(event) => setOrg(event.target.value)} className={inputClassName}>
+          <option value="">Выберите подразделение</option>
+          {org ? <option value={org}>{org}</option> : null}
+        </select>
+      </Field>
+      <Field label="Должность">
+        <select aria-label="Должность" value={position} onChange={(event) => setPosition(event.target.value)} className={inputClassName}>
+          <option value="">Выберите должность</option>
+          {position ? <option value={position}>{position}</option> : null}
+        </select>
+      </Field>
+    </>
+  ) : (
+    <div className="relative z-20">
+      <input aria-label="Сотрудник" value={query} onChange={(event) => setQuery(event.target.value)} className={inputClassName} />
+      {matches.length > 0 ? (
+        <div role="listbox" className="mt-1 overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
+          {matches.map((candidate) => (
+            <button
+              key={candidate.id}
+              type="button"
+              role="option"
+              className="block w-full px-3 py-2 text-left text-sm text-zinc-900 hover:bg-blue-50 focus:bg-blue-50 focus:outline-none dark:text-zinc-50 dark:hover:bg-zinc-800"
+              onClick={() => void choose(candidate)}
+            >
+              {candidate.fio}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+
+  return (
+    <div
+      className="fixed inset-0 z-[60] flex items-center justify-center bg-zinc-700/45 p-4 backdrop-blur-[1px] dark:bg-black/65"
+      data-testid="personnel-order-create-dialog"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) requestClose();
+      }}
+    >
+      <section
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="personnel-order-create-title"
+        tabIndex={-1}
+        className="relative flex max-h-[calc(100vh-2rem)] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white text-zinc-950 shadow-2xl dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-50"
+      >
+        <header data-testid="personnel-order-create-header" className="flex shrink-0 items-start justify-between gap-4 border-b border-zinc-200 px-5 py-4 dark:border-zinc-800">
+          <div>
+            <h2 id="personnel-order-create-title" className="text-lg font-semibold">Создать приказ</h2>
+            <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">Будет создан новый приказ в статусе DRAFT.</p>
+          </div>
+          <button type="button" aria-label="Закрыть" onClick={requestClose} disabled={busy} className="-mr-1 -mt-1 rounded-md p-2 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:hover:bg-zinc-800 dark:hover:text-zinc-50">×</button>
+        </header>
+        <form className="flex min-h-0 flex-1 flex-col" onSubmit={submit} onKeyDown={(event) => {
+          if (event.key === "Enter" && event.target instanceof HTMLInputElement && event.target.type !== "submit") event.preventDefault();
+        }}>
+          <div data-testid="personnel-order-create-body" className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-5 py-4">
+            <Field label="Тип кадрового приказа">
+              <select aria-label="Тип кадрового приказа" value={type} onChange={(event) => changeType(event.target.value)} className={inputClassName}>
+                <option value="">Выберите тип кадрового приказа</option>
+                {PERSONNEL_ORDER_CREATE_TYPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </select>
+            </Field>
+            <Field label="Номер приказа"><input aria-label="Номер приказа" required value={number} onChange={(event) => setNumber(event.target.value)} className={inputClassName} /></Field>
+            <Field label="Дата приказа"><input aria-label="Дата приказа" type="date" required value={orderDate} onChange={(event) => setOrderDate(event.target.value)} className={inputClassName} /></Field>
+            <Field label="Язык"><select aria-label="Язык" value={locale} onChange={(event) => setLocale(event.target.value as "kk" | "ru")} className={inputClassName}><option value="kk">Қазақша</option><option value="ru">Русский</option></select></Field>
+            <Field label="Название приказа"><textarea aria-label="Название приказа" readOnly value={title} placeholder={type ? "Загрузка названия…" : "Сначала выберите тип пункта"} className={`${inputClassName} min-h-20 resize-y`} /></Field>
+            {publishedTitleError ? <p role="alert" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900/70 dark:bg-amber-950/40 dark:text-amber-100">{publishedTitleError}</p> : null}
+            {type ? <>
+              <div className="space-y-1 text-sm font-medium leading-5 text-zinc-800 dark:text-zinc-100"><span>Сотрудник</span>{selectedEmployee}</div>
+              {unpaid ? <>
+              <Field label="Дата начала"><input aria-label="Дата начала" type="date" required value={start} onChange={(event) => { setStart(event.target.value); setEnd(event.target.value); }} className={inputClassName} /></Field>
+              <Field label="Дата окончания"><input aria-label="Дата окончания" type="date" required value={end} onChange={(event) => setEnd(event.target.value)} className={inputClassName} /></Field>
+              {employee ? <details open={formsExpanded} onToggle={(event) => setFormsExpanded(event.currentTarget.open)} className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-700" data-testid="personnel-order-text-forms">
+                <summary className="cursor-pointer text-sm font-medium">{formsComplete ? "Формы для текста приказа заполнены автоматически" : "Формы для текста приказа"}</summary>
+              {missingFormLabels.length ? <p role="alert" className="mt-2 text-sm text-amber-800">Необходимо заполнить: {missingFormLabels.join(", ")}.</p> : null}
+              <div className="mt-3 space-y-3">{([
+                ["org_unit_document_genitive_kk", "Подразделение в тексте приказа (KK)"],
+                ["position_document_possessive_kk", "Должность в тексте приказа (KK)"],
+                ["position_document_nominative_ru", "Должность в тексте приказа (RU)"],
+                ["employee_full_name_dative_kk", "ФИО сотрудника в дательном падеже (KK)"],
+                ["employee_full_name_genitive_kk", "ФИО сотрудника в родительном падеже (KK)"],
+                ["employee_full_name_dative_ru", "ФИО сотрудника в дательном падеже (RU)"],
+              ] as Array<[keyof Forms, string]>).map(([key, label]) => <Field key={key} label={label}><input aria-label={label} value={kk[key]} onChange={(event) => setKk((value) => ({ ...value, [key]: event.target.value }))} className={inputClassName} /></Field>)}</div>
+              </details>
+              : null}
+              </> : <Field label="Дата действия"><input aria-label="Дата действия" type="date" required value={effective} onChange={(event) => setEffective(event.target.value)} className={inputClassName} /></Field>}
+            </> : null}
+            {error ? <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900/70 dark:bg-red-950/40 dark:text-red-200">{error}</p> : null}
+          </div>
+          <footer data-testid="personnel-order-create-footer" className="flex shrink-0 justify-end gap-3 border-t border-zinc-200 bg-white px-5 py-4 dark:border-zinc-800 dark:bg-zinc-950">
+            <button type="button" onClick={requestClose} disabled={busy} className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-800 shadow-sm hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800">Отмена</button>
+            <button type="submit" disabled={!canSubmit} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-blue-300 dark:disabled:bg-blue-900">{busy ? "Создание…" : "Создать приказ"}</button>
+          </footer>
+        </form>
+      </section>
+    </div>
+  );
 }

@@ -1,6 +1,6 @@
 from app.services.personnel_order_template_catalog_service import list_personnel_order_template_catalog
 from app.services.personnel_order_template_catalog_data import CATALOG_PROJECTIONS
-from app.services.personnel_order_template_specs import assert_personnel_order_template_specs
+from app.services.personnel_order_template_specs import assert_personnel_order_template_specs, get_personnel_order_template_spec
 from app.services.personnel_orders_editorial.generators import generate_order_block
 from app.main import app
 from app.security.admin_guard import require_sysadmin_api
@@ -14,14 +14,15 @@ def test_catalog_is_registry_backed_and_safe():
     assert "COMPOSITE" not in codes
     pilot = next(item for item in items if item["type_code"] == "RETURN_FROM_CHILDCARE_LEAVE")
     assert pilot["is_pilot"] is True and pilot["support_level"] == "SUPPORTED"
-    assert all(set(item) == {"type_code", "title_ru", "title_kk", "source", "support_level", "supported_locales", "uses_specialized_generator", "is_pilot", "editor_available", "required_fields", "notes", "pilot_detail", "template_detail"} for item in items)
+    assert all(set(item) == {"type_code", "title_ru", "title_kk", "source", "support_level", "supported_locales", "uses_specialized_generator", "is_pilot", "editor_available", "allowed_variables", "required_fields", "notes", "pilot_detail", "template_detail"} for item in items)
+    assert all(item["allowed_variables"] == list(get_personnel_order_template_spec(item["type_code"]).allowed_variables) for item in items)
     assert {item["type_code"] for item in items if item["editor_available"]} == codes
 
 
 def test_catalog_projections_match_the_migrated_golden_snapshot_for_all_types():
     assert_personnel_order_template_specs()
     actual = {
-        item["type_code"]: {key: value for key, value in item.items() if key != "type_code"}
+        item["type_code"]: {key: value for key, value in item.items() if key not in {"type_code", "allowed_variables"}}
         for item in list_personnel_order_template_catalog()
     }
     assert actual == CATALOG_PROJECTIONS
@@ -83,6 +84,7 @@ def test_unpaid_leave_has_formalized_requisites_and_a_non_personal_bilingual_pre
     detail = unpaid["template_detail"]
 
     assert unpaid["support_level"] == "SUPPORTED"
+    assert unpaid["allowed_variables"] == list(get_personnel_order_template_spec("LEAVE.UNPAID.GRANT").allowed_variables)
     assert unpaid["pilot_detail"] is None
     assert unpaid["required_fields"] == detail["required_fields"]
     assert detail["required_fields"] == [

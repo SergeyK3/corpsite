@@ -168,8 +168,9 @@ def preview_draft(item_type_code: str, values: Mapping[str, str]) -> dict[str, A
     _assert_type(item_type_code); _validate(values, item_type_code)
     spec = get_personnel_order_template_spec(item_type_code)
     samples = {
-        "employee.full_name": "[[ФИО сотрудника]]", "position.title_ru": "[[Должность]]", "position.title_kk": "[[Лауазым]]", "org_unit.title_ru": "[[Подразделение]]", "org_unit.title_kk": "[[Бөлімше]]",
-        "leave.start_ru": "[[Дата начала отпуска]]", "leave.start_kk": "[[Демалыстың басталу күні]]", "leave.end_ru": "[[Дата окончания отпуска]]", "leave.end_kk": "[[Демалыстың аяқталу күні]]", "leave.days": "[[Количество дней]]",
+        "employee.full_name": "[[ФИО сотрудника]]", "position.title_ru": "[[Должность]]", "position.title_kk": "[[Лауазым]]", "position.document_nominative_ru": "[[Должность в именительном падеже]]", "org_unit.title_ru": "[[Подразделение]]", "org_unit.title_kk": "[[Бөлімше]]",
+        "org_unit.document_genitive_kk": "[[Бөлімшенің құжаттық нысаны]]", "position.document_possessive_kk": "[[Лауазымның құжаттық нысаны]]", "employee.full_name_dative_ru": "[[ФИО сотрудника в дательном падеже]]", "employee.full_name_dative_kk": "[[Қызметкердің барыс септігі]]", "employee.full_name_genitive_kk": "[[Қызметкердің ілік септігі]]",
+        "leave.start_ru": "[[Дата начала отпуска]]", "leave.start_kk": "[[Демалыстың басталу күні]]", "leave.end_ru": "[[Дата окончания отпуска]]", "leave.end_kk": "[[Демалыстың аяқталу күні]]", "leave.days": "[[Количество дней]]", "leave.period_clause_ru": "7 июля 2026 года", "leave.period_clause_kk": "2026 жылғы 7 шілде күніне",
         "basis.application_date_ru": " от [[Дата заявления]]", "basis.application_date_kk": "", "basis.application_number_suffix": " № [[Номер заявления]]",
         "rate": "[[Ставка]]",
         "termination.reason": "[[Причина увольнения]]", "termination.unused_leave_days": "[[Количество дней неиспользованного отпуска]]", "effective_date_local": "[[Дата увольнения]]", "concurrent.rate": "[[Ставка совмещения]]", "total.rate": "[[Итоговая ставка]]", "remaining.rate": "[[Остающаяся ставка]]",

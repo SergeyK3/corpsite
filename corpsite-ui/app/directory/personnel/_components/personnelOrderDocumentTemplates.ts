@@ -285,6 +285,43 @@ export function renderPersonnelOrderDocument(
   editorial?: PersonnelOrderEditorialState | null,
 ): RenderedOrderDocument | null {
   if (!detail.items.length) return null;
+  // A template application persists a complete editorial snapshot.  It is the
+  // authoritative document projection and must not be gated by the legacy
+  // in-browser catalogue below: newly published item types are intentionally
+  // not added to that catalogue.
+  const editorialText = (block: { override_text?: string | null; generated_text?: string | null; effective_text?: string | null } | undefined) =>
+    block?.override_text?.trim() || block?.generated_text?.trim() || block?.effective_text?.trim() || null;
+  const orderText = (blockType: string) => editorialText(editorial?.order_blocks.find(
+    (block) => block.block_type === blockType && block.locale === language,
+  ));
+  const activeItems = detail.items
+    .filter((item) => String(item.item_status).toUpperCase() !== "VOIDED")
+    .sort((left, right) => left.item_number - right.item_number || left.item_id - right.item_id);
+  const snapshotTitle = orderText("title");
+  const snapshotPreamble = orderText("preamble");
+  const snapshotClosingBlock = editorial?.order_blocks.find(
+    (block) => block.block_type === "closing" && block.locale === language,
+  );
+  const snapshotClosing = snapshotClosingBlock?.override_text === "" ? null : editorialText(snapshotClosingBlock);
+  const snapshotPoints = activeItems.map((item) => {
+    const group = editorial?.items.find((entry) => entry.order_item_id === item.item_id);
+    const body = editorialText(group?.blocks.find((block) => block.block_type === "body" && block.locale === language));
+    const basis = editorialText(group?.blocks.find((block) => block.block_type === "basis" && block.locale === language));
+    return body ? { text: body, basis: basis ? [basis] : [] } : null;
+  });
+  if (snapshotTitle && snapshotPreamble && snapshotPoints.length === activeItems.length && snapshotPoints.every(Boolean)) {
+    return {
+      templateKey: "editorial.snapshot",
+      templateVersion: 1,
+      title: snapshotTitle,
+      preamble: preambleWithoutOrderVerb(snapshotPreamble, language),
+      directive: orderVerb(language),
+      points: snapshotPoints as RenderedOrderPoint[],
+      additionalInstructions: String(detail.order.order_type_code).toUpperCase() === "RETURN_FROM_CHILDCARE_LEAVE" || !snapshotClosing
+        ? []
+        : [snapshotClosing],
+    };
+  }
   const templateKey = resolvePersonnelOrderTemplateKey(detail);
   if (!templateKey) return null;
   const rendered = templateKey === "personnel.hire.standard" ? hireForLanguage(detail, language)

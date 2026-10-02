@@ -11,7 +11,7 @@ vi.mock("../_lib/personnelOrderTemplatesApi.client", () => ({ listPersonnelOrder
 const texts = { title_ru: "Заголовок RU", title_kk: "Тақырып KK", preamble_ru: "Преамбула RU", preamble_kk: "Преамбула KK", body_template_ru: "{{employee.full_name}}", body_template_kk: "{{employee.full_name}}", basis_template_ru: "Основание", basis_template_kk: "Негіз" };
 const published = { ...texts, template_version_id: 20, item_type_code: "TERMINATION", version_number: 2, revision: 4, status: "PUBLISHED", based_on_built_in: true };
 const draft = { ...texts, title_ru: "Изменённый заголовок", template_version_id: 21, item_type_code: "TERMINATION", version_number: 3, revision: 1, status: "DRAFT", based_on_built_in: true };
-const catalog = { items: [{ type_code: "TERMINATION", title_ru: "Об увольнении", title_kk: "Жұмыстан босату туралы", source: "BUILT_IN" as const, support_level: "SUPPORTED" as const, supported_locales: ["ru", "kk"], uses_specialized_generator: true, is_pilot: false, editor_available: true, required_fields: [], notes: "", pilot_detail: null, template_detail: null }] };
+const catalog = { items: [{ type_code: "TERMINATION", title_ru: "Об увольнении", title_kk: "Жұмыстан босату туралы", source: "BUILT_IN" as const, support_level: "SUPPORTED" as const, supported_locales: ["ru", "kk"], uses_specialized_generator: true, is_pilot: false, editor_available: true, allowed_variables: ["employee.full_name"], required_fields: [], notes: "", pilot_detail: null, template_detail: null }] };
 const publishedBase = { ...texts, source: "PUBLISHED" as const, item_type_code: "TERMINATION", template_version_id: 20, version_number: 2, revision: 4 };
 const initialBase = { ...texts, source: "INITIAL" as const, item_type_code: "TERMINATION", template_version_id: null, version_number: null, revision: null };
 const setup = () => render(<TemplatesPageClient />);
@@ -59,6 +59,37 @@ describe("TemplatesPageClient draft lifecycle", () => {
     expect(screen.getByTestId("template-draft-editor")).not.toHaveTextContent("Несохранённая рабочая копия опубликованной версии");
     expect(screen.getByRole("button", { name: "Сохранить черновик" })).toBeDisabled(); expect(screen.getByRole("button", { name: "Опубликовать версию" })).toBeEnabled(); changeTitle("Ещё не сохранено"); expect(screen.getByRole("button", { name: "Опубликовать версию" })).toBeDisabled(); fireEvent.click(screen.getByRole("button", { name: "Сохранить черновик" }));
     await waitFor(() => expect(savePersonnelOrderTemplateDraft).toHaveBeenCalledWith("TERMINATION", expect.objectContaining({ expected_revision: 1, title_ru: "Ещё не сохранено" })));
+  });
+
+  it("shows current server-side spec variables instead of stale version metadata", async () => {
+    const currentSpecVariables = [
+      "employee.full_name_dative_ru", "employee.full_name_dative_kk", "employee.full_name_genitive_kk",
+      "position.document_possessive_kk", "org_unit.document_genitive_kk",
+      "leave.period_text_ru", "leave.period_text_kk", "leave.period_clause_ru", "leave.period_clause_kk",
+    ];
+    currentSearch = new URLSearchParams("section=personnel-orders&type=LEAVE.UNPAID.GRANT");
+    vi.mocked(listPersonnelOrderTemplateCatalog).mockResolvedValue({ items: [{
+      ...catalog.items[0],
+      type_code: "LEAVE.UNPAID.GRANT",
+      allowed_variables: currentSpecVariables,
+      template_detail: {
+        required_fields: [], additional_fields: [], document_parts: [],
+        variables: [{ code: "legacy.version_metadata_only", label: "устаревшая metadata версии" }],
+        specialty_note: "", previews: {
+          ru: { title: "", preamble: "", directive: "", body: "", basis: "", footer: "" },
+          kk: { title: "", preamble: "", directive: "", body: "", basis: "", footer: "" },
+        },
+      },
+    }] });
+    vi.mocked(getPersonnelOrderTemplateDraft).mockResolvedValue({ ...draft, item_type_code: "LEAVE.UNPAID.GRANT" });
+    vi.mocked(getPersonnelOrderTemplatePublished).mockResolvedValue({ ...published, item_type_code: "LEAVE.UNPAID.GRANT" });
+
+    setup();
+    await open("Продолжить редактирование");
+
+    const allowed = screen.getByTestId("template-editor-allowed-variables");
+    for (const variable of currentSpecVariables) expect(allowed).toHaveTextContent(variable);
+    expect(allowed).not.toHaveTextContent("legacy.version_metadata_only");
   });
 
   it("identical actual DRAFT is visible but cannot publish", async () => {

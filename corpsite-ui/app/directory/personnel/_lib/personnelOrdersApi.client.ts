@@ -294,6 +294,9 @@ export type PersonnelOrderManualDraftCreatePayload = {
     specialty: string;
   };
   effective_date: string;
+  period_start?: string | null;
+  period_end?: string | null;
+  item_payload?: Record<string, unknown>;
 };
 
 export type PersonnelOrderManualDraftCreateResult = {
@@ -657,8 +660,11 @@ export type PersonnelOrderTemplateApplicationPreview = {
   override_blocks: PersonnelOrderTemplateApplicationBlock[];
   has_prior_application: boolean;
   last_application: { application_id: number; template_version_id: number; template_version_number: number; applied_at: string; applied_by_user_id: number } | null;
-  current: Record<string, PersonnelOrderTemplateApplicationCurrentBlock>;
-  proposed: Record<string, string>;
+  current?: Record<string, PersonnelOrderTemplateApplicationCurrentBlock>;
+  proposed?: Record<string, string>;
+  order_current?: Record<string, PersonnelOrderTemplateApplicationCurrentBlock>;
+  order_proposed?: Record<string, string>;
+  items?: Array<{ order_item_id: number; item_number: number; current: Record<string, PersonnelOrderTemplateApplicationCurrentBlock>; proposed: Record<string, string>; warnings: Array<{ code: string; message: string }>; missing_data: string[] }>;
   order_revision: number;
 };
 export const previewPersonnelOrderTemplateApplication = (orderId: number) => requestJson<PersonnelOrderTemplateApplicationPreview>("GET", `/directory/personnel-orders/${orderId}/template-application/preview`, { fallback: "Не удалось подготовить сравнение шаблона." });
@@ -670,6 +676,12 @@ export async function createManualPersonnelOrderDraft(
   return requestJson("POST", "/directory/personnel-orders/manual-draft", {
     body: payload,
     fallback: "Не удалось создать приказ.",
+  });
+}
+
+export async function getPersonnelOrderPublishedTemplateTitle(itemTypeCode: string): Promise<{ item_type_code: string; title_ru: string; title_kk: string }> {
+  return requestJson("GET", `/directory/personnel-orders/templates/${encodeURIComponent(itemTypeCode)}/published-title`, {
+    fallback: "Опубликованный шаблон не найден.",
   });
 }
 

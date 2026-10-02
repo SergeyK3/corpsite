@@ -161,6 +161,88 @@ afterEach(() => {
 });
 
 describe("PersonnelOrderDetailDrawer document tab", () => {
+  it("shows the applied LEAVE.UNPAID.GRANT v2 editorial snapshot without consulting the legacy template whitelist", async () => {
+    const leaveDetail: PersonnelOrderDetailResponse = {
+      ...detail,
+      order: { ...detail.order, order_type_code: "LEAVE.UNPAID.GRANT", document_revision: 2 },
+      items: [{
+        item_id: 91, order_id: 42, item_number: 1, item_type_code: "LEAVE.UNPAID.GRANT", item_status: "ACTIVE",
+        employee_id: 7, employee_name: "Employee", effective_date: "2026-07-13", payload: {},
+      }],
+    };
+    const applied: PersonnelOrderEditorialState = {
+      order_id: 42, order_status: "DRAFT", editable: true,
+      order_blocks: ["kk", "ru"].flatMap((locale, index) => [
+        { block_id: index * 2 + 1, scope: "order" as const, order_item_id: null, locale: locale as "kk" | "ru", block_type: "title" as const, generated_text: `snapshot ${locale} title`, override_text: null, effective_text: `snapshot ${locale} title`, review_status: "CURRENT" as const, editable: true, revision: 2 },
+        { block_id: index * 2 + 2, scope: "order" as const, order_item_id: null, locale: locale as "kk" | "ru", block_type: "preamble" as const, generated_text: `snapshot ${locale} preamble`, override_text: null, effective_text: `snapshot ${locale} preamble`, review_status: "CURRENT" as const, editable: true, revision: 2 },
+      ]),
+      items: [{
+        order_item_id: 91, item_number: 1, item_type_code: "LEAVE.UNPAID.GRANT", basis_required: true,
+        blocks: ["kk", "ru"].flatMap((locale, index) => [
+          { block_id: 10 + index * 2, scope: "item" as const, order_item_id: 91, locale: locale as "kk" | "ru", block_type: "body" as const, generated_text: `snapshot ${locale} body`, override_text: null, effective_text: `snapshot ${locale} body`, review_status: "CURRENT" as const, editable: true, revision: 2 },
+          { block_id: 11 + index * 2, scope: "item" as const, order_item_id: 91, locale: locale as "kk" | "ru", block_type: "basis" as const, generated_text: `snapshot ${locale} basis`, override_text: null, effective_text: `snapshot ${locale} basis`, review_status: "CURRENT" as const, editable: true, revision: 2 },
+        ]),
+      }],
+    };
+    vi.mocked(getPersonnelOrder).mockResolvedValueOnce(leaveDetail).mockResolvedValueOnce(leaveDetail);
+    vi.mocked(getPersonnelOrderEditorial).mockResolvedValueOnce({ ...applied, order_blocks: [], items: [] });
+    vi.mocked(previewPersonnelOrderTemplateApplication).mockResolvedValueOnce({
+      ...templateApplicationPreview(),
+      template: { template_version_id: 11, version_number: 2, item_type_code: "LEAVE.UNPAID.GRANT" },
+      items: [{ order_item_id: 91, item_number: 1, current: {}, proposed: { body_kk: "snapshot kk body", body_ru: "snapshot ru body", basis_kk: "snapshot kk basis", basis_ru: "snapshot ru basis" }, warnings: [], missing_data: [] }],
+    });
+    vi.mocked(applyPersonnelOrderTemplateApplication).mockResolvedValueOnce(applied);
+
+    render(<PersonnelOrderDetailDrawer orderId={42} open initialTab="data" onClose={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("button", { name: "\u041f\u0440\u0438\u043c\u0435\u043d\u0438\u0442\u044c \u0448\u0430\u0431\u043b\u043e\u043d" }));
+    await waitFor(() => expect(applyPersonnelOrderTemplateApplication).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole("tab", { name: "\u0414\u043e\u043a\u0443\u043c\u0435\u043d\u0442" }));
+
+    const document = await screen.findByTestId("personnel-order-document");
+    expect(document).toHaveTextContent("snapshot kk title");
+    expect(document).toHaveTextContent("snapshot kk preamble");
+    expect(document).toHaveTextContent("snapshot kk body");
+    expect(document).toHaveTextContent("snapshot kk basis");
+    expect(screen.queryByTestId("personnel-order-document-missing-template")).not.toBeInTheDocument();
+    expect(generatePersonnelOrderEditorial).not.toHaveBeenCalled();
+  });
+
+  it("synchronizes data and document tabs from one multi-item apply response", async () => {
+    const oldEditorial = templateEditorial("old");
+    const newEditorial: PersonnelOrderEditorialState = {
+      ...templateEditorial("new"),
+      items: [
+        ...templateEditorial("new").items,
+        {
+          order_item_id: 18, item_number: 2, item_type_code: "TERMINATION", basis_required: true,
+          blocks: [
+            { block_id: 30, scope: "item", order_item_id: 18, locale: "ru", block_type: "body", generated_text: "new ru body item 2", override_text: null, effective_text: "new ru body item 2", review_status: "CURRENT", editable: true, revision: 1 },
+            { block_id: 31, scope: "item", order_item_id: 18, locale: "kk", block_type: "body", generated_text: "new kk body item 2", override_text: null, effective_text: "new kk body item 2", review_status: "CURRENT", editable: true, revision: 1 },
+            { block_id: 32, scope: "item", order_item_id: 18, locale: "ru", block_type: "basis", generated_text: "new ru basis item 2", override_text: null, effective_text: "new ru basis item 2", review_status: "CURRENT", editable: true, revision: 1 },
+            { block_id: 33, scope: "item", order_item_id: 18, locale: "kk", block_type: "basis", generated_text: "new kk basis item 2", override_text: null, effective_text: "new kk basis item 2", review_status: "CURRENT", editable: true, revision: 1 },
+          ],
+        },
+      ],
+    };
+    const multiDetail: PersonnelOrderDetailResponse = {
+      ...detail,
+      order: { ...detail.order, order_type_code: "TERMINATION", document_revision: 1 },
+      items: [17, 18].map((item_id, index) => ({ item_id, order_id: 42, item_number: index + 1, item_type_code: "TERMINATION", item_status: "ACTIVE", employee_id: 7, employee_name: `Employee ${index + 1}`, effective_date: "2026-07-01", payload: { basis_ids: ["application"] } })),
+    };
+    vi.mocked(getPersonnelOrder).mockResolvedValueOnce(multiDetail).mockResolvedValueOnce(multiDetail);
+    vi.mocked(getPersonnelOrderEditorial).mockResolvedValueOnce(oldEditorial);
+    vi.mocked(previewPersonnelOrderTemplateApplication).mockResolvedValueOnce(templateApplicationPreview());
+    vi.mocked(applyPersonnelOrderTemplateApplication).mockResolvedValueOnce(newEditorial);
+    render(<PersonnelOrderDetailDrawer orderId={42} open onClose={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("tab", { name: "Данные" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Применить шаблон" }));
+    await waitFor(() => expect(screen.getByTestId("personnel-order-editorial-editor")).toHaveTextContent("new kk body item 2"));
+    fireEvent.click(screen.getByRole("tab", { name: "Документ" }));
+    const document = await screen.findByTestId("personnel-order-document");
+    expect(document).toHaveTextContent("new kk body item 2");
+    expect(document).not.toHaveTextContent("old kk body");
+  });
+
   it("uses the applied template response as the single editorial snapshot across data and document", async () => {
     const oldEditorial = templateEditorial("old");
     const newEditorial = templateEditorial("new");

@@ -15,6 +15,7 @@ import {
   personnelOrderSignatoryRoleLabel,
 } from "../_lib/personnelOrderSignatoryRole";
 import { buildPersonnelOrderPrintViewModel } from "../_lib/personnelOrderPrintViewModel";
+import { normalizePersonnelOrderBasisText } from "../_lib/personnelOrderBasisText";
 
 export type { PersonnelOrderDocumentLanguage } from "./personnelOrderDocumentTemplates";
 
@@ -108,7 +109,7 @@ export default function PersonnelOrderDocumentView({
           <li key={index} className="pl-1 text-sm leading-6">
             <p>{point.text}</p>
             {point.basis.length ? (
-              <p className="mt-2"><span className="font-medium">{ui.basis}:</span> {point.basis.join("; ")}.</p>
+              <p className="mt-2"><span className="font-medium">{ui.basis}:</span> {point.basis.map((entry) => normalizePersonnelOrderBasisText(entry, language)).filter(Boolean).join("; ")}.</p>
             ) : null}
           </li>
         ))}

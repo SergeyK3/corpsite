@@ -255,6 +255,39 @@ describe("PersonnelOrderDocumentView", () => {
     expect(text).not.toContain("календарных дней");
   });
 
+  it("renders labelled editorial BASIS exactly once for two unpaid-leave points in RU and KK", () => {
+    const order = detail([
+      { item_id: 1, order_id: 104, item_number: 1, item_type_code: "LEAVE.UNPAID.GRANT", item_status: "ACTIVE", employee_id: 7, employee_name: "Employee one", effective_date: "2026-07-13", payload: {} },
+      { item_id: 2, order_id: 104, item_number: 2, item_type_code: "LEAVE.UNPAID.GRANT", item_status: "ACTIVE", employee_id: 8, employee_name: "Employee two", effective_date: "2026-07-13", payload: {} },
+    ], []);
+    order.order.order_type_code = "LEAVE.UNPAID.GRANT";
+    const editorial = {
+      order_blocks: ["ru", "kk"].flatMap((locale) => [
+        { block_type: "title", locale, effective_text: `${locale} title` },
+        { block_type: "preamble", locale, effective_text: `${locale} preamble` },
+      ]),
+      items: [1, 2].map((itemId) => ({
+        order_item_id: itemId,
+        blocks: [
+          { block_type: "body", locale: "ru", effective_text: `ru body ${itemId}` },
+          { block_type: "basis", locale: "ru", effective_text: "\u041e\u0441\u043d\u043e\u0432\u0430\u043d\u0438\u0435: \u041b\u0438\u0447\u043d\u043e\u0435 \u0437\u0430\u044f\u0432\u043b\u0435\u043d\u0438\u0435." },
+          { block_type: "body", locale: "kk", effective_text: `kk body ${itemId}` },
+          { block_type: "basis", locale: "kk", effective_text: "\u041d\u0435\u0433\u0456\u0437: \u0410\u0441\u0441\u0435\u043b\u044c \u0410\u0434\u0438\u043b\u043e\u0432\u043d\u0430 \u0418\u043b\u044c\u044f\u0441\u043e\u0432\u0430\u043d\u044b\u04a3 \u0436\u0435\u043a\u0435 \u04e9\u0442\u0456\u043d\u0456\u0448\u0456." },
+        ],
+      })),
+    } as never;
+    const ru = render(<PersonnelOrderDocumentView detail={order} language="ru" editorial={editorial} />);
+    expect(ru.getByTestId("personnel-order-document")).toHaveTextContent("\u041e\u0441\u043d\u043e\u0432\u0430\u043d\u0438\u0435: \u041b\u0438\u0447\u043d\u043e\u0435 \u0437\u0430\u044f\u0432\u043b\u0435\u043d\u0438\u0435.");
+    expect(ru.getByTestId("personnel-order-document").textContent).not.toContain("\u041e\u0441\u043d\u043e\u0432\u0430\u043d\u0438\u0435: \u041e\u0441\u043d\u043e\u0432\u0430\u043d\u0438\u0435:");
+    expect(ru.getByTestId("personnel-order-document").textContent).not.toContain("..");
+    ru.unmount();
+
+    const kk = render(<PersonnelOrderDocumentView detail={order} language="kk" editorial={editorial} />);
+    expect(kk.getByTestId("personnel-order-document")).toHaveTextContent("\u041d\u0435\u0433\u0456\u0437: \u0410\u0441\u0441\u0435\u043b\u044c \u0410\u0434\u0438\u043b\u043e\u0432\u043d\u0430 \u0418\u043b\u044c\u044f\u0441\u043e\u0432\u0430\u043d\u044b\u04a3 \u0436\u0435\u043a\u0435 \u04e9\u0442\u0456\u043d\u0456\u0448\u0456.");
+    expect(kk.getByTestId("personnel-order-document").textContent).not.toContain("\u041d\u0435\u0433\u0456\u0437: \u041d\u0435\u0433\u0456\u0437:");
+    expect(kk.getByTestId("personnel-order-document").textContent).not.toContain("..");
+  });
+
   it("uses Russian employee and assignment forms for concurrent duty", () => {
     const order = detail([{
       item_id: 1, order_id: 4845, item_number: 1, item_type_code: "CONCURRENT_DUTY_START", item_status: "ACTIVE", employee_id: null, employee_name: "Рудина Надежда Викторовна", effective_date: "2026-03-02",

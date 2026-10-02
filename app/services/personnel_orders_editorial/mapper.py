@@ -59,6 +59,24 @@ def build_item_ctx(item: Mapping[str, Any], employee_name: Optional[str]) -> Dic
     position_name = pick_payload_value(
         payload, "source_position_name", "position_name", "positionName", "from_position_name"
     ) or presentation.get("position_name") or assignment.get("position") or item.get("snapshot_position_name")
+    leave_start = pick_payload_value(payload, "leave_start")
+    leave_end = pick_payload_value(payload, "leave_end")
+    leave_days = pick_payload_value(payload, "leave_days")
+    leave_period_type = None
+    if item.get("item_type_code") == "LEAVE.UNPAID.GRANT":
+        # The versioned contract is authoritative for new unpaid-leave items.
+        try:
+            from app.services.personnel_order_unpaid_leave_contract import unpaid_leave_period
+
+            period = unpaid_leave_period(payload)
+            leave_period_type = period["period_type"]
+            leave_start = period["start"].isoformat()
+            leave_end = period["end"].isoformat()
+            leave_days = period["days"]
+        except ValueError:
+            # Validation owns the user-facing rejection.  The editorial read
+            # remains non-destructive for historical malformed payloads.
+            pass
     return {
         "item_type_code": item.get("item_type_code"),
         "employee_name": employee_name or pick_payload_value(payload, "source_employee_name"),
@@ -89,9 +107,10 @@ def build_item_ctx(item: Mapping[str, Any], employee_name: Optional[str]) -> Dic
         ),
         # Leave data is kept in the item payload. It is deliberately passed
         # through as one structured source for both editorial locales.
-        "leave_start": pick_payload_value(payload, "leave_start"),
-        "leave_end": pick_payload_value(payload, "leave_end"),
-        "leave_days": pick_payload_value(payload, "leave_days"),
+        "leave_start": leave_start,
+        "leave_end": leave_end,
+        "leave_days": leave_days,
+        "leave_period_type": leave_period_type,
         "work_periods": payload.get("work_periods"),
         "work_period_start": pick_payload_value(payload, "work_period_start"),
         "work_period_end": pick_payload_value(payload, "work_period_end"),

@@ -33,6 +33,7 @@ export type PersonnelOrderTemplateCatalogItem = {
   uses_specialized_generator: boolean;
   is_pilot: boolean;
   editor_available: boolean;
+  allowed_variables: string[];
   required_fields: string[];
   notes: string;
   pilot_detail?: PersonnelOrderTemplatePilotDetail | null;

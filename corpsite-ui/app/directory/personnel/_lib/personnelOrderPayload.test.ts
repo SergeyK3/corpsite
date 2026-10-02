@@ -15,6 +15,46 @@ import {
 } from "./personnelOrderLabels";
 
 describe("personnelOrderPayload", () => {
+  it("serializes single-day and continuous unpaid periods in the versioned contract", () => {
+    const single = buildItemPayload("LEAVE.UNPAID.GRANT", {
+      ...emptyItemPayloadDraft(), leave_start: "2026-07-07", leave_end: "2026-07-07", application_date: "2026-07-01",
+    });
+    const range = buildItemPayload("LEAVE.UNPAID.GRANT", {
+      ...emptyItemPayloadDraft(), leave_start: "2026-07-13", leave_end: "2026-07-15", application_date: "2026-07-01",
+    });
+    expect(single.leave).toEqual({ period_type: "SINGLE_DAY", start: "2026-07-07", end: "2026-07-07", days: 1 });
+    expect(range.leave).toEqual({ period_type: "CONTINUOUS_RANGE", start: "2026-07-13", end: "2026-07-15", days: 3 });
+    expect(single).not.toHaveProperty("leave_start");
+    expect(range).not.toHaveProperty("leave_end");
+  });
+
+  it("preserves confirmed KK document forms when unpaid leave is saved and reopened", () => {
+    const payload = buildItemPayload("LEAVE.UNPAID.GRANT", {
+      ...emptyItemPayloadDraft(),
+      leave_start: "2026-07-07", leave_end: "2026-07-07",
+      org_unit_document_genitive_kk: "Сәулелік диагностика бөлімшесінің",
+      position_document_possessive_kk: "КТ дәрігері",
+      employee_full_name_dative_kk: "Ассель Адиловна Ильясоваға",
+      employee_full_name_genitive_kk: "Ассель Адиловна Ильясованың",
+    });
+    expect(payload.document_forms_kk).toEqual({
+      org_unit_document_genitive_kk: "Сәулелік диагностика бөлімшесінің",
+      position_document_possessive_kk: "КТ дәрігері",
+      employee_full_name_dative_kk: "Ассель Адиловна Ильясоваға",
+      employee_full_name_genitive_kk: "Ассель Адиловна Ильясованың",
+    });
+    expect(itemPayloadDraftFromRecord(payload)).toMatchObject(payload.document_forms_kk as object);
+  });
+
+  it("reopens modern and legacy unpaid leave payloads", () => {
+    const modern = itemPayloadDraftFromRecord({ leave: { period_type: "SINGLE_DAY", start: "2026-07-07", end: "2026-07-07", days: 1 } });
+    expect(modern.leave_start).toBe("2026-07-07");
+    expect(modern.leave_end).toBe("2026-07-07");
+    const legacy = itemPayloadDraftFromRecord({ leave_start: "2026-07-13", leave_end: "2026-07-15", leave_days: 3 });
+    expect(legacy.leave_start).toBe("2026-07-13");
+    expect(legacy.leave_end).toBe("2026-07-15");
+  });
+
   it("builds HIRE payload from draft fields", () => {
     const draft = emptyItemPayloadDraft();
     draft.org_unit_id = "12";

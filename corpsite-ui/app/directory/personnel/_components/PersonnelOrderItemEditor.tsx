@@ -167,6 +167,23 @@ const FIELD_INPUT_CLASS =
   "w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950";
 const FIELD_HINT_CLASS = "mt-1 text-xs text-zinc-500 dark:text-zinc-400";
 
+function unpaidPeriodClauseKk(draft: ItemPayloadDraft): string {
+  const months = ["қаңтар", "ақпан", "наурыз", "сәуір", "мамыр", "маусым", "шілде", "тамыз", "қыркүйек", "қазан", "қараша", "желтоқсан"];
+  const parse = (raw: string) => {
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+    return match ? { year: Number(match[1]), month: Number(match[2]), day: Number(match[3]) } : null;
+  };
+  const start = parse(String(draft.leave_start || ""));
+  const end = parse(String(draft.leave_end || ""));
+  const dayMonth = (value: { month: number; day: number }) => `${value.day} ${months[value.month - 1]}`;
+  if (start && end && start.year === end.year && start.month === end.month && start.day === end.day) return `${start.year} жылғы ${dayMonth(start)} күніне`;
+  if (start && end) {
+    if (start.year === end.year && start.month === end.month) return `${start.year} жылғы ${start.day} мен ${end.day} ${months[start.month - 1]} аралығында`;
+    return `${start.year} жылғы ${dayMonth(start)} мен ${end.year === start.year ? "" : `${end.year} жылғы `}${dayMonth(end)} аралығында`;
+  }
+  return "…";
+}
+
 function placementValue(value: string | null | undefined): string {
   const text = String(value ?? "").trim();
   return text || "—";
@@ -644,6 +661,11 @@ export default function PersonnelOrderItemEditor({
         setSaving(false);
         return;
       }
+      if (isLeave && leaveEnd < leaveStart) {
+        setError("Дата окончания отпуска не может быть раньше даты начала.");
+        setSaving(false);
+        return;
+      }
       let resolvedEmployeeId =
         Number.isFinite(employeeNumeric) && employeeNumeric > 0 ? employeeNumeric : null;
       if (savedEmployeeIdBlocksPendingReset && resolvedEmployeeId == null) {
@@ -964,10 +986,11 @@ export default function PersonnelOrderItemEditor({
       const start = String(payloadDraft.leave_start || "");
       const end = String(payloadDraft.leave_end || "");
       const calculatedDays = start && end ? Math.max(0, Math.floor((Date.parse(`${end}T00:00:00`) - Date.parse(`${start}T00:00:00`)) / 86400000) + 1) : "";
+      const kkUnpaidPreview = `${payloadDraft.org_unit_document_genitive_kk || "[бөлімше]"} ${payloadDraft.position_document_possessive_kk || "[лауазым]"} ${payloadDraft.employee_full_name_dative_kk || "[аты-жөні]"} ${unpaidPeriodClauseKk(payloadDraft)} еңбекақысы сақталмайтын демалыс берілсін. Негіз: ${payloadDraft.employee_full_name_genitive_kk || "[аты-жөні]"} жеке өтініші.`;
       return <div className="space-y-3" data-testid="personnel-leave-fields">
         <div className="grid gap-3 sm:grid-cols-3">
-          <FormField label="Дата начала"><input type="date" value={start} onChange={(e) => updatePayloadField("leave_start", e.target.value)} className={FIELD_INPUT_CLASS} /></FormField>
-          <FormField label="Дата окончания"><input type="date" value={end} onChange={(e) => updatePayloadField("leave_end", e.target.value)} className={FIELD_INPUT_CLASS} /></FormField>
+          <FormField label="Дата начала"><input type="date" data-testid="leave-start" value={start} onChange={(e) => annual ? updatePayloadField("leave_start", e.target.value) : setPayloadDraft((prev) => ({ ...prev, leave_start: e.target.value, leave_end: e.target.value }))} className={FIELD_INPUT_CLASS} /></FormField>
+          <FormField label="Дата окончания"><input type="date" data-testid="leave-end" value={end} onChange={(e) => updatePayloadField("leave_end", e.target.value)} className={FIELD_INPUT_CLASS} /></FormField>
           <FormField label="Календарные дни"><input readOnly value={calculatedDays} data-testid="leave-days" className={FIELD_INPUT_CLASS} /></FormField>
         </div>
         {annual ? <div className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800" data-testid="annual-leave-work-periods">
@@ -979,13 +1002,19 @@ export default function PersonnelOrderItemEditor({
             {index > 0 ? <button type="button" onClick={() => setPayloadDraft((prev) => ({...prev, work_periods: (prev.work_periods || []).filter((_, i) => i !== index)}))} className="self-end rounded border px-2 py-2 text-sm">Удалить</button> : <span />}
           </div>)}
         </div> : null}
-        <div className="grid gap-3 sm:grid-cols-2"><FormField label="Дата заявления"><input type="date" required value={payloadDraft.application_date || ""} onChange={(e) => updatePayloadField("application_date", e.target.value)} className={FIELD_INPUT_CLASS} /></FormField><FormField label="Номер заявления"><input value={payloadDraft.application_number || ""} onChange={(e) => updatePayloadField("application_number", e.target.value)} className={FIELD_INPUT_CLASS} /></FormField></div>
+        <div className="grid gap-3 sm:grid-cols-2"><FormField label="Дата заявления"><input type="date" data-testid="leave-application-date" required value={payloadDraft.application_date || ""} onChange={(e) => updatePayloadField("application_date", e.target.value)} className={FIELD_INPUT_CLASS} /></FormField><FormField label="Номер заявления"><input value={payloadDraft.application_number || ""} onChange={(e) => updatePayloadField("application_number", e.target.value)} className={FIELD_INPUT_CLASS} /></FormField></div>
+        {!annual ? <section className="grid gap-2 rounded-lg border border-zinc-200 p-3 sm:grid-cols-2 dark:border-zinc-800" data-testid="unpaid-leave-kk-document-forms">
+          <FormField label="KK: бөлімше (ілік септік)"><input value={payloadDraft.org_unit_document_genitive_kk || ""} onChange={(e) => updatePayloadField("org_unit_document_genitive_kk", e.target.value)} className={FIELD_INPUT_CLASS} /></FormField>
+          <FormField label="KK: лауазым (құжат нысаны)"><input value={payloadDraft.position_document_possessive_kk || ""} onChange={(e) => updatePayloadField("position_document_possessive_kk", e.target.value)} className={FIELD_INPUT_CLASS} /></FormField>
+          <FormField label="KK: Т.А.Ә. (барыс септік)"><input value={payloadDraft.employee_full_name_dative_kk || ""} onChange={(e) => updatePayloadField("employee_full_name_dative_kk", e.target.value)} className={FIELD_INPUT_CLASS} /></FormField>
+          <FormField label="KK: Т.А.ӘА. (ілік септік)"><input value={payloadDraft.employee_full_name_genitive_kk || ""} onChange={(e) => updatePayloadField("employee_full_name_genitive_kk", e.target.value)} className={FIELD_INPUT_CLASS} /></FormField>
+        </section> : null}
         {annual ? <><label className="flex gap-2 text-sm"><input type="checkbox" checked={Boolean(payloadDraft.vacation_benefit_applicable)} onChange={(e) => setPayloadDraft((prev) => ({...prev, vacation_benefit_applicable:e.target.checked}))} />Пособие к отпуску</label>{payloadDraft.vacation_benefit_applicable ? <FormField label="Правило пособия"><input value={payloadDraft.vacation_benefit_rule || ""} onChange={(e) => updatePayloadField("vacation_benefit_rule", e.target.value)} className={FIELD_INPUT_CLASS} /></FormField> : null}</> : null}
         <FormField label="Примечание"><textarea value={payloadDraft.leave_note || ""} onChange={(e) => updatePayloadField("leave_note", e.target.value)} className={FIELD_INPUT_CLASS} /></FormField>
         <div className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800" data-testid="leave-order-preview">
           <div className="mb-2 flex gap-2"><button type="button" onClick={() => setLeavePreviewLocale("ru")} className={leavePreviewLocale === "ru" ? "font-semibold" : ""}>Русский</button><span>/</span><button type="button" onClick={() => setLeavePreviewLocale("kk")} className={leavePreviewLocale === "kk" ? "font-semibold" : ""}>Қазақша</button></div>
           <div className="text-sm font-semibold">{leavePreviewLocale === "ru" ? "ПРИКАЗ" : "БҰЙРЫҚ"}</div>
-          <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm"><li>{leavePreviewLocale === "ru" ? `${annual ? "Предоставить ежегодный трудовой отпуск" : "Предоставить отпуск без сохранения заработной платы"} ${employeeQuery || "сотруднику"}, ${currentPlacement?.position_name || "должность"} ${currentPlacement?.org_unit_name || "подразделения"}, с ${start || "…"} по ${end || "…"}, ${calculatedDays || "…"} календарных дней.` : `${employeeQuery || "Қызметкерге"} ${start || "…"} мен ${end || "…"} аралығында ${calculatedDays || "…"} күнтізбелік күнге ${annual ? "жылдық ақылы еңбек демалысы" : "еңбекақысы сақталмайтын демалыс"} берілсін.`} {annual ? (payloadDraft.work_periods || []).map((p) => ` ${p.start}–${p.end}: ${p.days} ${leavePreviewLocale === "ru" ? "дн." : "күн."}`).join("") : ""} {payloadDraft.vacation_benefit_applicable ? (leavePreviewLocale === "ru" ? ` Пособие: ${payloadDraft.vacation_benefit_rule || "…"}.` : ` Демалыс жәрдемақысы: ${payloadDraft.vacation_benefit_rule || "…"}.`) : ""} {leavePreviewLocale === "ru" ? ` Основание: личное заявление от ${payloadDraft.application_date || "…"}.` : ` Негіз: ${payloadDraft.application_date || "…"} күнгі жеке өтініш.`}</li></ol>
+          <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm"><li>{leavePreviewLocale === "ru" ? `${annual ? "Предоставить ежегодный трудовой отпуск" : "Предоставить отпуск без сохранения заработной платы"} ${employeeQuery || "сотруднику"}, ${currentPlacement?.position_name || "должность"} ${currentPlacement?.org_unit_name || "подразделения"}, с ${start || "…"} по ${end || "…"}, ${calculatedDays || "…"} календарных дней.` : annual ? `${employeeQuery || "Қызметкерге"} ${start || "…"} мен ${end || "…"} аралығында ${calculatedDays || "…"} күнтізбелік күнге жылдық ақылы еңбек демалысы берілсін.` : kkUnpaidPreview} {annual ? (payloadDraft.work_periods || []).map((p) => ` ${p.start}–${p.end}: ${p.days} ${leavePreviewLocale === "ru" ? "дн." : "күн."}`).join("") : ""} {payloadDraft.vacation_benefit_applicable ? (leavePreviewLocale === "ru" ? ` Пособие: ${payloadDraft.vacation_benefit_rule || "…"}.` : ` Демалыс жәрдемақысы: ${payloadDraft.vacation_benefit_rule || "…"}.`) : ""} {annual ? (leavePreviewLocale === "ru" ? ` Основание: личное заявление от ${payloadDraft.application_date || "…"}.` : ` Негіз: ${payloadDraft.application_date || "…"} күнгі жеке өтініш.`) : ""}</li></ol>
         </div>
       </div>;
     }
