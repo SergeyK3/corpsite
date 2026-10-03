@@ -181,6 +181,25 @@ describe("PersonnelOrderDetailDrawer document tab", () => {
     expect(onClose).toHaveBeenCalled();
   });
 
+  it.each(["ADMIN", "HR_HEAD"])("opens the DRAFT header editor for %s even when number and date are empty", async (roleCode) => {
+    currentUser.value = { role_code: roleCode };
+    vi.mocked(getPersonnelOrder).mockResolvedValue({
+      ...detail,
+      order: { ...detail.order, order_number: null, order_date: null, status: "DRAFT" },
+    });
+
+    render(<PersonnelOrderDetailDrawer orderId={42} open initialTab="data" onClose={vi.fn()} />);
+    const editButton = await screen.findByTestId("personnel-order-open-header-editor");
+    fireEvent.click(editButton);
+
+    const editor = screen.getByTestId("personnel-order-header-editor-section");
+    const orderNumber = within(editor).getByPlaceholderText("Заполнить перед регистрацией");
+    const orderDate = within(editor).getByTestId("personnel-order-header-order-date");
+    await waitFor(() => expect(orderNumber).toHaveFocus());
+    expect(orderNumber).not.toBeDisabled();
+    expect(orderDate).not.toBeDisabled();
+  });
+
   it("shows the applied LEAVE.UNPAID.GRANT v2 editorial snapshot without consulting the legacy template whitelist", async () => {
     const leaveDetail: PersonnelOrderDetailResponse = {
       ...detail,
