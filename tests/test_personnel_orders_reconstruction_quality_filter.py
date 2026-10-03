@@ -30,3 +30,35 @@ def test_docx_review_filter_remains_independent_of_pilot_key():
 
     assert "reconstruction_status' = 'NEEDS_DOCX_REVIEW'" in sql
     assert "reconstruction_pilot" not in sql
+
+
+def test_working_scope_is_default_and_excludes_confirmed_and_legacy_technical_orders():
+    where_parts, _ = _build_list_filters(
+        status=None, order_type_code=None, date_from=None, date_to=None,
+        employee_id=77, org_unit_id=None, q=None, reconstruction_quality=None,
+    )
+    sql = "\n".join(where_parts)
+    assert "technical_record" in sql
+    assert "record_quality" in sql
+    assert "PERSONNEL-IMPORT-%" in sql
+    assert "CSV-PILOT-%" in sql
+    assert "employee_id = :employee_id" in sql
+
+
+def test_technical_scope_includes_canonical_and_legacy_classification_only():
+    where_parts, _ = _build_list_filters(
+        status=None, order_type_code=None, date_from=None, date_to=None,
+        employee_id=None, org_unit_id=None, q=None, record_quality="TECHNICAL", reconstruction_quality=None,
+    )
+    sql = "\n".join(where_parts)
+    assert "technical_record" in sql
+    assert "PERSONNEL-IMPORT-%" in sql
+    assert "NOT (COALESCE(po.storage_json" in sql
+
+
+def test_all_scope_does_not_add_technical_visibility_clause():
+    where_parts, _ = _build_list_filters(
+        status=None, order_type_code=None, date_from=None, date_to=None,
+        employee_id=None, org_unit_id=None, q=None, record_quality="ALL", reconstruction_quality=None,
+    )
+    assert "technical_record" not in "\n".join(where_parts)

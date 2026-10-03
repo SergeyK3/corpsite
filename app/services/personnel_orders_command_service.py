@@ -69,6 +69,16 @@ class PersonnelOrderConflictError(RuntimeError):
     """Order is locked or business rule conflict."""
 
 
+class PersonnelOrderDeletedError(PersonnelOrderConflictError):
+    """A working-contour mutation was requested for a soft-deleted order."""
+
+    code = "PERSONNEL_ORDER_DELETED"
+    message = "Приказ удалён из рабочего контура"
+
+    def __init__(self) -> None:
+        super().__init__(self.message)
+
+
 class PersonnelOrderItemNotFoundError(LookupError):
     """Personnel order item not found."""
 
@@ -229,6 +239,7 @@ def _fetch_order_row(conn, order_id: int) -> Dict[str, Any]:
                 source_mode,
                 void_kind,
                 archived_at,
+                deleted_at,
                 created_by
             FROM public.personnel_orders
             WHERE order_id = :order_id
@@ -238,10 +249,40 @@ def _fetch_order_row(conn, order_id: int) -> Dict[str, Any]:
     ).mappings().first()
     if row is None:
         raise PersonnelOrderNotFoundError(f"Personnel order {order_id} not found.")
-    return dict(row)
+    order = dict(row)
+    require_order_row_not_deleted(order)
+    return order
+
+
+def require_active_personnel_order(conn, order_id: int, *, lock: bool = False) -> None:
+    """Reject mutations of an order removed from the working contour.
+
+    The small, shared row check intentionally happens in the caller's existing
+    transaction.  ``lock=True`` makes the check stable through the subsequent
+    write command without each service inventing its own deleted-order SQL or
+    response text.  A missing order remains the responsibility of the
+    operation's existing not-found path.
+    """
+    suffix = " FOR UPDATE" if lock else ""
+    row = conn.execute(
+        text(
+            "SELECT deleted_at FROM public.personnel_orders "
+            "WHERE order_id = :order_id" + suffix
+        ),
+        {"order_id": int(order_id)},
+    ).mappings().first()
+    if row is not None and row["deleted_at"] is not None:
+        raise PersonnelOrderDeletedError()
+
+
+def require_order_row_not_deleted(order: Dict[str, Any]) -> None:
+    """Apply the same contract where an order row is already locked/read."""
+    if order.get("deleted_at") is not None:
+        raise PersonnelOrderDeletedError()
 
 
 def _ensure_order_editable(order: Dict[str, Any]) -> None:
+    require_order_row_not_deleted(order)
     assert_order_not_archived(order)
     status = str(order["status"])
     if status in LOCKED_ORDER_STATUSES:

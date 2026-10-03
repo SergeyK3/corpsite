@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { useCurrentUser } from "@/lib/currentUser";
 
 import TaskOrgFiltersBar from "@/components/TaskOrgFiltersBar";
 import { getEmployees } from "@/app/directory/employees/_lib/api.client";
@@ -17,6 +18,7 @@ import {
   buildPersonnelOrdersQueryParams,
   filterPersonnelOrdersBySearch,
   listPersonnelOrders,
+  deletePersonnelOrderAsHrHead,
   mapPersonnelOrdersApiError,
   parsePersonnelOrdersFilters,
   personnelOrderStatusLabel,
@@ -42,8 +44,13 @@ function activeFilterSummary(filters: PersonnelOrdersFilters): string[] {
 }
 
 export default function PersonnelOrdersPageClient() {
+  const me = useCurrentUser();
   const router = useRouter();
   const searchParams = useSearchParams();
+  const returnTo = React.useMemo(() => {
+    const raw = searchParams.get("return_to");
+    return raw && raw.startsWith("/") && !raw.startsWith("//") ? raw : null;
+  }, [searchParams]);
 
   const filters = React.useMemo(
     () => parsePersonnelOrdersFilters(searchParams),
@@ -152,6 +159,10 @@ export default function PersonnelOrdersPageClient() {
   function closeDrawer() {
     setDrawerOpen(false);
     setSelectedOrderId(null);
+    if (returnTo) {
+      router.replace(returnTo);
+      return;
+    }
     if (filters.order_id) {
       const { order_id: _removed, ...rest } = filters;
       updateFilters({ ...rest, order_id: undefined });
@@ -168,6 +179,19 @@ export default function PersonnelOrdersPageClient() {
 
   function handleChanged() {
     void load();
+  }
+
+  async function deleteOrderAsHrHead(row: PersonnelOrderListItem) {
+    if (!window.confirm(`Удалить приказ ${row.order_number || `#${row.order_id}`}?`)) return;
+    try {
+      const result = await deletePersonnelOrderAsHrHead(row.order_id);
+      setToast(result.status === "ALREADY_DELETED" ? "Приказ уже удалён." : "Приказ удалён из рабочего контура.");
+      setItems((current) => current.filter((item) => item.order_id !== row.order_id));
+      setTotal((current) => Math.max(0, current - 1));
+      void load();
+    } catch (e) {
+      setError(mapPersonnelOrdersApiError(e, "Не удалось удалить приказ."));
+    }
   }
 
   return (
@@ -236,11 +260,25 @@ export default function PersonnelOrdersPageClient() {
           </label>
           <select
             data-testid="personnel-orders-reconstruction-quality"
+            value={filters.record_quality || "WORKING"}
+            onChange={(e) => updateFilters({ record_quality: e.target.value as PersonnelOrdersFilters["record_quality"] })}
+            className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+          >
+            <option value="WORKING">Рабочие записи</option>
+            <option value="TECHNICAL">Технические записи</option>
+            <option value="ALL">Все записи</option>
+          </select>
+        </div>
+        <div>
+          <label className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">
+            Реконструкция
+          </label>
+          <select
             value={filters.reconstruction_quality || ""}
             onChange={(e) => updateFilters({ reconstruction_quality: e.target.value as PersonnelOrdersFilters["reconstruction_quality"] || undefined })}
             className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
           >
-            <option value="">Все записи</option>
+            <option value="">Все</option>
             <option value="NEEDS_DOCX_REVIEW">Требуют сверки с DOCX</option>
             <option value="RECONSTRUCTED_PILOT">Восстановленные из журнала</option>
           </select>
@@ -344,6 +382,7 @@ export default function PersonnelOrdersPageClient() {
             : "Приказы пока не созданы."
         }
         onRowClick={openOrder}
+        onDelete={["ADMIN", "HR_HEAD"].includes(String(me?.role_code || "").trim().toUpperCase()) ? deleteOrderAsHrHead : undefined}
       />
 
       <PersonnelOrderDetailDrawer
@@ -353,6 +392,7 @@ export default function PersonnelOrdersPageClient() {
         onChanged={handleChanged}
         hirePersonId={hirePersonId}
         initialTab={drawerInitialTab}
+        allowDeletedTombstone={Boolean(returnTo?.startsWith("/admin/system"))}
       />
 
       <PersonnelOrderCreateDialog

@@ -3,11 +3,11 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { useSearchParams } from "next/navigation";
 
 import { useCurrentUser } from "@/lib/currentUser";
 import {
   canSeeTestPersonnelAdmin,
-  TEST_PERSONNEL_ADMIN_HREF,
 } from "@/lib/testPersonnelDeletionNav";
 
 import AccessTab from "./tabs/AccessTab";
@@ -18,6 +18,8 @@ import UserLinkageReviewTab from "./tabs/UserLinkageReviewTab";
 import UsersTab from "./tabs/UsersTab";
 import VisibilityTab from "./tabs/VisibilityTab";
 import TelegramStatusPanel from "./TelegramStatusPanel";
+import PersonnelOrderQualityControlPanel from "./PersonnelOrderQualityControlPanel";
+import DataCleanupCenter from "../data-cleanup/_components/DataCleanupCenter";
 
 type MainTab =
   | "users"
@@ -26,7 +28,9 @@ type MainTab =
   | "assignments"
   | "audit"
   | "visibility"
-  | "user-linkage-review";
+  | "user-linkage-review"
+  | "quality-control"
+  | "data-cleanup";
 
 const TABS: { id: MainTab; label: string }[] = [
   { id: "users", label: "Пользователи" },
@@ -49,7 +53,8 @@ function tabButtonClass(active: boolean): string {
 
 export default function SystemAdminClient() {
   const me = useCurrentUser();
-  const [activeTab, setActiveTab] = useState<MainTab>("users");
+  const searchParams = useSearchParams();
+  const [activeTab, setActiveTab] = useState<MainTab>(searchParams.get("section") === "data-cleanup" ? "data-cleanup" : "users");
 
   return (
     <div className="space-y-4">
@@ -62,7 +67,7 @@ export default function SystemAdminClient() {
 
       <TelegramStatusPanel />
 
-      <nav className="flex flex-wrap gap-2 xl:flex-nowrap xl:gap-1 2xl:gap-2" aria-label="Разделы кабинета">
+      <nav className="flex flex-wrap gap-2" aria-label="Разделы кабинета">
         {TABS.map((tab) => (
           <button
             key={tab.id}
@@ -78,11 +83,8 @@ export default function SystemAdminClient() {
           Жизненный цикл
         </Link>
         {me?.has_user_access_admin ? <Link href="/admin/system/access-management" className={tabButtonClass(false)}>Управление доступом</Link> : null}
-        {canSeeTestPersonnelAdmin(me) ? (
-          <Link href={TEST_PERSONNEL_ADMIN_HREF} className={tabButtonClass(false)}>
-            Очистка данных
-          </Link>
-        ) : null}
+        {canSeeTestPersonnelAdmin(me) ? <button type="button" onClick={() => setActiveTab("data-cleanup")} className={tabButtonClass(activeTab === "data-cleanup")}>Очистка данных</button> : null}
+        {me?.is_system_admin ? <button type="button" onClick={() => setActiveTab("quality-control")} className={tabButtonClass(activeTab === "quality-control")} aria-current={activeTab === "quality-control" ? "page" : undefined}>Контроль качества приказов</button> : null}
       </nav>
 
       <div className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-950">
@@ -93,6 +95,8 @@ export default function SystemAdminClient() {
         {activeTab === "assignments" ? <AssignmentsTab /> : null}
         {activeTab === "user-linkage-review" ? <UserLinkageReviewTab /> : null}
         {activeTab === "audit" ? <AuditTab /> : null}
+        {activeTab === "quality-control" ? <PersonnelOrderQualityControlPanel /> : null}
+        {activeTab === "data-cleanup" ? <DataCleanupCenter /> : null}
       </div>
     </div>
   );

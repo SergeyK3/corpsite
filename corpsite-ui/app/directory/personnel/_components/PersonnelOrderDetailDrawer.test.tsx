@@ -4,6 +4,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import PersonnelOrderDetailDrawer from "./PersonnelOrderDetailDrawer";
 import type { PersonnelOrderDetailResponse } from "../_lib/personnelOrdersApi.client";
 
+const currentUser = vi.hoisted(() => ({ value: null as { role_code?: string } | null }));
+const hrHeadDelete = vi.hoisted(() => vi.fn());
+
+vi.mock("@/lib/currentUser", () => ({ useCurrentUser: () => currentUser.value }));
+
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: vi.fn() }),
   usePathname: () => "/directory/personnel/orders",
@@ -73,6 +78,7 @@ vi.mock("../_lib/personnelOrdersApi.client", async () => {
       order_revision: 1,
     })),
     applyPersonnelOrderTemplateApplication: vi.fn(),
+    deletePersonnelOrderAsHrHead: hrHeadDelete,
   };
 });
 
@@ -158,9 +164,23 @@ function withClosingSuppressed(editorial: PersonnelOrderEditorialState, suppress
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  currentUser.value = null;
 });
 
 describe("PersonnelOrderDetailDrawer document tab", () => {
+  it("shows HR_HEAD all-status deletion in the card and calls the dedicated soft-delete API after one confirmation", async () => {
+    currentUser.value = { role_code: "HR_HEAD" };
+    vi.mocked(getPersonnelOrder).mockResolvedValue({ ...detail, order: { ...detail.order, status: "SIGNED" } });
+    hrHeadDelete.mockResolvedValue({ status: "SOFT_DELETED", order_id: 42 });
+    const onClose = vi.fn();
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    render(<PersonnelOrderDetailDrawer orderId={42} open initialTab="data" onClose={onClose} />);
+    const button = await screen.findByRole("button", { name: "Удалить" });
+    fireEvent.click(button);
+    await waitFor(() => expect(hrHeadDelete).toHaveBeenCalledWith(42));
+    expect(onClose).toHaveBeenCalled();
+  });
+
   it("shows the applied LEAVE.UNPAID.GRANT v2 editorial snapshot without consulting the legacy template whitelist", async () => {
     const leaveDetail: PersonnelOrderDetailResponse = {
       ...detail,

@@ -7,6 +7,9 @@ from app.db.models.personnel_orders import ORDER_STATUS_DRAFT
 
 
 def ensure_draft_writable(order: Mapping[str, Any]) -> None:
+    from app.services.personnel_orders_command_service import require_order_row_not_deleted
+
+    require_order_row_not_deleted(dict(order))
     status = str(order.get("status") or "")
     if status != ORDER_STATUS_DRAFT:
         from app.services.personnel_orders_command_service import PersonnelOrderConflictError

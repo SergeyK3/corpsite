@@ -1,3 +1,2 @@
-import DataCleanupCenter from "./_components/DataCleanupCenter";
-export const dynamic = "force-dynamic";
-export default function DataCleanupPage() { return <DataCleanupCenter />; }
+import { redirect } from "next/navigation";
+export default function DataCleanupPage() { redirect("/admin/system?section=data-cleanup"); }

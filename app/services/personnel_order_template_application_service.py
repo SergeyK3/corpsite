@@ -60,6 +60,8 @@ def _document_form_ru(payload:Mapping[str,Any],field:str)->str:
  name=employee.get("name") if isinstance(employee,Mapping) else None
  return _mapped_text(name,"full_name_dative_ru","dative_ru")
 def _order(conn:Any,order_id:int):
+ from app.services.personnel_orders_command_service import require_active_personnel_order
+ require_active_personnel_order(conn,order_id,lock=True)
  order=conn.execute(text("SELECT * FROM public.personnel_orders WHERE order_id=:id FOR UPDATE"),{"id":order_id}).mappings().first()
  if not order or order["archived_at"] is not None or order["status"]!="DRAFT": raise TemplateApplicationError("Template application is available only for a non-archived DRAFT order.")
  items=conn.execute(text("SELECT * FROM public.personnel_order_items WHERE order_id=:id AND item_status='ACTIVE' ORDER BY item_number,item_id"),{"id":order_id}).mappings().all()

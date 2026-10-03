@@ -12,6 +12,7 @@ from app.db.models.personnel_orders import (
 )
 from app.services.personnel_order_lifecycle_audit_service import append_personnel_order_lifecycle_audit
 from app.services.personnel_orders_query_service import PersonnelOrderNotFoundError
+from app.services.personnel_orders_command_service import require_active_personnel_order
 
 
 class PersonnelOrderDocumentReviewConflictError(Exception):
@@ -25,6 +26,8 @@ class PersonnelOrderDocumentReviewValidationError(Exception):
 
 
 def _review(conn, order_id: int, *, lock: bool = False) -> Dict[str, Any]:
+    if lock:
+        require_active_personnel_order(conn, order_id, lock=True)
     order = conn.execute(text(f"SELECT order_id, order_number, order_date, status, document_revision, storage_json FROM public.personnel_orders WHERE order_id=:id {'FOR UPDATE' if lock else ''}"), {"id": order_id}).mappings().one_or_none()
     if order is None:
         raise PersonnelOrderNotFoundError(f"Personnel order {order_id} not found.")

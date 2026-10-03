@@ -2,12 +2,14 @@
 
 import * as React from "react";
 import { createPortal } from "react-dom";
+import { useCurrentUser } from "@/lib/currentUser";
 
 import {
   formatPersonnelOrderDate,
   formatPersonnelOrderDateTime,
   formatPersonnelOrderNumber,
   getPersonnelOrder,
+  getPersonnelOrderDeletedTombstone,
   getPersonnelOrderEditorial,
   getPersonnelOrderDocumentReview,
   confirmPersonnelOrderDocumentReview,
@@ -18,6 +20,9 @@ import {
   patchPersonnelOrderDocumentItem,
   recordPersonnelOrderAcknowledgement,
   clearPersonnelOrderAcknowledgement,
+  getPersonnelOrderDraftDeletionPreview,
+  deletePersonnelOrderDraft,
+  deletePersonnelOrderAsHrHead,
   isWritablePersonnelOrder,
   isPersonnelOrderApplied,
   mapPersonnelOrdersApiError,
@@ -28,6 +33,7 @@ import {
   type PersonnelOrderLinkedEvent,
   type PersonnelOrderDocumentReview,
   type PersonnelOrderDocumentItem,
+  type PersonnelOrderDeletedTombstone,
 } from "../_lib/personnelOrdersApi.client";
 import { getEmployees } from "@/app/directory/employees/_lib/api.client";
 import type { EmployeeDTO } from "@/app/directory/employees/_lib/types";
@@ -75,6 +81,7 @@ type Props = {
   hirePersonId?: number | null;
   /** `items` is retained as the legacy deep-link value for document corrections. */
   initialTab?: DrawerTab;
+  allowDeletedTombstone?: boolean;
 };
 
 const DOCUMENT_CORRECTION_STATUSES = new Set(["REGISTERED", "SIGNED"]);
@@ -104,6 +111,27 @@ function journalOrImportSourceTitle(storage: unknown): { title: string; locale: 
     title: typeof entry.title === "string" ? entry.title.trim() : "",
     locale: typeof entry.title_locale === "string" ? entry.title_locale : "",
   };
+}
+
+function DraftDeletionPanel({ orderId, onDeleted }: { orderId: number; onDeleted: () => void }) {
+  const [preview, setPreview] = React.useState<{ can_delete: boolean; planned_deletions: Array<{ table: string; count: number }>; retained: string[]; blocking_dependencies: Array<{ table: string; count: number }>; confirmation_phrase: string } | null>(null);
+  const [reason, setReason] = React.useState("");
+  const [phrase, setPhrase] = React.useState("");
+  const [error, setError] = React.useState<string | null>(null);
+  async function loadPreview() { setError(null); try { setPreview(await getPersonnelOrderDraftDeletionPreview(orderId)); } catch { setError("Не удалось подготовить безопасный предварительный просмотр удаления."); } }
+  async function remove() { if (!preview) return; setError(null); try { await deletePersonnelOrderDraft(orderId, { reason, confirmation_phrase: phrase }); onDeleted(); } catch { setError("Черновик не удалён: повторно проверьте зависимости и подтверждение."); } }
+  return <section data-testid="personnel-order-draft-delete" className="rounded-lg border border-red-200 p-3 dark:border-red-900/60"><h3 className="font-semibold">Удалить черновик</h3><p className="mt-1 text-sm text-zinc-500">Удаление доступно только после read-only проверки зависимостей.</p>{!preview ? <button type="button" className="mt-3 rounded border border-red-300 px-3 py-1.5 text-sm" onClick={() => void loadPreview()}>Проверить удаление</button> : <div className="mt-3 space-y-3"><p className="text-sm">Будет удалено: {preview.planned_deletions.map((entry) => `${entry.table} (${entry.count})`).join(", ") || "—"}</p><p className="text-sm">Сохранится: {preview.retained.join(", ")}</p>{preview.blocking_dependencies.length ? <p role="alert" className="text-sm text-red-700">Блокеры: {preview.blocking_dependencies.map((entry) => `${entry.table} (${entry.count})`).join(", ")}</p> : null}{preview.can_delete ? <><label className="block text-sm">Причина<textarea value={reason} onChange={(event) => setReason(event.target.value)} className="mt-1 block w-full rounded border p-2" /></label><label className="block text-sm">Введите: {preview.confirmation_phrase}<input value={phrase} onChange={(event) => setPhrase(event.target.value)} className="mt-1 block w-full rounded border p-2" /></label><button type="button" disabled={!reason.trim() || phrase !== preview.confirmation_phrase} className="rounded bg-red-700 px-3 py-1.5 text-sm text-white disabled:opacity-50" onClick={() => void remove()}>Удалить черновик</button></> : null}</div>}{error ? <p role="alert" className="mt-2 text-sm text-red-700">{error}</p> : null}</section>;
+}
+
+function HrHeadDeletionPanel({ orderId, orderNumber, onDeleted }: { orderId: number; orderNumber: string | null | undefined; onDeleted: () => void }) {
+  const [error, setError] = React.useState<string | null>(null);
+  async function remove() {
+    if (!window.confirm(`Удалить приказ ${orderNumber || `#${orderId}`}?`)) return;
+    setError(null);
+    try { await deletePersonnelOrderAsHrHead(orderId); onDeleted(); }
+    catch { setError("Не удалось удалить приказ из рабочего контура."); }
+  }
+  return <div data-testid="personnel-order-hr-head-delete" className="shrink-0"><button type="button" className="rounded bg-red-700 px-3 py-1.5 text-sm text-white" onClick={() => void remove()}>Удалить</button>{error ? <p role="alert" className="mt-2 text-sm text-red-700">{error}</p> : null}</div>;
 }
 
 function PersonnelOrderAcknowledgements({ detail, onChanged }: { detail: PersonnelOrderDetailResponse; onChanged: (next: PersonnelOrderDetailResponse) => void }) {
@@ -318,8 +346,11 @@ export default function PersonnelOrderDetailDrawer({
   onChanged,
   hirePersonId = null,
   initialTab,
+  allowDeletedTombstone = false,
 }: Props) {
+  const me = useCurrentUser();
   const [detail, setDetail] = React.useState<PersonnelOrderDetailResponse | null>(null);
+  const [tombstone, setTombstone] = React.useState<PersonnelOrderDeletedTombstone | null>(null);
   const [templatePreviewRefresh, setTemplatePreviewRefresh] = React.useState(0);
   const [editorial, setEditorial] = React.useState<PersonnelOrderEditorialState | null>(null);
   const [documentReview, setDocumentReview] = React.useState<PersonnelOrderDocumentReview | null>(null);
@@ -369,6 +400,7 @@ export default function PersonnelOrderDetailDrawer({
   const reload = React.useCallback(async (id: number) => {
     setLoading(true);
     setError(null);
+    setTombstone(null);
     try {
       const [body, editorialState, review] = await Promise.all([
         getPersonnelOrder(id), getPersonnelOrderEditorial(id).catch(() => null),
@@ -382,16 +414,21 @@ export default function PersonnelOrderDetailDrawer({
       setDetail(null);
       setEditorial(null);
       setDocumentReview(null);
+      if (allowDeletedTombstone && String(e).includes("PERSONNEL_ORDER_DELETED")) {
+        try { setTombstone(await getPersonnelOrderDeletedTombstone(id)); setError(null); return null; }
+        catch (tombstoneError) { setError(mapPersonnelOrdersApiError(tombstoneError, "Сведения об удалённом приказе недоступны.")); return null; }
+      }
       setError(mapPersonnelOrdersApiError(e, "Не удалось загрузить приказ."));
       return null;
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [allowDeletedTombstone]);
 
   React.useEffect(() => {
     if (!open || orderId == null) {
       setDetail(null);
+      setTombstone(null);
       setError(null);
       setToast(null);
       setHeaderRequisitesDraft(null);
@@ -451,6 +488,8 @@ export default function PersonnelOrderDetailDrawer({
 
   if (!open || orderId == null) return null;
 
+  if (tombstone) return <div className="fixed inset-0 z-50 flex justify-end" data-testid="personnel-order-deleted-tombstone"><button type="button" aria-label="Закрыть" className="absolute inset-0 bg-black/30" onClick={onClose}/><aside className="relative h-full w-full max-w-2xl overflow-y-auto bg-white p-6 shadow-xl"><h2 className="text-lg font-semibold">Приказ удалён из рабочего контура</h2><dl className="mt-4 grid gap-3 text-sm"><Field label="Номер" value={tombstone.order_number || "—"}/><Field label="Тип" value={personnelOrderTypeLabel(tombstone.order_type_code)}/><Field label="Прежний статус" value={tombstone.previous_status}/><Field label="Дата удаления" value={formatPersonnelOrderDateTime(tombstone.deleted_at)}/><Field label="Причина" value={tombstone.deletion_reason || "—"}/><Field label="Удалил" value={tombstone.deleted_by_name || "Не указан"}/><Field label="Сотрудники" value={tombstone.employees.join(", ") || "—"}/><Field label="Сохранённые применения шаблона" value={tombstone.template_application_count}/></dl><section className="mt-5"><h3 className="font-medium">Пункты</h3><ul className="mt-2 list-disc pl-5 text-sm">{tombstone.items.map(item=><li key={item.item_id}>{item.item_number}. {personnelOrderTypeLabel(item.item_type_code)} — {item.employee_name || "Сотрудник не указан"}</li>)}</ul></section><button type="button" onClick={onClose} className="mt-6 rounded border px-3 py-2">Закрыть</button></aside></div>;
+
   const order = detail?.order;
   const previewRequisites = order
     ? mergePersonnelOrderRequisitesForPreview(
@@ -465,6 +504,7 @@ export default function PersonnelOrderDetailDrawer({
   const linkedEventCount = detail?.events.length || 0;
   const applied = isPersonnelOrderApplied(linkedEventCount);
   const editable = order ? isWritablePersonnelOrder(order.status, order.is_archived) : false;
+  const isHrHead = ["ADMIN", "HR_HEAD"].includes(String(me?.role_code || "").trim().toUpperCase());
   const journalSource = journalOrImportSourceTitle(order?.storage_json);
   const sourceTitle = journalSource.title;
   const currentTitle = editorial?.order_blocks.find((block) => block.block_type === "title" && block.locale === orderLanguage)?.effective_text?.trim() || "—";
@@ -610,6 +650,8 @@ export default function PersonnelOrderDetailDrawer({
                   onChanged={handleChanged}
                   onToast={(message, kind = "success") => setToast({ message, kind })}
                 />
+                <div className="mt-3 flex flex-wrap items-start gap-2">{editable ? <button type="button" onClick={() => setActiveTab("data")} className="rounded border border-blue-300 px-3 py-1.5 text-sm text-blue-800">Редактировать</button> : null}{isHrHead ? <HrHeadDeletionPanel orderId={order.order_id} orderNumber={order.order_number} onDeleted={() => { onChanged?.(detail); onClose(); }} /> : null}</div>
+                {editable && !isHrHead ? <DraftDeletionPanel orderId={order.order_id} onDeleted={() => { onChanged?.(detail); onClose(); }} /> : null}
               </section>
 
               <section>

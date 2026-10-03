@@ -27,6 +27,7 @@ from app.services.personnel_orders_query_service import (
     get_personnel_order,
     personnel_orders_available,
 )
+from app.services.personnel_orders_command_service import require_active_personnel_order
 
 ARCHIVABLE_ORDER_STATUSES = {
     ORDER_STATUS_REGISTERED,
@@ -165,6 +166,7 @@ def archive_personnel_order(
     )
 
     with engine.begin() as conn:
+        require_active_personnel_order(conn, order_id, lock=True)
         scope_tokens = lock_personnel_order_evidence_scopes_tx(conn, order_ids=[order_id])
         order = _fetch_order_row_for_archive(conn, int(order_id))
         status = str(order["status"])
@@ -233,6 +235,7 @@ def restore_personnel_order(
     _require_available()
 
     with engine.begin() as conn:
+        require_active_personnel_order(conn, order_id, lock=True)
         scope_tokens = lock_personnel_order_evidence_scopes_tx(conn, order_ids=[order_id])
         order = _fetch_order_row_for_archive(conn, int(order_id))
         status = str(order["status"])

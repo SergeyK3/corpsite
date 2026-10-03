@@ -26,6 +26,7 @@ from app.services.personnel_orders_command_service import (
     PersonnelOrderConflictError,
     PersonnelOrderItemNotFoundError,
     _fetch_order_row,
+    require_active_personnel_order,
 )
 from app.services.personnel_orders_query_service import (
     PersonnelOrderNotFoundError,
@@ -706,6 +707,7 @@ def void_personnel_order(*, order_id: int, void_reason: str, voided_by: int) -> 
     normalized_reason = _normalize_void_reason(void_reason)
 
     with engine.begin() as conn:
+        require_active_personnel_order(conn, order_id, lock=True)
         scope_tokens = lock_personnel_order_evidence_scopes_tx(conn, order_ids=[order_id])
         order = _fetch_order_row(conn, order_id)
         assert_order_not_archived(order)
@@ -795,6 +797,7 @@ def void_personnel_order_item(
     normalized_reason = _normalize_void_reason(void_reason)
 
     with engine.begin() as conn:
+        require_active_personnel_order(conn, order_id, lock=True)
         scope_tokens = lock_personnel_order_evidence_scopes_tx(conn, order_ids=[order_id])
         order = _fetch_order_row(conn, order_id)
         assert_order_not_archived(order)

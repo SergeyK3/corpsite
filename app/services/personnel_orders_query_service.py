@@ -176,11 +176,12 @@ def _build_list_filters(
     employee_id: Optional[int],
     org_unit_id: Optional[int],
     q: Optional[str],
+    record_quality: Optional[str] = "WORKING",
     reconstruction_quality: Optional[str],
     include_closed: bool = False,
     include_archived: bool = False,
 ) -> tuple[list[str], Dict[str, Any]]:
-    where_parts = ["TRUE"]
+    where_parts = ["po.deleted_at IS NULL"]
     params: Dict[str, Any] = {}
 
     effective_closed = bool(include_closed) or bool(include_archived)
@@ -246,6 +247,18 @@ def _build_list_filters(
     if q:
         where_parts.append("po.order_number ILIKE :q_pattern")
         params["q_pattern"] = f"%{str(q).strip()}%"
+
+    normalized_record_quality = str(record_quality or "WORKING").strip().upper()
+    technical = """(COALESCE(po.storage_json ->> 'technical_record', 'false') = 'true'
+        AND UPPER(COALESCE(po.storage_json ->> 'record_quality', '')) IN ('TECHNICAL', 'TECHNICAL_RECORD'))"""
+    legacy = """(UPPER(COALESCE(po.order_number, '')) LIKE 'PERSONNEL-IMPORT-%'
+        OR UPPER(COALESCE(po.order_number, '')) LIKE 'CSV-PILOT-%')"""
+    if normalized_record_quality == "WORKING":
+        where_parts.append(f"NOT {technical} AND NOT {legacy}")
+    elif normalized_record_quality == "TECHNICAL":
+        where_parts.append(f"({technical} OR (NOT {technical} AND {legacy}))")
+    elif normalized_record_quality != "ALL":
+        raise PersonnelOrderValidationError(f"Invalid record_quality filter: {record_quality}")
 
     if reconstruction_quality:
         normalized_quality = str(reconstruction_quality).strip().upper()
@@ -439,6 +452,7 @@ def list_personnel_orders(
     employee_id: Optional[int] = None,
     org_unit_id: Optional[int] = None,
     q: Optional[str] = None,
+    record_quality: Optional[str] = "WORKING",
     reconstruction_quality: Optional[str] = None,
     include_closed: bool = False,
     include_archived: bool = False,
@@ -456,6 +470,7 @@ def list_personnel_orders(
         employee_id=employee_id,
         org_unit_id=org_unit_id,
         q=q,
+        record_quality=record_quality,
         reconstruction_quality=reconstruction_quality,
         include_closed=bool(include_closed),
         include_archived=bool(include_archived),
@@ -594,6 +609,7 @@ def get_personnel_order(order_id: int) -> Dict[str, Any]:
                 FROM public.personnel_orders po
                 LEFT JOIN public.users arch_u ON arch_u.user_id = po.archived_by
                 WHERE po.order_id = :order_id
+                  AND po.deleted_at IS NULL
                 """
             ),
             {"order_id": int(order_id)},

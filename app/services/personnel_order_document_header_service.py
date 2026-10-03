@@ -8,6 +8,7 @@ from app.db.engine import engine
 from app.db.models.personnel_orders import LIFECYCLE_AUDIT_ACTION_DOCUMENT_REOPENED, LIFECYCLE_AUDIT_ACTION_HEADER_UPDATED
 from app.services.personnel_order_lifecycle_audit_service import append_personnel_order_lifecycle_audit
 from app.services.personnel_orders_query_service import PersonnelOrderNotFoundError
+from app.services.personnel_orders_command_service import require_active_personnel_order
 from app.services.personnel_order_document_review_service import PersonnelOrderDocumentReviewConflictError, get_document_review
 
 def _number(value: str) -> str:
@@ -22,6 +23,7 @@ def duplicate_preview(*, order_number: str, order_date: Optional[date], order_id
 
 def patch_document_header(*, order_id:int, expected_document_revision:int, order_number:str, order_date:Optional[date], source_title:Optional[str], source_title_locale:Optional[str], reason_code:Optional[str], reason_text:Optional[str], actor_user_id:int)->dict[str,Any]:
     with engine.begin() as conn:
+        require_active_personnel_order(conn, order_id, lock=True)
         order=conn.execute(text("SELECT * FROM personnel_orders WHERE order_id=:id FOR UPDATE"),{"id":order_id}).mappings().one_or_none()
         if not order: raise PersonnelOrderNotFoundError(f"Personnel order {order_id} not found.")
         if int(order["document_revision"])!=expected_document_revision: raise PersonnelOrderDocumentReviewConflictError("DOCUMENT_REVISION_CONFLICT")

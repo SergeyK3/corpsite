@@ -6,6 +6,7 @@ from datetime import date
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from pydantic import BaseModel, Field
 
 from app.auth import get_current_user
 from app.directory.common import as_http500, call_service
@@ -43,7 +44,7 @@ from app.directory.personnel_orders_schemas import (
     PersonnelOrderTemplateApplicationPreviewOut,
     PersonnelOrderVoidIn,
 )
-from app.directory.rbac import require_personnel_admin_or_403
+from app.directory.rbac import compute_scope, require_personnel_admin_or_403, require_personnel_visibility_or_403
 from app.person_photos.domain.errors import HirePhotoNotReadyError
 from app.services.personnel_order_archive_guard import PersonnelOrderArchivedError
 from app.services.personnel_orders_apply_service import (
@@ -68,9 +69,9 @@ from app.services.personnel_orders_void_service import (
 )
 from app.services.personnel_orders_command_service import (
     PersonnelOrderConflictError,
+    PersonnelOrderDeletedError,
     PersonnelOrderItemNotFoundError,
     create_personnel_order_draft,
-    delete_personnel_order_draft,
     delete_personnel_order_item,
     create_personnel_order_item,
     mark_personnel_order_ready_for_signature,
@@ -79,6 +80,10 @@ from app.services.personnel_orders_command_service import (
     update_personnel_order_item,
     upsert_personnel_order_localized_text,
 )
+from app.services import personnel_order_draft_deletion_service as draft_deletion
+from app.services.personnel_order_quality_control_service import list_personnel_order_quality_issues
+from app.services.personnel_order_tombstone_service import get_deleted_personnel_order_tombstone
+from app.security.admin_permissions import has_technical_personnel_order_cleanup_permission
 from app.services.personnel_orders_editorial_service import (
     PersonnelOrderEditorialBlockNotFoundError,
     PersonnelOrderEditorialConflictError,
@@ -124,6 +129,57 @@ from app.services.personnel_order_acknowledgement_service import (
 router = APIRouter()
 
 
+class PersonnelOrderDraftDeleteIn(BaseModel):
+    reason: str = Field(min_length=3, max_length=1000)
+    confirmation_phrase: str = Field(min_length=1, max_length=200)
+
+
+def _require_hr_head_order_delete_or_403(user: Dict[str, Any]) -> None:
+    """The exceptional all-status physical delete is reserved for ADMIN/HR_HEAD."""
+    require_personnel_admin_or_403(user)
+    if str(user.get("role_code") or "").upper() not in {"ADMIN", "HR_HEAD"}:
+        raise HTTPException(status_code=403, detail="ADMIN or HR_HEAD access required.")
+
+
+def _draft_order_scope_or_403(user: Dict[str, Any]) -> list[int] | None:
+    """Resolve the effective HR visibility scope for a destructive draft action."""
+    scope = compute_scope(int(user["user_id"]), user)
+    require_personnel_visibility_or_403(user, scope)
+    return None if scope.get("scope_unit_ids") is None else list(scope["scope_unit_ids"])
+
+
+def _require_system_quality_control_or_403(user: Dict[str, Any]) -> None:
+    # Quality control is a system-administrator read model, not a second HR editor.
+    if not bool(user.get("is_system_admin")) or not bool(user.get("has_sysadmin_api")):
+        raise HTTPException(status_code=403, detail="System administrator access required.")
+
+
+def _require_deleted_order_tombstone_access_or_403(user: Dict[str, Any]) -> None:
+    if (not bool(user.get("is_system_admin")) or not bool(user.get("has_sysadmin_api"))
+            or not has_technical_personnel_order_cleanup_permission(int(user["user_id"]))):
+        raise HTTPException(status_code=403, detail="System administrator cleanup access required.")
+
+
+@router.get("/personnel-orders/quality-control")
+def personnel_order_quality_control_route(
+    limit: int = Query(25, ge=1, le=50),
+    offset: int = Query(0, ge=0),
+    reason: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
+    order_type_code: Optional[str] = Query(None),
+    q: Optional[str] = Query(None),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Live read-only list of strict personnel-order quality issues."""
+    _require_system_quality_control_or_403(user)
+    try:
+        return list_personnel_order_quality_issues(limit=limit, offset=offset, reason=reason, status=status, order_type_code=order_type_code, q=q)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except Exception as exc:
+        raise as_http500(exc)
+
+
 @router.get("/personnel-orders/templates/{item_type_code}/published-title", response_model=PersonnelOrderPublishedTemplateTitleOut)
 def get_personnel_order_published_template_title(item_type_code: str, _user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
     require_personnel_admin_or_403(_user)
@@ -162,6 +218,11 @@ def _order_archived_http(exc: PersonnelOrderArchivedError) -> HTTPException:
 
 
 def _conflict_http409(exc: PersonnelOrderConflictError) -> HTTPException:
+    if isinstance(exc, PersonnelOrderDeletedError):
+        return HTTPException(
+            status_code=409,
+            detail={"code": exc.code, "message": exc.message},
+        )
     return HTTPException(status_code=409, detail=str(exc))
 
 
@@ -169,6 +230,13 @@ def _acknowledgement_http(exc: PersonnelOrderAcknowledgementError) -> HTTPExcept
     code = str(exc)
     status = 422 if code == "ACKNOWLEDGEMENT_DATE_OUT_OF_RANGE" else 409 if code == "ACKNOWLEDGEMENT_SCHEMA_UNAVAILABLE" else 422
     return HTTPException(status_code=status, detail={"code": code, "message": code})
+
+
+def _deleted_order_http(exc: PersonnelOrderDeletedError) -> HTTPException:
+    return HTTPException(
+        status_code=409,
+        detail={"code": exc.code, "message": exc.message},
+    )
 
 
 def _cancel_error_http(exc: PersonnelOrderCancelError) -> HTTPException:
@@ -210,6 +278,7 @@ def list_personnel_orders_route(
     employee_id: Optional[int] = Query(default=None, ge=1),
     org_unit_id: Optional[int] = Query(default=None, ge=1),
     q: Optional[str] = Query(default=None, max_length=200),
+    record_quality: Optional[str] = Query(default="WORKING"),
     reconstruction_quality: Optional[str] = Query(default=None),
     include_closed: bool = Query(
         default=False,
@@ -235,6 +304,7 @@ def list_personnel_orders_route(
             employee_id=employee_id,
             org_unit_id=org_unit_id,
             q=q,
+            record_quality=record_quality,
             reconstruction_quality=reconstruction_quality,
             include_closed=include_closed,
             include_archived=include_archived,
@@ -323,6 +393,19 @@ def get_personnel_order_route(
         raise as_http500(exc)
 
 
+@router.get("/personnel-orders/{order_id}/deleted-tombstone")
+def get_deleted_personnel_order_tombstone_route(
+    order_id: int = Path(..., ge=1),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Admin-only, read-only data retained after an order soft-delete."""
+    _require_deleted_order_tombstone_access_or_403(user)
+    try:
+        return get_deleted_personnel_order_tombstone(order_id)
+    except PersonnelOrderNotFoundError as exc:
+        raise HTTPException(status_code=404, detail={"code": "PERSONNEL_ORDER_TOMBSTONE_NOT_FOUND", "message": str(exc)}) from exc
+
+
 @router.patch("/personnel-orders/{order_id}", response_model=PersonnelOrderDetailResponse)
 def update_personnel_order_route(
     payload: PersonnelOrderUpdateIn,
@@ -361,21 +444,52 @@ def update_personnel_order_route(
         raise as_http500(exc)
 
 
-@router.delete("/personnel-orders/{order_id}", status_code=204)
-def delete_personnel_order_draft_route(
+@router.get("/personnel-orders/{order_id}/draft-deletion-preview")
+def personnel_order_draft_deletion_preview_route(
     order_id: int = Path(..., ge=1),
     user: Dict[str, Any] = Depends(get_current_user),
-) -> None:
-    """Physically delete a never-applied DRAFT personnel order."""
+) -> Dict[str, Any]:
+    """Read-only, fail-closed dependency preview for one DRAFT order."""
     try:
         require_personnel_admin_or_403(user)
-        call_service(delete_personnel_order_draft, order_id=order_id)
-    except PersonnelOrderNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
-    except PersonnelOrderArchivedError as exc:
-        raise _order_archived_http(exc)
-    except PersonnelOrderConflictError as exc:
-        raise _conflict_http409(exc)
+        return draft_deletion.preview(order_id, scope_unit_ids=_draft_order_scope_or_403(user))
+    except draft_deletion.DraftDeletionError as exc:
+        raise HTTPException(exc.status_code, detail={"code": exc.code, "message": exc.message}) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise as_http500(exc)
+
+
+@router.delete("/personnel-orders/{order_id}")
+def delete_personnel_order_draft_route(
+    payload: PersonnelOrderDraftDeleteIn,
+    order_id: int = Path(..., ge=1),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Atomically delete one explicitly confirmed, isolated DRAFT order."""
+    try:
+        require_personnel_admin_or_403(user)
+        return draft_deletion.execute(order_id=order_id, actor_user_id=int(user["user_id"]), reason=payload.reason, confirmation_phrase=payload.confirmation_phrase, scope_unit_ids=_draft_order_scope_or_403(user))
+    except draft_deletion.DraftDeletionError as exc:
+        raise HTTPException(exc.status_code, detail={"code": exc.code, "message": exc.message}) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise as_http500(exc)
+
+
+@router.delete("/personnel-orders/{order_id}/hr-head")
+def delete_personnel_order_hr_head_route(
+    order_id: int = Path(..., ge=1),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    """Backward-compatible ADMIN/HR_HEAD all-status physical deletion."""
+    try:
+        _require_hr_head_order_delete_or_403(user)
+        return draft_deletion.execute_physical_delete(order_id=order_id)
+    except draft_deletion.DraftDeletionError as exc:
+        raise HTTPException(exc.status_code, detail={"code": exc.code, "message": exc.message}) from exc
     except HTTPException:
         raise
     except Exception as exc:
@@ -556,6 +670,8 @@ def preview_personnel_order_template_application_route(order_id: int = Path(...,
     try:
         require_personnel_admin_or_403(user)
         return call_service(preview_template_application, order_id=order_id)
+    except PersonnelOrderDeletedError as exc:
+        raise _deleted_order_http(exc)
     except TemplateApplicationError as exc:
         raise HTTPException(status_code=409 if exc.conflict else 422, detail=str(exc))
 
@@ -565,6 +681,8 @@ def apply_personnel_order_template_application_route(payload: PersonnelOrderTemp
     try:
         require_personnel_admin_or_403(user)
         return call_service(apply_template_application, order_id=order_id, actor_user_id=_require_user_id(user), expected_document_revision=payload.expected_document_revision, confirm_replace_overrides=payload.confirm_replace_overrides, confirm_reapply=payload.confirm_reapply)
+    except PersonnelOrderDeletedError as exc:
+        raise _deleted_order_http(exc)
     except TemplateApplicationError as exc:
         raise HTTPException(status_code=409 if exc.conflict else 422, detail=str(exc))
 
@@ -738,6 +856,8 @@ def record_personnel_order_acknowledgement_route(
         require_personnel_admin_or_403(user)
         return call_service(record_acknowledgement, order_id=order_id, employee_id=payload.employee_id,
                             acknowledged_on=payload.acknowledged_on, actor_user_id=_require_user_id(user))
+    except PersonnelOrderDeletedError as exc:
+        raise _deleted_order_http(exc)
     except PersonnelOrderNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     except PersonnelOrderAcknowledgementError as exc:
@@ -758,6 +878,8 @@ def clear_personnel_order_acknowledgement_route(
         require_personnel_admin_or_403(user)
         return call_service(clear_acknowledgement, order_id=order_id, employee_id=payload.employee_id,
                             actor_user_id=_require_user_id(user))
+    except PersonnelOrderDeletedError as exc:
+        raise _deleted_order_http(exc)
     except PersonnelOrderAcknowledgementError as exc:
         raise _acknowledgement_http(exc)
     except HTTPException:
@@ -873,6 +995,8 @@ def _document_review_mutation(order_id: int, payload: Any, action: str, user: Di
         return call_service(mutate_document_review, order_id=order_id, action=action,
             expected_document_revision=payload.expected_document_revision, reason_code=payload.reason_code,
             note=payload.note, actor_user_id=_require_user_id(user))
+    except PersonnelOrderDeletedError as exc:
+        raise _deleted_order_http(exc)
     except PersonnelOrderNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
     except PersonnelOrderDocumentReviewConflictError as exc:
@@ -909,6 +1033,8 @@ def patch_personnel_order_document_header_route(payload: PersonnelOrderDocumentH
     try:
         require_personnel_admin_or_403(user)
         return call_service(patch_document_header, order_id=order_id, expected_document_revision=payload.expected_document_revision, order_number=payload.order_number, order_date=payload.order_date, source_title=payload.source_title, source_title_locale=payload.source_title_locale, reason_code=payload.reason_code, reason_text=payload.reason_text, actor_user_id=_require_user_id(user))
+    except PersonnelOrderDeletedError as exc:
+        raise _deleted_order_http(exc)
     except PersonnelOrderDocumentReviewConflictError as exc:
         raise HTTPException(status_code=409, detail={"code":str(exc)})
     except ValueError as exc:
@@ -919,6 +1045,7 @@ def patch_personnel_order_document_item_route(payload: PersonnelOrderDocumentIte
     try:
         require_personnel_admin_or_403(user)
         return call_service(patch_document_item, order_id=order_id,item_id=item_id,expected_document_revision=payload.expected_document_revision,item_type_code=payload.item_type_code,employee_id=payload.employee_id,effective_date=payload.effective_date,document_subject_context=payload.document_subject_context.model_dump() if payload.document_subject_context else None,reason_code=payload.reason_code,reason_text=payload.reason_text,actor_user_id=_require_user_id(user))
+    except PersonnelOrderDeletedError as exc: raise _deleted_order_http(exc)
     except PersonnelOrderDocumentReviewConflictError as exc: raise HTTPException(status_code=409,detail={"code":str(exc)})
     except ValueError as exc: raise HTTPException(status_code=422,detail={"code":str(exc)})
 
@@ -947,6 +1074,8 @@ def cancel_personnel_order_route(
             reason_text=payload.reason_text,
             actor_user_id=_require_user_id(user),
         )
+    except PersonnelOrderDeletedError as exc:
+        raise _deleted_order_http(exc)
     except PersonnelOrderNotFoundError as exc:
         raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": str(exc)})
     except PersonnelOrderAlreadyVoidedError as exc:
@@ -981,6 +1110,8 @@ def archive_personnel_order_route(
             reason_text=payload.reason_text,
             actor_user_id=_require_user_id(user),
         )
+    except PersonnelOrderDeletedError as exc:
+        raise _deleted_order_http(exc)
     except PersonnelOrderNotFoundError as exc:
         raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": str(exc)})
     except PersonnelOrderArchiveError as exc:
@@ -1008,6 +1139,8 @@ def restore_personnel_order_route(
             order_id=order_id,
             actor_user_id=_require_user_id(user),
         )
+    except PersonnelOrderDeletedError as exc:
+        raise _deleted_order_http(exc)
     except PersonnelOrderNotFoundError as exc:
         raise HTTPException(status_code=404, detail={"code": "ORDER_NOT_FOUND", "message": str(exc)})
     except PersonnelOrderArchiveError as exc:

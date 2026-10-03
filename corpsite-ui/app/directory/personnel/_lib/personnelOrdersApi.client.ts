@@ -176,6 +176,15 @@ export type PersonnelOrderDetailResponse = {
   acknowledgements?: PersonnelOrderAcknowledgement[];
 };
 
+export type PersonnelOrderDeletedTombstone = {
+  order_id: number; order_number?: string | null; order_type_code: string;
+  previous_status: string; deleted_at: string; deletion_reason?: string | null;
+  deleted_by_user_id?: number | null; deleted_by_name?: string | null;
+  deletion_mode: string; template_application_count: number;
+  employees: string[];
+  items: Array<{ item_id: number; item_number: number; item_type_code: string; item_status: string; employee_id?: number | null; employee_name?: string | null }>;
+};
+
 export type PersonnelOrderDocumentReview = {
   state: "NEEDS_REVIEW" | "CONFIRMED";
   document_revision: number;
@@ -253,6 +262,7 @@ export type PersonnelOrdersFilters = {
   org_unit_id?: number;
   order_id?: number;
   q?: string;
+  record_quality?: "WORKING" | "TECHNICAL" | "ALL";
   reconstruction_quality?: "NEEDS_DOCX_REVIEW" | "RECONSTRUCTED_PILOT";
   include_closed?: boolean;
   limit?: number;
@@ -378,6 +388,12 @@ function parseErrorBody(status: number, body: string, fallback: string): Error {
       if (typeof parsed.detail === "string" && parsed.detail.trim()) {
         return new Error(parsed.detail.trim());
       }
+      if (parsed.detail && typeof parsed.detail === "object") {
+        const detail = parsed.detail as { code?: unknown; message?: unknown };
+        if (typeof detail.code === "string") {
+          return new Error(`${detail.code}: ${typeof detail.message === "string" ? detail.message : ""}`.trim());
+        }
+      }
       if (Array.isArray(parsed.detail)) {
         const parts = parsed.detail
           .map((item) => {
@@ -445,6 +461,7 @@ export function buildPersonnelOrdersQueryParams(
     params.set("order_id", String(filters.order_id));
   }
   if (includeClientSearch && filters.q?.trim()) params.set("q", filters.q.trim());
+  if (filters.record_quality) params.set("record_quality", filters.record_quality);
   if (filters.reconstruction_quality) params.set("reconstruction_quality", filters.reconstruction_quality);
   if (filters.include_closed) params.set("include_closed", "true");
   if (filters.limit != null && filters.limit > 0) params.set("limit", String(filters.limit));
@@ -467,6 +484,9 @@ export function parsePersonnelOrdersFilters(searchParams: URLSearchParams): Pers
     org_unit_id: orgFilters.org_unit_id,
     order_id: Number.isFinite(orderId) && orderId > 0 ? orderId : undefined,
     q: searchParams.get("q") || undefined,
+    record_quality: searchParams.get("record_quality") === "TECHNICAL" || searchParams.get("record_quality") === "ALL"
+      ? searchParams.get("record_quality") as "TECHNICAL" | "ALL"
+      : "WORKING",
     reconstruction_quality:
       searchParams.get("reconstruction_quality") === "NEEDS_DOCX_REVIEW"
       || searchParams.get("reconstruction_quality") === "RECONSTRUCTED_PILOT"
@@ -516,6 +536,12 @@ export async function listPersonnelOrders(
 export async function getPersonnelOrder(orderId: number): Promise<PersonnelOrderDetailResponse> {
   return requestJson<PersonnelOrderDetailResponse>("GET", `/directory/personnel-orders/${orderId}`, {
     fallback: "Не удалось загрузить приказ.",
+  });
+}
+
+export async function getPersonnelOrderDeletedTombstone(orderId: number): Promise<PersonnelOrderDeletedTombstone> {
+  return requestJson<PersonnelOrderDeletedTombstone>("GET", `/directory/personnel-orders/${orderId}/deleted-tombstone`, {
+    fallback: "Не удалось загрузить сведения об удалённом приказе.",
   });
 }
 
@@ -739,6 +765,33 @@ export async function deletePersonnelOrderItem(
     `/directory/personnel-orders/${orderId}/items/${itemId}`,
     { fallback: "Не удалось удалить пункт приказа." },
   );
+}
+
+export type PersonnelOrderDraftDeletionPreview = {
+  can_delete: boolean;
+  confirmation_phrase: string;
+  planned_deletions: Array<{ table: string; count: number }>;
+  retained: string[];
+  blocking_dependencies: Array<{ table: string; count: number }>;
+};
+
+export async function getPersonnelOrderDraftDeletionPreview(orderId: number): Promise<PersonnelOrderDraftDeletionPreview> {
+  return requestJson<PersonnelOrderDraftDeletionPreview>("GET", `/directory/personnel-orders/${orderId}/draft-deletion-preview`);
+}
+
+export async function deletePersonnelOrderDraft(orderId: number, payload: { reason: string; confirmation_phrase: string }): Promise<{ status: string; order_id: number }> {
+  return requestJson<{ status: string; order_id: number }>("DELETE", `/directory/personnel-orders/${orderId}`, { body: payload });
+}
+
+export async function deletePersonnelOrderAsHrHead(orderId: number): Promise<{ status: string; order_id: number }> {
+  const path = `/directory/personnel-orders/${orderId}/hr-head`;
+  const res = await fetch(resolveApiUrl(path), { method: "DELETE", headers: authHeaders(), cache: "no-store" });
+  if (res.ok) return res.json() as Promise<{ status: string; order_id: number }>;
+  if (res.status === 404) {
+    const detail = await fetch(resolveApiUrl(`/directory/personnel-orders/${orderId}`), { headers: authHeaders(), cache: "no-store" });
+    if (detail.status === 404) return { status: "ALREADY_DELETED", order_id: orderId };
+  }
+  throw parseErrorBody(res.status, await res.text().catch(() => ""), "Не удалось удалить приказ.");
 }
 
 export async function markPersonnelOrderReadyForSignature(

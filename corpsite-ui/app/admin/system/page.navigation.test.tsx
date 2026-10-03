@@ -11,6 +11,7 @@ const push = vi.fn();
 vi.mock("next/navigation", () => ({
   usePathname: () => "/admin/system",
   useRouter: () => ({ replace, push }),
+  useSearchParams: () => new URLSearchParams(""),
 }));
 vi.mock("@/lib/auth", () => ({
   isAuthed: () => true,
@@ -51,14 +52,13 @@ describe("system admin page navigation", () => {
 
     const sections = await screen.findByRole("navigation", { name: "Разделы кабинета" });
     const lifecycle = within(sections).getByRole("link", { name: "Жизненный цикл" });
-    const testPersonnel = within(sections).getByRole("link", { name: "Очистка данных" });
+    const testPersonnel = within(sections).getByRole("button", { name: "Очистка данных" });
     expect(lifecycle).toHaveAttribute("href", "/admin/system/personnel-lifecycle");
-    expect(testPersonnel).toHaveAttribute("href", "/admin/system/data-cleanup");
     expect(lifecycle.closest("nav")).toHaveAttribute("aria-label", "Разделы кабинета");
     expect(testPersonnel.closest("nav")).toBe(lifecycle.closest("nav"));
     expect(screen.queryByText("Жизненный цикл персонала →")).not.toBeInTheDocument();
     expect(screen.queryByText("Управление тестовыми данными персонала →")).not.toBeInTheDocument();
-    expect(sections).toHaveClass("flex-wrap", "xl:flex-nowrap");
+    expect(sections).toHaveClass("flex-wrap");
     expect(lifecycle).toHaveClass("whitespace-nowrap");
     expect(testPersonnel).toHaveClass("whitespace-nowrap");
 
@@ -84,7 +84,7 @@ describe("system admin page navigation", () => {
     );
 
     const sections = await screen.findByRole("navigation", { name: "Разделы кабинета" });
-    expect(within(sections).queryByRole("link", { name: "Очистка данных" })).not.toBeInTheDocument();
+    expect(within(sections).queryByRole("button", { name: "Очистка данных" })).not.toBeInTheDocument();
     expect(within(sections).getByRole("link", { name: "Жизненный цикл" })).toHaveAttribute(
       "href",
       "/admin/system/personnel-lifecycle",

@@ -8,6 +8,7 @@ from sqlalchemy import text
 
 from app.db.engine import engine
 from app.services.personnel_orders_query_service import PersonnelOrderNotFoundError
+from app.services.personnel_orders_command_service import require_active_personnel_order
 
 TABLE = "personnel_order_acknowledgement_events"
 
@@ -67,6 +68,7 @@ def list_current(order_id: int) -> dict[str, Any]:
 
 def record(order_id: int, employee_id: int, acknowledged_on: date, actor_user_id: int) -> dict[str, Any]:
     with engine.begin() as conn:
+        require_active_personnel_order(conn, order_id, lock=True)
         order = conn.execute(text("SELECT order_date FROM public.personnel_orders WHERE order_id=:id"), {"id": order_id}).mappings().first()
         if order is None: raise PersonnelOrderNotFoundError(f"Personnel order {order_id} not found.")
         if not _available(conn): raise PersonnelOrderAcknowledgementError("ACKNOWLEDGEMENT_SCHEMA_UNAVAILABLE")
@@ -92,6 +94,7 @@ def record(order_id: int, employee_id: int, acknowledged_on: date, actor_user_id
 
 def clear(order_id: int, employee_id: int, actor_user_id: int) -> dict[str, Any]:
     with engine.begin() as conn:
+        require_active_personnel_order(conn, order_id, lock=True)
         if not _available(conn): raise PersonnelOrderAcknowledgementError("ACKNOWLEDGEMENT_SCHEMA_UNAVAILABLE")
         if not _active_subject(conn, order_id, employee_id): raise PersonnelOrderAcknowledgementError("ACKNOWLEDGEMENT_EMPLOYEE_NOT_IN_ACTIVE_ORDER")
         previous = _current(conn, order_id, employee_id)

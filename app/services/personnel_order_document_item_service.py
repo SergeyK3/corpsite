@@ -13,6 +13,7 @@ from app.services.personnel_order_document_review_service import PersonnelOrderD
 from app.services.personnel_order_lifecycle_audit_service import append_personnel_order_lifecycle_audit
 from app.services.personnel_orders_editorial.generation_service import generate_editorial
 from app.services.personnel_orders_query_service import PersonnelOrderNotFoundError
+from app.services.personnel_orders_command_service import require_active_personnel_order
 
 
 def _safe_context(payload: Mapping[str, Any], context: Optional[Mapping[str, Any]]) -> dict[str, Any]:
@@ -57,6 +58,7 @@ def list_document_items(*, order_id: int) -> dict[str, Any]:
 
 def patch_document_item(*, order_id: int, item_id: int, expected_document_revision: int, item_type_code: str, employee_id: Optional[int], effective_date: Optional[date], document_subject_context: Optional[Mapping[str, Any]], reason_code: Optional[str], reason_text: Optional[str], actor_user_id: int) -> dict[str, Any]:
     with engine.begin() as c:
+        require_active_personnel_order(c, order_id, lock=True)
         order = c.execute(text("SELECT order_id,status,order_type_code,document_revision FROM personnel_orders WHERE order_id=:id FOR UPDATE"), {"id": order_id}).mappings().one_or_none()
         if not order: raise PersonnelOrderNotFoundError(f"Personnel order {order_id} not found.")
         if int(order["document_revision"]) != expected_document_revision: raise PersonnelOrderDocumentReviewConflictError("DOCUMENT_REVISION_CONFLICT")

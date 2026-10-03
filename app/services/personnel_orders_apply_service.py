@@ -38,6 +38,7 @@ from app.services.personnel_order_hire_apply_readiness import (
 from app.services.personnel_orders_command_service import (
     PersonnelOrderConflictError,
     _fetch_order_row,
+    require_active_personnel_order,
 )
 from app.services.personnel_orders_query_service import (
     PersonnelOrderNotFoundError,
@@ -817,6 +818,7 @@ def apply_personnel_order_in_conn(
     complete_linked_application: bool = True,
 ) -> None:
     """Apply a signed/registered personnel order within caller-owned transaction."""
+    require_active_personnel_order(conn, order_id, lock=True)
     scope_tokens = lock_personnel_order_evidence_scopes_tx(conn, order_ids=[order_id])
     order = _fetch_order_row(conn, order_id)
     assert_order_not_archived(order)

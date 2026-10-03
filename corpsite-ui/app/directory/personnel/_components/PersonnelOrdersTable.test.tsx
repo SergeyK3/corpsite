@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PersonnelOrdersTable } from "./PersonnelOrdersTable";
@@ -79,5 +79,15 @@ describe("PersonnelOrdersTable", () => {
       />,
     );
     expect(screen.getByTestId("personnel-order-archived-badge")).toHaveTextContent("📦 Архив");
+  });
+
+  it("renders the HR_HEAD delete action beside open and does not row-open on delete", () => {
+    const onRowClick = vi.fn();
+    const onDelete = vi.fn();
+    render(<PersonnelOrdersTable items={[sampleRow]} onRowClick={onRowClick} onDelete={onDelete} />);
+    fireEvent.click(screen.getByTestId("personnel-order-delete-101"));
+    expect(onDelete).toHaveBeenCalledWith(sampleRow);
+    expect(onRowClick).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Удалить" })).toBeInTheDocument();
   });
 });
