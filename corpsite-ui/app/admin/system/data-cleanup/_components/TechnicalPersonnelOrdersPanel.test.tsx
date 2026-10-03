@@ -6,62 +6,63 @@ import { apiFetchJson } from "@/lib/api";
 
 vi.mock("@/lib/api", () => ({ apiFetchJson: vi.fn() }));
 
-const legacy = { order_id: 11, order_number: "PERSONNEL-IMPORT-2026-11", order_date: "2026-01-01", order_type_code: "HIRE", status: "SIGNED", classification: "LEGACY_TECHNICAL_CANDIDATE", employees: ["Тест"] };
-const confirmed = { ...legacy, order_id: 12, classification: "CONFIRMED_TECHNICAL" };
-const provenancePreview = { classification: "LEGACY_TECHNICAL_CANDIDATE", can_delete: false, can_confirm_provenance: true, confirmation_phrase: "CONFIRM TECHNICAL ORDER 11", planned_deletions: [{ table: "personnel_orders", count: 1 }], blocking_dependencies: [] };
-const blockedPreview = { classification: "CONFIRMED_TECHNICAL", can_delete: false, confirmation_phrase: "DELETE TECHNICAL ORDER 12", planned_deletions: [], blocking_dependencies: [{ table: "employee_events", count: 1 }] };
-const isolatedPreview = { classification: "CONFIRMED_TECHNICAL", can_delete: true, confirmation_phrase: "DELETE TECHNICAL ORDER 12", planned_deletions: [{ table: "personnel_orders", count: 1 }], blocking_dependencies: [] };
-
-function search() { return screen.getByRole("button", { name: "Найти" }); }
+const confirmed = { order_id: 12, order_number: "TECH-12", order_date: "2026-01-02", order_type_code: "HIRE", status: "DRAFT", classification: "CONFIRMED_TECHNICAL", employees: ["Тест"], employee_details: [] };
+const legacy = { order_id: 11, order_number: "PERSONNEL-IMPORT-2026-11", order_date: "2026-01-01", order_type_code: "HIRE", status: "SIGNED", classification: "LEGACY_TECHNICAL_CANDIDATE", employees: ["Тест"], employee_details: [] };
+const listing = { items: [confirmed, legacy], page: 1, page_size: 25, total: 26 };
+const fiftyConfirmed = Array.from({ length: 50 }, (_, index) => ({ ...confirmed, order_id: index + 1, order_number: `TECH-${index + 1}` }));
 
 beforeEach(() => vi.mocked(apiFetchJson).mockReset());
 afterEach(cleanup);
 
 describe("TechnicalPersonnelOrdersPanel", () => {
-  it("searches legacy candidates, requires provenance reason/phrase, then refreshes as confirmed", async () => {
-    vi.mocked(apiFetchJson)
-      .mockResolvedValueOnce({ items: [legacy] })
-      .mockResolvedValueOnce(provenancePreview)
-      .mockResolvedValueOnce({ status: "COMPLETED" })
-      .mockResolvedValueOnce({ items: [{ ...legacy, classification: "CONFIRMED_TECHNICAL" }] });
+  it("loads the first page automatically, keeps legacy out of selection, and prepares an exact batch preview", async () => {
+    vi.mocked(apiFetchJson).mockResolvedValueOnce(listing).mockResolvedValueOnce({ ready: [{ order_id: 12 }], legacy: [], blocked: [], planned_deletions: [], confirmation_phrase: "DELETE TECHNICAL ORDERS 1", can_execute: true });
     render(<TechnicalPersonnelOrdersPanel />);
-    fireEvent.change(screen.getByLabelText("Поиск технического приказа"), { target: { value: "PERSONNEL-IMPORT-2026-11" } });
-    fireEvent.click(search());
-    await waitFor(() => expect(screen.getAllByText(/LEGACY_TECHNICAL_CANDIDATE/).length).toBeGreaterThan(0));
-    expect(screen.queryByRole("button", { name: "Удалить один приказ" })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Подтвердить техническое происхождение" }));
-    await screen.findByText("Preview #11");
-    expect(apiFetchJson).toHaveBeenCalledWith("/directory/technical-personnel-order-cleanup/11/provenance-preview");
-    fireEvent.click(screen.getByRole("button", { name: "Подтвердить происхождение" }));
-    expect(screen.getByRole("status")).toHaveTextContent("Укажите причину");
-    expect(apiFetchJson).toHaveBeenCalledTimes(2);
-    fireEvent.change(screen.getByLabelText("Причина операции"), { target: { value: "legacy import verified" } });
-    fireEvent.change(screen.getByLabelText("Фраза подтверждения"), { target: { value: "CONFIRM TECHNICAL ORDER 11" } });
-    fireEvent.click(screen.getByRole("button", { name: "Подтвердить происхождение" }));
-    await waitFor(() => expect(apiFetchJson).toHaveBeenCalledWith("/directory/technical-personnel-order-cleanup/11/confirm-provenance", expect.objectContaining({ method: "POST" })));
-    await waitFor(() => expect(screen.getAllByText(/CONFIRMED_TECHNICAL/).length).toBeGreaterThan(0));
+    await waitFor(() => expect(apiFetchJson).toHaveBeenCalledWith(expect.stringContaining("/search?page=1&page_size=25")));
+    expect(screen.getByText("Техническая запись прежнего формата")).toBeInTheDocument();
+    expect(screen.getByLabelText("Выбрать приказ 11")).toBeDisabled();
+    fireEvent.click(screen.getByLabelText("Выбрать доступные на странице"));
+    expect(screen.getByLabelText("Выбрать приказ 12")).toBeChecked();
+    expect(screen.getByLabelText("Выбрать приказ 11")).not.toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Подготовить удаление выбранных" }));
+    await waitFor(() => expect(apiFetchJson).toHaveBeenCalledWith("/directory/technical-personnel-order-cleanup/batch-preview", expect.objectContaining({ method: "POST", body: JSON.stringify({ order_ids: [12] }) })));
+    expect(await screen.findByText("Batch preview")).toBeInTheDocument();
   });
 
-  it("shows delete blockers, permits an isolated delete only after its own phrase, and displays one API error safely", async () => {
-    vi.mocked(apiFetchJson)
-      .mockResolvedValueOnce({ items: [confirmed] })
-      .mockResolvedValueOnce(blockedPreview)
-      .mockResolvedValueOnce(isolatedPreview)
-      .mockRejectedValueOnce(new Error("API unavailable"));
+  it("uses page controls and preserves explicit search fields", async () => {
+    vi.mocked(apiFetchJson).mockResolvedValueOnce(listing).mockResolvedValueOnce({ ...listing, page: 2, items: [confirmed] });
     render(<TechnicalPersonnelOrdersPanel />);
-    fireEvent.click(search());
-    await waitFor(() => expect(screen.getAllByText(/CONFIRMED_TECHNICAL/).length).toBeGreaterThan(0));
-    fireEvent.click(screen.getByRole("button", { name: "Preview удаления" }));
-    expect(await screen.findByText(/employee_events/)).toBeInTheDocument();
-    expect(screen.getByText("Операция заблокирована.")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Preview удаления" }));
-    await screen.findByRole("button", { name: "Удалить один приказ" });
-    fireEvent.change(screen.getByLabelText("Причина операции"), { target: { value: "isolated test" } });
-    fireEvent.click(screen.getByRole("button", { name: "Удалить один приказ" }));
-    expect(screen.getByRole("status")).toHaveTextContent("Укажите причину");
-    fireEvent.change(screen.getByLabelText("Фраза подтверждения"), { target: { value: "DELETE TECHNICAL ORDER 12" } });
-    fireEvent.click(screen.getByRole("button", { name: "Удалить один приказ" }));
-    await waitFor(() => expect(screen.getByRole("status")).toHaveTextContent("API unavailable"));
-    expect(apiFetchJson).toHaveBeenCalledTimes(4);
+    await screen.findByText("TECH-12");
+    fireEvent.change(screen.getByLabelText("Поле поиска технического приказа"), { target: { value: "employee_name" } });
+    fireEvent.change(screen.getByLabelText("Поиск технического приказа"), { target: { value: "Ильясова" } });
+    fireEvent.click(screen.getByRole("button", { name: "Найти" }));
+    await waitFor(() => expect(apiFetchJson).toHaveBeenLastCalledWith(expect.stringContaining("employee_name=%D0%98%D0%BB%D1%8C%D1%8F%D1%81%D0%BE%D0%B2%D0%B0")));
+  });
+
+  it("caps a 50-row page at 25 selections, unlocks the next box after removal, and clears selection on search and page changes", async () => {
+    vi.mocked(apiFetchJson)
+      .mockResolvedValueOnce(listing)
+      .mockResolvedValueOnce({ items: fiftyConfirmed, page: 1, page_size: 50, total: 100 })
+      .mockResolvedValueOnce({ items: fiftyConfirmed, page: 1, page_size: 50, total: 100 })
+      .mockResolvedValueOnce({ items: fiftyConfirmed, page: 2, page_size: 50, total: 100 });
+    render(<TechnicalPersonnelOrdersPanel />);
+    await screen.findByText("TECH-12");
+    fireEvent.change(screen.getByLabelText("Размер страницы"), { target: { value: "50" } });
+    await screen.findByText("TECH-50");
+    fireEvent.click(screen.getByLabelText("Выбрать доступные на странице"));
+    expect(screen.getByRole("status")).toHaveTextContent("Выбрано: 25 из 25");
+    expect(screen.getByText("Выбрано 25 — максимальный размер одной операции")).toBeInTheDocument();
+    expect(screen.getByLabelText("Выбрать приказ 26")).toBeDisabled();
+    fireEvent.click(screen.getByLabelText("Выбрать приказ 1"));
+    expect(screen.getByLabelText("Выбрать приказ 26")).not.toBeDisabled();
+    fireEvent.click(screen.getByLabelText("Выбрать приказ 26"));
+    expect(screen.getByRole("status")).toHaveTextContent("Выбрано: 25 из 25");
+    fireEvent.change(screen.getByLabelText("Поиск технического приказа"), { target: { value: "TECH" } });
+    fireEvent.click(screen.getByRole("button", { name: "Найти" }));
+    expect(screen.getByRole("status")).toHaveTextContent("Выбрано: 0 из 25");
+    await waitFor(() => expect(apiFetchJson).toHaveBeenLastCalledWith(expect.stringContaining("q=TECH")));
+    fireEvent.click(screen.getByLabelText("Выбрать приказ 1"));
+    fireEvent.click(screen.getByRole("button", { name: "Вперёд" }));
+    expect(screen.getByRole("status")).toHaveTextContent("Выбрано: 0 из 25");
   });
 });

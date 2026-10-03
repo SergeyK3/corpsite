@@ -21,10 +21,28 @@ class ExecuteIn(BaseModel):
     reason: str = Field(min_length=3, max_length=1000)
     confirmation_phrase: str = Field(min_length=1, max_length=200)
 
+class BatchIn(ExecuteIn):
+    order_ids: list[int] = Field(min_length=1, max_length=25)
+
+class BatchPreviewIn(BaseModel):
+    order_ids: list[int] = Field(min_length=1, max_length=25)
+
 @router.get("/search")
-def search(order_id: int | None = Query(None, ge=1), q: str | None = None, employee_name: str | None = None, import_source: str | None = None, user: dict[str, Any] = Depends(get_current_user)):
+def search(order_id: int | None = Query(None, ge=1), q: str | None = None, employee_name: str | None = None, import_source: str | None = None, page: int = Query(1, ge=1), page_size: int = Query(25), user: dict[str, Any] = Depends(get_current_user)):
     _require(user)
-    try: return {"items": service.search(order_id=order_id, q=q, employee_name=employee_name, import_source=import_source)}
+    try: return service.search(order_id=order_id, q=q, employee_name=employee_name, import_source=import_source, page=page, page_size=page_size)
+    except service.TechnicalOrderCleanupError as exc: raise _error(exc) from exc
+
+@router.post("/batch-preview")
+def batch_preview(body: BatchPreviewIn, user: dict[str, Any] = Depends(get_current_user)):
+    _require(user)
+    try: return service.batch_preview(order_ids=body.order_ids)
+    except service.TechnicalOrderCleanupError as exc: raise _error(exc) from exc
+
+@router.post("/batch-execute")
+def batch_execute(body: BatchIn, user: dict[str, Any] = Depends(get_current_user)):
+    actor = _require(user)
+    try: return service.batch_execute(order_ids=body.order_ids, actor_user_id=actor, reason=body.reason, confirmation_phrase=body.confirmation_phrase)
     except service.TechnicalOrderCleanupError as exc: raise _error(exc) from exc
 
 @router.get("/{order_id}/preview")

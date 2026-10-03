@@ -37,8 +37,8 @@ def cleanup_tx(monkeypatch):
     with database_engine.connect() as conn:
         transaction = conn.begin()
         try:
-            if any(conn.execute(text(f"SELECT to_regclass('public.{table}')")).scalar_one() is None for table in ("technical_personnel_order_deletion_audit", "technical_personnel_order_provenance_audit")):
-                pytest.skip("pojson015 has not been applied to corpsite_test")
+            if any(conn.execute(text(f"SELECT to_regclass('public.{table}')")).scalar_one() is None for table in ("technical_personnel_order_deletion_audit", "technical_personnel_order_provenance_audit", "technical_personnel_order_cleanup_batch_audit")):
+                pytest.skip("pojson016 has not been applied to corpsite_test")
             monkeypatch.setattr(cleanup, "engine", _SameConnectionEngine(conn))
             yield conn
         finally:
@@ -113,3 +113,55 @@ def test_transaction_rolls_back_when_audit_insert_fails(cleanup_tx, monkeypatch)
     # The service transaction is the outer rollback-only transaction; restore execution to inspect it.
     monkeypatch.setattr(cleanup_tx, "execute", original)
     assert cleanup_tx.execute(text("SELECT count(*) FROM public.personnel_orders WHERE order_id=:id"), {"id": order_id}).scalar_one() == 1
+
+
+def test_batch_delete_is_atomic_and_writes_one_batch_id_per_order(cleanup_tx):
+    first, second, neighbour, actor = _order(cleanup_tx), _order(cleanup_tx), _order(cleanup_tx), _actor(cleanup_tx)
+    result = cleanup.batch_execute(order_ids=[first, second], actor_user_id=actor, reason="pytest batch", confirmation_phrase="DELETE TECHNICAL ORDERS 2")
+    assert result["status"] == "COMPLETED" and result["batch_id"]
+    assert cleanup_tx.execute(text("SELECT count(*) FROM public.personnel_orders WHERE order_id = ANY(:ids)"), {"ids": [first, second]}).scalar_one() == 0
+    assert cleanup_tx.execute(text("SELECT count(*) FROM public.personnel_orders WHERE order_id=:id"), {"id": neighbour}).scalar_one() == 1
+    batch_id = result["batch_id"]
+    assert cleanup_tx.execute(text("SELECT count(*) FROM public.technical_personnel_order_cleanup_batch_audit WHERE batch_id=CAST(:batch_id AS uuid)"), {"batch_id": batch_id}).scalar_one() == 1
+    assert cleanup_tx.execute(text("SELECT count(*) FROM public.technical_personnel_order_deletion_audit WHERE batch_id=CAST(:batch_id AS uuid)"), {"batch_id": batch_id}).scalar_one() == 2
+
+
+def test_batch_rolls_back_everything_if_one_order_gains_a_blocker(cleanup_tx):
+    first, second, actor = _order(cleanup_tx), _order(cleanup_tx), _actor(cleanup_tx)
+    cleanup_tx.execute(text("CREATE TABLE public.pytest_technical_batch_blocker (id BIGSERIAL PRIMARY KEY, order_id BIGINT NOT NULL REFERENCES public.personnel_orders(order_id))"))
+    cleanup_tx.execute(text("INSERT INTO public.pytest_technical_batch_blocker(order_id) VALUES (:id)"), {"id": second})
+    with pytest.raises(cleanup.TechnicalOrderCleanupError, match="changed classification or gained"):
+        cleanup.batch_execute(order_ids=[first, second], actor_user_id=actor, reason="pytest batch blocked", confirmation_phrase="DELETE TECHNICAL ORDERS 2")
+    assert cleanup_tx.execute(text("SELECT count(*) FROM public.personnel_orders WHERE order_id = ANY(:ids)"), {"ids": [first, second]}).scalar_one() == 2
+    assert cleanup_tx.execute(text("SELECT count(*) FROM public.technical_personnel_order_cleanup_batch_audit")).scalar_one() == 0
+
+
+def test_batch_rechecks_a_dependency_added_after_its_preview(cleanup_tx):
+    first, second, actor = _order(cleanup_tx), _order(cleanup_tx), _actor(cleanup_tx)
+    preview = cleanup.batch_preview(order_ids=[first, second])
+    assert preview["can_execute"] is True
+    cleanup_tx.execute(text("CREATE TABLE public.pytest_technical_batch_after_preview_blocker (id BIGSERIAL PRIMARY KEY, order_id BIGINT NOT NULL REFERENCES public.personnel_orders(order_id))"))
+    cleanup_tx.execute(text("INSERT INTO public.pytest_technical_batch_after_preview_blocker(order_id) VALUES (:id)"), {"id": second})
+    with pytest.raises(cleanup.TechnicalOrderCleanupError, match="changed classification or gained"):
+        cleanup.batch_execute(order_ids=[first, second], actor_user_id=actor, reason="pytest after preview", confirmation_phrase="DELETE TECHNICAL ORDERS 2")
+    assert cleanup_tx.execute(text("SELECT count(*) FROM public.personnel_orders WHERE order_id = ANY(:ids)"), {"ids": [first, second]}).scalar_one() == 2
+
+
+def test_batch_limit_is_enforced_before_any_database_mutation(cleanup_tx):
+    with pytest.raises(cleanup.TechnicalOrderCleanupError, match="at most 25"):
+        cleanup.batch_preview(order_ids=list(range(1, 27)))
+    assert cleanup_tx.execute(text("SELECT count(*) FROM public.technical_personnel_order_cleanup_batch_audit")).scalar_one() == 0
+
+
+def test_batch_audit_failure_rolls_back_all_orders(cleanup_tx, monkeypatch):
+    first, second, actor = _order(cleanup_tx), _order(cleanup_tx), _actor(cleanup_tx)
+    original = cleanup_tx.execute
+    def fail_batch_audit(statement, *args, **kwargs):
+        if "technical_personnel_order_cleanup_batch_audit" in str(statement):
+            raise RuntimeError("forced batch audit failure")
+        return original(statement, *args, **kwargs)
+    monkeypatch.setattr(cleanup_tx, "execute", fail_batch_audit)
+    with pytest.raises(RuntimeError, match="forced batch audit failure"):
+        cleanup.batch_execute(order_ids=[first, second], actor_user_id=actor, reason="pytest audit rollback", confirmation_phrase="DELETE TECHNICAL ORDERS 2")
+    monkeypatch.setattr(cleanup_tx, "execute", original)
+    assert cleanup_tx.execute(text("SELECT count(*) FROM public.personnel_orders WHERE order_id = ANY(:ids)"), {"ids": [first, second]}).scalar_one() == 2

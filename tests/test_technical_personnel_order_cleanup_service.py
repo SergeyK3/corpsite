@@ -45,3 +45,16 @@ def test_routes_require_the_dedicated_system_admin_permission(monkeypatch):
         assert response.json()["detail"]["code"] == "TECHNICAL_ORDER_CLEANUP_PERMISSION_REQUIRED"
     finally:
         app.dependency_overrides.pop(get_current_user, None)
+
+
+def test_batch_rejects_empty_duplicate_and_more_than_25_exact_ids():
+    for ids, code in [([], "TECHNICAL_ORDER_BATCH_IDS_REQUIRED"), ([1, 1], "TECHNICAL_ORDER_BATCH_DUPLICATE_IDS"), (list(range(1, 27)), "TECHNICAL_ORDER_BATCH_LIMIT")]:
+        with pytest.raises(service.TechnicalOrderCleanupError) as exc:
+            service._validated_batch_ids(ids)
+        assert exc.value.code == code
+
+
+def test_batch_confirmation_is_server_derived_and_does_not_accept_client_batch_id():
+    with pytest.raises(service.TechnicalOrderCleanupError) as exc:
+        service.batch_execute(order_ids=[101], actor_user_id=1, reason="batch test", confirmation_phrase="DELETE TECHNICAL ORDERS 2")
+    assert exc.value.code == "TECHNICAL_ORDER_CONFIRMATION_REQUIRED"
