@@ -291,10 +291,12 @@ def _enrich_user_context(user: Dict[str, Any]) -> Dict[str, Any]:
         PERSONNEL_EVENTS_READ,
         USER_ACCESS_ADMIN,
         PPR_MIGRATION_STATUS_READ_PERMISSION,
+        TECHNICAL_PERSONNEL_ORDER_CLEANUP,
         has_admin_permission,
         has_any_personnel_read_permission,
         has_hr_governance_permission,
         get_test_personnel_deletion_capabilities,
+        has_technical_personnel_order_cleanup_permission,
     )
 
     out = dict(user)
@@ -319,6 +321,7 @@ def _enrich_user_context(user: Dict[str, Any]) -> Dict[str, Any]:
     )
     out["has_personnel_orders_archive"] = has_admin_permission(uid, "PERSONNEL_ORDERS_ARCHIVE")
     out["has_personnel_orders_restore"] = has_admin_permission(uid, "PERSONNEL_ORDERS_RESTORE")
+    out["can_technical_personnel_order_cleanup"] = has_technical_personnel_order_cleanup_permission(uid)
     from app.security.personnel_card_edit import has_personnel_card_edit
     out["has_personnel_card_edit"] = has_personnel_card_edit(out)
     out.update(get_test_personnel_deletion_capabilities(

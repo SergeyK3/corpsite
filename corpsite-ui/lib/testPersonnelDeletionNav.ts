@@ -1,10 +1,10 @@
 import type { MeInfo } from "./types";
 
-export const TEST_PERSONNEL_ADMIN_HREF = "/admin/system/test-personnel-data";
+export const TEST_PERSONNEL_ADMIN_HREF = "/admin/system/data-cleanup";
 export const TEST_PERSONNEL_APPROVALS_HREF = "/directory/personnel/test-data-deletion-approvals";
 
 export function canSeeTestPersonnelAdmin(me: MeInfo | null | undefined): boolean {
-  return me?.can_request_test_personnel_deletion === true;
+  return me?.can_request_test_personnel_deletion === true || me?.can_technical_personnel_order_cleanup === true;
 }
 
 export function canSeeTestPersonnelApprovals(me: MeInfo | null | undefined): boolean {
@@ -12,7 +12,7 @@ export function canSeeTestPersonnelApprovals(me: MeInfo | null | undefined): boo
 }
 
 export function isTestPersonnelAdminRoute(pathname: string): boolean {
-  return pathname === TEST_PERSONNEL_ADMIN_HREF || pathname.startsWith(`${TEST_PERSONNEL_ADMIN_HREF}/`);
+  return pathname === TEST_PERSONNEL_ADMIN_HREF || pathname.startsWith(`${TEST_PERSONNEL_ADMIN_HREF}/`) || pathname === "/admin/system/test-personnel-data";
 }
 
 export function isTestPersonnelApprovalsRoute(pathname: string): boolean {

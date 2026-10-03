@@ -1,6 +1,7 @@
 import os
 from logging.config import fileConfig
 from pathlib import Path
+from urllib.parse import urlparse
 
 from dotenv import load_dotenv
 from sqlalchemy import engine_from_config
@@ -15,15 +16,25 @@ config = context.config
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 explicit_database_url = config.get_main_option("sqlalchemy.url")
 if not explicit_database_url or not explicit_database_url.strip():
-    # Normal application/CLI startup keeps the established .env fallback.  A URL
-    # supplied explicitly through Alembic Config is authoritative and is never
-    # replaced by process environment or .env state.
-    load_dotenv(dotenv_path=PROJECT_ROOT / ".env", override=False)
-    database_url = os.getenv("DATABASE_URL")
-    if not database_url:
-        raise RuntimeError("DATABASE_URL is not set and sqlalchemy.url was not supplied")
-    # ConfigParser treats '%' as interpolation; escape for passwords containing it.
-    config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
+    if os.getenv("ALEMBIC_USE_TEST_DATABASE") == "1":
+        # This opt-in path is deliberately independent of DATABASE_URL so an
+        # operator cannot accidentally upgrade a development/production DB.
+        database_url = os.getenv("TEST_DATABASE_URL") or ""
+        parsed = urlparse(database_url)
+        database_name = (parsed.path or "").rstrip("/").split("/")[-1]
+        if parsed.hostname not in {"localhost", "127.0.0.1"} or database_name != "corpsite_test":
+            raise RuntimeError("ALEMBIC_USE_TEST_DATABASE requires loopback TEST_DATABASE_URL for corpsite_test")
+        config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
+    else:
+        # Normal application/CLI startup keeps the established .env fallback.  A URL
+        # supplied explicitly through Alembic Config is authoritative and is never
+        # replaced by process environment or .env state.
+        load_dotenv(dotenv_path=PROJECT_ROOT / ".env", override=False)
+        database_url = os.getenv("DATABASE_URL")
+        if not database_url:
+            raise RuntimeError("DATABASE_URL is not set and sqlalchemy.url was not supplied")
+        # ConfigParser treats '%' as interpolation; escape for passwords containing it.
+        config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.

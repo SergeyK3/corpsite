@@ -80,7 +80,7 @@ export default function SystemAdminClient() {
         {me?.has_user_access_admin ? <Link href="/admin/system/access-management" className={tabButtonClass(false)}>Управление доступом</Link> : null}
         {canSeeTestPersonnelAdmin(me) ? (
           <Link href={TEST_PERSONNEL_ADMIN_HREF} className={tabButtonClass(false)}>
-            Удаление тестовых данных
+            Очистка данных
           </Link>
         ) : null}
       </nav>

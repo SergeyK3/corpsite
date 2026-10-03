@@ -24,6 +24,7 @@ export type MeInfo = {
   can_hard_delete_employee?: boolean;
   /** WP-TD-003A — exact primary-role + permission projections; no execute capability. */
   can_request_test_personnel_deletion?: boolean;
+  can_technical_personnel_order_cleanup?: boolean;
   can_approve_test_personnel_deletion?: boolean;
   can_read_test_personnel_deletion_audit?: boolean;
   can_execute_test_personnel_deletion?: boolean;

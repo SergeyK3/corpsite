@@ -1,7 +1,7 @@
-import TestPersonnelDataAdminClient from "./_components/TestPersonnelDataAdminClient";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
 export default function TestPersonnelDataPage() {
-  return <TestPersonnelDataAdminClient />;
+  redirect("/admin/system/data-cleanup");
 }

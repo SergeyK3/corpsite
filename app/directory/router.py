@@ -13,6 +13,7 @@ from .org_units_routes import router as org_units_router
 from .employees_routes import router as employees_router
 from .test_personnel_deletion_routes import router as test_personnel_deletion_router
 from .test_system_identity_deletion_routes import router as test_system_identity_deletion_router
+from .technical_personnel_order_cleanup_routes import router as technical_personnel_order_cleanup_router
 from .import_routes import router as import_router
 from .roles_routes import router as roles_router
 from .positions_routes import router as positions_router
@@ -51,6 +52,7 @@ router.include_router(employees_router)
 router.include_router(employee_access_router)
 router.include_router(test_personnel_deletion_router)
 router.include_router(test_system_identity_deletion_router)
+router.include_router(technical_personnel_order_cleanup_router)
 router.include_router(import_router)
 router.include_router(roles_router)
 router.include_router(positions_router)

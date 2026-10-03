@@ -32,6 +32,12 @@ function sourceTitle(row: PersonnelOrderListItem): string {
 }
 
 function isTechnicalOrder(row: PersonnelOrderListItem): boolean {
+  return row.storage_json?.technical_record === true
+    && (row.storage_json?.record_quality === "TECHNICAL" || row.storage_json?.record_quality === "TECHNICAL_RECORD");
+}
+
+function isLegacyTechnicalCandidate(row: PersonnelOrderListItem): boolean {
+  if (isTechnicalOrder(row)) return false;
   const number = String(row.order_number || "").trim().toUpperCase();
   return number.startsWith("CSV-PILOT-") || number.startsWith("PERSONNEL-IMPORT-");
 }
@@ -105,6 +111,11 @@ export function PersonnelOrdersTable({
                 {isTechnicalOrder(row) ? (
                   <div className="mt-1 inline-flex rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100">
                     Техническая запись
+                  </div>
+                ) : null}
+                {isLegacyTechnicalCandidate(row) ? (
+                  <div className="mt-1 inline-flex rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100">
+                    Техническая запись прежнего формата
                   </div>
                 ) : null}
                 {isReconstructedForReview(row) ? (

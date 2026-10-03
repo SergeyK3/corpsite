@@ -67,6 +67,8 @@ def test_apply_one_receives_actor_user_id_for_all_audit_writes():
     assert "actor_user_id: int" in source
     assert "personnel-import:{actor_user_id}" in source
     assert "created_by=actor_user_id" in source
+    assert '"technical_record": True' in source
+    assert '"record_quality": "TECHNICAL_RECORD"' in source
 
 
 def test_apply_requires_explicit_actor_user_id(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):

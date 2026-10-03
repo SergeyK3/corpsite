@@ -51,9 +51,9 @@ describe("system admin page navigation", () => {
 
     const sections = await screen.findByRole("navigation", { name: "Разделы кабинета" });
     const lifecycle = within(sections).getByRole("link", { name: "Жизненный цикл" });
-    const testPersonnel = within(sections).getByRole("link", { name: "Удаление тестовых данных" });
+    const testPersonnel = within(sections).getByRole("link", { name: "Очистка данных" });
     expect(lifecycle).toHaveAttribute("href", "/admin/system/personnel-lifecycle");
-    expect(testPersonnel).toHaveAttribute("href", "/admin/system/test-personnel-data");
+    expect(testPersonnel).toHaveAttribute("href", "/admin/system/data-cleanup");
     expect(lifecycle.closest("nav")).toHaveAttribute("aria-label", "Разделы кабинета");
     expect(testPersonnel.closest("nav")).toBe(lifecycle.closest("nav"));
     expect(screen.queryByText("Жизненный цикл персонала →")).not.toBeInTheDocument();
@@ -84,7 +84,7 @@ describe("system admin page navigation", () => {
     );
 
     const sections = await screen.findByRole("navigation", { name: "Разделы кабинета" });
-    expect(within(sections).queryByRole("link", { name: "Удаление тестовых данных" })).not.toBeInTheDocument();
+    expect(within(sections).queryByRole("link", { name: "Очистка данных" })).not.toBeInTheDocument();
     expect(within(sections).getByRole("link", { name: "Жизненный цикл" })).toHaveAttribute(
       "href",
       "/admin/system/personnel-lifecycle",

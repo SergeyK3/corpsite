@@ -23,6 +23,7 @@ TEST_PERSONNEL_DELETION_APPROVE = "TEST_PERSONNEL_DELETION_APPROVE"
 TEST_PERSONNEL_DELETION_EXECUTE = "TEST_PERSONNEL_DELETION_EXECUTE"
 TEST_PERSONNEL_DELETION_AUDIT_READ = "TEST_PERSONNEL_DELETION_AUDIT_READ"
 TEST_SYSTEM_IDENTITY_DELETION_REQUEST = "TEST_SYSTEM_IDENTITY_DELETION_REQUEST"
+TECHNICAL_PERSONNEL_ORDER_CLEANUP = "TECHNICAL_PERSONNEL_ORDER_CLEANUP"
 PERSONNEL_CARD_EDIT = "PERSONNEL_CARD_EDIT"
 
 # Read-only personnel event journal.  Deliberately separate from the broader
@@ -52,6 +53,7 @@ PERMISSION_CODES: FrozenSet[str] = frozenset(
         TEST_PERSONNEL_DELETION_EXECUTE,
         TEST_PERSONNEL_DELETION_AUDIT_READ,
         TEST_SYSTEM_IDENTITY_DELETION_REQUEST,
+        TECHNICAL_PERSONNEL_ORDER_CLEANUP,
         PERSONNEL_CARD_EDIT,
         "ACCESS_MANAGER",
         "SECURITY_AUDITOR",
@@ -188,6 +190,19 @@ def has_test_system_identity_deletion_request_permission(user_id: int) -> bool:
     return primary_role == "ADMIN" and has_admin_permission(
         uid, TEST_SYSTEM_IDENTITY_DELETION_REQUEST,
     )
+
+
+def has_technical_personnel_order_cleanup_permission(user_id: int) -> bool:
+    """This destructive contour is deliberately ADMIN-only."""
+    try:
+        uid = int(user_id)
+    except (TypeError, ValueError):
+        return False
+    with engine.connect() as conn:
+        role = conn.execute(text("""SELECT r.code FROM public.users u
+            JOIN public.roles r ON r.role_id=u.role_id
+            WHERE u.user_id=:user_id AND u.is_active=TRUE"""), {"user_id": uid}).scalar_one_or_none()
+    return role == "ADMIN" and has_admin_permission(uid, TECHNICAL_PERSONNEL_ORDER_CLEANUP)
 
 
 def has_any_admin_api_permission(user_id: int) -> bool:

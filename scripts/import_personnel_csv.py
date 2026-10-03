@@ -356,6 +356,11 @@ def apply_one(
                 order_number=order_number(source_row=row["csv_row"], prefix=order_prefix),
                 order_date=effective_date,
                 order_type_code="HIRE",
+                storage_json={
+                    "technical_record": True,
+                    "record_quality": "TECHNICAL_RECORD",
+                    "import_source_id": f"personnel-import:{row['csv_row']}",
+                },
                 comment=f"Bulk personnel migration, source row {row['csv_row']}",
             )
             if fail_after_draft:
