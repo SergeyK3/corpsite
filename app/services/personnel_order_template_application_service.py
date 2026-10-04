@@ -73,6 +73,10 @@ def _order(conn:Any,order_id:int):
 def _values(conn:Any,item:Mapping[str,Any]):
  employee=conn.execute(text("SELECT e.full_name,p.name position_name,ou.name org_unit_name FROM public.employees e LEFT JOIN public.positions p ON p.position_id=e.position_id LEFT JOIN public.org_units ou ON ou.unit_id=e.org_unit_id WHERE e.employee_id=:id"),{"id":item["employee_id"]}).mappings().first()
  payload=item["payload"] or {}; posru=_snapshot(payload,"position_name",str((employee or {}).get("position_name") or "")); unitru=_snapshot(payload,"org_unit_name",str((employee or {}).get("org_unit_name") or "")); poskk=_snapshot(payload,"position_name","","kk"); unitkk=_snapshot(payload,"org_unit_name","","kk"); warnings=[]; missing=[]
+ if str(item["item_type_code"]) == "LEAVE.CHILDCARE.GRANT":
+  from app.services.personnel_order_childcare_contract import childcare_values
+  try: return childcare_values(payload, org_unit_ru=_snapshot(payload, "source_org_unit_name", unitru)), [], []
+  except ValueError as exc: raise TemplateApplicationError(str(exc)) from exc
  unpaid=str(item["item_type_code"]) == "LEAVE.UNPAID.GRANT"
  if not unpaid:
   poskk=poskk or localized_personnel_order_position(posru,"kk") or posru; unitkk=unitkk or unitru
@@ -116,6 +120,9 @@ def _preview(conn,order_id):
  overrides=[{"block_id":x["block_id"],"scope":x["scope"],"block_type":str(x["block_type"]).upper(),"language":str(x["locale"]).upper(),"order_item_id":x["order_item_id"]} for x in blocks if (x["override_text"] or "").strip()]
  prior=conn.execute(text("SELECT a.template_application_id application_id,a.template_version_id,t.version_number template_version_number,a.applied_at,a.applied_by_user_id FROM public.personnel_order_template_applications a JOIN public.personnel_order_template_versions t ON t.template_version_id=a.template_version_id WHERE a.order_id=:id ORDER BY a.applied_at DESC,a.template_application_id DESC LIMIT 1"),{"id":order_id}).mappings().first()
  result={"available":True,"template":{"template_version_id":template["template_version_id"],"version_number":template["version_number"],"item_type_code":template["item_type_code"]},"has_overrides":bool(overrides),"override_blocks":overrides,"has_prior_application":bool(prior),"last_application":dict(prior) if prior else None,"order_current":{f"{x['locale']}:{x['block_type']}":dict(x) for x in blocks if x["scope"]=="ORDER"},"order_proposed":{k:template[k] for k in ("title_ru","title_kk","preamble_ru","preamble_kk")},"items":entries,"order_revision":order["document_revision"]}
+ if template["item_type_code"] == "LEAVE.CHILDCARE.GRANT":
+  from app.services.personnel_order_childcare_contract import without_directive
+  result["order_proposed"] = {k: without_directive(v) if k.startswith("preamble_") else v for k,v in result["order_proposed"].items()}
  if len(entries)==1: result["current"]={**result["order_current"],**entries[0]["current"]}; result["proposed"]={**result["order_proposed"],**{f"{k}_template_{lang}":entries[0]["proposed"][f"{k}_{lang}"] for k in ("body","basis") for lang in ("ru","kk")}}
  return result
 def preview_template_application(order_id:int)->dict[str,Any]:

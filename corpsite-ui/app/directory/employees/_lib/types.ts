@@ -8,6 +8,9 @@ export type Department = {
 export type Position = {
   id: number | null;
   name: string | null;
+  name_kk?: string | null;
+  document_possessive_kk?: string | null;
+  document_nominative_ru?: string | null;
 };
 
 export type OrgUnitRef = {

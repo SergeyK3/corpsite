@@ -25,7 +25,7 @@ const employee = {
   id: "383",
   person_id: 720,
   fio: "Ильясова Ассель Адиловна",
-  position: { id: 6, name: "Врач" },
+  position: { id: 6, name: "Врач", name_kk: "дәрігер" },
   org_unit: { unit_id: 59, name: "Лучевая диагностика", code: "DIAG_IMG", parent_unit_id: 41, is_active: true },
   department: null,
   rate: "1.0",
@@ -68,11 +68,11 @@ function setup(onClose = vi.fn(), onCreated = vi.fn()) {
     { unit_id: 41, name: "Многопрофильный медицинский центр", group_id: null, name_kk: null, document_genitive_kk: null },
     { unit_id: 59, name: "Лучевая диагностика", group_id: 2, name_kk: "Сәулелік диагностика бөлімшесі", document_genitive_kk: "Сәулелік диагностика бөлімшесінің" },
   ]);
-  render(<PersonnelOrderCreateDialog open onClose={onClose} onCreated={onCreated} />);
-  return { onClose, onCreated };
+  const view = render(<PersonnelOrderCreateDialog open onClose={onClose} onCreated={onCreated} />);
+  return { onClose, onCreated, ...view };
 }
 
-async function selectType(type: "LEAVE.UNPAID.GRANT" | "TRANSFER") {
+async function selectType(type: "LEAVE.UNPAID.GRANT" | "LEAVE.CHILDCARE.GRANT" | "TRANSFER") {
   fireEvent.change(screen.getByLabelText("Тип кадрового приказа"), { target: { value: type } });
   await waitFor(() => expect(getPersonnelOrderPublishedTemplateTitle).toHaveBeenLastCalledWith(type));
 }
@@ -96,6 +96,68 @@ async function fillValidUnpaid() {
   fireEvent.change(screen.getByLabelText("Дата начала"), { target: { value: "2026-07-17" } });
 }
 
+it.each(["LEAVE.CHILDCARE.GRANT", "LEAVE.UNPAID.GRANT"] as const)("autofills actual API Медсестра in create %s", async (type) => {
+  setup();
+  vi.mocked(getEmployee).mockResolvedValue({ ...employeeDetail, position: { id: 27, name: "Медсестра", name_kk: "мейіргер" } });
+  await selectType(type);
+  await selectEmployee();
+  await waitFor(() => expect(screen.getByLabelText("Должность в тексте приказа (KK)")).toHaveValue("мейіргері"));
+  expect(screen.getByLabelText("Должность в тексте приказа (RU)")).toHaveValue("медсестра");
+  expect(screen.queryByText(/Необходимо заполнить:/)).not.toBeInTheDocument();
+});
+
+it.each(["LEAVE.CHILDCARE.GRANT", "LEAVE.UNPAID.GRANT"] as const)("uses arbitrary catalogue positions and warns only for missing KK in %s", async type => {
+  setup();
+  vi.mocked(getEmployee).mockResolvedValue({ ...employeeDetail, position: { id: 44, name: "сестра-хозяйка", name_kk: "шаруа бикесі" } });
+  await selectType(type); await selectEmployee();
+  expect(screen.getByLabelText("Должность в тексте приказа (KK)")).toHaveValue("шаруа бикесі");
+  expect(screen.getByLabelText("Должность в тексте приказа (RU)")).toHaveValue("сестра-хозяйка");
+  fireEvent.change(screen.getByLabelText("Должность в тексте приказа (KK)"), { target: { value: "Ручная форма первого сотрудника" } });
+  fireEvent.click(screen.getByRole("button", { name: "Сменить сотрудника" }));
+  const second = { ...employeeDetail, id: "777", fio: "Ильясова Анна Сергеевна", position: { id: 3, name: "Бухгалтер", name_kk: null } };
+  vi.mocked(getEmployees).mockResolvedValue({ items: [employee, second], total: 2 });
+  vi.mocked(getEmployee).mockResolvedValue(second);
+  fireEvent.change(screen.getByLabelText("Сотрудник"), { target: { value: "Ильясова" } });
+  fireEvent.click(await screen.findByRole("option", { name: second.fio }));
+  await waitFor(() => expect(getEmployee).toHaveBeenLastCalledWith("777"));
+  await waitFor(() => expect(screen.getByLabelText("Должность в тексте приказа (RU)")).toHaveValue("бухгалтер"));
+  expect(screen.getByLabelText("Должность в тексте приказа (RU)")).toHaveValue("бухгалтер");
+  expect(screen.getByLabelText("Должность в тексте приказа (KK)")).toHaveValue("");
+  expect(screen.getByText(/В справочнике должности нет казахского названия/)).toBeInTheDocument();
+});
+
+it.each(["LEAVE.CHILDCARE.GRANT", "LEAVE.UNPAID.GRANT"] as const)("preserves manual position edits across late detail, then refreshes on employee change in %s", async (type) => {
+  const { rerender, onClose, onCreated } = setup();
+  await selectType(type);
+  await selectEmployee();
+  const nurse = { ...employeeDetail, id: "618", fio: "Адилова Жадыра Хабибуловна", position: { id: 27, name: "Медсестра", name_kk: "мейіргер" },
+    document_forms_ru: { position_document_nominative_ru: "Сохранённая RU" },
+    document_forms_kk: { position_document_possessive_kk: "Сохранённая KK" },
+  };
+  vi.mocked(getEmployees).mockResolvedValue({ items: [nurse], total: 1 });
+  let resolveDetail!: (value: typeof nurse) => void;
+  vi.mocked(getEmployee).mockResolvedValueOnce(nurse).mockReturnValueOnce(new Promise(resolve => { resolveDetail = resolve; }));
+  rerender(<PersonnelOrderCreateDialog open onClose={onClose} onCreated={onCreated} initialEmployeeId={618} />);
+  const ru = screen.getByLabelText("Должность в тексте приказа (RU)");
+  const kk = screen.getByLabelText("Должность в тексте приказа (KK)");
+  await waitFor(() => expect(ru).toHaveValue("")); expect(kk).toHaveValue("");
+  fireEvent.change(ru, { target: { value: "Ручная RU" } });
+  fireEvent.change(kk, { target: { value: "Ручная KK" } });
+  const unit = screen.getByLabelText("Подразделение в тексте приказа (KK)");
+  fireEvent.change(unit, { target: { value: "Ручное подразделение" } });
+  resolveDetail(nurse);
+  await waitFor(() => expect(screen.getByLabelText("Должность")).toHaveValue("Медсестра"));
+  expect(ru).toHaveValue("Ручная RU"); expect(kk).toHaveValue("Ручная KK");
+  expect(unit).toHaveValue("Ручное подразделение");
+  fireEvent.change(screen.getByLabelText("Дата начала"), { target: { value: "2026-08-01" } });
+  expect(ru).toHaveValue("Ручная RU"); expect(kk).toHaveValue("Ручная KK");
+  vi.mocked(getEmployee).mockResolvedValue({ ...nurse, id: "619" });
+  rerender(<PersonnelOrderCreateDialog open onClose={onClose} onCreated={onCreated} initialEmployeeId={619} />);
+  await waitFor(() => expect(ru).toHaveValue("Сохранённая RU"));
+  expect(kk).toHaveValue("Сохранённая KK");
+  expect(createManualPersonnelOrderDraft).not.toHaveBeenCalled();
+});
+
 it("starts without a type, template request, title, employee fields, or enabled Create", () => {
   setup();
   expect(screen.getByLabelText("Тип кадрового приказа")).toHaveValue("");
@@ -105,6 +167,56 @@ it("starts without a type, template request, title, employee fields, or enabled 
   expect(getPersonnelOrderPublishedTemplateTitle).not.toHaveBeenCalled();
   expect(getEmployees).not.toHaveBeenCalled();
   expect(getEmployee).not.toHaveBeenCalled();
+});
+
+it("creates childcare leave with separate application/certificate and saved document forms", async () => {
+  setup();
+  vi.mocked(previewPersonnelOrderHeaderDuplicate).mockResolvedValue({ blocking: false } as any);
+  vi.mocked(createManualPersonnelOrderDraft).mockResolvedValue({ order_id: 123 } as any);
+  await selectType("LEAVE.CHILDCARE.GRANT");
+  await selectEmployee();
+  expect(screen.getByLabelText("ФИО сотрудника в родительном падеже (RU)")).toHaveValue("Ильясовой Ассель Адиловны");
+  for (const [label, value] of Object.entries({
+    "Номер приказа": "CHILD-TEST", "Дата приказа": "2026-07-28", "Дата начала": "2026-08-01", "Дата окончания": "2029-02-13",
+    "Дата заявления": "2026-07-28", "Номер заявления": "APP-17", "Дата выдачи свидетельства о рождении": "2026-02-13", "Номер свидетельства о рождении": "9967264",
+    "ФИО сотрудника в дательном падеже (RU)": "Ильясовой Ассель Адиловне",
+  })) fireEvent.change(screen.getByLabelText(label), { target: { value } });
+  expect(screen.getByLabelText("Дата окончания")).toHaveValue("2029-02-13");
+  fireEvent.click(screen.getByRole("button", { name: "Создать приказ" }));
+  await waitFor(() => expect(createManualPersonnelOrderDraft).toHaveBeenCalled());
+  expect(vi.mocked(createManualPersonnelOrderDraft).mock.calls[0][0]).toMatchObject({ item_payload: {
+    leave_start: "2026-08-01", leave_end: "2029-02-13",
+    basis: { kind: "PERSONAL_APPLICATION", date: "2026-07-28", number: "APP-17", birth_certificate: { date: "2026-02-13", number: "9967264" } },
+    document_forms_kk: { org_unit_document_genitive_kk: "Сәулелік диагностика бөлімшесінің" },
+    document_forms_ru: { employee_full_name_genitive_ru: "Ильясовой Ассель Адиловны" },
+  } });
+});
+
+it("prefers a saved RU genitive and preserves manual text across rerenders", async () => {
+  setup();
+  vi.mocked(getEmployee).mockResolvedValue({ ...employeeDetail, document_forms_ru: { employee_full_name_genitive_ru: "Сохранённая документная форма" } } as typeof employeeDetail);
+  await selectType("LEAVE.CHILDCARE.GRANT");
+  await selectEmployee();
+  const field = screen.getByLabelText("ФИО сотрудника в родительном падеже (RU)");
+  expect(field).toHaveValue("Сохранённая документная форма");
+  fireEvent.change(field, { target: { value: "Ручная корректировка" } });
+  fireEvent.change(screen.getByLabelText("Дата заявления"), { target: { value: "2026-07-29" } });
+  fireEvent.change(screen.getByLabelText("Язык"), { target: { value: "ru" } });
+  await waitFor(() => expect(screen.getByLabelText("Название приказа")).toHaveValue(unpaidTitles.title_ru));
+  expect(field).toHaveValue("Ручная корректировка");
+});
+
+it("does not overwrite RU genitive typed while employee detail is pending", async () => {
+  setup();
+  let resolveDetail!: (value: typeof employeeDetail) => void;
+  vi.mocked(getEmployee).mockReturnValue(new Promise(resolve => { resolveDetail = resolve; }));
+  await selectType("LEAVE.CHILDCARE.GRANT");
+  fireEvent.change(screen.getByLabelText("Сотрудник"), { target: { value: "Иль" } });
+  fireEvent.click(await screen.findByRole("option", { name: employee.fio }));
+  fireEvent.change(screen.getByLabelText("ФИО сотрудника в родительном падеже (RU)"), { target: { value: "Введено до ответа" } });
+  resolveDetail(employeeDetail);
+  await waitFor(() => expect(screen.getByLabelText("Подразделение")).toBeInTheDocument());
+  expect(screen.getByLabelText("ФИО сотрудника в родительном падеже (RU)")).toHaveValue("Введено до ответа");
 });
 
 it("renders a dialog with dedicated header, scrollable body, and sticky footer", async () => {

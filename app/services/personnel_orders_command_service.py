@@ -130,6 +130,14 @@ def _validate_leave_draft_item(
         return
     if employee_id is None:
         raise PersonnelOrderValidationError("Leave item requires employee_id.")
+    if item_type_code == "LEAVE.CHILDCARE.GRANT":
+        from app.services.personnel_order_childcare_contract import childcare_values
+        try:
+            childcare_values(payload, org_unit_ru=str(payload.get("source_org_unit_name") or payload.get("org_unit_name") or ""))
+            if effective_date != period_start or payload.get("leave_start") != str(period_start) or payload.get("leave_end") != str(period_end):
+                raise ValueError("Даты пункта должны совпадать с периодом отпуска.")
+        except ValueError as exc:
+            raise PersonnelOrderValidationError(str(exc)) from exc
     try:
         if item_type_code == "LEAVE.UNPAID.GRANT":
             from app.services.personnel_order_unpaid_leave_contract import unpaid_leave_period

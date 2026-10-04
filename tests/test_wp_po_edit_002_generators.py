@@ -2,6 +2,8 @@
 """Unit tests for editorial text generators (WP-PO-EDIT-002)."""
 from __future__ import annotations
 
+import pytest
+
 from app.db.engine import engine
 from app.services.personnel_orders_editorial.constants import GENERATOR_VERSION
 from app.services.personnel_orders_editorial.generators import (
@@ -106,12 +108,11 @@ def test_childcare_grant_is_distinct_from_return_for_ru_and_kk() -> None:
     assert classify_personnel_order_action("Предоставить отпуск по уходу за ребёнком") == "LEAVE.CHILDCARE.GRANT"
     assert classify_personnel_order_action("Бала күтіміне байланысты демалыс берілсін") == "LEAVE.CHILDCARE.GRANT"
     assert classify_personnel_order_action("Вышла на работу") is None
-    assert "ребёнком" in generate_order_block("title", "ru", {"order_type_code": "LEAVE.CHILDCARE.GRANT"})["generated_text"]
+    assert "ребенком" in generate_order_block("title", "ru", {"order_type_code": "LEAVE.CHILDCARE.GRANT"})["generated_text"]
     assert "бала" in generate_order_block("title", "kk", {"order_type_code": "LEAVE.CHILDCARE.GRANT"})["generated_text"].casefold()
-    ru = generate_item_body("ru", {"item_type_code": "LEAVE.CHILDCARE.GRANT", "employee_name": "Иванова", "leave_start": "2026-01-01", "leave_end": "2026-01-02"})["generated_text"]
-    kk = generate_item_body("kk", {"item_type_code": "LEAVE.CHILDCARE.GRANT", "employee_name": "Иванова", "leave_start": "2026-01-01", "leave_end": "2026-01-02"})["generated_text"]
-    assert not ru.endswith("Стаж работы ещё не определён.")
-    assert not kk.endswith("Жұмыс өтілі әлі анықталмаған.")
+    for locale in ("ru", "kk"):
+        with pytest.raises(ValueError):
+            generate_item_body(locale, {"item_type_code": "LEAVE.CHILDCARE.GRANT", "employee_name": "Иванова", "leave_start": "2026-01-01", "leave_end": "2026-01-02"})
 
 
 def test_hire_body_kk_ru() -> None:

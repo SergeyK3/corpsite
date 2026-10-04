@@ -80,6 +80,7 @@ def build_item_ctx(item: Mapping[str, Any], employee_name: Optional[str]) -> Dic
             pass
     return {
         "item_type_code": item.get("item_type_code"),
+        "childcare_payload": payload if item.get("item_type_code") == "LEAVE.CHILDCARE.GRANT" else None,
         "employee_name": employee_name or pick_payload_value(payload, "source_employee_name"),
         "effective_date": iso_date(item.get("effective_date")),
         "org_unit_name": org_unit_name,

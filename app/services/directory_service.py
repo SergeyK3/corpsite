@@ -321,7 +321,6 @@ def _employee_select_sql(emp_rel: str, emp_cols: List[str]) -> Tuple[str, Dict[s
         (f"e.{date_to_col} AS e_date_to" if date_to_col else "NULL AS e_date_to"),
         (f"e.{dept_fk} AS e_dept_id" if dept_fk else "NULL AS e_dept_id"),
         (f"e.{pos_fk} AS e_legacy_pos_id" if pos_fk else "NULL AS e_legacy_pos_id"),
-        f"e.{org_unit_fk} AS e_org_unit_id",
         ("e.person_id AS e_person_id" if "person_id" in set(emp_cols) else "NULL AS e_person_id"),
     ]
 
@@ -374,7 +373,7 @@ def _employee_select_sql(emp_rel: str, emp_cols: List[str]) -> Tuple[str, Dict[s
         if current_position_available:
             join_sql += (
                 " LEFT JOIN LATERAL ("
-                " SELECT pa.assignment_id, pa.position_id"
+                " SELECT pa.assignment_id, pa.position_id, pa.org_unit_id"
                 " FROM public.person_assignments pa"
                 " WHERE pa.person_id = e.person_id"
                 " AND pa.active_flag IS TRUE"
@@ -421,6 +420,13 @@ def _employee_select_sql(emp_rel: str, emp_cols: List[str]) -> Tuple[str, Dict[s
             ]
         )
 
+    # All dictionary fields must belong to the same selected assignment.
+    if pos_fk and pos_rel and pos_id_col and pos_name_col:
+        position_record = "CASE WHEN current_pa.assignment_id IS NOT NULL THEN to_jsonb(current_p) ELSE to_jsonb(p) END" if current_position_available else "to_jsonb(p)"
+        for field in ("name_kk", "document_possessive_kk", "document_nominative_ru"):
+            select_parts.append(f"NULLIF(BTRIM(({position_record}) ->> '{field}'), '') AS pos_{field}")
+    org_unit_expr = "CASE WHEN current_pa.assignment_id IS NOT NULL THEN current_pa.org_unit_id ELSE e.org_unit_id END" if current_position_available else "e.org_unit_id"
+    select_parts.append(f"{org_unit_expr} AS e_org_unit_id")
     # Org Units (canonical table)
     select_parts += [
         "ou.name AS org_unit_name",
@@ -430,7 +436,7 @@ def _employee_select_sql(emp_rel: str, emp_cols: List[str]) -> Tuple[str, Dict[s
         "ou.parent_unit_id AS org_unit_parent_unit_id",
         "ou.is_active AS org_unit_is_active",
     ]
-    join_sql += " LEFT JOIN public.org_units ou ON ou.unit_id = e.org_unit_id"
+    join_sql += f" LEFT JOIN public.org_units ou ON ou.unit_id = ({org_unit_expr})"
     has_termination_records = ("employee_termination_records", "table") in _list_relations()
     if has_termination_records:
         select_parts += [
@@ -525,7 +531,12 @@ def _normalize_employee_joined(row: Dict[str, Any], emp_rel: str) -> Dict[str, A
         "first_name": row.get("person_first_name") or row.get("e_first"),
         "middle_name": row.get("person_middle_name") or row.get("e_mid"),
         "department": {"id": row.get("e_dept_id"), "name": row.get("dept_name")},
-        "position": {"id": row.get("e_pos_id"), "name": row.get("pos_name")},
+        "position": {
+            "id": row.get("e_pos_id"), "name": row.get("pos_name"),
+            "name_kk": row.get("pos_name_kk"),
+            "document_possessive_kk": row.get("pos_document_possessive_kk"),
+            "document_nominative_ru": row.get("pos_document_nominative_ru"),
+        },
         "org_unit": {
             "unit_id": org_unit_id,
             "name": row.get("org_unit_name"),

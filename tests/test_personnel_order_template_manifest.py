@@ -83,6 +83,24 @@ def test_canonical_export_is_stable_and_excludes_ids_and_personal_data(tmp_path:
     assert "Иванов" not in decoded and "IIN" not in decoded
 
 
+def test_childcare_package_sync_is_type_scoped_and_never_publishes(tmp_path: Path) -> None:
+    childcare = "LEAVE.CHILDCARE.GRANT"
+    manifest = load_manifest(manifest_path(childcare))
+    assert _sync_plan([manifest], {"status": "PUBLISHED", **{f: manifest[f] for f in TEXT_FIELDS}}) == ("NO_OP", [])
+    write_manifest(childcare, {field: manifest[field] for field in TEXT_FIELDS}, tmp_path)
+    _write(tmp_path, _texts())
+    db = _TemplateDb()
+    assert sync_manifests(apply=False, db_engine=db, root=tmp_path, item_type_code=childcare) == {childcare: "CREATE"}
+    assert db.row is None
+    assert sync_manifests(apply=True, db_engine=db, root=tmp_path, item_type_code=childcare) == {childcare: "CREATE"}
+    assert db.row['item_type_code'] == childcare
+    assert all(db.row[field] == manifest[field] for field in TEXT_FIELDS)
+    assert any("'DRAFT'" in sql for sql in db.statements if sql.lstrip().startswith('INSERT'))
+    assert sync_manifests(apply=False, db_engine=db, root=tmp_path, item_type_code=childcare) == {childcare: "NO_OP"}
+    with pytest.raises(ManifestError):
+        sync_manifests(apply=True, db_engine=db, root=tmp_path, item_type_code="NOT_IN_PACKAGE")
+
+
 def test_export_reads_draft_without_writing_database(tmp_path: Path) -> None:
     db = _TemplateDb({"template_version_id": 99, "revision": 7, **_texts()})
     assert export_drafts([TYPE], db_engine=db, root=tmp_path) == {TYPE: "EXPORT"}

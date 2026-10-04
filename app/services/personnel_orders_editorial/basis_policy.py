@@ -29,10 +29,14 @@ def resolve_basis_required(item_type_code: str) -> tuple[bool, str | None]:
     treat as required AND unsupported so callers mark REVIEW_REQUIRED.
     """
     normalized = str(item_type_code or "").strip().upper()
-    if normalized in {ORDER_TYPE_SUPPLEMENTARY_PAY, ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE, "LEAVE.CHILDCARE.GRANT"}:
+    if normalized in {ORDER_TYPE_SUPPLEMENTARY_PAY, ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE}:
         # The journal title carries no reliable basis.  A reconstruction draft
         # must not invent one from the usual personnel-order default.
         return False, None
+    if normalized == "LEAVE.CHILDCARE.GRANT":
+        # The childcare contract validates two grounds in the item payload:
+        # personal application and the separately dated birth certificate.
+        return True, None
     if normalized == "LEAVE.UNPAID.GRANT":
         # The unpaid-leave generator has a dedicated, normalized personal
         # application basis. Legacy payload data is read only when that row

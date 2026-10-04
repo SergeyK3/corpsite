@@ -109,6 +109,10 @@ def create_manual_draft(*, created_by: int, order_number: str, order_date: date,
             if period_start != period["start"] or period_end != period["end"] or effective_date != period_start:
                 raise PersonnelOrderValidationError("UNPAID_LEAVE_PERIOD_MISMATCH")
             base_payload.update(supplied)
+        if item_type_code == "LEAVE.CHILDCARE.GRANT":
+            from app.services.personnel_orders_command_service import _validate_leave_draft_item
+            base_payload.update(dict(item_payload or {}))
+            _validate_leave_draft_item(item_type_code=item_type_code, employee_id=employee_id, effective_date=effective_date, period_start=period_start, period_end=period_end, payload=base_payload)
         # Recheck inside the write transaction; browser preview is never authoritative.
         duplicate = duplicate_preview(order_number=number, order_date=order_date)
         if duplicate["blocking"]:

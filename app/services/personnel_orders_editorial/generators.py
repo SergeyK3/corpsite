@@ -41,6 +41,7 @@ from app.services.personnel_orders_editorial.constants import (
 from app.services.personnel_orders_editorial.fingerprint import compute_fingerprint
 from app.services.personnel_orders_editorial.position_dictionary import localized_personnel_order_position
 from app.services.personnel_order_termination_reason import termination_reason_text
+from app.services.personnel_order_childcare_contract import TEXTS as CHILDCARE_TEXTS, childcare_values, render_childcare
 
 DOCUMENT_TITLES: Dict[str, Dict[str, str]] = {
     ORDER_TYPE_HIRE: {
@@ -84,8 +85,8 @@ DOCUMENT_TITLES: Dict[str, Dict[str, str]] = {
         "ru": "О предоставлении отпуска без сохранения заработной платы",
     },
     ORDER_TYPE_LEAVE_CHILDCARE_GRANT: {
-        "kk": "Бала үш жасқа толғанға дейін оның күтіміне байланысты жалақы сақталмайтын демалыс беру туралы",
-        "ru": "О предоставлении отпуска без сохранения заработной платы по уходу за ребёнком до достижения им возраста трёх лет",
+        "kk": CHILDCARE_TEXTS["title_kk"],
+        "ru": CHILDCARE_TEXTS["title_ru"],
     },
 }
 
@@ -311,7 +312,9 @@ def generate_order_block(
         )
 
     if normalized_type == ORDER_BLOCK_TYPE_PREAMBLE:
-        if order_type == ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE:
+        if order_type == ORDER_TYPE_LEAVE_CHILDCARE_GRANT:
+            preamble = CHILDCARE_TEXTS[f"preamble_{lang}"]
+        elif order_type == ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE:
             # The legal ground for this temporary wording will be confirmed
             # separately; do not infer an article or a paragraph.
             preamble = (
@@ -353,7 +356,7 @@ def generate_order_block(
         )
 
     if normalized_type == ORDER_BLOCK_TYPE_CLOSING:
-        if order_type in {ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE, "LEAVE.UNPAID.GRANT"}:
+        if order_type in {ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE, "LEAVE.UNPAID.GRANT", ORDER_TYPE_LEAVE_CHILDCARE_GRANT}:
             return _result(
                 generated_text="",
                 generator_key=GENERATOR_KEY_ORDER_CLOSING,
@@ -383,6 +386,9 @@ def generate_item_body(locale: str, item_ctx: Mapping[str, Any]) -> Dict[str, st
     """Generate item body text (ported from personnelOrderPrintItemText.ts)."""
     lang = _locale(locale)
     item_type = str(item_ctx.get("item_type_code") or "").strip().upper()
+    if item_type == ORDER_TYPE_LEAVE_CHILDCARE_GRANT:
+        values = childcare_values(item_ctx.get("childcare_payload") or {}, org_unit_ru=_localized_name(item_ctx.get("org_unit_name"), "ru"))
+        return _result(generated_text=render_childcare(f"body_template_{lang}", values), generator_key=GENERATOR_KEY_ITEM_BODY, fingerprint_payload={"type": item_type, "locale": lang, "values": values})
     employee_name = item_ctx.get("employee_name")
     effective_date = item_ctx.get("effective_date")
     org_unit_name = item_ctx.get("org_unit_name")
@@ -473,21 +479,6 @@ def generate_item_body(locale: str, item_ctx: Mapping[str, Any]) -> Dict[str, st
                 f"Предоставить {fio}, {position} подразделения «{org}», отпуск без сохранения "
                 f"заработной платы {period_phrase} "
                 f"продолжительностью {days} календарных дней."
-            )
-    elif item_type == ORDER_TYPE_LEAVE_CHILDCARE_GRANT:
-        org = _localized_name(org_unit_name, lang)
-        position = _localized_position(position_name, lang)
-        leave_start_text = _format_date(leave_start, lang)
-        leave_end_text = _format_date(leave_end, lang)
-        if lang == "kk":
-            text = (
-                f"{leave_start_text} бастап {leave_end_text} дейін «{org}» бөлімшесінің «{position}» қызметкері {fio} "
-                "бала үш жасқа толғанға дейін оның күтіміне байланысты жалақы сақталмайтын демалыс берілсін."
-            )
-        else:
-            text = (
-                f"Предоставить {fio}, {position} подразделения «{org}», отпуск без сохранения заработной платы "
-                f"по уходу за ребёнком до достижения им возраста трёх лет с {leave_start_text} по {leave_end_text}."
             )
     elif item_type == ORDER_TYPE_HIRE:
         org = _localized_name(org_unit_name, lang)
@@ -651,6 +642,9 @@ def generate_item_body(locale: str, item_ctx: Mapping[str, Any]) -> Dict[str, st
 def generate_basis_text(locale: str, basis_fact: Mapping[str, Any]) -> Dict[str, str]:
     """Generate basis wording (ported from personnelOrderBasisGenerate.ts)."""
     lang = _locale(locale)
+    if basis_fact.get("item_type_code") == ORDER_TYPE_LEAVE_CHILDCARE_GRANT:
+        values = childcare_values(basis_fact.get("childcare_payload") or {}, org_unit_ru=_localized_name(basis_fact.get("org_unit_name"), "ru"))
+        return _result(generated_text=render_childcare(f"basis_template_{lang}", values), generator_key=GENERATOR_KEY_ITEM_BASIS, fingerprint_payload={"type": ORDER_TYPE_LEAVE_CHILDCARE_GRANT, "locale": lang, "values": values})
     basis_type = str(basis_fact.get("basis_type") or "").strip().upper()
     name = _clean(basis_fact.get("subject_employee_name"))
     genitive_ru = _clean(basis_fact.get("subject_employee_name_genitive_ru")) or name

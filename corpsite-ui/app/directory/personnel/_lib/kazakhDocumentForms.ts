@@ -71,3 +71,22 @@ export function calculateKazakhOrgUnitGenitive(name: unknown): CalculatedKazakhF
 }
 
 export function firstNonEmpty(...values: unknown[]) { return values.map(text).find(Boolean) || ""; }
+
+/** Third-person possession, not translation: https://emle.kz/kz/rule?id=125.
+ * Calculated catalogue titles remain editable proposals, never saved forms.
+ */
+export function calculateKazakhPositionPossessive(name: unknown): CalculatedKazakhForm {
+  const source = text(name);
+  if (!source) return { value: "", needsReview: true };
+  const words = source.split(/\s+/u);
+  const last = words.pop() || "";
+  const lower = last.toLocaleLowerCase("kk-KZ");
+  // Compound titles may already carry possession: шаруа бикесі, бөлім бастығы.
+  if (/[сғгқкрлмн][ыі]$/u.test(lower)) return { value: source, needsReview: true };
+  const front = isFront(last);
+  const suffix = VOWELS.includes(lastLetter(last)) ? (front ? "сі" : "сы") : (front ? "і" : "ы");
+  const voiced = /[қкп]$/u.test(lower) && [...lower].filter(c => VOWELS.includes(c)).length > 1
+    ? last.slice(0, -1) + ({ қ: "ғ", к: "г", п: "б" }[lastLetter(last)] || lastLetter(last)) : last;
+  words.push(voiced + suffix);
+  return { value: words.join(" "), needsReview: true };
+}

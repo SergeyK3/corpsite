@@ -11,6 +11,7 @@ from typing import Any, Mapping
 from app.db.models.personnel_orders import ORDER_TYPE_COMPOSITE, PERSONNEL_ORDER_ITEM_TYPE_CODES
 from app.services.personnel_order_template_catalog_data import CATALOG_PROJECTIONS
 from app.services.personnel_order_template_initial_data import INITIAL_TEXTS_BY_TYPE
+from app.services.personnel_order_childcare_contract import VARIABLES as CHILDCARE_VARIABLES, REQUIRED_VARIABLES as CHILDCARE_REQUIRED_VARIABLES
 
 DraftTexts = Mapping[str, str]
 RequiredVariables = Mapping[str, tuple[str, ...]]
@@ -45,7 +46,7 @@ PERSONNEL_ORDER_TEMPLATE_SPECS = {
     "CONCURRENT_DUTY_START": _spec("CONCURRENT_DUTY_START", ("employee.full_name", "effective_date", "concurrent.rate", "total.rate", "basis")),
     "CONCURRENT_DUTY_END": _spec("CONCURRENT_DUTY_END", ("employee.full_name", "effective_date", "concurrent.rate", "remaining.rate", "basis")),
     "LEAVE.ANNUAL.GRANT": _spec("LEAVE.ANNUAL.GRANT", _LEAVE),
-    "LEAVE.CHILDCARE.GRANT": _spec("LEAVE.CHILDCARE.GRANT", _LEAVE[:-2]),
+    "LEAVE.CHILDCARE.GRANT": _spec("LEAVE.CHILDCARE.GRANT", CHILDCARE_VARIABLES, required=CHILDCARE_REQUIRED_VARIABLES),
     "SUPPLEMENTARY_PAY": _spec("SUPPLEMENTARY_PAY", ("employee.full_name",)),
     "LEAVE.UNPAID.GRANT": _spec("LEAVE.UNPAID.GRANT", _LEAVE[:-1] + (
         "leave.period_text_ru", "leave.period_text_kk", "leave.period_clause_ru", "leave.period_clause_kk",

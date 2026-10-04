@@ -11,7 +11,8 @@ import {
   type PersonnelOrderManualDraftCreateResult,
 } from "../_lib/personnelOrdersApi.client";
 import { personnelOrderCanonicalTitle } from "../_lib/personnelOrderCanonicalTitles";
-import { resolvePersonnelOrderDocumentForms } from "../_lib/personnelOrderDocumentForms";
+import { resolvePersonnelOrderDocumentForms, resolvePersonnelOrderOrgUnitForms } from "../_lib/personnelOrderDocumentForms";
+import { russianEmployeeGenitiveForOrder, savedRussianEmployeeNameForm } from "../_lib/personnelOrderRussianWording";
 import { calculateKazakhOrgUnitGenitive, calculateKazakhPersonForm, firstNonEmpty } from "../_lib/kazakhDocumentForms";
 import { getEmployee, getEmployees } from "@/app/directory/employees/_lib/api.client";
 import type { EmployeeDTO } from "@/app/directory/employees/_lib/types";
@@ -33,6 +34,7 @@ type Forms = {
   employee_full_name_dative_kk: string;
   employee_full_name_genitive_kk: string;
   employee_full_name_dative_ru: string;
+  employee_full_name_genitive_ru: string;
 };
 
 const blankForms = (): Forms => ({
@@ -42,6 +44,7 @@ const blankForms = (): Forms => ({
   employee_full_name_dative_kk: "",
   employee_full_name_genitive_kk: "",
   employee_full_name_dative_ru: "",
+  employee_full_name_genitive_ru: "",
 });
 
 const inputClassName =
@@ -52,23 +55,24 @@ function asText(value: unknown) {
 }
 
 function orgUnitDocumentText(orgUnit: EmployeeDTO["org_unit"] | OrgUnitSelectOption | null) {
-  return firstNonEmpty(orgUnit?.document_genitive_kk, calculateKazakhOrgUnitGenitive(orgUnit?.name_kk).value);
+  return resolvePersonnelOrderOrgUnitForms(orgUnit).org_unit_document_genitive_kk;
 }
 
 function documentForms(employee: EmployeeDTO, orgUnit = employee.org_unit): Forms {
   const record = employee as EmployeeDTO & Record<string, unknown>;
-  const dictionary = resolvePersonnelOrderDocumentForms(employee.position);
+  const dictionary = resolvePersonnelOrderDocumentForms(employee.position, employee);
 
   return {
     org_unit_document_genitive_kk:
       orgUnitDocumentText(orgUnit),
     position_document_possessive_kk:
-      asText(record.position_document_possessive_kk) || dictionary.position_document_possessive_kk,
+      dictionary.position_document_possessive_kk,
     position_document_nominative_ru:
-      asText(record.position_document_nominative_ru) || dictionary.position_document_nominative_ru,
+      dictionary.position_document_nominative_ru,
     employee_full_name_dative_kk: firstNonEmpty(record.employee_full_name_dative_kk, calculateKazakhPersonForm(employee, "dative").value),
     employee_full_name_genitive_kk: firstNonEmpty(record.employee_full_name_genitive_kk, calculateKazakhPersonForm(employee, "genitive").value),
-    employee_full_name_dative_ru: asText(record.employee_full_name_dative_ru) || suggestedRussianNameDative(record),
+    employee_full_name_dative_ru: savedRussianEmployeeNameForm(record, "dative") || suggestedRussianNameDative(record),
+    employee_full_name_genitive_ru: russianEmployeeGenitiveForOrder(record),
   };
 }
 
@@ -155,18 +159,26 @@ export default function PersonnelOrderCreateDialog({
   const [start, setStart] = React.useState("");
   const [end, setEnd] = React.useState("");
   const [effective, setEffective] = React.useState("");
+  const [applicationDate, setApplicationDate] = React.useState("");
+  const [applicationNumber, setApplicationNumber] = React.useState("");
+  const [certificateDate, setCertificateDate] = React.useState("");
+  const [certificateNumber, setCertificateNumber] = React.useState("");
   const [kk, setKk] = React.useState<Forms>(blankForms);
   const [formsExpanded, setFormsExpanded] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
   const searchId = React.useRef(0);
   const employeeSelectionId = React.useRef(0);
+  const ruGenitiveEdited = React.useRef(false);
+  const editedPositionForms = React.useRef(new Set<string>());
   const templateId = React.useRef(0);
   const dialogRef = React.useRef<HTMLElement>(null);
   const restoreFocusRef = React.useRef<HTMLElement | null>(null);
 
   const unpaid = type === "LEAVE.UNPAID.GRANT";
-  const formsComplete = Object.values(kk).every((value) => value.trim());
+  const childcare = type === "LEAVE.CHILDCARE.GRANT";
+  const periodLeave = unpaid || childcare;
+  const formsComplete = Object.entries(kk).every(([key, value]) => (!childcare && key === "employee_full_name_genitive_ru") || value.trim());
   const missingFormLabels = ([
     ["org_unit_document_genitive_kk", "Подразделение в тексте приказа (KK)"],
     ["position_document_possessive_kk", "Должность в тексте приказа (KK)"],
@@ -183,7 +195,8 @@ export default function PersonnelOrderCreateDialog({
       orderDate &&
       resolvedTitle &&
       employee?.id &&
-      (unpaid ? start && end && end >= start && formsComplete : effective),
+      (periodLeave ? start && end && end >= start && formsComplete : effective) &&
+      (!childcare || (applicationDate && certificateDate && certificateNumber.trim())),
   );
 
   const requestClose = React.useCallback(() => {
@@ -192,6 +205,9 @@ export default function PersonnelOrderCreateDialog({
 
   const choose = React.useCallback(async (candidate: EmployeeDTO) => {
     const requestId = ++employeeSelectionId.current;
+    ruGenitiveEdited.current = false;
+    editedPositionForms.current.clear();
+    setKk(current => ({ ...current, employee_full_name_genitive_ru: "", position_document_possessive_kk: "", position_document_nominative_ru: "", org_unit_document_genitive_kk: "" }));
     const selected = candidate.id
       ? await getEmployee(String(candidate.id)).catch(() => candidate)
       : candidate;
@@ -203,9 +219,14 @@ export default function PersonnelOrderCreateDialog({
     setSelectedOrgUnit(selected.active_assignment_id ? selected.org_unit : null);
     setPosition(selected.active_assignment_id ? selected.position?.name || "" : "");
     const forms = documentForms(selected, selected.active_assignment_id ? selected.org_unit : null);
-    setKk(forms);
-    setFormsExpanded(!Object.values(forms).every((value) => value.trim()));
-  }, []);
+    setKk(current => ({ ...forms,
+      employee_full_name_genitive_ru: ruGenitiveEdited.current ? current.employee_full_name_genitive_ru : forms.employee_full_name_genitive_ru,
+      position_document_possessive_kk: editedPositionForms.current.has("position_document_possessive_kk") ? current.position_document_possessive_kk : forms.position_document_possessive_kk,
+      position_document_nominative_ru: editedPositionForms.current.has("position_document_nominative_ru") ? current.position_document_nominative_ru : forms.position_document_nominative_ru,
+      org_unit_document_genitive_kk: editedPositionForms.current.has("org_unit_document_genitive_kk") ? current.org_unit_document_genitive_kk : forms.org_unit_document_genitive_kk,
+    }));
+    setFormsExpanded(!Object.entries(forms).every(([key, value]) => (!childcare && key === "employee_full_name_genitive_ru") || value.trim()));
+  }, [childcare]);
 
   React.useEffect(() => {
     if (!open || !type) return;
@@ -336,7 +357,8 @@ export default function PersonnelOrderCreateDialog({
     setEnd("");
     setEffective("");
     setKk(blankForms());
-    setFormsExpanded(Boolean(employee) && nextType === "LEAVE.UNPAID.GRANT");
+    setFormsExpanded(Boolean(employee) && ["LEAVE.UNPAID.GRANT", "LEAVE.CHILDCARE.GRANT"].includes(nextType));
+    setApplicationDate(""); setApplicationNumber(""); setCertificateDate(""); setCertificateNumber("");
     setError(null);
   }
 
@@ -348,10 +370,10 @@ export default function PersonnelOrderCreateDialog({
     try {
       if (!employee?.id) throw Error("Выберите сотрудника из списка.");
       if (unpaid && (!start || !end)) throw Error("Для отпуска укажите дату начала и дату окончания.");
-      if (unpaid && end < start) throw Error("Дата окончания отпуска не может быть раньше даты начала.");
+      if (periodLeave && end < start) throw Error("Дата окончания отпуска не может быть раньше даты начала.");
       const duplicate = await previewPersonnelOrderHeaderDuplicate({ order_number: number, order_date: orderDate });
       if (duplicate.blocking) throw Error("Найден приказ с таким же номером и датой.");
-      const days = unpaid
+      const days = periodLeave
         ? Math.floor((Date.parse(`${end}T00:00:00`) - Date.parse(`${start}T00:00:00`)) / 86400000) + 1
         : undefined;
       const result = await createManualPersonnelOrderDraft({
@@ -362,12 +384,12 @@ export default function PersonnelOrderCreateDialog({
         item_type_code: type,
         employee_id: Number(employee.id),
         document_subject_context: { org_unit_name: org || null, position_name: position || null },
-        effective_date: unpaid ? start : effective,
-        period_start: unpaid ? start : null,
-        period_end: unpaid ? end : null,
-        item_payload: unpaid
+        effective_date: periodLeave ? start : effective,
+        period_start: periodLeave ? start : null,
+        period_end: periodLeave ? end : null,
+        item_payload: periodLeave
           ? {
-              leave: { period_type: start === end ? "SINGLE_DAY" : "CONTINUOUS_RANGE", start, end, days },
+              ...(childcare ? { leave_start: start, leave_end: end, leave_days: days } : { leave: { period_type: start === end ? "SINGLE_DAY" : "CONTINUOUS_RANGE", start, end, days } }),
               document_forms_kk: {
                 org_unit_document_genitive_kk: kk.org_unit_document_genitive_kk,
                 position_document_possessive_kk: kk.position_document_possessive_kk,
@@ -376,10 +398,11 @@ export default function PersonnelOrderCreateDialog({
               },
               document_forms_ru: {
                 employee_full_name_dative_ru: kk.employee_full_name_dative_ru,
+                ...(childcare ? { employee_full_name_genitive_ru: kk.employee_full_name_genitive_ru } : {}),
                 position_document_nominative_ru: kk.position_document_nominative_ru,
               },
               assignment: { org_unit: { id: selectedOrgUnit?.unit_id || null, name: org || null }, position: { id: employee.position?.id || null, name: position || null } },
-              basis: { kind: "PERSONAL_APPLICATION" },
+              basis: childcare ? { kind: "PERSONAL_APPLICATION", date: applicationDate, number: applicationNumber || null, birth_certificate: { date: certificateDate, number: certificateNumber } } : { kind: "PERSONAL_APPLICATION" },
             }
           : undefined,
       });
@@ -395,6 +418,12 @@ export default function PersonnelOrderCreateDialog({
   const selectedEmployee = employee ? (
     <>
       <input aria-label="Сотрудник" readOnly value={employee.fio || ""} className={inputClassName} />
+      <button type="button" disabled={busy} className="text-sm text-blue-600" onClick={() => {
+        ++employeeSelectionId.current;
+        setEmployee(null); setQuery(""); setMatches([]);
+        setSelectedOrgUnit(null); setOrg(""); setPosition(""); setKk(blankForms());
+        editedPositionForms.current.clear(); ruGenitiveEdited.current = false;
+      }}>Сменить сотрудника</button>
       <Field label="Подразделение">
         <select aria-label="Подразделение" value={selectedOrgUnit?.unit_id ?? ""} onChange={(event) => changeOrgUnit(event.target.value)} className={inputClassName}>
           <option value="">Выберите подразделение</option>
@@ -470,19 +499,28 @@ export default function PersonnelOrderCreateDialog({
             {publishedTitleError ? <p role="alert" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900/70 dark:bg-amber-950/40 dark:text-amber-100">{publishedTitleError}</p> : null}
             {type ? <>
               <div className="space-y-1 text-sm font-medium leading-5 text-zinc-800 dark:text-zinc-100"><span>Сотрудник</span>{selectedEmployee}</div>
-              {unpaid ? <>
+              {periodLeave ? <>
               <Field label="Дата начала"><input aria-label="Дата начала" type="date" required value={start} onChange={(event) => { setStart(event.target.value); setEnd(event.target.value); }} className={inputClassName} /></Field>
               <Field label="Дата окончания"><input aria-label="Дата окончания" type="date" required value={end} onChange={(event) => setEnd(event.target.value)} className={inputClassName} /></Field>
+              {childcare ? <>
+                <Field label="Дата заявления"><input type="date" required value={applicationDate} onChange={e=>setApplicationDate(e.target.value)} className={inputClassName} /></Field>
+                <Field label="Номер заявления"><input value={applicationNumber} onChange={e=>setApplicationNumber(e.target.value)} className={inputClassName} /></Field>
+                <Field label="Дата выдачи свидетельства о рождении"><input type="date" required value={certificateDate} onChange={e=>setCertificateDate(e.target.value)} className={inputClassName} /></Field>
+                <Field label="Номер свидетельства о рождении"><input required value={certificateNumber} onChange={e=>setCertificateNumber(e.target.value)} className={inputClassName} /></Field>
+                <p className="text-xs">Дата выдачи свидетельства — не дата рождения ребёнка. Дата окончания отпуска вводится отдельно.</p>
+                <Field label="ФИО сотрудника в родительном падеже (RU)"><input required value={kk.employee_full_name_genitive_ru} onChange={e=>{ ruGenitiveEdited.current = true; setKk(previous=>({...previous, employee_full_name_genitive_ru:e.target.value})); }} className={inputClassName} /></Field>
+              </> : null}
               {employee ? <details open={formsExpanded} onToggle={(event) => setFormsExpanded(event.currentTarget.open)} className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-700" data-testid="personnel-order-text-forms">
                 <summary className="cursor-pointer text-sm font-medium">{formsComplete ? "Формы для текста приказа заполнены автоматически" : "Формы для текста приказа"}</summary>
               {missingFormLabels.length ? <p role="alert" className="mt-2 text-sm text-amber-800">Необходимо заполнить: {missingFormLabels.join(", ")}.</p> : null}
+              {!kk.position_document_possessive_kk.trim() ? <p className="text-xs text-amber-700">В справочнике должности нет казахского названия или сохранённой документной формы. Заполните КК-должность вручную.</p> : <p className="text-xs text-zinc-500">Документные формы редактируемые; рассчитанную форму из названия справочника проверьте.</p>}
               <div className="mt-3 space-y-3">{([
                 ["position_document_possessive_kk", "Должность в тексте приказа (KK)"],
                 ["position_document_nominative_ru", "Должность в тексте приказа (RU)"],
                 ["employee_full_name_dative_kk", "ФИО сотрудника в дательном падеже (KK)"],
                 ["employee_full_name_genitive_kk", "ФИО сотрудника в родительном падеже (KK)"],
                 ["employee_full_name_dative_ru", "ФИО сотрудника в дательном падеже (RU)"],
-              ] as Array<[keyof Forms, string]>).map(([key, label]) => <Field key={key} label={label}><input aria-label={label} value={kk[key]} onChange={(event) => setKk((value) => ({ ...value, [key]: event.target.value }))} className={inputClassName} /></Field>)}<Field label="Подразделение в тексте приказа (KK)"><input aria-label="Подразделение в тексте приказа (KK)" value={kk.org_unit_document_genitive_kk} onChange={(event) => setKk((value) => ({ ...value, org_unit_document_genitive_kk: event.target.value }))} className={inputClassName} />{!hasKazakhOrgUnitText(selectedOrgUnit) ? <p className="text-xs font-normal text-amber-700 dark:text-amber-300">В справочнике отсутствует казахское название выбранного подразделения.</p> : null}</Field></div>
+              ] as Array<[keyof Forms, string]>).map(([key, label]) => <Field key={key} label={label}><input aria-label={label} value={kk[key]} onChange={(event) => { editedPositionForms.current.add(key); setKk((value) => ({ ...value, [key]: event.target.value })); }} className={inputClassName} /></Field>)}<Field label="Подразделение в тексте приказа (KK)"><input aria-label="Подразделение в тексте приказа (KK)" value={kk.org_unit_document_genitive_kk} onChange={(event) => { editedPositionForms.current.add("org_unit_document_genitive_kk"); setKk((value) => ({ ...value, org_unit_document_genitive_kk: event.target.value })); }} className={inputClassName} />{!hasKazakhOrgUnitText(selectedOrgUnit) ? <p className="text-xs font-normal text-amber-700 dark:text-amber-300">В справочнике отсутствует казахское название выбранного подразделения.</p> : null}</Field></div>
               </details>
               : null}
               </> : <Field label="Дата действия"><input aria-label="Дата действия" type="date" required value={effective} onChange={(event) => setEffective(event.target.value)} className={inputClassName} /></Field>}

@@ -58,7 +58,7 @@ export const PERSONNEL_ORDER_TYPE_LABELS: Record<PersonnelOrderType, string> = {
   SUPPLEMENTARY_PAY: "Дополнительная оплата",
   "LEAVE.ANNUAL.GRANT": "Ежегодный трудовой отпуск",
   "LEAVE.UNPAID.GRANT": "Отпуск без сохранения заработной платы",
-  "LEAVE.CHILDCARE.GRANT": "Отпуск без сохранения заработной платы по уходу за ребёнком",
+  "LEAVE.CHILDCARE.GRANT": "О неоплачиваемом отпуске по уходу за ребенком",
   COMPOSITE: "Составной",
 };
 

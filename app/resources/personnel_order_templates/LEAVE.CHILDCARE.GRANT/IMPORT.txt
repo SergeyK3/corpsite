@@ -1,0 +1,18 @@
+Источник: локальная corpsite, PUBLISHED template_version_id=12,
+version_number=1, revision=1, опубликовано 2026-10-04 16:07:10.146184 UTC.
+draft-v1.json выгружен штатным export_personnel_order_templates --from-published.
+Все восемь текстовых полей сохранены точно; content_sha256 проверяется загрузчиком.
+Локальный ID не используется как идентификатор шаблона на другом сервере.
+
+После отдельного разрешения на серверную загрузку, в окружении приложения:
+python -m app.scripts.sync_personnel_order_templates --type LEAVE.CHILDCARE.GRANT --dry-run
+
+При CONFLICT остановиться: серверная версия отличается. Не перезаписывать вручную.
+После проверки dry-run и отдельного разрешения:
+python -m app.scripts.sync_personnel_order_templates --type LEAVE.CHILDCARE.GRANT --apply
+python -m app.scripts.sync_personnel_order_templates --type LEAVE.CHILDCARE.GRANT --dry-run
+
+Загрузчик создаёт/обновляет только DRAFT, не публикует автоматически.
+Проверить черновик в штатном редакторе шаблонов и публиковать отдельно пользователем
+с соответствующими правами. PUBLISHED-версия не перезаписывается.
+В этой задаче серверная загрузка и публикация не выполнялись.

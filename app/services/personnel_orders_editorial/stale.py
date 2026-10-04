@@ -151,6 +151,8 @@ def mark_blocks_stale_after_structured_change(
                     else None
                 )
                 current_fp = current_item_body_fingerprint(item, emp_name, locale)
+            elif item.get("item_type_code") == "LEAVE.CHILDCARE.GRANT":
+                current_fp = generate_basis_text(locale, build_item_ctx(item, None))["source_fingerprint"]
             else:
                 basis = bases.get(int(block["order_item_id"]))
                 if basis is None:

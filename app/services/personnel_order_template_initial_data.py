@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Final
+from app.services.personnel_order_childcare_contract import TEXTS as CHILDCARE_TEXTS
 
 InitialTexts = dict[str, str]
 INITIAL_TEXTS_BY_TYPE: Final[dict[str, InitialTexts]] = {'HIRE': {'title_ru': 'О приёме на работу',
@@ -91,21 +92,7 @@ INITIAL_TEXTS_BY_TYPE: Final[dict[str, InitialTexts]] = {'HIRE': {'title_ru': '�
                         'basis_template_ru': 'Основание: Личное '
                                              'заявление{{basis.application_date_ru}}{{basis.application_number_suffix}}.',
                         'basis_template_kk': 'Негіз: {{employee.full_name_genitive_kk}} жеке өтініші.'},
- 'LEAVE.CHILDCARE.GRANT': {'title_ru': 'О предоставлении отпуска без сохранения заработной платы по уходу за ребёнком '
-                                       'до достижения им возраста трёх лет',
-                           'title_kk': 'Бала үш жасқа толғанға дейін оның күтіміне байланысты жалақы сақталмайтын '
-                                       'демалыс беру туралы',
-                           'preamble_ru': 'В соответствии с Трудовым кодексом Республики Казахстан',
-                           'preamble_kk': 'Қазақстан Республикасының Еңбек кодексіне сәйкес',
-                           'body_template_ru': 'Предоставить {{employee.full_name}}, {{position.title_ru}} '
-                                               'подразделения «{{org_unit.title_ru}}», отпуск по уходу за ребёнком с '
-                                               '{{leave.start_ru}} по {{leave.end_ru}}.',
-                           'body_template_kk': '{{leave.start_kk}} бастап {{leave.end_kk}} дейін '
-                                               '«{{org_unit.title_kk}}» бөлімшесінің «{{position.title_kk}}» '
-                                               'қызметкері {{employee.full_name}} бала күтіміне байланысты демалысқа '
-                                               'жіберілсін.',
-                           'basis_template_ru': 'Основание: {{basis}}.',
-                           'basis_template_kk': 'Негіз: {{basis}}.'},
+ 'LEAVE.CHILDCARE.GRANT': dict(CHILDCARE_TEXTS),
  'SUPPLEMENTARY_PAY': {'title_ru': 'О дополнительной оплате',
                        'title_kk': 'Қосымша ақы туралы',
                        'preamble_ru': 'Условия дополнительной оплаты уточняются после сверки с DOCX.',

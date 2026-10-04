@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.services.personnel_order_childcare_contract import TEXTS as CHILDCARE_TEXTS, REQUIRED_FIELDS as CHILDCARE_REQUIRED_FIELDS
 
 CATALOG_PROJECTIONS = {'HIRE': {'title_ru': 'О приёме на работу',
           'title_kk': 'Жұмысқа қабылдау туралы',
@@ -241,21 +242,12 @@ CATALOG_PROJECTIONS = {'HIRE': {'title_ru': 'О приёме на работу',
                                                                           '[Тегі А.]\n'
                                                                           '«___» ______________ 20___ ж.\n'
                                                                           'Орындаушы: [Орындаушының аты-жөні]'}}}},
- 'LEAVE.CHILDCARE.GRANT': {'title_ru': 'О предоставлении отпуска без сохранения заработной платы по уходу за ребёнком '
-                                       'до достижения им возраста трёх лет',
-                           'title_kk': 'Бала үш жасқа толғанға дейін оның күтіміне байланысты жалақы сақталмайтын '
-                                       'демалыс беру туралы',
-                           'source': 'BUILT_IN',
-                           'support_level': 'PARTIAL',
-                           'supported_locales': ['ru', 'kk'],
-                           'uses_specialized_generator': True,
-                           'is_pilot': False,
-                           'editor_available': True,
-                           'required_fields': [],
-                           'notes': 'Обязательные поля шаблона пока не формализованы; каталог не выводит данные '
-                                    'конкретных приказов.',
-                           'pilot_detail': None,
-                           'template_detail': None},
+ 'LEAVE.CHILDCARE.GRANT': {'title_ru': CHILDCARE_TEXTS['title_ru'], 'title_kk': CHILDCARE_TEXTS['title_kk'],
+                         'source': 'BUILT_IN', 'support_level': 'SUPPORTED', 'supported_locales': ['ru', 'kk'],
+                         'uses_specialized_generator': True, 'is_pilot': False, 'editor_available': True,
+                         'required_fields': list(CHILDCARE_REQUIRED_FIELDS),
+                         'notes': 'Два основания: личное заявление и свидетельство о рождении. Дата выдачи свидетельства не определяет период отпуска. Номер заявления необязателен.',
+                         'pilot_detail': None, 'template_detail': None},
  'SUPPLEMENTARY_PAY': {'title_ru': 'О дополнительной оплате',
                        'title_kk': 'Қосымша ақы туралы',
                        'source': 'BUILT_IN',
