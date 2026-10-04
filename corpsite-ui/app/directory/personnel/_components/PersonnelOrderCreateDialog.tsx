@@ -398,7 +398,7 @@ export default function PersonnelOrderCreateDialog({
       <Field label="Подразделение">
         <select aria-label="Подразделение" value={selectedOrgUnit?.unit_id ?? ""} onChange={(event) => changeOrgUnit(event.target.value)} className={inputClassName}>
           <option value="">Выберите подразделение</option>
-          {selectedOrgUnit && !orgUnitOptions.some((item) => item.unit_id === selectedOrgUnit.unit_id) ? <option value={selectedOrgUnit.unit_id}>{selectedOrgUnit.name}</option> : null}
+          {selectedOrgUnit?.unit_id != null && !orgUnitOptions.some((item) => item.unit_id === selectedOrgUnit.unit_id) ? <option value={selectedOrgUnit.unit_id}>{selectedOrgUnit.name}</option> : null}
           {orgUnitOptions.map((item) => <option key={item.unit_id} value={item.unit_id}>{item.name}</option>)}
         </select>
       </Field>
