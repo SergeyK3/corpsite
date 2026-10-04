@@ -25,6 +25,7 @@ from app.db.engine import engine
 
 DEFAULT_PACKAGE = ROOT / "reference-data" / "org_units_name_kk.json"
 DEFAULT_BACKUP_DIR = ROOT / "runtime" / "org_units_name_kk_backups"
+REQUIRED_ORG_UNITS_COLUMNS = frozenset({"unit_id", "code", "name", "group_id", "name_kk", "document_genitive_kk"})
 
 
 class SyncSafetyError(RuntimeError):
@@ -66,6 +67,24 @@ def load_package(path: Path) -> list[dict[str, str]]:
     if len(items) != 46:
         raise SyncSafetyError(f"expected exactly 46 confirmed names, got {len(items)}")
     return items
+
+
+def assert_org_units_schema(connection: Any) -> None:
+    """Fail before the first org_units data query when the schema is outdated."""
+    statement = text("""
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'org_units'
+    """)
+    present = {str(row["column_name"]) for row in connection.execute(statement).mappings()}
+    missing = sorted(REQUIRED_ORG_UNITS_COLUMNS - present)
+    if missing:
+        raise SyncSafetyError(
+            "public.org_units is missing required columns: "
+            + ", ".join(missing)
+            + ". Run the tracked Alembic migrations (alembic upgrade head) before syncing names."
+        )
 
 
 def load_target_rows(connection: Any, codes: Iterable[str]) -> list[dict[str, Any]]:
@@ -174,6 +193,7 @@ def apply_plan(connection: Any, plan: dict[str, Any]) -> int:
 def run(package_path: Path, *, apply: bool, backup_path: Path | None = None) -> dict[str, Any]:
     items = load_package(package_path)
     with engine.begin() as connection:
+        assert_org_units_schema(connection)
         plan = make_plan(items, load_target_rows(connection, (item["code"] for item in items)))
         assert_safe(plan)
         if not apply:

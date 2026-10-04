@@ -5,7 +5,13 @@ from pathlib import Path
 
 import pytest
 
-from scripts.sync_org_units_name_kk import SyncSafetyError, load_package, make_plan
+from scripts.sync_org_units_name_kk import (
+    REQUIRED_ORG_UNITS_COLUMNS,
+    SyncSafetyError,
+    assert_org_units_schema,
+    load_package,
+    make_plan,
+)
 
 
 PACKAGE = Path(__file__).resolve().parents[1] / "reference-data" / "org_units_name_kk.json"
@@ -72,3 +78,30 @@ def test_package_loader_rejects_duplicate_codes(tmp_path: Path) -> None:
 
     with pytest.raises(SyncSafetyError, match="duplicate package codes"):
         load_package(path)
+
+
+class _SchemaResult:
+    def __init__(self, columns: set[str]) -> None:
+        self._columns = columns
+
+    def mappings(self) -> list[dict[str, str]]:
+        return [{"column_name": column} for column in self._columns]
+
+
+class _SchemaConnection:
+    def __init__(self, columns: set[str]) -> None:
+        self._columns = columns
+
+    def execute(self, _statement: object) -> _SchemaResult:
+        return _SchemaResult(self._columns)
+
+
+def test_schema_preflight_names_missing_columns_before_any_org_units_query() -> None:
+    columns = set(REQUIRED_ORG_UNITS_COLUMNS) - {"name_kk", "document_genitive_kk"}
+
+    with pytest.raises(SyncSafetyError, match="document_genitive_kk, name_kk"):
+        assert_org_units_schema(_SchemaConnection(columns))
+
+
+def test_schema_preflight_accepts_the_complete_schema() -> None:
+    assert_org_units_schema(_SchemaConnection(set(REQUIRED_ORG_UNITS_COLUMNS)))
