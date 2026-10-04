@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCurrentUser } from "@/lib/currentUser";
 
 import TaskOrgFiltersBar from "@/components/TaskOrgFiltersBar";
-import { getEmployees } from "@/app/directory/employees/_lib/api.client";
+import { getEmployee, getEmployees } from "@/app/directory/employees/_lib/api.client";
 import { mapEmployeesResponseToSearchOptions, type EmployeeSearchOption } from "../_lib/personnelOrderEmployeeSearch";
 
 import PersonnelOrderCreateDialog from "./PersonnelOrderCreateDialog";
@@ -82,6 +82,20 @@ export default function PersonnelOrdersPageClient() {
   const [employeeOptions, setEmployeeOptions] = React.useState<EmployeeSearchOption[]>([]);
 
   React.useEffect(() => {
+    const employeeId = filters.employee_id;
+    if (!employeeId) return;
+    let cancelled = false;
+    void getEmployee(String(employeeId))
+      .then((employee) => {
+        if (!cancelled) setEmployeeQuery(employee.fio || `#${employeeId}`);
+      })
+      .catch(() => {
+        if (!cancelled) setEmployeeQuery(`#${employeeId}`);
+      });
+    return () => { cancelled = true; };
+  }, [filters.employee_id]);
+
+  React.useEffect(() => {
     const query = employeeQuery.trim();
     if (query.length < 2) { setEmployeeOptions([]); return; }
     let cancelled = false;
@@ -153,7 +167,6 @@ export default function PersonnelOrdersPageClient() {
   function openOrder(row: PersonnelOrderListItem) {
     setSelectedOrderId(row.order_id);
     setDrawerOpen(true);
-    updateFilters({ order_id: row.order_id });
   }
 
   function closeDrawer() {
@@ -170,11 +183,11 @@ export default function PersonnelOrdersPageClient() {
   }
 
   function handleCreated(detail: PersonnelOrderManualDraftCreateResult) {
-    setToast(`Создан черновик приказа #${detail.order_id}`);
+    const orderNumber = String(detail.order_number || "").trim();
+    setToast(orderNumber ? `Черновик приказа создан: № ${orderNumber}` : "Черновик приказа создан");
     void load();
     setSelectedOrderId(detail.order_id);
     setDrawerOpen(true);
-    updateFilters({ order_id: detail.order_id });
   }
 
   function handleChanged() {
@@ -329,11 +342,14 @@ export default function PersonnelOrdersPageClient() {
             type="search"
             aria-label="Сотрудник"
             value={employeeQuery}
-            onChange={(e) => setEmployeeQuery(e.target.value)}
+            onChange={(e) => {
+              setEmployeeQuery(e.target.value);
+              if (filters.employee_id) updateFilters({ employee_id: undefined });
+            }}
             placeholder="Введите фамилию или ФИО"
             className="min-w-[14rem] rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
           />
-          {filters.employee_id ? <button type="button" aria-label="Очистить сотрудника" onClick={() => { setEmployeeQuery(""); updateFilters({ employee_id: undefined }); }} className="ml-2 text-xs underline">Очистить</button> : null}
+          {filters.employee_id ? <button type="button" aria-label="Очистить сотрудника" onClick={() => { setEmployeeOptions([]); setEmployeeQuery(""); updateFilters({ employee_id: undefined }); }} className="ml-2 text-xs underline">Очистить</button> : null}
           {employeeOptions.length > 0 ? <div className="absolute z-20 mt-1 w-full rounded border bg-white shadow dark:bg-zinc-950">{employeeOptions.map((option) => <button key={option.employee_id} type="button" className="block w-full px-3 py-2 text-left text-sm hover:bg-zinc-100 dark:hover:bg-zinc-800" onClick={() => { setEmployeeQuery(option.full_name); setEmployeeOptions([]); updateFilters({ employee_id: option.employee_id }); }}><span className="block font-medium">{option.full_name}</span><span className="block text-xs text-zinc-500">{option.position_name || "—"} · {option.org_unit_name || "—"}</span></button>)}</div> : null}
         </div>
         <div>

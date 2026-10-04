@@ -326,6 +326,17 @@ def _employee_select_sql(emp_rel: str, emp_cols: List[str]) -> Tuple[str, Dict[s
     ]
 
     join_sql = ""
+    # The personnel-order form needs the source name components to apply
+    # Kazakh document-case rules without rewriting the employee record.
+    if "person_id" in set(emp_cols) and ("persons", "table") in _list_relations():
+        select_parts += [
+            "person.last_name AS person_last_name",
+            "person.first_name AS person_first_name",
+            "person.middle_name AS person_middle_name",
+        ]
+        join_sql += " LEFT JOIN public.persons person ON person.person_id = e.person_id"
+    else:
+        select_parts += ["NULL AS person_last_name", "NULL AS person_first_name", "NULL AS person_middle_name"]
 
     # Departments (auto-detect relation + columns)
     dept_rel, dept_cols = _departments_relation()
@@ -413,6 +424,8 @@ def _employee_select_sql(emp_rel: str, emp_cols: List[str]) -> Tuple[str, Dict[s
     # Org Units (canonical table)
     select_parts += [
         "ou.name AS org_unit_name",
+        "NULLIF(BTRIM(to_jsonb(ou) ->> 'name_kk'), '') AS org_unit_name_kk",
+        "NULLIF(BTRIM(to_jsonb(ou) ->> 'document_genitive_kk'), '') AS org_unit_document_genitive_kk",
         "ou.code AS org_unit_code",
         "ou.parent_unit_id AS org_unit_parent_unit_id",
         "ou.is_active AS org_unit_is_active",
@@ -508,11 +521,16 @@ def _normalize_employee_joined(row: Dict[str, Any], emp_rel: str) -> Dict[str, A
         "id": str(row.get("e_id")) if row.get("e_id") is not None else None,
         "person_id": int(row["e_person_id"]) if row.get("e_person_id") is not None else None,
         "fio": fio,
+        "last_name": row.get("person_last_name") or row.get("e_last"),
+        "first_name": row.get("person_first_name") or row.get("e_first"),
+        "middle_name": row.get("person_middle_name") or row.get("e_mid"),
         "department": {"id": row.get("e_dept_id"), "name": row.get("dept_name")},
         "position": {"id": row.get("e_pos_id"), "name": row.get("pos_name")},
         "org_unit": {
             "unit_id": org_unit_id,
             "name": row.get("org_unit_name"),
+            "name_kk": row.get("org_unit_name_kk"),
+            "document_genitive_kk": row.get("org_unit_document_genitive_kk"),
             "code": row.get("org_unit_code"),
             "parent_unit_id": parent_unit_id,
             "is_active": org_unit_is_active,

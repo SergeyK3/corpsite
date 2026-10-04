@@ -12,8 +12,10 @@ import {
 } from "../_lib/personnelOrdersApi.client";
 import { personnelOrderCanonicalTitle } from "../_lib/personnelOrderCanonicalTitles";
 import { resolvePersonnelOrderDocumentForms } from "../_lib/personnelOrderDocumentForms";
+import { calculateKazakhOrgUnitGenitive, calculateKazakhPersonForm, firstNonEmpty } from "../_lib/kazakhDocumentForms";
 import { getEmployee, getEmployees } from "@/app/directory/employees/_lib/api.client";
 import type { EmployeeDTO } from "@/app/directory/employees/_lib/types";
+import { loadOrgUnitSelectOptions, type OrgUnitSelectOption } from "@/lib/orgUnitsSelect";
 
 type Props = {
   open: boolean;
@@ -49,21 +51,29 @@ function asText(value: unknown) {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function documentForms(employee: EmployeeDTO): Forms {
+function orgUnitDocumentText(orgUnit: EmployeeDTO["org_unit"] | OrgUnitSelectOption | null) {
+  return firstNonEmpty(orgUnit?.document_genitive_kk, calculateKazakhOrgUnitGenitive(orgUnit?.name_kk).value);
+}
+
+function documentForms(employee: EmployeeDTO, orgUnit = employee.org_unit): Forms {
   const record = employee as EmployeeDTO & Record<string, unknown>;
-  const dictionary = resolvePersonnelOrderDocumentForms(employee.org_unit?.unit_id, employee.position);
+  const dictionary = resolvePersonnelOrderDocumentForms(employee.position);
 
   return {
     org_unit_document_genitive_kk:
-      asText(record.org_unit_document_genitive_kk) || dictionary.org_unit_document_genitive_kk,
+      orgUnitDocumentText(orgUnit),
     position_document_possessive_kk:
       asText(record.position_document_possessive_kk) || dictionary.position_document_possessive_kk,
     position_document_nominative_ru:
       asText(record.position_document_nominative_ru) || dictionary.position_document_nominative_ru,
-    employee_full_name_dative_kk: asText(record.employee_full_name_dative_kk) || suggestedKazakhNameForm(record, "dative"),
-    employee_full_name_genitive_kk: asText(record.employee_full_name_genitive_kk) || suggestedKazakhNameForm(record, "genitive"),
+    employee_full_name_dative_kk: firstNonEmpty(record.employee_full_name_dative_kk, calculateKazakhPersonForm(employee, "dative").value),
+    employee_full_name_genitive_kk: firstNonEmpty(record.employee_full_name_genitive_kk, calculateKazakhPersonForm(employee, "genitive").value),
     employee_full_name_dative_ru: asText(record.employee_full_name_dative_ru) || suggestedRussianNameDative(record),
   };
+}
+
+function hasKazakhOrgUnitText(orgUnit: EmployeeDTO["org_unit"] | OrgUnitSelectOption | null) {
+  return Boolean(orgUnitDocumentText(orgUnit));
 }
 
 function kazakhNameForm(fullName: string, form: "dative" | "genitive") {
@@ -139,6 +149,8 @@ export default function PersonnelOrderCreateDialog({
   const [employee, setEmployee] = React.useState<EmployeeDTO | null>(null);
   const [matches, setMatches] = React.useState<EmployeeDTO[]>([]);
   const [org, setOrg] = React.useState("");
+  const [selectedOrgUnit, setSelectedOrgUnit] = React.useState<EmployeeDTO["org_unit"] | OrgUnitSelectOption | null>(null);
+  const [orgUnitOptions, setOrgUnitOptions] = React.useState<OrgUnitSelectOption[]>([]);
   const [position, setPosition] = React.useState("");
   const [start, setStart] = React.useState("");
   const [end, setEnd] = React.useState("");
@@ -188,11 +200,29 @@ export default function PersonnelOrderCreateDialog({
     setQuery(selected.fio || "");
     setMatches([]);
     setOrg(selected.active_assignment_id ? selected.org_unit?.name || "" : "");
+    setSelectedOrgUnit(selected.active_assignment_id ? selected.org_unit : null);
     setPosition(selected.active_assignment_id ? selected.position?.name || "" : "");
-    const forms = documentForms(selected);
+    const forms = documentForms(selected, selected.active_assignment_id ? selected.org_unit : null);
     setKk(forms);
     setFormsExpanded(!Object.values(forms).every((value) => value.trim()));
   }, []);
+
+  React.useEffect(() => {
+    if (!open || !type) return;
+    let cancelled = false;
+    void loadOrgUnitSelectOptions()
+      .then((items) => { if (!cancelled) setOrgUnitOptions(items); })
+      .catch(() => { if (!cancelled) setOrgUnitOptions([]); });
+    return () => { cancelled = true; };
+  }, [open, type]);
+
+  const changeOrgUnit = React.useCallback((value: string) => {
+    const unitId = Number(value);
+    const next = orgUnitOptions.find((item) => item.unit_id === unitId) ?? null;
+    setSelectedOrgUnit(next);
+    setOrg(next?.name || "");
+    setKk((current) => ({ ...current, org_unit_document_genitive_kk: orgUnitDocumentText(next) }));
+  }, [orgUnitOptions]);
 
   React.useEffect(() => {
     const id = ++templateId.current;
@@ -348,7 +378,7 @@ export default function PersonnelOrderCreateDialog({
                 employee_full_name_dative_ru: kk.employee_full_name_dative_ru,
                 position_document_nominative_ru: kk.position_document_nominative_ru,
               },
-              assignment: { org_unit: { id: employee.org_unit?.unit_id || null, name: org || null }, position: { id: employee.position?.id || null, name: position || null } },
+              assignment: { org_unit: { id: selectedOrgUnit?.unit_id || null, name: org || null }, position: { id: employee.position?.id || null, name: position || null } },
               basis: { kind: "PERSONAL_APPLICATION" },
             }
           : undefined,
@@ -366,9 +396,10 @@ export default function PersonnelOrderCreateDialog({
     <>
       <input aria-label="Сотрудник" readOnly value={employee.fio || ""} className={inputClassName} />
       <Field label="Подразделение">
-        <select aria-label="Подразделение" value={org} onChange={(event) => setOrg(event.target.value)} className={inputClassName}>
+        <select aria-label="Подразделение" value={selectedOrgUnit?.unit_id ?? ""} onChange={(event) => changeOrgUnit(event.target.value)} className={inputClassName}>
           <option value="">Выберите подразделение</option>
-          {org ? <option value={org}>{org}</option> : null}
+          {selectedOrgUnit && !orgUnitOptions.some((item) => item.unit_id === selectedOrgUnit.unit_id) ? <option value={selectedOrgUnit.unit_id}>{selectedOrgUnit.name}</option> : null}
+          {orgUnitOptions.map((item) => <option key={item.unit_id} value={item.unit_id}>{item.name}</option>)}
         </select>
       </Field>
       <Field label="Должность">
@@ -446,13 +477,12 @@ export default function PersonnelOrderCreateDialog({
                 <summary className="cursor-pointer text-sm font-medium">{formsComplete ? "Формы для текста приказа заполнены автоматически" : "Формы для текста приказа"}</summary>
               {missingFormLabels.length ? <p role="alert" className="mt-2 text-sm text-amber-800">Необходимо заполнить: {missingFormLabels.join(", ")}.</p> : null}
               <div className="mt-3 space-y-3">{([
-                ["org_unit_document_genitive_kk", "Подразделение в тексте приказа (KK)"],
                 ["position_document_possessive_kk", "Должность в тексте приказа (KK)"],
                 ["position_document_nominative_ru", "Должность в тексте приказа (RU)"],
                 ["employee_full_name_dative_kk", "ФИО сотрудника в дательном падеже (KK)"],
                 ["employee_full_name_genitive_kk", "ФИО сотрудника в родительном падеже (KK)"],
                 ["employee_full_name_dative_ru", "ФИО сотрудника в дательном падеже (RU)"],
-              ] as Array<[keyof Forms, string]>).map(([key, label]) => <Field key={key} label={label}><input aria-label={label} value={kk[key]} onChange={(event) => setKk((value) => ({ ...value, [key]: event.target.value }))} className={inputClassName} /></Field>)}</div>
+              ] as Array<[keyof Forms, string]>).map(([key, label]) => <Field key={key} label={label}><input aria-label={label} value={kk[key]} onChange={(event) => setKk((value) => ({ ...value, [key]: event.target.value }))} className={inputClassName} /></Field>)}<Field label="Подразделение в тексте приказа (KK)"><input aria-label="Подразделение в тексте приказа (KK)" value={kk.org_unit_document_genitive_kk} onChange={(event) => setKk((value) => ({ ...value, org_unit_document_genitive_kk: event.target.value }))} className={inputClassName} />{!hasKazakhOrgUnitText(selectedOrgUnit) ? <p className="text-xs font-normal text-amber-700 dark:text-amber-300">В справочнике отсутствует казахское название выбранного подразделения.</p> : null}</Field></div>
               </details>
               : null}
               </> : <Field label="Дата действия"><input aria-label="Дата действия" type="date" required value={effective} onChange={(event) => setEffective(event.target.value)} className={inputClassName} /></Field>}

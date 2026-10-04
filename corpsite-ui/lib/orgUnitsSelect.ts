@@ -5,6 +5,8 @@ export type OrgUnitSelectOption = {
   unit_id: number;
   name: string;
   group_id: number | null;
+  name_kk?: string | null;
+  document_genitive_kk?: string | null;
 };
 
 type OrgUnitRow = {
@@ -20,6 +22,8 @@ type OrgUnitRow = {
   code?: string | null;
   group_id?: number | string | null;
   groupId?: number | string | null;
+  name_kk?: string | null;
+  document_genitive_kk?: string | null;
   children?: OrgUnitRow[];
 };
 
@@ -28,6 +32,8 @@ type OrgTreeNode = {
   unit_id: number | null;
   name: string;
   group_id: number | null;
+  name_kk?: string | null;
+  document_genitive_kk?: string | null;
   children: OrgTreeNode[];
 };
 
@@ -68,6 +74,13 @@ function ownGroupId(row: OrgUnitRow | OrgTreeNode): number | null {
   return null;
 }
 
+function formsOf(row: { name_kk?: string | null; document_genitive_kk?: string | null }) {
+  return {
+    ...(row.name_kk != null ? { name_kk: row.name_kk } : {}),
+    ...(row.document_genitive_kk != null ? { document_genitive_kk: row.document_genitive_kk } : {}),
+  };
+}
+
 function dedupeOrgUnitOptions(items: OrgUnitSelectOption[]): OrgUnitSelectOption[] {
   const byUnitId = new Map<number, OrgUnitSelectOption>();
 
@@ -97,6 +110,7 @@ function normalizeOrgUnitNodeTree(raw: OrgUnitRow): OrgTreeNode {
     unit_id: unitIdOf(raw),
     name: unitNameOf(raw),
     group_id: ownGroupId(raw),
+    ...formsOf(raw),
     children: childrenRaw.map(normalizeOrgUnitNodeTree),
   };
 }
@@ -108,6 +122,7 @@ function buildTreeFromFlat(itemsRaw: OrgUnitRow[]): OrgTreeNode[] {
     unit_id: unitIdOf(x),
     name: unitNameOf(x),
     group_id: ownGroupId(x),
+    ...formsOf(x),
   }));
 
   const byKey = new Map<string, OrgTreeNode>();
@@ -117,6 +132,7 @@ function buildTreeFromFlat(itemsRaw: OrgUnitRow[]): OrgTreeNode[] {
       unit_id: n.unit_id,
       name: n.name,
       group_id: n.group_id,
+      ...formsOf(n),
       children: [],
     }),
   );
@@ -246,6 +262,7 @@ function flattenOrgUnitTree(nodes: OrgTreeNode[], inheritedGroupId: number | nul
           unit_id: node.unit_id,
           name: node.name,
           group_id: effectiveGroup,
+          ...formsOf(node),
         });
       }
       if (node.children.length > 0) {
@@ -287,6 +304,7 @@ function enrichFlatOrgUnitsWithInheritedGroup(rows: OrgUnitRow[]): OrgUnitSelect
           unit_id: unitId,
           name: unitNameOf(row),
           group_id: resolveGroup(unitId),
+          ...formsOf(row),
         },
       ];
     }),

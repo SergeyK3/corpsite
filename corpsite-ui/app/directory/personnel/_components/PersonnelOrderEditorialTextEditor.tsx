@@ -46,6 +46,8 @@ type Props = {
   basisDocuments?: Array<{ basis_id?: unknown; document_type?: unknown; description?: unknown; source_text?: unknown }>;
   onOrderChanged?: (detail: PersonnelOrderDetailResponse) => void;
   onEditorialChanged?: (state: PersonnelOrderEditorialState) => void;
+  /** Saves the active structured item before text is generated. */
+  beforeGenerate?: () => Promise<boolean>;
   /** Parent-owned editorial snapshot, including the response from template apply. */
   editorialState?: PersonnelOrderEditorialState | null;
   /** Drawer-supplied locale keeps document and editorial editing synchronized. */
@@ -350,6 +352,7 @@ export default function PersonnelOrderEditorialTextEditor({
   basisDocuments = [],
   onOrderChanged,
   onEditorialChanged,
+  beforeGenerate,
   editorialState,
   locale,
 }: Props) {
@@ -407,6 +410,10 @@ export default function PersonnelOrderEditorialTextEditor({
     setError(null);
     setMessage(null);
     try {
+      if (beforeGenerate && !(await beforeGenerate())) {
+        setError("Не удалось сохранить пункт. Формирование текста не выполнено.");
+        return;
+      }
       const next = await generatePersonnelOrderEditorial(orderId);
       setState(next);
       onEditorialChanged?.(next);

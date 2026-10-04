@@ -10,6 +10,7 @@ vi.mock("../_lib/personnelOrdersApi.client", async () => ({
   createManualPersonnelOrderDraft: vi.fn(),
 }));
 vi.mock("@/app/directory/employees/_lib/api.client", () => ({ getEmployee: vi.fn(), getEmployees: vi.fn() }));
+vi.mock("@/lib/orgUnitsSelect", () => ({ loadOrgUnitSelectOptions: vi.fn() }));
 
 import {
   createManualPersonnelOrderDraft,
@@ -17,6 +18,7 @@ import {
   previewPersonnelOrderHeaderDuplicate,
 } from "../_lib/personnelOrdersApi.client";
 import { getEmployee, getEmployees } from "@/app/directory/employees/_lib/api.client";
+import { loadOrgUnitSelectOptions } from "@/lib/orgUnitsSelect";
 
 // Actual /directory/employees search item and /directory/employees/383 detail.
 const employee = {
@@ -33,7 +35,12 @@ const employee = {
   termination: null,
   source: { relation: "employees" },
 };
-const employeeDetail = { ...employee, active_assignment_id: 361, user: null };
+const employeeDetail = {
+  ...employee,
+  active_assignment_id: 361,
+  org_unit: { ...employee.org_unit, document_genitive_kk: "Сәулелік диагностика бөлімшесінің" },
+  user: null,
+};
 
 const unpaidTitles = {
   item_type_code: "LEAVE.UNPAID.GRANT",
@@ -57,6 +64,10 @@ function setup(onClose = vi.fn(), onCreated = vi.fn()) {
   );
   vi.mocked(getEmployees).mockResolvedValue({ items: [employee], total: 1 });
   vi.mocked(getEmployee).mockResolvedValue(employeeDetail);
+  vi.mocked(loadOrgUnitSelectOptions).mockResolvedValue([
+    { unit_id: 41, name: "Многопрофильный медицинский центр", group_id: null, name_kk: null, document_genitive_kk: null },
+    { unit_id: 59, name: "Лучевая диагностика", group_id: 2, name_kk: "Сәулелік диагностика бөлімшесі", document_genitive_kk: "Сәулелік диагностика бөлімшесінің" },
+  ]);
   render(<PersonnelOrderCreateDialog open onClose={onClose} onCreated={onCreated} />);
   return { onClose, onCreated };
 }
@@ -178,7 +189,7 @@ it("loads the primary assignment and keeps the footer after the unpaid KK fields
   setup();
   await selectUnpaid();
   await selectEmployee();
-  expect(screen.getByLabelText("Подразделение")).toHaveValue("Лучевая диагностика");
+  expect(screen.getByLabelText("Подразделение")).toHaveValue("59");
   expect(screen.getByLabelText("Должность")).toHaveValue("Врач");
   fireEvent.change(screen.getByLabelText("Дата начала"), { target: { value: "2026-07-07" } });
   expect(screen.getByLabelText("Дата окончания")).toHaveValue("2026-07-07");
@@ -223,6 +234,7 @@ it("fills Ilyasova's actual active-assignment document forms from the API detail
   const forms = screen.getByTestId("personnel-order-text-forms");
   expect(forms).not.toHaveAttribute("open");
   expect(forms).toHaveTextContent("Формы для текста приказа заполнены автоматически");
+  expect(screen.queryByText("В справочнике отсутствует казахское название выбранного подразделения.")).not.toBeInTheDocument();
   expect(screen.getByLabelText("Подразделение в тексте приказа (KK)")).toHaveValue("Сәулелік диагностика бөлімшесінің");
   expect(screen.getByLabelText("Должность в тексте приказа (KK)")).toHaveValue("дәрігері");
   expect(screen.getByLabelText("Должность в тексте приказа (RU)")).toHaveValue("врач");
@@ -259,6 +271,74 @@ it("keeps actual API document forms after asynchronous detail loading and a subs
   expect(screen.getByLabelText("Должность в тексте приказа (KK)")).toHaveValue("дәрігері");
   expect(screen.getByLabelText("Должность в тексте приказа (RU)")).toHaveValue("врач");
   expect(screen.getByLabelText("ФИО сотрудника в дательном падеже (RU)")).toHaveValue("Ильясовой Ассель Адиловне");
+});
+
+it("uses the directory Kazakh name when its order-text form is absent and preserves a manual edit on rerender", async () => {
+  setup();
+  vi.mocked(getEmployee).mockResolvedValueOnce({
+    ...employeeDetail,
+    org_unit: { ...employee.org_unit, name_kk: "Сәулелік диагностика бөлімшесі", document_genitive_kk: null },
+  });
+  await selectUnpaid();
+  await selectEmployee();
+  const field = screen.getByLabelText("Подразделение в тексте приказа (KK)");
+    expect(field).toHaveValue("Сәулелік диагностика бөлімшесінің");
+  fireEvent.change(field, { target: { value: "Ручная форма" } });
+  fireEvent.change(screen.getByLabelText("Язык"), { target: { value: "ru" } });
+  expect(field).toHaveValue("Ручная форма");
+});
+
+it("replaces the order-text department form from the selected directory unit", async () => {
+  setup();
+  await selectUnpaid();
+  await selectEmployee();
+  const department = screen.getByLabelText("Подразделение");
+  await waitFor(() => expect(screen.getByRole("option", { name: "Лучевая диагностика" })).toBeInTheDocument());
+  fireEvent.change(department, { target: { value: "41" } });
+  expect(screen.getByLabelText("Подразделение в тексте приказа (KK)")).toHaveValue("");
+  expect(screen.getByText("В справочнике отсутствует казахское название выбранного подразделения.")).toBeInTheDocument();
+  fireEvent.change(department, { target: { value: "59" } });
+  expect(screen.getByLabelText("Подразделение в тексте приказа (KK)")).toHaveValue("Сәулелік диагностика бөлімшесінің");
+  expect(screen.queryByText("В справочнике отсутствует казахское название выбранного подразделения.")).not.toBeInTheDocument();
+});
+
+it("keeps automatic employee-selected department text while the directory finishes loading", async () => {
+  let resolveCatalog: ((items: Array<{ unit_id: number; name: string; group_id: number | null; name_kk?: string | null; document_genitive_kk?: string | null }>) => void) | undefined;
+  vi.mocked(loadOrgUnitSelectOptions).mockImplementationOnce(() => new Promise((resolve) => { resolveCatalog = resolve; }));
+  setup();
+  await selectUnpaid();
+  await selectEmployee();
+  const field = screen.getByLabelText("Подразделение в тексте приказа (KK)");
+  expect(field).toHaveValue("Сәулелік диагностика бөлімшесінің");
+  resolveCatalog?.([{ unit_id: 59, name: "Лучевая диагностика", group_id: 2, name_kk: "Сәулелік диагностика бөлімшесі", document_genitive_kk: "Сәулелік диагностика бөлімшесінің" }]);
+  await waitFor(() => expect(field).toHaveValue("Сәулелік диагностика бөлімшесінің"));
+  fireEvent.change(field, { target: { value: "Ручная форма" } });
+  fireEvent.change(screen.getByLabelText("Язык"), { target: { value: "ru" } });
+  expect(field).toHaveValue("Ручная форма");
+});
+
+it("keeps a manual department-text edit when the dialog is closed and reopened", async () => {
+  vi.mocked(getPersonnelOrderPublishedTemplateTitle).mockResolvedValue(unpaidTitles);
+  vi.mocked(getEmployees).mockResolvedValue({ items: [employee], total: 1 });
+  vi.mocked(getEmployee).mockResolvedValue(employeeDetail);
+  vi.mocked(loadOrgUnitSelectOptions).mockResolvedValue([{ unit_id: 59, name: "Лучевая диагностика", group_id: 2, document_genitive_kk: "Сәулелік диагностика бөлімшесінің" }]);
+  const view = render(<PersonnelOrderCreateDialog open onClose={vi.fn()} onCreated={vi.fn()} />);
+  await selectUnpaid();
+  await selectEmployee();
+  const field = screen.getByLabelText("Подразделение в тексте приказа (KK)");
+  fireEvent.change(field, { target: { value: "Ручная форма" } });
+  view.rerender(<PersonnelOrderCreateDialog open={false} onClose={vi.fn()} onCreated={vi.fn()} />);
+  view.rerender(<PersonnelOrderCreateDialog open onClose={vi.fn()} onCreated={vi.fn()} />);
+  expect(screen.getByLabelText("Подразделение в тексте приказа (KK)")).toHaveValue("Ручная форма");
+});
+
+it("identifies a missing Kazakh directory name next to the editable field", async () => {
+  setup();
+  vi.mocked(getEmployee).mockResolvedValueOnce({ ...employeeDetail, org_unit: { ...employee.org_unit, unit_id: 999 } });
+  await selectUnpaid();
+  await selectEmployee();
+  expect(screen.getByText("В справочнике отсутствует казахское название выбранного подразделения.")).toBeInTheDocument();
+  expect(screen.getByLabelText("Подразделение в тексте приказа (KK)")).toBeEnabled();
 });
 
 it("prevents a second request while the first create request is pending", async () => {

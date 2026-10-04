@@ -352,6 +352,7 @@ export default function PersonnelOrderDetailDrawer({
   const [detail, setDetail] = React.useState<PersonnelOrderDetailResponse | null>(null);
   const [tombstone, setTombstone] = React.useState<PersonnelOrderDeletedTombstone | null>(null);
   const [templatePreviewRefresh, setTemplatePreviewRefresh] = React.useState(0);
+  const pendingItemSaveRef = React.useRef<(() => Promise<boolean>) | null>(null);
   const [editorial, setEditorial] = React.useState<PersonnelOrderEditorialState | null>(null);
   const [documentReview, setDocumentReview] = React.useState<PersonnelOrderDocumentReview | null>(null);
   const [loading, setLoading] = React.useState(false);
@@ -632,8 +633,8 @@ export default function PersonnelOrderDetailDrawer({
           ) : null}
           {order && correctionsAvailable && activeTab === "items" && detail ? <PersonnelOrderDocumentItemsForm detail={detail} onSaved={async () => { const next = await reload(order.order_id); if (next) onChanged?.(next); }} /> : null}
 
-          {order && activeTab === "data" ? (
-            <>
+          {order ? (
+            <div hidden={activeTab !== "data"}>
               {documentReview ? <section data-testid="personnel-order-document-review">
                 <h3 className="mb-2 text-sm font-semibold text-zinc-900 dark:text-zinc-100">Проверка документа</h3>
                 {documentReview.blockers.length || documentReview.warnings.length ? <ul className="mb-3 space-y-1 text-sm text-amber-800">{[...documentReview.blockers, ...documentReview.warnings].map((entry, index) => <li key={`${entry.code}-${index}`}>{entry.code}</li>)}</ul> : null}
@@ -735,6 +736,7 @@ export default function PersonnelOrderDetailDrawer({
                   disabled={!editable}
                   onChanged={handleChanged}
                   hirePersonId={hirePersonId}
+                  registerPendingSave={(save) => { pendingItemSaveRef.current = save; }}
                 />
               </section>
 
@@ -783,6 +785,7 @@ export default function PersonnelOrderDetailDrawer({
                   basisDocuments={basisDocuments}
                   onOrderChanged={handleChanged}
                   onEditorialChanged={handleEditorialChanged}
+                  beforeGenerate={async () => pendingItemSaveRef.current ? pendingItemSaveRef.current() : true}
                   editorialState={editorial}
                   locale={orderLanguage}
                 />
@@ -807,7 +810,7 @@ export default function PersonnelOrderDetailDrawer({
                   </div>
                 ) : null}
               </section>
-            </>
+            </div>
           ) : null}
         </div>
       </aside>

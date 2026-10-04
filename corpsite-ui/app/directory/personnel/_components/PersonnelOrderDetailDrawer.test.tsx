@@ -516,7 +516,7 @@ describe("PersonnelOrderDetailDrawer document tab", () => {
     vi.mocked(getPersonnelOrderDocumentReview).mockResolvedValue({ state: "NEEDS_REVIEW", document_revision: 7, blockers: [{ code: "MISSING_ORDER_NUMBER" }], warnings: [], allowed_actions: ["confirm"] });
     render(<PersonnelOrderDetailDrawer orderId={42} open onClose={vi.fn()} />);
     expect(await screen.findByTestId("personnel-order-document-review-status")).toHaveTextContent("ревизия 7");
-    expect(screen.queryByText("MISSING_ORDER_NUMBER")).not.toBeInTheDocument();
+    expect(screen.getByText("MISSING_ORDER_NUMBER")).not.toBeVisible();
     fireEvent.click(screen.getByRole("tab", { name: "Данные" }));
     expect(await screen.findByTestId("personnel-order-document-review")).toHaveTextContent("MISSING_ORDER_NUMBER");
     fireEvent.click(screen.getByRole("button", { name: "Подтвердить кадровой службой" }));

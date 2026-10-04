@@ -11,6 +11,7 @@ from sqlalchemy import create_engine, text
 from app.services import personnel_order_template_application_service as service
 from app.services.personnel_order_template_specs import get_personnel_order_template_spec
 from app.services.personnel_orders_editorial import service as editorial_service
+from app.services.personnel_orders_editorial import generation_service
 
 
 URL = os.environ.get("TEST_DATABASE_URL", "")
@@ -122,6 +123,29 @@ def test_unpaid_apply_rolls_back_blocks_when_audit_insert_fails(monkeypatch):
         nested.rollback()
         assert conn.execute(text("select count(*) from personnel_order_template_applications where order_id=:order"), {"order": order}).scalar_one() == 0
         assert conn.execute(text("select count(*) from personnel_order_item_editorial_blocks where order_item_id=any(:items) and generated_text='old body'"), {"items": item_ids}).scalar_one() == 4
+    finally:
+        outer.rollback(); conn.close(); engine.dispose()
+
+
+def test_generic_editorial_generation_includes_all_saved_unpaid_items(monkeypatch):
+    """The non-template Generate button must render every saved item, in order."""
+    engine = create_engine(URL); conn = engine.connect(); outer = conn.begin()
+    try:
+        order, item_ids, actor = _seed(conn, 2)
+        conn.execute(text("insert into personnel_order_evidence_scopes(order_id) values(:order)"), {"order": order})
+        adapter = _Engine(conn)
+        monkeypatch.setattr(editorial_service, "engine", adapter)
+        result = generation_service.generate_editorial(order, user_id=actor, conn=conn)
+        assert result == {"order_id": order, "generated_in_existing_transaction": True}
+        bodies = conn.execute(text("""
+            select i.item_number, b.generated_text
+            from personnel_order_items i
+            join personnel_order_item_editorial_blocks b on b.order_item_id = i.item_id
+            where i.order_id=:order and b.locale='kk' and b.block_type='body'
+            order by i.item_number
+        """), {"order": order}).mappings().all()
+        assert len(bodies) == 2
+        assert all(row["generated_text"].strip() for row in bodies)
     finally:
         outer.rollback(); conn.close(); engine.dispose()
 

@@ -161,6 +161,8 @@ def list_org_units_flat(
                     "parent_id": u.parent_unit_id,
                     "parent_unit_id": u.parent_unit_id,
                     "name": u.name,
+                    "name_kk": u.name_kk,
+                    "document_genitive_kk": u.document_genitive_kk,
                     "code": u.code,
                     "group_id": u.group_id,
                     "is_active": u.is_active,

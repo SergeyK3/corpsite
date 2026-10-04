@@ -13,6 +13,8 @@ export type Position = {
 export type OrgUnitRef = {
   unit_id: number | null;
   name: string | null;
+  name_kk?: string | null;
+  document_genitive_kk?: string | null;
   code: string | null;
   parent_unit_id: number | null;
   is_active: boolean | null;
@@ -27,6 +29,9 @@ export type EmployeeDTO = {
   active_assignment_id?: number | null;
   record_kind?: "employee" | "applicant" | string | null;
   fio: string | null;
+  first_name?: string | null;
+  middle_name?: string | null;
+  last_name?: string | null;
 
   department: Department | null;
   position: Position | null;

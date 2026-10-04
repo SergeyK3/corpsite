@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { getEmployee, getEmployees } from "@/app/directory/employees/_lib/api.client";
@@ -309,6 +309,50 @@ describe("PersonnelOrderItemEditor draft item deletion", () => {
 });
 
 describe("PersonnelOrderItemEditor unpaid-leave period", () => {
+  it("loads document forms for the selected employee only and marks missing confirmed forms for manual input", async () => {
+    const majenova = {
+      id: "463",
+      fio: "Маженова Альбина Сериковна",
+      department: null,
+      position: { id: 6, name: "Врач" },
+      org_unit: {
+        unit_id: 55,
+        name: "Диспансер",
+        name_kk: "Диспансер бөлімшесі",
+        document_genitive_kk: null,
+        code: "DISP",
+        parent_unit_id: 41,
+        is_active: true,
+      },
+      rate: "1",
+      status: "active",
+      date_from: null,
+      date_to: null,
+    };
+    vi.mocked(getEmployees).mockResolvedValue({ items: [majenova], total: 1 });
+    vi.mocked(getEmployee).mockResolvedValue(majenova);
+    render(<PersonnelOrderItemEditor orderId={1} items={[]} onChanged={vi.fn()} />);
+    fireEvent.change(screen.getByTestId("personnel-order-item-type-select"), {
+      target: { value: "LEAVE.UNPAID.GRANT" },
+    });
+    fireEvent.change(screen.getByTestId("personnel-order-employee-search-input"), {
+      target: { value: "Маженова" },
+    });
+    fireEvent.click(await screen.findByTestId("personnel-order-employee-option-463"));
+
+    const forms = screen.getByTestId("unpaid-leave-kk-document-forms");
+    await waitFor(() => {
+      expect(within(forms).getAllByRole("textbox")[1]).toHaveValue("дәрігері");
+    });
+    const fields = within(forms).getAllByRole("textbox");
+    expect(fields[0]).toHaveValue("Диспансер бөлімшесінің");
+    expect(fields[2]).toHaveValue("Альбина Сериковна Маженоваға");
+    expect(fields[3]).toHaveValue("Альбина Сериковна Маженованың");
+    expect(screen.queryByTestId("personnel-order-org-unit-form-missing")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("personnel-order-employee-dative-form-missing")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("personnel-order-employee-genitive-form-missing")).not.toBeInTheDocument();
+  });
+
   it("uses start and end dates only, defaulting the end date to the selected start", async () => {
     render(<PersonnelOrderItemEditor orderId={1} items={[]} onChanged={vi.fn()} />);
     fireEvent.change(screen.getByTestId("personnel-order-item-type-select"), {
@@ -378,6 +422,12 @@ describe("PersonnelOrderItemEditor TRANSFER", () => {
         },
       ],
       total: 1,
+    });
+    vi.mocked(getEmployee).mockResolvedValue({
+      ...activeEmployee,
+      id: "200",
+      fio: "Другой Сотрудник",
+      org_unit: { ...activeEmployee.org_unit, unit_id: 20, name: "Отделение B" },
     });
     fireEvent.change(screen.getByTestId("personnel-order-employee-search-input"), {
       target: { value: "Друг" },

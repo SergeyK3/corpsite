@@ -285,6 +285,35 @@ describe("PersonnelOrderEditorialTextEditor", () => {
     });
   });
 
+  it("saves a pending structured item before generating the document", async () => {
+    vi.mocked(getPersonnelOrderEditorial).mockResolvedValue(sampleState());
+    vi.mocked(generatePersonnelOrderEditorial).mockResolvedValue(sampleState());
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const beforeGenerate = vi.fn(async () => true);
+
+    render(<PersonnelOrderEditorialTextEditor orderId={42} order={sampleOrder} items={items} editable beforeGenerate={beforeGenerate} />);
+    fireEvent.click(await screen.findByTestId("personnel-order-editorial-generate"));
+
+    await waitFor(() => expect(beforeGenerate).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(generatePersonnelOrderEditorial).toHaveBeenCalledWith(42));
+    expect(beforeGenerate.mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(generatePersonnelOrderEditorial).mock.invocationCallOrder[0],
+    );
+  });
+
+  it("does not generate when the pending item cannot be saved", async () => {
+    vi.mocked(getPersonnelOrderEditorial).mockResolvedValue(sampleState());
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const beforeGenerate = vi.fn(async () => false);
+
+    render(<PersonnelOrderEditorialTextEditor orderId={42} order={sampleOrder} items={items} editable beforeGenerate={beforeGenerate} />);
+    fireEvent.click(await screen.findByTestId("personnel-order-editorial-generate"));
+
+    await waitFor(() => expect(beforeGenerate).toHaveBeenCalledTimes(1));
+    expect(generatePersonnelOrderEditorial).not.toHaveBeenCalled();
+    expect(screen.getByText("Не удалось сохранить пункт. Формирование текста не выполнено.")).toBeInTheDocument();
+  });
+
   it("shows only kk blocks on kk tab even when ru blocks are present in state", async () => {
     vi.mocked(getPersonnelOrderEditorial).mockResolvedValue(sampleState());
 

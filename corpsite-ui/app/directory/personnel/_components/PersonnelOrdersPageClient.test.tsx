@@ -9,6 +9,7 @@ const navigation = vi.hoisted(() => ({
 }));
 const api = vi.hoisted(() => ({
   getEmployees: vi.fn(),
+  getEmployee: vi.fn(),
   listPersonnelOrders: vi.fn(),
   deletePersonnelOrderAsHrHead: vi.fn(),
 }));
@@ -21,9 +22,15 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/components/TaskOrgFiltersBar", () => ({ default: () => null }));
 vi.mock("@/lib/currentUser", () => ({ useCurrentUser: () => currentUser.value }));
-vi.mock("@/app/directory/employees/_lib/api.client", () => ({ getEmployees: api.getEmployees }));
-vi.mock("./PersonnelOrderCreateDialog", () => ({ default: () => null }));
-vi.mock("./PersonnelOrderDetailDrawer", () => ({ default: ({ onClose }: { onClose: () => void }) => <button type="button" onClick={onClose}>Закрыть карточку</button> }));
+vi.mock("@/app/directory/employees/_lib/api.client", () => ({ getEmployees: api.getEmployees, getEmployee: api.getEmployee }));
+vi.mock("./PersonnelOrderCreateDialog", () => ({
+  default: ({ onCreated }: { onCreated: (detail: { order_id: number; order_number: string }) => void }) => (
+    <button type="button" data-testid="simulate-draft-created" onClick={() => onCreated({ order_id: 77, order_number: "ТЕСТ-77" })}>Создать тестовый черновик</button>
+  ),
+}));
+vi.mock("./PersonnelOrderDetailDrawer", () => ({
+  default: ({ onClose, open, orderId }: { onClose: () => void; open: boolean; orderId: number | null }) => open ? <div data-testid="personnel-order-drawer">Черновик {orderId}<button type="button" onClick={onClose}>Закрыть карточку</button></div> : null,
+}));
 
 vi.mock("../_lib/personnelOrdersApi.client", async () => {
   const actual = await vi.importActual<typeof import("../_lib/personnelOrdersApi.client")>(
@@ -37,12 +44,42 @@ afterEach(() => {
   navigation.params = "";
   navigation.replace.mockReset();
   api.getEmployees.mockReset();
+  api.getEmployee.mockReset();
   api.listPersonnelOrders.mockReset();
   api.deletePersonnelOrderAsHrHead.mockReset();
   currentUser.value = null;
 });
 
 describe("PersonnelOrdersPageClient employee filter", () => {
+  it("opens a journal order in the drawer without replacing the page URL", async () => {
+    api.listPersonnelOrders.mockResolvedValue({
+      items: [{ order_id: 5018, order_number: "1192/1", order_date: "2026-07-06", order_type_code: "LEAVE.UNPAID.GRANT", status: "DRAFT", item_count: 1, employee_ids: [383], employee_names: ["Ильясова Ассель Адиловна"], storage_json: {} }],
+      total: 1,
+      limit: 200,
+      offset: 0,
+    });
+    render(<PersonnelOrdersPageClient />);
+
+    fireEvent.click(await screen.findByTestId("personnel-order-open-5018"));
+
+    expect(screen.getByTestId("personnel-order-drawer")).toHaveTextContent("Черновик 5018");
+    expect(navigation.replace).not.toHaveBeenCalled();
+  });
+
+  it("shows a success message, refreshes the journal and opens the created draft without changing the URL", async () => {
+    api.listPersonnelOrders.mockResolvedValue({ items: [], total: 0, limit: 200, offset: 0 });
+    render(<PersonnelOrdersPageClient />);
+    await waitFor(() => expect(api.listPersonnelOrders).toHaveBeenCalled());
+    const callsBeforeCreate = api.listPersonnelOrders.mock.calls.length;
+
+    fireEvent.click(screen.getByTestId("simulate-draft-created"));
+
+    expect(await screen.findByText("Черновик приказа создан: № ТЕСТ-77")).toBeInTheDocument();
+    expect(screen.getByTestId("personnel-order-drawer")).toHaveTextContent("Черновик 77");
+    await waitFor(() => expect(api.listPersonnelOrders.mock.calls.length).toBeGreaterThan(callsBeforeCreate));
+    expect(navigation.replace).not.toHaveBeenCalled();
+  });
+
   it("shows the HR_HEAD all-status delete button in the journal and uses one confirmation", async () => {
     currentUser.value = { role_code: "HR_HEAD" };
     api.listPersonnelOrders.mockResolvedValue({ items: [{ order_id: 9, order_number: "SIGNED-9", order_date: "2026-10-03", order_type_code: "HIRE", status: "SIGNED", item_count: 0, employee_ids: [], employee_names: [], storage_json: {} }], total: 1, limit: 200, offset: 0 });
@@ -61,6 +98,20 @@ describe("PersonnelOrdersPageClient employee filter", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Закрыть карточку" }));
 
     expect(navigation.replace).toHaveBeenCalledWith("/admin/system?section=quality-control");
+  });
+
+  it("keeps employee_id and its hydrated name when closing an order deep link", async () => {
+    navigation.params = "employee_id=234&order_id=8&record_quality=WORKING";
+    api.listPersonnelOrders.mockResolvedValue({ items: [], total: 0, limit: 200, offset: 0 });
+    api.getEmployee.mockResolvedValue({ id: "234", fio: "Абдирова Роза", org_unit: null, position: null });
+
+    render(<PersonnelOrdersPageClient />);
+    await waitFor(() => expect(screen.getByRole("searchbox", { name: "Сотрудник" })).toHaveValue("Абдирова Роза"));
+    fireEvent.click(screen.getByRole("button", { name: "Закрыть карточку" }));
+
+    expect(navigation.replace).toHaveBeenCalledWith(
+      "/directory/personnel/orders?employee_id=234&record_quality=WORKING",
+    );
   });
 
   it("selects an employee by full name and applies employee_id filter", async () => {
@@ -94,5 +145,20 @@ describe("PersonnelOrdersPageClient employee filter", () => {
     expect(navigation.replace).toHaveBeenCalledWith(
       "/directory/personnel/orders?employee_id=791&record_quality=WORKING",
     );
+  });
+
+  it("hydrates the employee name from employee_id in the URL and clears both values", async () => {
+    navigation.params = "employee_id=234&record_quality=WORKING";
+    api.listPersonnelOrders.mockResolvedValue({ items: [], total: 0, limit: 200, offset: 0 });
+    api.getEmployee.mockResolvedValue({ id: "234", fio: "Абдирова Роза", org_unit: null, position: null });
+
+    render(<PersonnelOrdersPageClient />);
+
+    const input = screen.getByRole("searchbox", { name: "Сотрудник" });
+    await waitFor(() => expect(input).toHaveValue("Абдирова Роза"));
+    expect(api.getEmployee).toHaveBeenCalledWith("234");
+    fireEvent.click(screen.getByRole("button", { name: "Очистить сотрудника" }));
+    expect(input).toHaveValue("");
+    expect(navigation.replace).toHaveBeenCalledWith("/directory/personnel/orders?record_quality=WORKING");
   });
 });

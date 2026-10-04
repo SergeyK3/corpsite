@@ -1,8 +1,3 @@
-/** Canonical document wording, resolved from directory identity rather than UI ids. */
-const ORG_UNIT_DOCUMENT_GENITIVE_KK: Record<number, string> = {
-  59: "Сәулелік диагностика бөлімшесінің",
-};
-
 type PositionReference = {
   id?: number | null;
   name?: string | null;
@@ -24,10 +19,9 @@ function canonicalPositionKey(position: PositionReference): string {
   return raw.trim().toLocaleLowerCase("ru-RU").replace(/\s+/g, " ");
 }
 
-export function resolvePersonnelOrderDocumentForms(orgUnitId: number | null | undefined, position: PositionReference) {
+export function resolvePersonnelOrderDocumentForms(position: PositionReference) {
   const positionForms = POSITION_DOCUMENT_FORMS_BY_CANONICAL_KEY[canonicalPositionKey(position)];
   return {
-    org_unit_document_genitive_kk: orgUnitId == null ? "" : ORG_UNIT_DOCUMENT_GENITIVE_KK[orgUnitId] || "",
     position_document_possessive_kk: positionForms?.position_document_possessive_kk || "",
     position_document_nominative_ru: positionForms?.position_document_nominative_ru || "",
   };
