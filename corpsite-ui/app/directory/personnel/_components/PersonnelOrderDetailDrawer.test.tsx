@@ -351,11 +351,121 @@ describe("PersonnelOrderDetailDrawer document tab", () => {
     fireEvent.change(screen.getByLabelText("Специальность 9"), { target: { value: "Neurology" } });
     fireEvent.change(screen.getByLabelText("Дата действия 9"), { target: { value: "2026-09-03" } });
     fireEvent.change(screen.getByLabelText("Ставка в приказе 9"), { target: { value: "0,25" } });
-    fireEvent.change(screen.getByLabelText("Причина исправления пункта"), { target: { value: "DOCUMENT_CONTEXT_CORRECTION" } });
-    fireEvent.change(screen.getByLabelText("Пояснение исправления пункта"), { target: { value: "Исправлен документный контекст" } });
+    fireEvent.change(screen.getByLabelText("Причина исправления пункта 9"), { target: { value: "DOCUMENT_CONTEXT_CORRECTION" } });
+    fireEvent.change(screen.getByLabelText("Пояснение исправления пункта 9"), { target: { value: "Исправлен документный контекст" } });
     fireEvent.click(screen.getByRole("button", { name: "Сохранить изменения" }));
     await waitFor(() => expect(patchPersonnelOrderDocumentItem).toHaveBeenCalledWith(42, 9, expect.objectContaining({ expected_document_revision: 1, item_type_code: "TRANSFER", employee_id: 8, effective_date: "2026-09-03", document_subject_context: { position_name: "Document doctor", org_unit_name: "Document unit", specialty: "Neurology", rate: "0,25" }, reason_code: "DOCUMENT_CONTEXT_CORRECTION", reason_text: "Исправлен документный контекст" })));
     await waitFor(() => expect(getPersonnelOrderEditorial).toHaveBeenCalledTimes(2));
+  });
+
+  it("offers a safe Data-to-Corrections transition when ordinary item saving is unavailable", async () => {
+    vi.mocked(getPersonnelOrder).mockResolvedValue({ ...detail, order: { ...detail.order, status: "REGISTERED" } });
+    render(<PersonnelOrderDetailDrawer orderId={42} open onClose={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("tab", { name: "Данные" }));
+    expect(await screen.findByTestId("personnel-order-data-correction-notice")).toHaveTextContent("Для изменения этого приказа перейдите на вкладку «Корректировки»");
+    fireEvent.click(screen.getByRole("button", { name: "Перейти к корректировкам" }));
+    expect(screen.getByRole("tab", { name: "Корректировки" })).toHaveAttribute("aria-selected", "true");
+    expect(await screen.findByTestId("personnel-order-document-items")).toBeInTheDocument();
+  });
+
+  it("re-reads a confirmed correction and renders its refreshed document text", async () => {
+    const confirmedDetail: PersonnelOrderDetailResponse = {
+      ...detail,
+      order: { ...detail.order, status: "REGISTERED", document_revision: 2, order_type_code: "TERMINATION" },
+      items: [{ item_id: 17, order_id: 42, item_number: 1, item_type_code: "TERMINATION", item_status: "ACTIVE", employee_id: 7, employee_name: "Employee", effective_date: "2026-09-03", payload: {} }],
+    };
+    const oldEditorial = templateEditorial("old");
+    const refreshedEditorial: PersonnelOrderEditorialState = {
+      ...templateEditorial("new"),
+      items: templateEditorial("new").items.map((item) => ({
+        ...item,
+        blocks: item.blocks.map((block) => block.locale === "kk" && block.block_type === "body"
+          ? { ...block, generated_text: "шаруа бикесі", effective_text: "шаруа бикесі" }
+          : block),
+      })),
+    };
+    vi.mocked(getPersonnelOrder).mockResolvedValue(confirmedDetail);
+    vi.mocked(getPersonnelOrderEditorial).mockResolvedValueOnce(oldEditorial).mockResolvedValueOnce(refreshedEditorial);
+    vi.mocked(listPersonnelOrderDocumentItems)
+      .mockResolvedValueOnce({ document_revision: 2, items: [{ item_id: 17, item_number: 1, item_type_code: "TERMINATION", employee_id: 7, employee_name: "Employee", position_name: "сестра-хозяйка", org_unit_name: "Unit", specialty: null, rate: null, needs_employee_link: false, effective_date: "2026-09-03" }] })
+      .mockResolvedValueOnce({ document_revision: 3, items: [{ item_id: 17, item_number: 1, item_type_code: "TERMINATION", employee_id: 7, employee_name: "Employee", position_name: "шаруа бикесі", org_unit_name: "Unit", specialty: null, rate: null, needs_employee_link: false, effective_date: "2026-09-03" }] });
+    vi.mocked(patchPersonnelOrderDocumentItem).mockResolvedValueOnce({ no_op: false, resulting_document_revision: 3, header_type_code: "TERMINATION", document_review_state: "NEEDS_REVIEW", audit_event_ids: [1] });
+
+    render(<PersonnelOrderDetailDrawer orderId={42} open onClose={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("tab", { name: "Корректировки" }));
+    fireEvent.change(await screen.findByLabelText("Должность в приказе 17"), { target: { value: "шаруа бикесі" } });
+    fireEvent.change(screen.getByLabelText("Причина исправления пункта 17"), { target: { value: "DOCUMENT_CONTEXT_CORRECTION" } });
+    fireEvent.change(screen.getByLabelText("Пояснение исправления пункта 17"), { target: { value: "Исправлена должность" } });
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить изменения" }));
+
+    await waitFor(() => expect(screen.getByLabelText("Должность в приказе 17")).toHaveValue("шаруа бикесі"));
+    expect(patchPersonnelOrderDocumentItem).toHaveBeenCalledWith(42, 17, expect.objectContaining({
+      expected_document_revision: 2,
+      document_subject_context: expect.objectContaining({ position_name: "шаруа бикесі" }),
+    }));
+    fireEvent.click(screen.getByRole("tab", { name: "Документ" }));
+    expect(await screen.findByTestId("personnel-order-document")).toHaveTextContent("шаруа бикесі");
+  });
+
+  it("shows per-item dirty state, removes it after reverting, and validates reasons before PATCH", async () => {
+    vi.mocked(getPersonnelOrder).mockResolvedValue({ ...detail, order: { ...detail.order, status: "REGISTERED" } });
+    render(<PersonnelOrderDetailDrawer orderId={42} open onClose={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("tab", { name: "Корректировки" }));
+    const position = await screen.findByLabelText("Должность в приказе 9");
+    fireEvent.change(position, { target: { value: "шаруа бикесі" } });
+    expect(screen.getByText("Есть несохранённые изменения")).toBeInTheDocument();
+    expect(screen.getByLabelText("Причина исправления пункта 9")).toBeInTheDocument();
+    fireEvent.change(position, { target: { value: "" } });
+    expect(screen.queryByText("Есть несохранённые изменения")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Причина исправления пункта 9")).not.toBeInTheDocument();
+
+    fireEvent.change(position, { target: { value: "шаруа бикесі" } });
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить изменения" }));
+    expect(patchPersonnelOrderDocumentItem).not.toHaveBeenCalled();
+    expect(screen.getByText("Для сохранения заполните причину и пояснение.")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText("Причина исправления пункта 9")).toHaveFocus());
+    expect(screen.getByLabelText("Причина исправления пункта 9")).toHaveAttribute("aria-invalid", "true");
+  });
+
+  it("keeps drafts across tabs, reports API errors per item, and asks before closing", async () => {
+    vi.mocked(getPersonnelOrder).mockResolvedValue({ ...detail, order: { ...detail.order, status: "REGISTERED" } });
+    vi.mocked(patchPersonnelOrderDocumentItem).mockRejectedValueOnce(new Error("request failed"));
+    const onClose = vi.fn();
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    render(<PersonnelOrderDetailDrawer orderId={42} open onClose={onClose} />);
+    fireEvent.click(await screen.findByRole("tab", { name: "Корректировки" }));
+    fireEvent.change(await screen.findByLabelText("Должность в приказе 9"), { target: { value: "шаруа бикесі" } });
+    fireEvent.change(screen.getByLabelText("Причина исправления пункта 9"), { target: { value: "DOCUMENT_CONTEXT_CORRECTION" } });
+    fireEvent.change(screen.getByLabelText("Пояснение исправления пункта 9"), { target: { value: "Исправлена должность" } });
+    fireEvent.click(screen.getByRole("tab", { name: "Документ" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Корректировки" }));
+    expect(screen.getByLabelText("Должность в приказе 9")).toHaveValue("шаруа бикесі");
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить изменения" }));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("Не удалось сохранить изменения: Не удалось выполнить запрос"));
+    expect(screen.getByLabelText("Должность в приказе 9")).toHaveValue("шаруа бикесі");
+    fireEvent.click(screen.getAllByRole("button", { name: "Закрыть" })[1]);
+    expect(confirm).toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("keeps reasons independent for different correction items and reports success after reload", async () => {
+    vi.mocked(getPersonnelOrder).mockResolvedValue({ ...detail, order: { ...detail.order, status: "REGISTERED" } });
+    vi.mocked(listPersonnelOrderDocumentItems).mockResolvedValue({ document_revision: 1, items: [
+      { item_id: 9, item_number: 1, item_type_code: "HIRE", employee_id: 7, employee_name: "One", position_name: null, org_unit_name: null, specialty: null, rate: null, needs_employee_link: false, effective_date: "2026-09-02" },
+      { item_id: 10, item_number: 2, item_type_code: "HIRE", employee_id: 8, employee_name: "Two", position_name: null, org_unit_name: null, specialty: null, rate: null, needs_employee_link: false, effective_date: "2026-09-03" },
+    ] });
+    render(<PersonnelOrderDetailDrawer orderId={42} open onClose={vi.fn()} />);
+    fireEvent.click(await screen.findByRole("tab", { name: "Корректировки" }));
+    fireEvent.change(await screen.findByLabelText("Должность в приказе 9"), { target: { value: "one" } });
+    fireEvent.change(await screen.findByLabelText("Должность в приказе 10"), { target: { value: "two" } });
+    fireEvent.change(screen.getByLabelText("Причина исправления пункта 9"), { target: { value: "R1" } });
+    fireEvent.change(screen.getByLabelText("Пояснение исправления пункта 9"), { target: { value: "T1" } });
+    fireEvent.change(screen.getByLabelText("Причина исправления пункта 10"), { target: { value: "R2" } });
+    fireEvent.change(screen.getByLabelText("Пояснение исправления пункта 10"), { target: { value: "T2" } });
+    fireEvent.click(screen.getAllByRole("button", { name: "Сохранить изменения" })[0]);
+    await waitFor(() => expect(screen.getByText("Изменения сохранены.")).toBeInTheDocument());
+    expect(patchPersonnelOrderDocumentItem).toHaveBeenCalledWith(42, 9, expect.objectContaining({ reason_code: "R1", reason_text: "T1" }));
+    expect(screen.getByLabelText("Причина исправления пункта 10")).toHaveValue("R2");
   });
 
   it("shows only Document and Data tabs for a draft and resolves legacy items to Data", async () => {

@@ -1,8 +1,12 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as React from "react";
 
 import { getEmployee, getEmployees } from "@/app/directory/employees/_lib/api.client";
 import PersonnelOrderItemEditor from "./PersonnelOrderItemEditor";
+import PersonnelOrderEditorialTextEditor from "./PersonnelOrderEditorialTextEditor";
+import PersonnelOrderDocumentView from "./PersonnelOrderDocumentView";
+import { generatePersonnelOrderEditorial, type PersonnelOrderDetailResponse, type PersonnelOrderEditorialState } from "../_lib/personnelOrdersApi.client";
 import { createPersonnelOrderItem, deletePersonnelOrderItem, updatePersonnelOrderItem } from "../_lib/personnelOrdersApi.client";
 import { loadScopedPositionOptions, loadGlobalPositionCatalogCached, resetGlobalPositionCatalogCache } from "@/lib/taskOrgFilters";
 import { resolveEmployeeOrgScopePrefill } from "@/lib/userCreateOrgScope";
@@ -121,6 +125,7 @@ vi.mock("../_lib/personnelOrdersApi.client", async (importOriginal) => {
     createPersonnelOrderItem: vi.fn(),
     deletePersonnelOrderItem: vi.fn(),
     updatePersonnelOrderItem: vi.fn(),
+    generatePersonnelOrderEditorial: vi.fn(),
   };
 });
 
@@ -223,6 +228,120 @@ async function selectEmployeeFromSearch() {
   });
 }
 
+describe("item save → editorial generation integration", () => {
+  function setup() {
+    let persisted: PersonnelOrderDetailResponse = {
+      order: { order_id: 1, order_type_code: "LEAVE.UNPAID.GRANT", order_class: "SIMPLE", status: "DRAFT", source_mode: "PAPER", created_by: 1 },
+      items: [{ item_id: 51, order_id: 1, item_number: 1, item_type_code: "LEAVE.UNPAID.GRANT", item_status: "ACTIVE", employee_id: 138, employee_name: "Test employee", effective_date: "2026-07-01", payload: {
+        leave: { period_type: "CONTINUOUS_RANGE", start: "2026-07-01", end: "2026-07-12", days: 12 }, basis: { kind: "PERSONAL_APPLICATION", date: "2026-06-29" }, document_forms_kk: { position_document_possessive_kk: "сестра-хозяйка" },
+      } }], localized_texts: [], attachments: [], prints: [], events: [],
+    };
+    const snapshot = (): PersonnelOrderEditorialState => {
+      const position = String((persisted.items[0].payload.document_forms_kk as Record<string, unknown>).position_document_possessive_kk);
+      const block = (id: number, type: string, text: string) => ({ block_id: id, scope: "order", locale: "kk", block_type: type, generated_text: text, effective_text: text, editable: true, revision: 1, review_status: "CURRENT" });
+      return { order_id: 1, order_status: "DRAFT", editable: true,
+        order_blocks: [block(1, "title", "Демалыс туралы"), block(2, "preamble", "БҰЙЫРАМЫН:")],
+        items: [{ order_item_id: 51, item_number: 1, item_type_code: "LEAVE.UNPAID.GRANT", basis_required: false, blocks: [{ ...block(3, "body", position), scope: "item", order_item_id: 51 }] }],
+      };
+    };
+    vi.mocked(updatePersonnelOrderItem).mockImplementation(async (_order, _item, body) => {
+      persisted = { ...persisted, items: [{ ...persisted.items[0], ...body }] };
+      return persisted;
+    });
+    vi.mocked(generatePersonnelOrderEditorial).mockImplementation(async () => snapshot());
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    function Harness() {
+      const [detail, setDetail] = React.useState(persisted);
+      const [editorial, setEditorial] = React.useState(snapshot);
+      const pending = React.useRef<(() => Promise<boolean>) | null>(null);
+      return <>
+        <PersonnelOrderItemEditor orderId={1} orderTypeCode="LEAVE.UNPAID.GRANT" items={detail.items} onChanged={setDetail} registerPendingSave={save => { pending.current = save; }} />
+        <PersonnelOrderEditorialTextEditor orderId={1} order={detail.order} items={detail.items} editable editorialState={editorial} onEditorialChanged={setEditorial} beforeGenerate={async () => pending.current ? pending.current() : true} />
+        <PersonnelOrderDocumentView detail={detail} language="kk" editorial={editorial} />
+      </>;
+    }
+    render(<Harness />);
+    const edit = () => fireEvent.click(within(screen.getByTestId("personnel-order-item-editor")).getByRole("button", { name: "Редактировать" }));
+    edit();
+    const position = () => within(screen.getByTestId("unpaid-leave-kk-document-forms")).getAllByRole("textbox")[1];
+    const generate = () => fireEvent.click(screen.getByTestId("personnel-order-editorial-generate"));
+    const save = () => fireEvent.click(screen.getByRole("button", { name: "Сохранить пункт" }));
+    return { edit, position, generate, save };
+  }
+
+  it("changes, saves, confirms generation, renders the saved position and reopens the application date without a second PATCH", async () => {
+    const ui = setup();
+    fireEvent.change(ui.position(), { target: { value: "шаруа бикесі" } });
+    ui.save();
+    await screen.findByText("Пункт сохранён. Сформируйте / обновите текст приказа.");
+    ui.generate();
+    await waitFor(() => expect(screen.getByTestId("personnel-order-document")).toHaveTextContent("шаруа бикесі"));
+    expect(updatePersonnelOrderItem).toHaveBeenCalledTimes(1);
+    expect(generatePersonnelOrderEditorial).toHaveBeenCalledTimes(1);
+    ui.edit();
+    expect(ui.position()).toHaveValue("шаруа бикесі");
+    expect(screen.getByTestId("leave-application-date")).toHaveValue("2026-06-29");
+    ui.generate();
+    await waitFor(() => expect(generatePersonnelOrderEditorial).toHaveBeenCalledTimes(2));
+    expect(updatePersonnelOrderItem).toHaveBeenCalledTimes(1);
+  });
+
+  it("waits for an already running save instead of issuing another PATCH", async () => {
+    const ui = setup();
+    const save = vi.mocked(updatePersonnelOrderItem).getMockImplementation()!;
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    vi.mocked(updatePersonnelOrderItem).mockImplementation(async (...args) => { await gate; return save(...args); });
+    fireEvent.change(ui.position(), { target: { value: "шаруа бикесі" } });
+    ui.save();
+    ui.generate();
+    expect(updatePersonnelOrderItem).toHaveBeenCalledTimes(1);
+    expect(generatePersonnelOrderEditorial).not.toHaveBeenCalled();
+    release();
+    await waitFor(() => expect(generatePersonnelOrderEditorial).toHaveBeenCalledTimes(1));
+    expect(screen.getByTestId("personnel-order-document")).toHaveTextContent("шаруа бикесі");
+  });
+
+  it("saves a dirty item before generation; cancelling sends neither request", async () => {
+    const ui = setup();
+    fireEvent.change(ui.position(), { target: { value: "шаруа бикесі" } });
+    vi.mocked(window.confirm).mockReturnValue(false);
+    ui.generate();
+    expect(updatePersonnelOrderItem).not.toHaveBeenCalled();
+    expect(generatePersonnelOrderEditorial).not.toHaveBeenCalled();
+    expect(ui.position()).toHaveValue("шаруа бикесі");
+    vi.mocked(window.confirm).mockReturnValue(true);
+    ui.generate();
+    await waitFor(() => expect(generatePersonnelOrderEditorial).toHaveBeenCalledTimes(1));
+    expect(updatePersonnelOrderItem).toHaveBeenCalledTimes(1);
+    expect(updatePersonnelOrderItem).toHaveBeenCalledBefore(generatePersonnelOrderEditorial);
+  });
+
+  it("retains input and stops generation if PATCH fails", async () => {
+    const ui = setup();
+    vi.mocked(updatePersonnelOrderItem).mockRejectedValueOnce(new Error("Тестовая ошибка сохранения"));
+    fireEvent.change(ui.position(), { target: { value: "шаруа бикесі" } });
+    ui.generate();
+    await screen.findByText("Тестовая ошибка сохранения");
+    expect(generatePersonnelOrderEditorial).not.toHaveBeenCalled();
+    expect(ui.position()).toHaveValue("шаруа бикесі");
+    expect(screen.getByTestId("leave-application-date")).toHaveValue("2026-06-29");
+  });
+
+  it("retries failed generation without saving the item again", async () => {
+    const ui = setup();
+    vi.mocked(generatePersonnelOrderEditorial).mockRejectedValueOnce(new Error("Тестовая ошибка генерации"));
+    fireEvent.change(ui.position(), { target: { value: "шаруа бикесі" } });
+    ui.generate();
+    await screen.findByText("Тестовая ошибка генерации");
+    expect(updatePersonnelOrderItem).toHaveBeenCalledTimes(1);
+    ui.generate();
+    await waitFor(() => expect(screen.getByTestId("personnel-order-document")).toHaveTextContent("шаруа бикесі"));
+    expect(updatePersonnelOrderItem).toHaveBeenCalledTimes(1);
+    expect(generatePersonnelOrderEditorial).toHaveBeenCalledTimes(2);
+  });
+});
+
 describe("PersonnelOrderItemEditor employee autocomplete", () => {
   it("shows matching active employees after typing a surname", async () => {
     vi.mocked(getEmployees).mockResolvedValue({
@@ -309,6 +428,20 @@ describe("PersonnelOrderItemEditor draft item deletion", () => {
 });
 
 describe("PersonnelOrderItemEditor unpaid-leave period", () => {
+  it("marks a changed saved KK position and clears the marker after reverting", async () => {
+    render(<PersonnelOrderItemEditor orderId={1} items={[{
+      item_id: 51, order_id: 1, item_number: 1, item_type_code: "LEAVE.UNPAID.GRANT", item_status: "ACTIVE",
+      employee_id: 138, employee_name: "Employee", effective_date: "2026-07-02",
+      payload: { leave: { period_type: "CONTINUOUS_RANGE", start: "2026-07-02", end: "2026-07-03", days: 2 }, application_date: "2026-06-29", document_forms_kk: { position_document_possessive_kk: "дәрігері" } },
+    } as any]} onChanged={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Редактировать" }));
+    const position = await screen.findByDisplayValue("дәрігері");
+    fireEvent.change(position, { target: { value: "шаруа бикесі" } });
+    expect(screen.getByText("Есть несохранённые изменения")).toBeInTheDocument();
+    fireEvent.change(position, { target: { value: "дәрігері" } });
+    expect(screen.queryByText("Есть несохранённые изменения")).not.toBeInTheDocument();
+  });
+
   it("loads document forms for the selected employee only and marks missing confirmed forms for manual input", async () => {
     const majenova = {
       id: "463",
@@ -380,6 +513,46 @@ describe("PersonnelOrderItemEditor unpaid-leave period", () => {
 
     expect(await screen.findByText("Дата окончания отпуска не может быть раньше даты начала.")).toBeInTheDocument();
     expect(createPersonnelOrderItem).not.toHaveBeenCalled();
+  });
+
+  it("updates an existing unpaid-leave range with matching inclusive days", async () => {
+    render(<PersonnelOrderItemEditor orderId={1} items={[{
+      item_id: 52, order_id: 1, item_number: 1, item_type_code: "LEAVE.UNPAID.GRANT", item_status: "ACTIVE",
+      employee_id: 138, employee_name: "Employee", effective_date: "2026-07-02",
+      payload: {
+        leave: { period_type: "CONTINUOUS_RANGE", start: "2026-07-02", end: "2026-07-03", days: 2 },
+        leave_start: "2026-07-02", leave_end: "2026-07-03", leave_days: 2,
+        application_date: "2026-06-29",
+      },
+    } as any]} onChanged={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Редактировать" }));
+    expect(await screen.findByTestId("leave-days")).toHaveValue("2");
+    fireEvent.change(screen.getByTestId("leave-start"), { target: { value: "2026-07-01" } });
+    fireEvent.change(screen.getByTestId("leave-end"), { target: { value: "2026-07-12" } });
+    expect(screen.getByTestId("leave-days")).toHaveValue("12");
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить пункт" }));
+    await waitFor(() => expect(updatePersonnelOrderItem).toHaveBeenCalledWith(1, 52, expect.objectContaining({
+      effective_date: "2026-07-01", period_start: "2026-07-01", period_end: "2026-07-12",
+      payload: expect.objectContaining({ leave: { period_type: "CONTINUOUS_RANGE", start: "2026-07-01", end: "2026-07-12", days: 12 } }),
+    })));
+    const body = vi.mocked(updatePersonnelOrderItem).mock.calls[0]?.[2] as { payload: Record<string, unknown> };
+    expect(body.payload).not.toHaveProperty("leave_start");
+    expect(body.payload).not.toHaveProperty("leave_end");
+    expect(body.payload).not.toHaveProperty("leave_days");
+  });
+
+  it("shows the inclusive-days contract error in Russian", async () => {
+    vi.mocked(updatePersonnelOrderItem).mockRejectedValueOnce(new Error("CONTINUOUS_RANGE leave.days must equal inclusive range days."));
+    render(<PersonnelOrderItemEditor orderId={1} items={[{
+      item_id: 53, order_id: 1, item_number: 1, item_type_code: "LEAVE.UNPAID.GRANT", item_status: "ACTIVE",
+      employee_id: 138, employee_name: "Employee", effective_date: "2026-07-02",
+      payload: { leave: { period_type: "CONTINUOUS_RANGE", start: "2026-07-02", end: "2026-07-03", days: 2 }, application_date: "2026-06-29" },
+    } as any]} onChanged={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Редактировать" }));
+    fireEvent.change(await screen.findByTestId("leave-start"), { target: { value: "2026-07-01" } });
+    fireEvent.change(screen.getByTestId("leave-end"), { target: { value: "2026-07-12" } });
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить пункт" }));
+    expect(await screen.findByText("Количество календарных дней отпуска должно совпадать с выбранным периодом включительно.")).toBeInTheDocument();
   });
 });
 

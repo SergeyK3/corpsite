@@ -362,6 +362,7 @@ export default function PersonnelOrderEditorialTextEditor({
   const activeLocale = locale ?? uncontrolledLocale;
   const [loading, setLoading] = React.useState(true);
   const [busy, setBusy] = React.useState(false);
+  const generationInFlight = React.useRef(false);
   const [error, setError] = React.useState<string | null>(null);
   const [message, setMessage] = React.useState<string | null>(null);
 
@@ -405,7 +406,9 @@ export default function PersonnelOrderEditorialTextEditor({
   const canWrite = editable && Boolean(state?.editable);
 
   async function handleGenerateAll() {
+    if (generationInFlight.current) return;
     if (!window.confirm(GENERATE_CONFIRM_MESSAGE)) return;
+    generationInFlight.current = true;
     setBusy(true);
     setError(null);
     setMessage(null);
@@ -421,6 +424,7 @@ export default function PersonnelOrderEditorialTextEditor({
     } catch (err) {
       setError(mapPersonnelOrdersApiError(err, "Не удалось сформировать текст приказа."));
     } finally {
+      generationInFlight.current = false;
       setBusy(false);
     }
   }

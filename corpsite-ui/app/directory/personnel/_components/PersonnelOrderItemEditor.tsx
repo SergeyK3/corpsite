@@ -323,6 +323,9 @@ export default function PersonnelOrderItemEditor({
   const [deletingItemId, setDeletingItemId] = React.useState<number | null>(null);
   const deletionInProgressRef = React.useRef(false);
   const [leavePreviewLocale, setLeavePreviewLocale] = React.useState<"ru" | "kk">("ru");
+  const [saveNotice, setSaveNotice] = React.useState<string | null>(null);
+  const savedFormSignature = React.useRef<string | null>(null);
+  const itemSaveInFlight = React.useRef<Promise<boolean> | null>(null);
   const [effectiveDate, setEffectiveDate] = React.useState("");
   const [payloadDraft, setPayloadDraft] = React.useState<ItemPayloadDraft>(emptyItemPayloadDraft());
   const [calculatedKkFields, setCalculatedKkFields] = React.useState<Set<string>>(() => new Set());
@@ -479,6 +482,13 @@ export default function PersonnelOrderItemEditor({
     setPayloadDraft((prev) => setPositionId(prev, itemTypeCode, ""));
   }, [orgScoped, positionOptions, positionsLoading, payloadDraft, itemTypeCode]);
 
+  const formSignature = JSON.stringify({ itemTypeCode, employeeId, effectiveDate, payloadDraft });
+  const hasUnsavedEdit = editingItemId != null && savedFormSignature.current != null && savedFormSignature.current !== formSignature;
+
+  React.useEffect(() => {
+    if (hasUnsavedEdit) setSaveNotice(null);
+  }, [hasUnsavedEdit, formSignature]);
+
   function resetForm(typeCode: PersonnelOrderItemFormType = defaultItemType) {
     setEditingItemId(null);
     setEditingItemSavedEmployeeId(null);
@@ -496,6 +506,8 @@ export default function PersonnelOrderItemEditor({
     setTargetOrgGroupId(null);
     setHireOrgGroupId(null);
     setError(null);
+    setSaveNotice(null);
+    savedFormSignature.current = null;
   }
 
   async function applyEmployeeSelection(option: EmployeeSearchOption) {
@@ -617,9 +629,11 @@ export default function PersonnelOrderItemEditor({
     );
     setEffectiveDate(persistedEffectiveDate(item));
     setPayloadDraft(draft);
+    savedFormSignature.current = JSON.stringify({ itemTypeCode: normalizedUiType, employeeId: item.employee_id ? String(item.employee_id) : "", effectiveDate: persistedEffectiveDate(item), payloadDraft: draft });
     setTerminationReasonSuggested(suggestedReason);
     setEditingBasis(false);
     setError(null);
+    setSaveNotice(null);
     setCurrentPlacement(null);
 
     const config = getItemFormRegistry(normalizedUiType);
@@ -700,8 +714,18 @@ export default function PersonnelOrderItemEditor({
     setPayloadDraft((prev) => setPositionId(prev, itemTypeCode, nextPositionId));
   }
 
-  async function handleSubmit(e: React.FormEvent): Promise<boolean> {
+  function handleSubmit(e: React.FormEvent): Promise<boolean> {
     e.preventDefault();
+    // The form button and beforeGenerate must await the same mutation.
+    // React's `saving` state alone cannot guard callbacks in the same render.
+    if (itemSaveInFlight.current) return itemSaveInFlight.current;
+    const pending = saveItem();
+    itemSaveInFlight.current = pending;
+    void pending.finally(() => { itemSaveInFlight.current = null; });
+    return pending;
+  }
+
+  async function saveItem(): Promise<boolean> {
     if (disabled) return false;
     setError(null);
 
@@ -757,6 +781,14 @@ export default function PersonnelOrderItemEditor({
       // Updating a form field must not erase imported context, placement,
       // basis ids, or other payload attributes not represented by inputs.
       const payload = { ...savedPayload, ...buildItemPayload(backendType, payloadDraft) };
+      if (backendType === "LEAVE.UNPAID.GRANT") {
+        // An edited legacy item must not carry its old triplet beside the
+        // versioned `leave` object: the backend deliberately rejects two
+        // conflicting period sources.
+        delete payload.leave_start;
+        delete payload.leave_end;
+        delete payload.leave_days;
+      }
       if (isLeave && currentPlacement) {
         payload.org_unit_name = currentPlacement.org_unit_name || null;
         payload.position_name = currentPlacement.position_name || null;
@@ -775,9 +807,13 @@ export default function PersonnelOrderItemEditor({
           : await createPersonnelOrderItem(orderId, body);
       onChanged(detail);
       resetForm(itemTypeCode);
+      if (editingItemId != null) setSaveNotice("Пункт сохранён. Сформируйте / обновите текст приказа.");
       return true;
     } catch (err) {
-      setError(mapPersonnelOrdersApiError(err, "Не удалось сохранить пункт."));
+      const message = mapPersonnelOrdersApiError(err, "Не удалось сохранить пункт.");
+      setError(/(?:CONTINUOUS_RANGE|SINGLE_DAY) leave\.days must equal inclusive range days/i.test(message)
+        ? "Количество календарных дней отпуска должно совпадать с выбранным периодом включительно."
+        : message);
       return false;
     } finally {
       setSaving(false);
@@ -787,11 +823,13 @@ export default function PersonnelOrderItemEditor({
   React.useEffect(() => {
     if (!registerPendingSave) return;
     registerPendingSave(() => {
+      if (itemSaveInFlight.current) return itemSaveInFlight.current;
+      if (editingItemId != null && !hasUnsavedEdit) return Promise.resolve(true);
       // The editor is rendered even before the operator starts a new item.
       // Generating text in that state must not attempt to save an empty
       // item (and, consequently, must not turn a normal generation into a
-      // validation error).  Once an existing item is being edited, or a new
-      // item has any entered value, use the same submit path as the form.
+      // validation error). Only a changed existing item or a nonempty new
+      // item needs the same submit path as the form.
       const meaningfulDraftFields: Array<keyof ItemPayloadDraft> = [
         "leave_start", "leave_end", "leave_days", "work_period_start", "work_period_end", "work_period_days",
         "application_date", "application_number", "vacation_benefit_rule", "leave_note",
@@ -1352,7 +1390,7 @@ export default function PersonnelOrderItemEditor({
                           type="button"
                           className="text-xs font-medium text-blue-700 hover:underline dark:text-blue-300"
                           onClick={() => void startEdit(item)}
-                          disabled={deletingItemId === item.item_id}
+                          disabled={saving || deletingItemId === item.item_id}
                         >
                           Редактировать
                         </button>
@@ -1360,7 +1398,7 @@ export default function PersonnelOrderItemEditor({
                           type="button"
                           className="text-xs font-medium text-red-700 hover:underline disabled:opacity-50 dark:text-red-300"
                           onClick={() => void handleDeleteItem(item)}
-                          disabled={deletingItemId != null}
+                          disabled={saving || deletingItemId != null}
                           data-testid={`personnel-order-item-delete-${item.item_id}`}
                         >
                           {deletingItemId === item.item_id ? "Удаление…" : "Удалить"}
@@ -1389,9 +1427,9 @@ export default function PersonnelOrderItemEditor({
             </p>
           </div>
 
-          <div className="space-y-4">
+          <fieldset disabled={saving} className="space-y-4">
             {sectionOrder.map((section) => renderFormSection(section))}
-          </div>
+          </fieldset>
 
           {error ? (
             <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900/55 dark:bg-red-950/35 dark:text-red-200">
@@ -1407,10 +1445,13 @@ export default function PersonnelOrderItemEditor({
             >
               {saving ? "Сохранение…" : editingItemId != null ? "Сохранить пункт" : "Добавить пункт"}
             </button>
+            {hasUnsavedEdit ? <span className="self-center text-sm text-amber-700">Есть несохранённые изменения</span> : null}
+            {saveNotice ? <span role="status" className="self-center text-sm text-emerald-700">{saveNotice}</span> : null}
             {editingItemId != null ? (
               <button
                 type="button"
                 onClick={() => resetForm(defaultItemType)}
+                disabled={saving}
                 className="rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700"
               >
                 Отмена

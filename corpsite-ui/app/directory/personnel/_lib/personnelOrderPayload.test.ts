@@ -28,6 +28,18 @@ describe("personnelOrderPayload", () => {
     expect(range).not.toHaveProperty("leave_end");
   });
 
+  it("recalculates unpaid leave days when an existing range's dates change", () => {
+    const existingDraft = itemPayloadDraftFromRecord({
+      leave: { period_type: "CONTINUOUS_RANGE", start: "2026-07-02", end: "2026-07-03", days: 2 },
+    });
+    existingDraft.leave_start = "2026-07-01";
+    existingDraft.leave_end = "2026-07-12";
+    const payload = buildItemPayload("LEAVE.UNPAID.GRANT", existingDraft);
+    expect(payload.leave).toEqual({
+      period_type: "CONTINUOUS_RANGE", start: "2026-07-01", end: "2026-07-12", days: 12,
+    });
+  });
+
   it("preserves confirmed KK document forms when unpaid leave is saved and reopened", () => {
     const payload = buildItemPayload("LEAVE.UNPAID.GRANT", {
       ...emptyItemPayloadDraft(),
@@ -53,6 +65,12 @@ describe("personnelOrderPayload", () => {
     const legacy = itemPayloadDraftFromRecord({ leave_start: "2026-07-13", leave_end: "2026-07-15", leave_days: 3 });
     expect(legacy.leave_start).toBe("2026-07-13");
     expect(legacy.leave_end).toBe("2026-07-15");
+  });
+
+  it("reopens an application date and number stored in the saved basis object", () => {
+    const draft = itemPayloadDraftFromRecord({ basis: { kind: "PERSONAL_APPLICATION", date: "2026-06-29", number: "15" } });
+    expect(draft.application_date).toBe("2026-06-29");
+    expect(draft.application_number).toBe("15");
   });
 
   it("builds HIRE payload from draft fields", () => {

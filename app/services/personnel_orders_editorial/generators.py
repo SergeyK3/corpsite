@@ -446,7 +446,11 @@ def generate_item_body(locale: str, item_ctx: Mapping[str, Any]) -> Dict[str, st
             )
     elif item_type == "LEAVE.UNPAID.GRANT":
         org = _localized_name(org_unit_name, lang)
-        position = _localized_position(position_name, lang)
+        position = (
+            _clean(item_ctx.get("position_document_possessive_kk"))
+            if lang == "kk"
+            else None
+        ) or _localized_position(position_name, lang)
         days = _dash(leave_days)
         if leave_period_type == "SINGLE_DAY":
             period_phrase = _format_date(leave_start, lang)

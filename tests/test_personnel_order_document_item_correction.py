@@ -11,6 +11,7 @@ from app.services.personnel_order_document_review_service import (
     PersonnelOrderDocumentReviewConflictError,
     mutate_document_review,
 )
+from app.services.personnel_orders_editorial.service import get_editorial_state
 
 
 def _create_order(seed, *, status="DRAFT", second_item=False):
@@ -143,5 +144,46 @@ def test_conflict_reopens_confirmed_document_and_preserves_hr_facts(seed):
             after = tuple(int(conn.execute(text(f"SELECT count(*) FROM {table}")).scalar_one()) for table in ("employee_events", "person_assignments"))
         assert actions == ["DOCUMENT_CONFIRMED", "ITEM_UPDATED", "DOCUMENT_REOPENED"]
         assert before == after == (0, 0)
+    finally:
+        _clean(order_id)
+
+
+def test_confirmed_document_context_correction_persists_and_regenerates_document(seed):
+    """A document-only position correction survives reopening and changes its item text."""
+    order_id, item_id, employee_id, _alternate_employee_id, actor = _create_order(seed, status="REGISTERED")
+    try:
+        mutate_document_review(
+            order_id,
+            action="DOCUMENT_CONFIRMED",
+            expected_document_revision=1,
+            reason_code="HR",
+            note=None,
+            actor_user_id=actor,
+        )
+        result = _patch(
+            order_id,
+            item_id,
+            employee_id,
+            actor,
+            revision=2,
+            reason_code="DOCUMENT_CONTEXT_CORRECTION",
+            reason_text="Corrected document position",
+            document_subject_context={"position_name": "шаруа бикесі"},
+        )
+        assert result["no_op"] is False
+        assert result["resulting_document_revision"] == 3
+
+        reopened = list_document_items(order_id=order_id)
+        assert reopened["document_revision"] == 3
+        assert reopened["items"][0]["position_name"] == "шаруа бикесі"
+
+        editorial = get_editorial_state(order_id)
+        item = next(entry for entry in editorial["items"] if entry["order_item_id"] == item_id)
+        assert any(
+            block["block_type"] == "body"
+            and block["locale"] == "kk"
+            and "шаруа бикесі" in block["effective_text"]
+            for block in item["blocks"]
+        )
     finally:
         _clean(order_id)

@@ -364,12 +364,21 @@ export default function PersonnelOrderDetailDrawer({
   const [headerRequisitesDraft, setHeaderRequisitesDraft] =
     React.useState<PersonnelOrderRequisitesSnapshot | null>(null);
   const [activeTab, setActiveTab] = React.useState<DrawerTab>("document");
+  const [correctionsOpened, setCorrectionsOpened] = React.useState(false);
+  const [correctionsDirty, setCorrectionsDirty] = React.useState(false);
+  const requestClose = React.useCallback(() => {
+    if (correctionsDirty && !window.confirm("Есть несохранённые изменения корректировок. Закрыть без сохранения?")) return;
+    onClose();
+  }, [correctionsDirty, onClose]);
   const [orderLanguage, setOrderLanguage] = React.useState<PersonnelOrderDocumentLanguage>("kk");
   const [printLanguage, setPrintLanguage] = React.useState<PersonnelOrderDocumentLanguage | null>(null);
   const headerEditorRef = React.useRef<HTMLElement | null>(null);
 
   React.useEffect(() => {
-    if (open && initialTab) setActiveTab(initialTab);
+    if (open && initialTab) {
+      setActiveTab(initialTab);
+      if (initialTab === "items") setCorrectionsOpened(true);
+    }
   }, [initialTab, open, orderId]);
 
   const correctionsAvailable = supportsDocumentItemCorrections(detail?.order.status);
@@ -393,11 +402,11 @@ export default function PersonnelOrderDetailDrawer({
   React.useEffect(() => {
     if (!open) return;
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") requestClose();
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [open, onClose]);
+  }, [open, requestClose]);
 
   const reload = React.useCallback(async (id: number) => {
     setLoading(true);
@@ -434,6 +443,8 @@ export default function PersonnelOrderDetailDrawer({
       setError(null);
       setToast(null);
       setHeaderRequisitesDraft(null);
+      setCorrectionsOpened(false);
+      setCorrectionsDirty(false);
       setActiveTab("document");
       setOrderLanguage("kk");
       return;
@@ -523,7 +534,7 @@ export default function PersonnelOrderDetailDrawer({
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end" data-testid="personnel-order-detail-drawer">
-      <button type="button" aria-label="Закрыть" className="absolute inset-0 bg-black/30" onClick={onClose} />
+      <button type="button" aria-label="Закрыть" className="absolute inset-0 bg-black/30" onClick={requestClose} />
       <aside className="relative flex h-full w-full max-w-3xl flex-col border-l border-zinc-200 bg-white shadow-xl dark:border-zinc-800 dark:bg-zinc-950">
         <div className="flex items-start justify-between gap-3 border-b border-zinc-200 px-4 py-4 dark:border-zinc-800">
           <div>
@@ -555,7 +566,7 @@ export default function PersonnelOrderDetailDrawer({
             ) : null}
             <button
               type="button"
-              onClick={onClose}
+              onClick={requestClose}
               className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm dark:border-zinc-700"
             >
               Закрыть
@@ -573,7 +584,7 @@ export default function PersonnelOrderDetailDrawer({
           >
             Документ
           </button>
-          {correctionsAvailable ? <button type="button" role="tab" aria-selected={activeTab === "items"} onClick={() => setActiveTab("items")} className={`rounded-t-lg px-3 py-2 text-sm font-medium ${activeTab === "items" ? "bg-zinc-100 text-zinc-950" : "text-zinc-500"}`}>Корректировки</button> : null}
+          {correctionsAvailable ? <button type="button" role="tab" aria-selected={activeTab === "items"} onClick={() => { setCorrectionsOpened(true); setActiveTab("items"); }} className={`rounded-t-lg px-3 py-2 text-sm font-medium ${activeTab === "items" ? "bg-zinc-100 text-zinc-950" : "text-zinc-500"}`}>Корректировки</button> : null}
           <button
             type="button"
             role="tab"
@@ -631,7 +642,7 @@ export default function PersonnelOrderDetailDrawer({
           {order && activeTab === "document" ? (
             <PersonnelOrderDocumentView detail={detail} language={orderLanguage} editorial={editorial} />
           ) : null}
-          {order && correctionsAvailable && activeTab === "items" && detail ? <PersonnelOrderDocumentItemsForm detail={detail} onSaved={async () => { const next = await reload(order.order_id); if (next) onChanged?.(next); }} /> : null}
+          {order && correctionsAvailable && correctionsOpened && detail ? <div hidden={activeTab !== "items"}><PersonnelOrderDocumentItemsForm detail={detail} onDirtyChange={setCorrectionsDirty} onSaved={async () => { const next = await reload(order.order_id); if (next) onChanged?.(next); }} /></div> : null}
 
           {order ? (
             <div hidden={activeTab !== "data"}>
@@ -729,6 +740,7 @@ export default function PersonnelOrderDetailDrawer({
                 <p className="mb-3 text-xs text-zinc-500">
                   Каждый пункт имеет собственный тип. Тип пункта не дублирует тип приказа в заголовке.
                 </p>
+                {!editable && correctionsAvailable ? <div className="mb-3 flex flex-wrap items-center gap-3 rounded border border-amber-200 p-3 text-sm" data-testid="personnel-order-data-correction-notice"><span>Для изменения этого приказа перейдите на вкладку «Корректировки»</span><button type="button" onClick={() => { setCorrectionsOpened(true); setActiveTab("items"); }} className="rounded border border-blue-300 px-3 py-1.5 text-blue-800">Перейти к корректировкам</button></div> : null}
                 <PersonnelOrderItemEditor
                   orderId={order.order_id}
                   orderTypeCode={order.order_type_code}

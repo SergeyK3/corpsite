@@ -51,6 +51,7 @@ def pick_payload_value(payload: Mapping[str, Any], *keys: str) -> Any:
 
 def build_item_ctx(item: Mapping[str, Any], employee_name: Optional[str]) -> Dict[str, Any]:
     payload = payload_dict(item.get("payload"))
+    document_forms_kk = payload_dict(payload.get("document_forms_kk"))
     assignment = payload_dict(payload.get("to_assignment") or payload.get("assignment"))
     presentation = payload_dict(payload.get("presentation_context"))
     org_unit_name = pick_payload_value(
@@ -83,6 +84,11 @@ def build_item_ctx(item: Mapping[str, Any], employee_name: Optional[str]) -> Dic
         "effective_date": iso_date(item.get("effective_date")),
         "org_unit_name": org_unit_name,
         "position_name": position_name,
+        # Explicit document forms are authoritative for the Kazakh document;
+        # do not try to infer them from a Russian position snapshot.
+        "position_document_possessive_kk": pick_payload_value(
+            document_forms_kk, "position_document_possessive_kk", "position_possessive", "document_possessive_kk"
+        ),
         "to_org_unit_name": pick_payload_value(
             payload, "to_org_unit_name", "toOrgUnitName"
         ) or assignment.get("unit"),

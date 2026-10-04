@@ -376,6 +376,23 @@ def test_unpaid_leave_body_uses_payload_and_snapshot_in_both_locales() -> None:
     assert "Негіз:" not in kk["generated_text"]
 
 
+def test_unpaid_leave_kk_body_uses_saved_document_position_form() -> None:
+    ctx = build_item_ctx(
+        {
+            "item_type_code": "LEAVE.UNPAID.GRANT",
+            "payload": {
+                "leave": {"period_type": "CONTINUOUS_RANGE", "start": "2026-07-01", "end": "2026-07-12", "days": 12},
+                "document_forms_kk": {"position_document_possessive_kk": "шаруа бикесі"},
+                "source_position_name": "сестра-хозяйка",
+            },
+        },
+        "Employee",
+    )
+    kk = generate_item_body("kk", ctx)["generated_text"]
+    assert "шаруа бикесі" in kk
+    assert "сестра-хозяйка" not in kk
+
+
 def test_unpaid_leave_basis_is_separate_and_uses_normalized_date_and_number() -> None:
     fact = {
         "item_type_code": "LEAVE.UNPAID.GRANT",

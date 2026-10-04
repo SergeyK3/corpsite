@@ -71,6 +71,8 @@ export function itemPayloadDraftFromRecord(payload: Record<string, unknown> | nu
   const sourcePeriods = Array.isArray(source.work_periods) ? source.work_periods : [];
   const documentForms = source.document_forms_kk && typeof source.document_forms_kk === "object" && !Array.isArray(source.document_forms_kk)
     ? source.document_forms_kk as Record<string, unknown> : {};
+  const basis = source.basis && typeof source.basis === "object" && !Array.isArray(source.basis)
+    ? source.basis as Record<string, unknown> : {};
   const nestedForm = (entity: "org_unit_name" | "position_name" | "employee", keys: string[]): string => {
     const raw = source[entity];
     const value = entity === "employee" && raw && typeof raw === "object" ? (raw as Record<string, unknown>).name : raw;
@@ -98,7 +100,7 @@ export function itemPayloadDraftFromRecord(payload: Record<string, unknown> | nu
     work_periods: workPeriods.length ? workPeriods : [{ start: "", end: "", days: "" }],
     leave_start: asString("leave_start", source.leave && typeof source.leave === "object" ? String((source.leave as Record<string, unknown>).start || "") : ""), leave_end: asString("leave_end", source.leave && typeof source.leave === "object" ? String((source.leave as Record<string, unknown>).end || "") : ""), leave_days: asString("leave_days", source.leave && typeof source.leave === "object" ? String((source.leave as Record<string, unknown>).days || "") : ""),
     work_period_start: asString("work_period_start"), work_period_end: asString("work_period_end"), work_period_days: asString("work_period_days"),
-    application_date: asString("basis_date", asString("application_date")), application_number: asString("basis_number", asString("application_number")),
+    application_date: asString("basis_date", asString("application_date", typeof basis.date === "string" ? basis.date : "")), application_number: asString("basis_number", asString("application_number", typeof basis.number === "string" ? basis.number : "")),
     vacation_benefit_applicable: source.vacation_benefit_applicable === true,
     vacation_benefit_rule: asString("vacation_benefit_rule"), leave_note: asString("note"),
     org_unit_document_genitive_kk: documentForm(["org_unit_document_genitive_kk", "org_unit_genitive", "document_genitive_kk"], "org_unit_name", ["document_genitive_kk", "genitive_kk"]),
@@ -174,7 +176,13 @@ export function buildItemPayload(
     const explicitLeaveDays = optionalNumber(draft.leave_days);
     const startMs = Date.parse(`${leaveStart}T00:00:00`);
     const endMs = Date.parse(`${leaveEnd}T00:00:00`);
-    const leaveDays = explicitLeaveDays ?? (Number.isFinite(startMs) && Number.isFinite(endMs) ? Math.floor((endMs - startMs) / 86400000) + 1 : undefined);
+    const inclusiveRangeDays = Number.isFinite(startMs) && Number.isFinite(endMs)
+      ? Math.floor((endMs - startMs) / 86400000) + 1
+      : undefined;
+    // `leave_days` can be left over from the previously saved range while the
+    // operator changes only the dates.  The unpaid-leave contract owns one
+    // coherent range, so its days must always describe those outgoing dates.
+    const leaveDays = type === "LEAVE.UNPAID.GRANT" ? inclusiveRangeDays : explicitLeaveDays ?? inclusiveRangeDays;
     if (type === "LEAVE.UNPAID.GRANT") {
       const periodType = leaveStart && leaveStart === leaveEnd ? "SINGLE_DAY" : "CONTINUOUS_RANGE";
       payload.leave = { period_type: periodType, start: leaveStart, end: leaveEnd, days: leaveDays };
