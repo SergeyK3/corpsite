@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "description": "Explicit server-code aliases for the org_units_name_kk package. Each expected_name must match exactly.",
+  "mappings": [
+    {
+      "package_code": "QM",
+      "server_code": "qm_ovipd",
+      "expected_name": "Отдел менеджмента и качества"
+    }
+  ]
+}
