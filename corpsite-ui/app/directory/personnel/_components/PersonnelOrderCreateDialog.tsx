@@ -2,10 +2,9 @@
 
 import * as React from "react";
 import { usePersonnelSectionLanguage } from "../_lib/personnelSectionLanguage";
-import { personnelOrderTypeLabel } from "../_lib/personnelOrderLabels";
+import PersonnelOrderTypeMenu from "./PersonnelOrderTypeMenu";
 
 import {
-  PERSONNEL_ORDER_CREATE_TYPE_OPTIONS,
   createManualPersonnelOrderDraft,
   getPersonnelOrderPublishedTemplateTitle,
   mapPersonnelOrdersApiError,
@@ -326,6 +325,7 @@ export default function PersonnelOrderCreateDialog({
   React.useEffect(() => {
     if (!open) return;
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) return;
       if (event.key === "Escape") {
         event.preventDefault();
         requestClose();
@@ -489,12 +489,7 @@ export default function PersonnelOrderCreateDialog({
           if (event.key === "Enter" && event.target instanceof HTMLInputElement && event.target.type !== "submit") event.preventDefault();
         }}>
           <div data-testid="personnel-order-create-body" className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-5 py-4">
-            <Field label="Тип кадрового приказа">
-              <select aria-label="Тип кадрового приказа" value={type} onChange={(event) => changeType(event.target.value)} className={inputClassName}>
-                <option value="">Выберите тип кадрового приказа</option>
-                {PERSONNEL_ORDER_CREATE_TYPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{personnelOrderTypeLabel(option.value, sectionLanguage)}</option>)}
-              </select>
-            </Field>
+            <PersonnelOrderTypeMenu value={type} language={sectionLanguage} onChange={changeType} />
             <Field label="Номер приказа"><input aria-label="Номер приказа" required value={number} onChange={(event) => setNumber(event.target.value)} className={inputClassName} /></Field>
             <Field label="Дата приказа"><input aria-label="Дата приказа" type="date" required value={orderDate} onChange={(event) => setOrderDate(event.target.value)} className={inputClassName} /></Field>
             <Field label="Язык"><select aria-label="Язык" value={locale} onChange={(event) => setLocale(event.target.value as "kk" | "ru")} className={inputClassName}><option value="kk">Қазақша</option><option value="ru">Русский</option></select></Field>

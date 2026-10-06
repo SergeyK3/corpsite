@@ -59,7 +59,9 @@ it("does not change document language when shared language changes", async () =>
   fireEvent.change(screen.getByLabelText("Язык кадрового раздела"), { target: { value: "kk" } });
   await waitFor(() => expect(screen.getByLabelText("Кадр бөлімінің тілі")).toHaveValue("kk"));
   expect(screen.getByLabelText("Язык")).toHaveValue("ru");
-  expect(screen.getByRole("option", { name: "Жұмысқа қабылдау туралы" })).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Тип кадрового приказа" }));
+  fireEvent.change(screen.getByRole("searchbox"), { target: { value: "Жұмысқа қабылдау" } });
+  expect(screen.getByRole("menuitem", { name: "Жұмысқа қабылдау туралы" })).toBeInTheDocument();
 });
 
 it("uses existing approved names and falls back to the available translation", () => {

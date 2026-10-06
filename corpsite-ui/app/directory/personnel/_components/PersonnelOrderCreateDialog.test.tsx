@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, expect, it, vi } from "vitest";
 
 import PersonnelOrderCreateDialog from "./PersonnelOrderCreateDialog";
+import { personnelOrderTypeLabel } from "../_lib/personnelOrderLabels";
 
 vi.mock("../_lib/personnelOrdersApi.client", async () => ({
   ...(await vi.importActual<object>("../_lib/personnelOrdersApi.client")),
@@ -73,8 +74,14 @@ function setup(onClose = vi.fn(), onCreated = vi.fn()) {
 }
 
 async function selectType(type: "LEAVE.UNPAID.GRANT" | "LEAVE.CHILDCARE.GRANT" | "TRANSFER") {
-  fireEvent.change(screen.getByLabelText("Тип кадрового приказа"), { target: { value: type } });
+  chooseTypeInMenu(type);
   await waitFor(() => expect(getPersonnelOrderPublishedTemplateTitle).toHaveBeenLastCalledWith(type));
+}
+
+function chooseTypeInMenu(type: string) {
+  fireEvent.click(screen.getByRole("button", { name: "Тип кадрового приказа" }));
+  fireEvent.change(screen.getByRole("searchbox"), { target: { value: personnelOrderTypeLabel(type, "kk") } });
+  fireEvent.click(screen.getByRole("menuitem", { name: personnelOrderTypeLabel(type, "kk"), exact: true }));
 }
 
 async function selectUnpaid() {
