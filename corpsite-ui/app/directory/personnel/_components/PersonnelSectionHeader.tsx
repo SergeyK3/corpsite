@@ -6,6 +6,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 import PersonnelSubNav from "./PersonnelSubNav";
+import PersonnelLanguageSetting from "./PersonnelLanguageSetting";
 import PersonnelControlListSubNav from "./PersonnelControlListSubNav";
 
 export default function PersonnelSectionHeader() {
@@ -15,6 +16,7 @@ export default function PersonnelSectionHeader() {
   return (
     <div>
       <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">Кадровые процессы</h1>
+      <PersonnelLanguageSetting />
       <div className="mt-3">
         <Suspense fallback={<div className="h-8" aria-hidden="true" />}>
           <PersonnelSubNav />

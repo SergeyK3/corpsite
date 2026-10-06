@@ -1,10 +1,13 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import TemplatesPageClient from "./TemplatesPageClient";
+import { PersonnelSectionLanguageProvider } from "@/app/directory/personnel/_lib/personnelSectionLanguage";
+import { apiFetchJson } from "@/lib/api";
 import { createPersonnelOrderTemplateDraft, getPersonnelOrderTemplateDraft, getPersonnelOrderTemplateEditorBase, getPersonnelOrderTemplatePublished, listPersonnelOrderTemplateCatalog, publishPersonnelOrderTemplateDraft, savePersonnelOrderTemplateDraft } from "../_lib/personnelOrderTemplatesApi.client";
 
 let currentSearch = new URLSearchParams("section=personnel-orders&type=TERMINATION");
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }), useSearchParams: () => currentSearch }));
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }), useSearchParams: () => currentSearch, usePathname: () => "/admin/templates" }));
+vi.mock("@/lib/api", async () => ({ ...(await vi.importActual<object>("@/lib/api")), apiFetchJson: vi.fn() }));
 vi.mock("@/app/regular-tasks/_components/RegularTasksAdminClient", () => ({ default: () => null }));
 vi.mock("../_lib/personnelOrderTemplatesApi.client", () => ({ listPersonnelOrderTemplateCatalog: vi.fn(), getPersonnelOrderTemplateDraft: vi.fn(), getPersonnelOrderTemplatePublished: vi.fn(), getPersonnelOrderTemplateEditorBase: vi.fn(), createPersonnelOrderTemplateDraft: vi.fn(), savePersonnelOrderTemplateDraft: vi.fn(), previewPersonnelOrderTemplateDraft: vi.fn(), publishPersonnelOrderTemplateDraft: vi.fn() }));
 
@@ -31,6 +34,19 @@ describe("TemplatesPageClient draft lifecycle", () => {
     vi.stubGlobal("confirm", vi.fn(() => true));
   });
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+
+  it.each(["ru", "kk"] as const)("uses shared %s names in list and editor without changing bilingual texts", async language => {
+    vi.mocked(apiFetchJson).mockResolvedValue({ language, can_edit: false });
+    render(<PersonnelSectionLanguageProvider><TemplatesPageClient /></PersonnelSectionLanguageProvider>);
+    const title = language === "ru" ? catalog.items[0].title_ru : catalog.items[0].title_kk;
+    await screen.findByRole("heading", { name: title });
+    expect(screen.getByTestId("personnel-order-template-TERMINATION")).toHaveTextContent(title);
+    await open();
+    expect(screen.getByLabelText("Заголовок RU")).toHaveValue(texts.title_ru);
+    expect(screen.getByLabelText("Заголовок KK")).toHaveValue(texts.title_kk);
+    expect(createPersonnelOrderTemplateDraft).not.toHaveBeenCalled();
+    expect(savePersonnelOrderTemplateDraft).not.toHaveBeenCalled();
+  });
 
   it("mount and reload request PUBLISHED and DRAFT only", async () => {
     const view = setup(); await screen.findByTestId("template-published-read-only");
@@ -153,11 +169,11 @@ describe("TemplatesPageClient draft lifecycle", () => {
     vi.mocked(listPersonnelOrderTemplateCatalog).mockResolvedValue({ items: [...catalog.items, { ...catalog.items[0], type_code: "HIRE", title_ru: "Приём", title_kk: "Жұмысқа қабылдау" }] });
     vi.mocked(getPersonnelOrderTemplatePublished).mockImplementation((type) => type === "TERMINATION" ? oldPublished : Promise.resolve(hire));
     vi.mocked(getPersonnelOrderTemplateDraft).mockImplementation((type) => Promise.resolve(type === "HIRE" ? null : null));
-    const view = setup(); await screen.findByRole("heading", { name: "Об увольнении" });
+    const view = setup(); await screen.findByRole("heading", { name: "Жұмыстан босату туралы" });
     currentSearch = new URLSearchParams("section=personnel-orders&type=HIRE"); view.rerender(<TemplatesPageClient />);
-    expect(await screen.findByRole("heading", { name: "Приём" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Жұмысқа қабылдау" })).toBeInTheDocument();
     resolveOld?.(published);
-    await waitFor(() => expect(screen.getByTestId("personnel-order-template-detail")).toHaveTextContent("Приём"));
+    await waitFor(() => expect(screen.getByTestId("personnel-order-template-detail")).toHaveTextContent("Жұмысқа қабылдау"));
     expect(screen.getByTestId("personnel-order-template-detail")).not.toHaveTextContent("Заголовок RU");
   });
 });

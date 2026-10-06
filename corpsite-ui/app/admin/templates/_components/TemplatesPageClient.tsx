@@ -1,4 +1,5 @@
 "use client";
+import { usePersonnelSectionLanguage, localizedPersonnelTitle } from "@/app/directory/personnel/_lib/personnelSectionLanguage";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -414,6 +415,7 @@ function DraftEditor({ editor, published, onSaved, onPublished, variables, warni
 }
 
 function TemplateDetail({ item }: { item: PersonnelOrderTemplateCatalogItem }) {
+  const { language } = usePersonnelSectionLanguage();
   const detail = item.template_detail ?? item.pilot_detail;
   const [editor, setEditor] = useState<EditorDocument | null>(null);
   const [serverDraft, setServerDraft] = useState<PersonnelOrderTemplateDraft | null>(null);
@@ -466,10 +468,9 @@ function TemplateDetail({ item }: { item: PersonnelOrderTemplateCatalogItem }) {
   }, [item.type_code, item.editor_available, reloadState]);
   return (
     <aside data-testid="personnel-order-template-detail" className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
-      <h3 className="text-lg font-semibold">{item.title_ru}</h3>
-      <p className="mt-1">{item.title_kk}</p>
+      <h3 className="text-lg font-semibold">{localizedPersonnelTitle(item, language)}</h3>
       <p className="mt-2 text-sm">{item.type_code} · {item.support_level}</p>
-      {published ? <section className="mt-4 rounded-lg border border-emerald-200 p-3" data-testid="template-published-read-only"><h4 className="font-semibold">Опубликованная версия шаблона</h4><p className="text-sm">Версия {published.version_number} · {published.status}</p><p className="mt-2 whitespace-pre-wrap text-sm">{published.title_ru}</p>{draftExists ? <p className="mt-2 text-sm text-amber-700">Имеется черновик следующей версии.</p> : null}</section> : null}
+      {published ? <section className="mt-4 rounded-lg border border-emerald-200 p-3" data-testid="template-published-read-only"><h4 className="font-semibold">Опубликованная версия шаблона</h4><p className="text-sm">Версия {published.version_number} · {published.status}</p><p className="mt-2 whitespace-pre-wrap text-sm">{localizedPersonnelTitle(published, language)}</p>{draftExists ? <p className="mt-2 text-sm text-amber-700">Имеется черновик следующей версии.</p> : null}</section> : null}
       <p className="mt-1 text-sm">{item.uses_specialized_generator ? "Специализированный генератор" : "Общий fallback"}</p>
       {detail ? <FormalizedTemplateDetail detail={detail} showCatalogPreview={!item.editor_available} /> : <>
         <p className="mt-3">Обязательные поля: {item.required_fields.join(", ") || "не формализованы"}</p>
@@ -482,6 +483,7 @@ function TemplateDetail({ item }: { item: PersonnelOrderTemplateCatalogItem }) {
 }
 
 export default function TemplatesPageClient() {
+  const { language } = usePersonnelSectionLanguage();
   const router = useRouter();
   const searchParams = useSearchParams();
   const activeSection = resolveTemplateSection(searchParams.get("section"));
@@ -537,7 +539,7 @@ export default function TemplatesPageClient() {
           <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">Встроенные read-only шаблоны, построенные по действующим генераторам. Редактирование и версионирование будут добавлены на следующем этапе.</p>
           <GeneralPersonnelOrderRequirements />
           <div className="flex gap-2"><input aria-label="Поиск шаблонов кадровых приказов" value={query} onChange={(e) => setQuery(e.target.value)} className="rounded border px-2 py-1" /><select aria-label="Уровень поддержки" value={level} onChange={(e) => setLevel(e.target.value)} className="rounded border px-2 py-1"><option value="ALL">Все уровни</option><option value="SUPPORTED">SUPPORTED</option><option value="PARTIAL">PARTIAL</option><option value="NOT_IMPLEMENTED">NOT_IMPLEMENTED</option></select></div>
-          <div className="grid gap-2 md:grid-cols-2" data-testid="personnel-order-template-list">{visibleItems.map((item) => <button type="button" key={item.type_code} onClick={() => selectType(item.type_code)} className="rounded border p-3 text-left" data-testid={`personnel-order-template-${item.type_code}`}><div className="font-medium">{item.title_ru}</div><div>{item.title_kk}</div><div className="font-mono text-xs">{item.type_code}</div><div>{item.support_level} · {item.supported_locales.join(", ")} · Встроенный шаблон {item.is_pilot ? "· Пилот" : ""}</div></button>)}</div>
+          <div className="grid gap-2 md:grid-cols-2" data-testid="personnel-order-template-list">{visibleItems.map((item) => <button type="button" key={item.type_code} onClick={() => selectType(item.type_code)} className="rounded border p-3 text-left" data-testid={`personnel-order-template-${item.type_code}`}><div className="font-medium">{localizedPersonnelTitle(item, language)}</div><div className="font-mono text-xs">{item.type_code}</div><div>{item.support_level} · {item.supported_locales.join(", ")} · Встроенный шаблон {item.is_pilot ? "· Пилот" : ""}</div></button>)}</div>
           {selectedItem ? <TemplateDetail key={selectedItem.type_code} item={selectedItem} /> : null}
         </section>
       )}

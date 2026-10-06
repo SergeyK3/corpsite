@@ -1,3 +1,5 @@
+import { personnelOrderCanonicalTitle } from "./personnelOrderCanonicalTitles";
+
 export type PersonnelOrderStatus =
   | "DRAFT"
   | "READY_FOR_SIGNATURE"
@@ -97,8 +99,12 @@ export function personnelOrderStatusLabel(status: string | null | undefined): st
   return normalized || "—";
 }
 
-export function personnelOrderTypeLabel(typeCode: string | null | undefined): string {
+export function personnelOrderTypeLabel(typeCode: string | null | undefined, language?: "ru" | "kk"): string {
   const normalized = String(typeCode || "").trim().toUpperCase();
+  if (language) {
+    const title = personnelOrderCanonicalTitle(normalized, language) || personnelOrderCanonicalTitle(normalized, language === "kk" ? "ru" : "kk");
+    if (title) return title;
+  }
   if ((PERSONNEL_ORDER_TYPES as readonly string[]).includes(normalized)) {
     return PERSONNEL_ORDER_TYPE_LABELS[normalized as PersonnelOrderType];
   }

@@ -1,6 +1,8 @@
 "use client";
 
 import * as React from "react";
+import { usePersonnelSectionLanguage } from "../_lib/personnelSectionLanguage";
+import { personnelOrderTypeLabel } from "../_lib/personnelOrderLabels";
 
 import {
   PERSONNEL_ORDER_CREATE_TYPE_OPTIONS,
@@ -142,6 +144,7 @@ export default function PersonnelOrderCreateDialog({
   initialEmployeeQuery = null,
   initialOrgUnitId = null,
 }: Props) {
+  const { language: sectionLanguage } = usePersonnelSectionLanguage();
   const [type, setType] = React.useState("");
   const [number, setNumber] = React.useState("");
   const [orderDate, setOrderDate] = React.useState("");
@@ -489,7 +492,7 @@ export default function PersonnelOrderCreateDialog({
             <Field label="Тип кадрового приказа">
               <select aria-label="Тип кадрового приказа" value={type} onChange={(event) => changeType(event.target.value)} className={inputClassName}>
                 <option value="">Выберите тип кадрового приказа</option>
-                {PERSONNEL_ORDER_CREATE_TYPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                {PERSONNEL_ORDER_CREATE_TYPE_OPTIONS.map((option) => <option key={option.value} value={option.value}>{personnelOrderTypeLabel(option.value, sectionLanguage)}</option>)}
               </select>
             </Field>
             <Field label="Номер приказа"><input aria-label="Номер приказа" required value={number} onChange={(event) => setNumber(event.target.value)} className={inputClassName} /></Field>

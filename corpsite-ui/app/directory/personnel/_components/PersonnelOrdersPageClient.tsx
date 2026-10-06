@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { usePersonnelSectionLanguage, type PersonnelSectionLanguage } from "../_lib/personnelSectionLanguage";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCurrentUser } from "@/lib/currentUser";
 
@@ -28,13 +29,13 @@ import {
   type PersonnelOrdersFilters,
 } from "../_lib/personnelOrdersApi.client";
 
-function activeFilterSummary(filters: PersonnelOrdersFilters): string[] {
+function activeFilterSummary(filters: PersonnelOrdersFilters, language: PersonnelSectionLanguage): string[] {
   const parts: string[] = [];
   if (filters.order_id) parts.push(`приказ #${filters.order_id}`);
   if (filters.employee_id) parts.push("сотрудник");
   if (filters.org_unit_id) parts.push(`подразделение #${filters.org_unit_id}`);
   if (filters.status) parts.push(personnelOrderStatusLabel(filters.status));
-  if (filters.order_type_code) parts.push(personnelOrderTypeLabel(filters.order_type_code));
+  if (filters.order_type_code) parts.push(personnelOrderTypeLabel(filters.order_type_code, language));
   if (filters.date_from || filters.date_to) {
     parts.push(`период ${filters.date_from || "…"} — ${filters.date_to || "…"}`);
   }
@@ -44,6 +45,7 @@ function activeFilterSummary(filters: PersonnelOrdersFilters): string[] {
 }
 
 export default function PersonnelOrdersPageClient() {
+  const { language } = usePersonnelSectionLanguage();
   const me = useCurrentUser();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -151,7 +153,7 @@ export default function PersonnelOrdersPageClient() {
     [filters.q, items],
   );
 
-  const filterHints = activeFilterSummary(filters);
+  const filterHints = activeFilterSummary(filters, language);
 
   function updateFilters(next: Partial<PersonnelOrdersFilters>) {
     const merged: PersonnelOrdersFilters = { ...filters, ...next };
@@ -307,7 +309,7 @@ export default function PersonnelOrdersPageClient() {
           >
             {PERSONNEL_ORDER_TYPE_FILTER_OPTIONS.map((option) => (
               <option key={option.value || "all-type"} value={option.value}>
-                {option.label}
+                {option.value ? personnelOrderTypeLabel(option.value, language) : option.label}
               </option>
             ))}
           </select>
