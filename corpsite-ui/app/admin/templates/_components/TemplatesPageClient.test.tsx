@@ -3,13 +3,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import TemplatesPageClient from "./TemplatesPageClient";
 import { PersonnelSectionLanguageProvider } from "@/app/directory/personnel/_lib/personnelSectionLanguage";
 import { apiFetchJson } from "@/lib/api";
+import { copyPersonnelTemplate, listPersonnelIndependentTemplates, listPersonnelTemplateVersions } from "../_lib/personnelOrderTemplatesApi.client";
 import { createPersonnelOrderTemplateDraft, getPersonnelOrderTemplateDraft, getPersonnelOrderTemplateEditorBase, getPersonnelOrderTemplatePublished, listPersonnelOrderTemplateCatalog, publishPersonnelOrderTemplateDraft, savePersonnelOrderTemplateDraft } from "../_lib/personnelOrderTemplatesApi.client";
 
 let currentSearch = new URLSearchParams("section=personnel-orders&type=TERMINATION");
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }), useSearchParams: () => currentSearch, usePathname: () => "/admin/templates" }));
 vi.mock("@/lib/api", async () => ({ ...(await vi.importActual<object>("@/lib/api")), apiFetchJson: vi.fn() }));
 vi.mock("@/app/regular-tasks/_components/RegularTasksAdminClient", () => ({ default: () => null }));
-vi.mock("../_lib/personnelOrderTemplatesApi.client", () => ({ listPersonnelOrderTemplateCatalog: vi.fn(), getPersonnelOrderTemplateDraft: vi.fn(), getPersonnelOrderTemplatePublished: vi.fn(), getPersonnelOrderTemplateEditorBase: vi.fn(), createPersonnelOrderTemplateDraft: vi.fn(), savePersonnelOrderTemplateDraft: vi.fn(), previewPersonnelOrderTemplateDraft: vi.fn(), publishPersonnelOrderTemplateDraft: vi.fn() }));
+vi.mock("../_lib/personnelOrderTemplatesApi.client", () => ({ listPersonnelIndependentTemplates: vi.fn().mockResolvedValue({items: []}), listPersonnelTemplateVersions: vi.fn().mockResolvedValue({items: []}), copyPersonnelTemplate: vi.fn(), listPersonnelOrderTemplateCatalog: vi.fn(), getPersonnelOrderTemplateDraft: vi.fn(), getPersonnelOrderTemplatePublished: vi.fn(), getPersonnelOrderTemplateEditorBase: vi.fn(), createPersonnelOrderTemplateDraft: vi.fn(), savePersonnelOrderTemplateDraft: vi.fn(), previewPersonnelOrderTemplateDraft: vi.fn(), publishPersonnelOrderTemplateDraft: vi.fn() }));
 
 const texts = { title_ru: "Заголовок RU", title_kk: "Тақырып KK", preamble_ru: "Преамбула RU", preamble_kk: "Преамбула KK", body_template_ru: "{{employee.full_name}}", body_template_kk: "{{employee.full_name}}", basis_template_ru: "Основание", basis_template_kk: "Негіз" };
 const published = { ...texts, template_version_id: 20, item_type_code: "TERMINATION", version_number: 2, revision: 4, status: "PUBLISHED", based_on_built_in: true };
@@ -22,7 +23,8 @@ const open = async (label = "Редактировать шаблон") => { awai
 const changeTitle = (value: string) => fireEvent.change(screen.getByLabelText("Заголовок RU"), { target: { value } });
 
 describe("TemplatesPageClient draft lifecycle", () => {
-  beforeEach(() => {
+  beforeEach(() => { vi.mocked(listPersonnelIndependentTemplates).mockReset().mockResolvedValue({items: []}); vi.mocked(listPersonnelTemplateVersions).mockReset().mockResolvedValue({items: []}); vi.mocked(copyPersonnelTemplate).mockReset();
+    Object.defineProperty(HTMLDialogElement.prototype, "showModal", { configurable: true, value: function () { this.setAttribute("open", ""); } });
     currentSearch = new URLSearchParams("section=personnel-orders&type=TERMINATION"); window.localStorage.clear();
     vi.mocked(listPersonnelOrderTemplateCatalog).mockReset().mockResolvedValue(catalog);
     vi.mocked(getPersonnelOrderTemplatePublished).mockReset().mockResolvedValue(published);
@@ -35,11 +37,47 @@ describe("TemplatesPageClient draft lifecycle", () => {
   });
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
+  it("shows opening and copying actions before the catalog without an extra type selection", async () => {
+    currentSearch = new URLSearchParams("section=personnel-orders");
+    vi.mocked(apiFetchJson).mockResolvedValue({ language: "kk", can_edit: false });
+    render(<PersonnelSectionLanguageProvider><TemplatesPageClient /></PersonnelSectionLanguageProvider>);
+    const openButton = await screen.findByRole("button", { name: "Редактировать шаблон" });
+    const actions = screen.getByTestId("personnel-template-actions");
+    expect(actions).toContainElement(openButton);
+    const copyButton = screen.getByRole("button", { name: /Создать на основе|Негізінде жасау/ });
+    expect(actions).toContainElement(copyButton);
+    await waitFor(() => expect(copyButton).toBeEnabled());
+    expect(actions.compareDocumentPosition(screen.getByTestId("personnel-order-template-list")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    fireEvent.click(copyButton);
+    expect(screen.getByLabelText("Жаңа үлгінің орысша атауы")).toBeVisible();
+    expect(screen.getByLabelText("Жаңа үлгінің қазақша атауы")).toBeVisible();
+    expect(createPersonnelOrderTemplateDraft).not.toHaveBeenCalled();
+  });
+
+  it("automatically opens the independent copied draft and confirms the original is preserved", async () => {
+    vi.mocked(apiFetchJson).mockResolvedValue({ language: "ru", can_edit: false });
+    vi.mocked(copyPersonnelTemplate).mockResolvedValue({ ...draft, template_id: 99, version_number: 1 }); vi.mocked(listPersonnelIndependentTemplates).mockImplementation(async () => ({items: vi.mocked(copyPersonnelTemplate).mock.calls.length ? [{template_id:99,item_type_code:"TERMINATION",name_ru:"Новый вариант",name_kk:"Жаңа нұсқа",is_default:false,template_version_id:null,draft_version_id:21}] : []}));
+    render(<PersonnelSectionLanguageProvider><TemplatesPageClient /></PersonnelSectionLanguageProvider>);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Создать на основе…" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Создать на основе…" }));
+    expect(screen.getByRole("dialog", { name: "Создать на основе шаблона" })).toBeVisible();
+    await waitFor(() => expect(screen.getByLabelText("Исходный шаблон")).toBeEnabled());
+    fireEvent.change(screen.getByLabelText("Название нового шаблона на русском"), { target: { value: "Новый вариант" } });
+    fireEvent.change(screen.getByLabelText("Название нового шаблона на казахском"), { target: { value: "Жаңа нұсқа" } });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Создать и редактировать" })).toBeEnabled()); fireEvent.click(screen.getByRole("button", { name: "Создать и редактировать" }));
+    await screen.findByTestId("template-draft-editor");
+    expect(screen.getByTestId("template-copy-success")).toHaveTextContent("Создан отдельный черновик «Новый вариант». Исходный шаблон сохранён");
+    expect(screen.getByLabelText("Заголовок RU")).toHaveValue(draft.title_ru);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(createPersonnelOrderTemplateDraft).not.toHaveBeenCalled();
+  });
+
   it.each(["ru", "kk"] as const)("uses shared %s names in list and editor without changing bilingual texts", async language => {
     vi.mocked(apiFetchJson).mockResolvedValue({ language, can_edit: false });
     render(<PersonnelSectionLanguageProvider><TemplatesPageClient /></PersonnelSectionLanguageProvider>);
     const title = language === "ru" ? catalog.items[0].title_ru : catalog.items[0].title_kk;
     await screen.findByRole("heading", { name: title });
+    expect(screen.getByRole("button", { name: language === "ru" ? "Создать на основе…" : "Негізінде жасау…", exact: true })).toBeVisible();
     expect(screen.getByTestId("personnel-order-template-TERMINATION")).toHaveTextContent(title);
     await open();
     expect(screen.getByLabelText("Заголовок RU")).toHaveValue(texts.title_ru);
@@ -126,6 +164,32 @@ describe("TemplatesPageClient draft lifecycle", () => {
   it("publish re-reads PUBLISHED and null DRAFT and creates no successor", async () => {
     vi.mocked(getPersonnelOrderTemplateDraft).mockResolvedValueOnce(draft).mockResolvedValueOnce(draft).mockResolvedValue(null); vi.mocked(getPersonnelOrderTemplatePublished).mockResolvedValueOnce(published).mockResolvedValueOnce({ ...draft, status: "PUBLISHED" }); setup(); await open("Продолжить редактирование"); fireEvent.click(screen.getByRole("button", { name: "Опубликовать версию" }));
     await waitFor(() => expect(publishPersonnelOrderTemplateDraft).toHaveBeenCalledWith("TERMINATION", 1)); await waitFor(() => expect(screen.queryByTestId("template-draft-editor")).not.toBeInTheDocument()); expect(getPersonnelOrderTemplatePublished).toHaveBeenCalledTimes(2); expect(getPersonnelOrderTemplateDraft).toHaveBeenCalledTimes(3); expect(createPersonnelOrderTemplateDraft).not.toHaveBeenCalled();
+  });
+
+  it.each(["ru", "kk"] as const)("shows publication errors and a durable named confirmation in %s", async language => {
+    vi.mocked(apiFetchJson).mockResolvedValue({language,can_edit:false});
+    let completed=false;
+    const scoped={...draft,template_id:101,template_version_id:1327,revision:4,version_number:1};
+    const result={...scoped,status:"PUBLISHED"};
+    vi.mocked(listPersonnelIndependentTemplates).mockImplementation(async()=>({items:[{template_id:101,item_type_code:"TERMINATION",name_ru:"Об отзыве из отпуска",name_kk:"Еңбек демалысынан шақырту туралы",is_default:false,template_version_id:completed?1327:null,draft_version_id:completed?null:1327}]}));
+    vi.mocked(listPersonnelTemplateVersions).mockResolvedValue({items:[scoped]});
+    vi.mocked(getPersonnelOrderTemplateDraft).mockImplementation(async()=>completed?null:scoped);
+    vi.mocked(getPersonnelOrderTemplatePublished).mockImplementation(async()=>completed?result:null);
+    vi.mocked(publishPersonnelOrderTemplateDraft).mockRejectedValueOnce({message:"Конфликт ревизии: обновите черновик."}).mockImplementation(async()=>{completed=true;return result;});
+    currentSearch=new URLSearchParams("section=personnel-orders&type=TERMINATION&template_id=101");
+    render(<PersonnelSectionLanguageProvider><TemplatesPageClient/></PersonnelSectionLanguageProvider>);
+    await screen.findByTestId("template-draft-editor");
+    fireEvent.click(screen.getByRole("button",{name:"Опубликовать версию"}));
+    expect(await screen.findByText("Конфликт ревизии: обновите черновик.")).toBeVisible();
+    expect(screen.getByLabelText("Заголовок RU")).toHaveValue(scoped.title_ru);
+    fireEvent.click(screen.getByRole("button",{name:"Опубликовать версию"}));
+    const notice=await screen.findByTestId("template-publication-success");
+    expect(notice).toHaveTextContent(language==="kk"?"жарияланды":"опубликована");
+    expect(notice).toHaveTextContent(language==="kk"?"Еңбек демалысынан шақырту туралы":"Об отзыве из отпуска");
+    await screen.findByTestId("template-published-read-only");
+    expect(screen.queryByTestId("template-draft-editor")).not.toBeInTheDocument();
+    expect(savePersonnelOrderTemplateDraft).not.toHaveBeenCalled();
+    expect(createPersonnelOrderTemplateDraft).not.toHaveBeenCalled();
   });
 
   it("keeps typed values after a validation or stale-base error", async () => {

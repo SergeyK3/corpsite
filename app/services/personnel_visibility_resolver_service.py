@@ -243,28 +243,29 @@ def resolve_effective_personnel_visibility(
                 "implicit_from_access_level": False,
             }
 
-        try:
-            access = resolve_effective_access(int(user_id))
-            access_level = str(access.get("access_level") or "NONE").upper()
-        except Exception:
-            access_level = "NONE"
+    # Release the visibility read connection before resolving access grants.
+    try:
+        access = resolve_effective_access(int(user_id))
+        access_level = str(access.get("access_level") or "NONE").upper()
+    except Exception:
+        access_level = "NONE"
 
-        if access_level in ACCESS_LEVELS_WITH_IMPLICIT_VISIBILITY:
-            organization_wide = access_level == "ADMIN" or _has_hr_enrollment_manager_grant(int(user_id))
-            return {
-                "has_visibility": True,
-                "show_org_sidebar": True,
-                "organization_wide": organization_wide,
-                "scope_unit_ids": None if organization_wide else [],
-                "can_view_personnel": True,
-                "can_view_tasks": access_level == "ADMIN",
-                "source": "access_level",
-                "matched_assignment_ids": [],
-                "implicit_from_access_level": True,
-                "access_level": access_level,
-            }
+    if access_level in ACCESS_LEVELS_WITH_IMPLICIT_VISIBILITY:
+        organization_wide = access_level == "ADMIN" or _has_hr_enrollment_manager_grant(int(user_id))
+        return {
+            "has_visibility": True,
+            "show_org_sidebar": True,
+            "organization_wide": organization_wide,
+            "scope_unit_ids": None if organization_wide else [],
+            "can_view_personnel": True,
+            "can_view_tasks": access_level == "ADMIN",
+            "source": "access_level",
+            "matched_assignment_ids": [],
+            "implicit_from_access_level": True,
+            "access_level": access_level,
+        }
 
-        return _empty_visibility()
+    return _empty_visibility()
 
 
 def enrich_user_with_personnel_visibility(user: Dict[str, Any]) -> Dict[str, Any]:

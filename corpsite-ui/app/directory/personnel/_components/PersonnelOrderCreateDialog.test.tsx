@@ -2,11 +2,65 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, expect, it, vi } from "vitest";
 
 import PersonnelOrderCreateDialog from "./PersonnelOrderCreateDialog";
+
+it("prefills recall from a selected Musabekov, keeps corrections, and uses manual case input when missing", async () => {
+  setup();
+  const musabekov={...employeeDetail,id:"77",fio:"Мусабеков Арман Ерланович",has_current_assignment:true,
+    position:{id:6,name:"Врач",job_nameru:"врач",job_namekk:"дәрігер"},
+    org_unit:{...employeeDetail.org_unit,name:"Терапия",name_kk:"Терапия"}};
+  vi.mocked(getEmployees).mockResolvedValue({items:[musabekov,musabekov],total:2});vi.mocked(getEmployee).mockResolvedValue(musabekov);
+  await chooseTypeInMenu("LEAVE.ANNUAL.RECALL");fireEvent.change(screen.getByLabelText("Сотрудник"),{target:{value:"Мусабеков"}});
+  const option=await screen.findByRole("option",{name:/Мусабеков Арман Ерланович/});expect(option).toHaveTextContent("Терапия");
+  expect(screen.getAllByRole("option",{name:/Мусабеков Арман Ерланович/})).toHaveLength(1);fireEvent.click(option);
+  await waitFor(()=>expect(screen.getByTestId("selected-employee-id")).toHaveValue("77"));
+  expect(screen.getByLabelText("Должность")).toHaveValue("врач");expect(screen.getByLabelText("Лауазым KZ")).toHaveValue("дәрігер");
+  expect(screen.getByLabelText("Подразделение")).toHaveValue("Терапия");expect(screen.getByLabelText("Бөлімше KZ")).toHaveValue("Терапия");
+  expect(screen.getByLabelText("Основание RU")).toHaveValue("Докладная записка и личное согласие Мусабекова Армана Ерлановича");
+  expect(screen.getByLabelText("Негіз KZ")).toHaveValue("Баяндау хат және Арман Ерланович Мусабековтің жеке келісімі");
+  fireEvent.change(screen.getByLabelText("Основание RU"),{target:{value:"Ручное основание"}});
+  fireEvent.change(screen.getByLabelText("ФИО в родительном падеже (RU)"),{target:{value:"Ручная форма ФИО"}});
+  expect(screen.getByLabelText("Основание RU")).toHaveValue("Ручное основание");
+  fireEvent.click(screen.getByRole("button",{name:"Негізді ұсыну RU"}));
+  expect(screen.getByLabelText("Основание RU")).toHaveValue("Докладная записка и личное согласие Ручная форма ФИО");
+  fireEvent.click(screen.getByRole("button",{name:"Сменить сотрудника"}));
+  const unknown={...musabekov,id:"78",fio:"Неизвестный"};vi.mocked(getEmployees).mockResolvedValue({items:[unknown],total:1});vi.mocked(getEmployee).mockResolvedValue(unknown);
+  fireEvent.change(screen.getByLabelText("Сотрудник"),{target:{value:"Неизвестный"}});fireEvent.click(await screen.findByRole("option",{name:/Неизвестный/}));
+  await waitFor(()=>expect(screen.getByTestId("selected-employee-id")).toHaveValue("78"));
+  expect(screen.getByLabelText("Основание RU")).toHaveValue("");expect(screen.getByLabelText("Негіз KZ")).toHaveValue("");
+  fireEvent.change(screen.getByLabelText("ФИО в родительном падеже (RU)"),{target:{value:"Сотрудника"}});
+  expect(screen.getByLabelText("Основание RU")).toHaveValue("Докладная записка и личное согласие Сотрудника");
+});
+
+it("allows an explicit document position for recall when the test employee has no current assignment", async () => {
+  setup();vi.mocked(getEmployee).mockResolvedValue({...employeeDetail,active_assignment_id:null,has_current_assignment:false} as never);
+  await chooseTypeInMenu("LEAVE.ANNUAL.RECALL");await selectEmployee();
+  const position=screen.getByLabelText("Должность");expect(position).toHaveValue("");
+  fireEvent.change(position,{target:{value:"врач"}});expect(position).toHaveValue("врач");
+  expect(createManualPersonnelOrderDraft).not.toHaveBeenCalled();
+});
+
+it("creates a recall with separate bilingual bases and no rate or leave period", async () => {
+  setup(); await chooseTypeInMenu("LEAVE.ANNUAL.RECALL"); await selectEmployee();
+  fireEvent.change(screen.getByLabelText("Номер приказа"), {target:{value:"RECALL-TEST"}});
+  fireEvent.change(screen.getByLabelText("Дата приказа"), {target:{value:"2026-10-07"}});
+  fireEvent.change(screen.getByLabelText("Дата действия"), {target:{value:"2026-10-12"}});
+  expect(screen.getByRole("button",{name:"Создать приказ",exact:true})).toBeDisabled();
+  fireEvent.change(screen.getByLabelText("Лауазым KZ"), {target:{value:"дәрігер"}});
+  fireEvent.change(screen.getByLabelText("Бөлімше KZ"), {target:{value:"Терапия"}});
+  fireEvent.change(screen.getByLabelText("Основание RU"), {target:{value:"Служебная записка"}});
+  fireEvent.change(screen.getByLabelText("Негіз KZ"), {target:{value:"Қызметтік хат"}});
+  vi.mocked(previewPersonnelOrderHeaderDuplicate).mockResolvedValue({blocking:false,warnings:[],candidates:[]});
+  vi.mocked(createManualPersonnelOrderDraft).mockResolvedValue({order_id:1} as never);
+  await waitFor(() => expect(screen.getByRole("button",{name:"Создать приказ",exact:true})).toBeEnabled());
+  fireEvent.click(screen.getByRole("button",{name:"Создать приказ",exact:true}));
+  await waitFor(() => expect(createManualPersonnelOrderDraft).toHaveBeenCalledWith(expect.objectContaining({item_type_code:"LEAVE.ANNUAL.RECALL",effective_date:"2026-10-12",period_start:null,period_end:null,item_payload:expect.objectContaining({recall_position_kk:"дәрігер",recall_org_unit_kk:"Терапия",basis_ru:"Служебная записка",basis_kk:"Қызметтік хат"})})));
+});
 import { personnelOrderTypeLabel } from "../_lib/personnelOrderLabels";
 
 vi.mock("../_lib/personnelOrdersApi.client", async () => ({
   ...(await vi.importActual<object>("../_lib/personnelOrdersApi.client")),
   getPersonnelOrderPublishedTemplateTitle: vi.fn(),
+  getPersonnelOrderPublishedVariants: vi.fn().mockResolvedValue({ items: [] }),
   previewPersonnelOrderHeaderDuplicate: vi.fn(),
   createManualPersonnelOrderDraft: vi.fn(),
 }));
@@ -14,6 +68,7 @@ vi.mock("@/app/directory/employees/_lib/api.client", () => ({ getEmployee: vi.fn
 vi.mock("@/lib/orgUnitsSelect", () => ({ loadOrgUnitSelectOptions: vi.fn() }));
 
 import {
+  PERSONNEL_ORDER_CREATE_TYPE_OPTIONS,
   createManualPersonnelOrderDraft,
   getPersonnelOrderPublishedTemplateTitle,
   previewPersonnelOrderHeaderDuplicate,
@@ -74,11 +129,12 @@ function setup(onClose = vi.fn(), onCreated = vi.fn()) {
 }
 
 async function selectType(type: "LEAVE.UNPAID.GRANT" | "LEAVE.CHILDCARE.GRANT" | "TRANSFER") {
-  chooseTypeInMenu(type);
+  await chooseTypeInMenu(type);
   await waitFor(() => expect(getPersonnelOrderPublishedTemplateTitle).toHaveBeenLastCalledWith(type));
 }
 
-function chooseTypeInMenu(type: string) {
+async function chooseTypeInMenu(type: string) {
+  await waitFor(() => expect(screen.getByRole("button", { name: "Тип кадрового приказа" })).toBeEnabled());
   fireEvent.click(screen.getByRole("button", { name: "Тип кадрового приказа" }));
   fireEvent.change(screen.getByRole("searchbox"), { target: { value: personnelOrderTypeLabel(type, "kk") } });
   fireEvent.click(screen.getByRole("menuitem", { name: personnelOrderTypeLabel(type, "kk"), exact: true }));
@@ -91,7 +147,7 @@ async function selectUnpaid() {
 
 async function selectEmployee() {
   fireEvent.change(screen.getByLabelText("Сотрудник"), { target: { value: "Иль" } });
-  fireEvent.click(await screen.findByRole("option", { name: "Ильясова Ассель Адиловна" }));
+  fireEvent.click(await screen.findByRole("option", { name: /^Ильясова Ассель Адиловна/ }));
   await waitFor(() => expect(screen.getByLabelText("Подразделение")).toBeInTheDocument());
 }
 
@@ -102,6 +158,23 @@ async function fillValidUnpaid() {
   fireEvent.change(screen.getByLabelText("Дата приказа"), { target: { value: "2026-07-01" } });
   fireEvent.change(screen.getByLabelText("Дата начала"), { target: { value: "2026-07-17" } });
 }
+
+it.each(PERSONNEL_ORDER_CREATE_TYPE_OPTIONS.map(option => option.value))("offers canonical and editable job forms for create %s", async type => {
+  setup();
+  vi.mocked(getEmployee).mockResolvedValue({ ...employeeDetail, has_current_assignment: true, position: { ...employee.position, job_code: "PHYSICIAN", job_nameru: "Врач каталога", job_namekk: "Дәрігер", job_namekk_doc: "дәрігері каталога" } });
+  await chooseTypeInMenu(type);
+  await selectEmployee();
+  if(type === "LEAVE.ANNUAL.RECALL") {
+    expect(screen.getByLabelText("Должность")).toHaveValue("Врач каталога");
+    expect(screen.getByLabelText("Лауазым KZ")).toHaveValue("Дәрігер");
+    fireEvent.change(screen.getByLabelText("Лауазым KZ"),{target:{value:"Ручная форма"}});
+    expect(screen.getByLabelText("Лауазым KZ")).toHaveValue("Ручная форма");return;
+  }
+  expect(screen.getByLabelText("Должность в тексте приказа (RU)")).toHaveValue("Врач каталога");
+  expect(screen.getByLabelText("Должность в тексте приказа (KK)")).toHaveValue("дәрігері каталога");
+  fireEvent.change(screen.getByLabelText("Должность в тексте приказа (KK)"), { target: { value: "Ручная форма" } });
+  expect(screen.getByLabelText("Должность в тексте приказа (KK)")).toHaveValue("Ручная форма");
+});
 
 it.each(["LEAVE.CHILDCARE.GRANT", "LEAVE.UNPAID.GRANT"] as const)("autofills actual API Медсестра in create %s", async (type) => {
   setup();
@@ -293,6 +366,17 @@ it("uses a canonical title when PUBLISHED template is absent", async () => {
   await selectType("TRANSFER");
   expect(await screen.findByRole("alert")).toHaveTextContent("отсутствует опубликованный шаблон");
   expect(screen.getByLabelText("Название приказа")).toHaveValue("Ауыстыру туралы");
+  expect(createManualPersonnelOrderDraft).not.toHaveBeenCalled();
+});
+
+it("prefills the approved childcare titles in both languages without a published version", async () => {
+  setup();
+  vi.mocked(getPersonnelOrderPublishedTemplateTitle).mockRejectedValue(new Error("not found"));
+  await selectType("LEAVE.CHILDCARE.GRANT");
+  expect(await screen.findByRole("alert")).toHaveTextContent("отсутствует опубликованный шаблон");
+  expect(screen.getByLabelText("Название приказа")).toHaveValue("Бала күтіміне байланысты жалақы сақталмайтын демалыс туралы");
+  fireEvent.change(screen.getByLabelText("Язык"), { target: { value: "ru" } });
+  await waitFor(() => expect(screen.getByLabelText("Название приказа")).toHaveValue("О неоплачиваемом отпуске по уходу за ребенком"));
   expect(createManualPersonnelOrderDraft).not.toHaveBeenCalled();
 });
 

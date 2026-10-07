@@ -6,6 +6,10 @@ export type Department = {
 };
 
 export type Position = {
+  job_code?: string | null;
+  job_nameru?: string | null;
+  job_namekk?: string | null;
+  job_namekk_doc?: string | null;
   id: number | null;
   name: string | null;
   name_kk?: string | null;
@@ -30,6 +34,7 @@ export type EmployeeDTO = {
   id: string | null;
   person_id?: number | null;
   active_assignment_id?: number | null;
+  has_current_assignment?: boolean;
   record_kind?: "employee" | "applicant" | string | null;
   fio: string | null;
   first_name?: string | null;

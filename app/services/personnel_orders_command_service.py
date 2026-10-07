@@ -130,6 +130,15 @@ def _validate_leave_draft_item(
         return
     if employee_id is None:
         raise PersonnelOrderValidationError("Leave item requires employee_id.")
+    if item_type_code == "LEAVE.ANNUAL.RECALL":
+        from app.services.personnel_order_recall_contract import values
+        try:
+            values(payload, effective_date)
+        except ValueError as exc:
+            raise PersonnelOrderValidationError(str(exc)) from exc
+        if period_start is not None or period_end is not None:
+            raise PersonnelOrderValidationError("Recall requires a recall date, not a leave period.")
+        return
     if item_type_code == "LEAVE.CHILDCARE.GRANT":
         from app.services.personnel_order_childcare_contract import childcare_values
         try:

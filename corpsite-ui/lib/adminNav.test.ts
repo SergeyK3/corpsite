@@ -73,6 +73,27 @@ describe("adminNav", () => {
     expect(isForbiddenAdminRoute("/admin/system", hrManager)).toBe(true);
   });
 
+  it("standard ADMIN keeps template access and the existing system-admin fallback", () => {
+    const admin: MeInfo = { user_id: 100, role_id: 2, role_code: "ADMIN", has_sysadmin_api: true };
+    expect(isForbiddenAdminRoute("/admin/templates", admin)).toBe(false);
+    expect(isForbiddenAdminRoute("/admin/templates/details", admin)).toBe(false);
+    expect(isForbiddenAdminRoute("/admin/templates", { ...admin, has_sysadmin_api: false })).toBe(false);
+    expect(canSeeAdminShell(admin)).toBe(true);
+  });
+
+  it("sysadmin API capability opens only the template route without granting the full admin shell", () => {
+    const admin: MeInfo = { user_id: 101, role_id: 4, role_code: "ADMIN", has_sysadmin_api: true };
+    expect(isForbiddenAdminRoute("/admin/templates", admin)).toBe(false);
+    expect(isForbiddenAdminRoute("/admin/templates/details", admin)).toBe(false);
+    expect(isForbiddenAdminRoute("/admin/templates-other", admin)).toBe(true);
+    expect(isForbiddenAdminRoute("/admin/sync", admin)).toBe(true);
+    expect(isForbiddenAdminRoute("/regular-tasks", admin)).toBe(true);
+    expect(canSeeAdminShell(admin)).toBe(false);
+    expect(isForbiddenAdminRoute("/admin/templates", { ...admin, has_sysadmin_api: false })).toBe(true);
+    expect(isForbiddenAdminRoute("/admin/templates", hrManager)).toBe(true);
+    expect(isForbiddenAdminRoute("/admin/templates", regular)).toBe(true);
+  });
+
   const headWithVisibility: MeInfo = {
     user_id: 10,
     role_id: 3,

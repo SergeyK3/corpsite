@@ -29,7 +29,7 @@ import {
   resolveCurrentPlacementView,
   type CurrentPlacementView,
 } from "../_lib/personnelOrderCurrentPlacement";
-import { resolvePersonnelOrderDocumentForms, resolvePersonnelOrderOrgUnitForms } from "../_lib/personnelOrderDocumentForms";
+import { resolvePersonnelOrderDocumentForms, resolvePersonnelOrderOrgUnitForms, savedKazakhEmployeeNameForm } from "../_lib/personnelOrderDocumentForms";
 import { calculateKazakhOrgUnitGenitive, calculateKazakhPersonForm, firstNonEmpty } from "../_lib/kazakhDocumentForms";
 import { russianEmployeeGenitiveForOrder, savedRussianEmployeeNameForm } from "../_lib/personnelOrderRussianWording";
 import {
@@ -108,26 +108,8 @@ function sourceEmployeeName(item: PersonnelOrderItem): string {
   return "Не указан";
 }
 
-function explicitEmployeeKkNameForm(
-  employee: unknown,
-  field: "employee_full_name_dative_kk" | "employee_full_name_genitive_kk",
-): string {
-  // Employee names are never inflected in the client.  Accept only an explicit
-  // document form if a directory response starts providing one.
-  if (!employee || typeof employee !== "object") return "";
-  const row = employee as Record<string, unknown>;
-  const forms = row.document_forms_kk;
-  if (forms && typeof forms === "object") {
-    const value = (forms as Record<string, unknown>)[field];
-    if (typeof value === "string" && value.trim()) return value.trim();
-  }
-  const name = row.name;
-  if (name && typeof name === "object") {
-    const alias = field === "employee_full_name_dative_kk" ? "full_name_dative_kk" : "full_name_genitive_kk";
-    const value = (name as Record<string, unknown>)[alias];
-    if (typeof value === "string" && value.trim()) return value.trim();
-  }
-  return "";
+function explicitEmployeeKkNameForm(employee: unknown, field: "employee_full_name_dative_kk" | "employee_full_name_genitive_kk"): string {
+  return savedKazakhEmployeeNameForm(employee, field === "employee_full_name_genitive_kk" ? "genitive" : "dative");
 }
 
 function persistedEffectiveDate(item: PersonnelOrderItem): string {

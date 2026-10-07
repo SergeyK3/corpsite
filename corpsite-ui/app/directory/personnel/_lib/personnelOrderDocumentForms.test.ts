@@ -2,6 +2,12 @@ import { describe, expect, it } from "vitest";
 import { resolvePersonnelOrderDocumentForms, resolvePersonnelOrderOrgUnitForms } from "./personnelOrderDocumentForms";
 
 describe("position document forms", () => {
+  it("uses canonical job fields, preserves saved forms, and ignores a stale employee position", () => {
+    const position = { name: "Старое название", name_kk: "мейіргер", job_code: "NURSE", job_nameru: "Медицинская сестра", job_namekk: "Мейіргер", job_namekk_doc: "Согласованная форма KK" };
+    expect(resolvePersonnelOrderDocumentForms(position)).toEqual({ position_document_nominative_ru: "Медицинская сестра", position_document_possessive_kk: "Согласованная форма KK" });
+    expect(resolvePersonnelOrderDocumentForms(position, { document_forms_kk: { position_document_possessive_kk: "Ручная форма" } }).position_document_possessive_kk).toBe("Ручная форма");
+    expect(resolvePersonnelOrderDocumentForms(position, { has_current_assignment: false })).toEqual({ position_document_nominative_ru: "", position_document_possessive_kk: "" });
+  });
   it("resolves the actual assignment API name Медсестра without employee/unit rules", () => {
     expect(resolvePersonnelOrderDocumentForms({ id: 27, name: "Медсестра", name_kk: "мейіргер" })).toEqual({
       position_document_nominative_ru: "медсестра", position_document_possessive_kk: "мейіргері",

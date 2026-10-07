@@ -283,7 +283,7 @@ def _is_task_manager_role(
 
 
 def can_view_team_tasks(
-    conn,
+    conn=None,
     *,
     current_user_id: int,
     current_role_id: int,
@@ -291,7 +291,13 @@ def can_view_team_tasks(
     if is_system_admin_role_id(current_role_id):
         return True
 
-    role_meta = load_role_meta(conn, role_id=int(current_role_id))
+    if conn is None:
+        # Auth enrichment must release this connection before the task-scope
+        # resolver acquires its own, otherwise parallel requests exhaust the pool.
+        with engine.connect() as role_conn:
+            role_meta = load_role_meta(role_conn, role_id=int(current_role_id))
+    else:
+        role_meta = load_role_meta(conn, role_id=int(current_role_id))
     if _looks_like_manager_role(
         role_code=role_meta.get("code"),
         role_name=role_meta.get("name"),

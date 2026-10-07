@@ -15,6 +15,7 @@ export type PersonnelOrderType =
   | "CONCURRENT_DUTY_START"
   | "CONCURRENT_DUTY_END"
   | "SUPPLEMENTARY_PAY"
+  | "LEAVE.ANNUAL.RECALL"
   | "LEAVE.ANNUAL.GRANT"
   | "LEAVE.UNPAID.GRANT"
   | "LEAVE.CHILDCARE.GRANT"
@@ -37,6 +38,7 @@ export const PERSONNEL_ORDER_TYPES: readonly PersonnelOrderType[] = [
   "CONCURRENT_DUTY_END",
   "SUPPLEMENTARY_PAY",
   "LEAVE.ANNUAL.GRANT",
+  "LEAVE.ANNUAL.RECALL",
   "LEAVE.UNPAID.GRANT",
   "LEAVE.CHILDCARE.GRANT",
   "COMPOSITE",
@@ -58,6 +60,7 @@ export const PERSONNEL_ORDER_TYPE_LABELS: Record<PersonnelOrderType, string> = {
   CONCURRENT_DUTY_START: "Совмещение (начало)",
   CONCURRENT_DUTY_END: "Совмещение (окончание)",
   SUPPLEMENTARY_PAY: "Дополнительная оплата",
+  "LEAVE.ANNUAL.RECALL": "Отзыв из трудового отпуска",
   "LEAVE.ANNUAL.GRANT": "Ежегодный трудовой отпуск",
   "LEAVE.UNPAID.GRANT": "Отпуск без сохранения заработной платы",
   "LEAVE.CHILDCARE.GRANT": "О неоплачиваемом отпуске по уходу за ребенком",
@@ -161,6 +164,7 @@ export const PERSONNEL_ORDER_CREATE_TYPES = [
   "CONCURRENT_DUTY_END",
   "RETURN_FROM_CHILDCARE_LEAVE",
   "LEAVE.ANNUAL.GRANT",
+  "LEAVE.ANNUAL.RECALL",
   "LEAVE.UNPAID.GRANT",
   "LEAVE.CHILDCARE.GRANT",
   "SUPPLEMENTARY_PAY",

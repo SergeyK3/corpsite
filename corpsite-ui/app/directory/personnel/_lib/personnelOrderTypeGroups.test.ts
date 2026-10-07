@@ -15,7 +15,7 @@ describe("personnel order display groups", () => {
   });
 
   it("searches approved Russian and Kazakh names regardless of the display language", () => {
-    expect(searchPersonnelOrderTypes("  ТРУДОВ  ")).toEqual(["LEAVE.ANNUAL.GRANT"]);
+    expect(searchPersonnelOrderTypes("  ТРУДОВ  ")).toEqual(["LEAVE.ANNUAL.GRANT", "LEAVE.ANNUAL.RECALL"]);
     expect(searchPersonnelOrderTypes("еңбек демалысы")).toContain("LEAVE.ANNUAL.GRANT");
     expect(searchPersonnelOrderTypes("ребенком")).toEqual(["RETURN_FROM_CHILDCARE_LEAVE", "LEAVE.CHILDCARE.GRANT"]);
     expect(searchPersonnelOrderTypes("жалақы сақталмайтын")).toEqual(["LEAVE.UNPAID.GRANT", "LEAVE.CHILDCARE.GRANT"]);

@@ -245,7 +245,7 @@ def _build_list_filters(
         params["org_unit_id"] = int(org_unit_id)
 
     if q:
-        where_parts.append("po.order_number ILIKE :q_pattern")
+        where_parts.append("(po.order_number ILIKE :q_pattern OR po.source_title ILIKE :q_pattern)")
         params["q_pattern"] = f"%{str(q).strip()}%"
 
     normalized_record_quality = str(record_quality or "WORKING").strip().upper()

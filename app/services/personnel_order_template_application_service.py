@@ -67,12 +67,20 @@ def _order(conn:Any,order_id:int):
  items=conn.execute(text("SELECT * FROM public.personnel_order_items WHERE order_id=:id AND item_status='ACTIVE' ORDER BY item_number,item_id"),{"id":order_id}).mappings().all()
  if not items: raise TemplateApplicationError("Template application requires at least one ACTIVE item.")
  if len({str(x["item_type_code"]) for x in items})!=1: raise TemplateApplicationError("Template application requires ACTIVE items of one type.")
- template=conn.execute(text("SELECT * FROM public.personnel_order_template_versions WHERE item_type_code=:t AND status='PUBLISHED'"),{"t":items[0]["item_type_code"]}).mappings().first()
+ pinned = order.get("selected_template_version_id")
+ if pinned is not None:
+  template=conn.execute(text("SELECT * FROM public.personnel_order_template_versions WHERE template_version_id=:id AND item_type_code=:t AND status IN ('PUBLISHED','ARCHIVED')"),{"id":pinned,"t":items[0]["item_type_code"]}).mappings().first()
+ else:
+  template=conn.execute(text("SELECT v.* FROM public.personnel_order_template_versions v JOIN public.personnel_order_templates t ON t.template_id=v.template_id WHERE v.item_type_code=:t AND v.status='PUBLISHED' AND t.is_default"),{"t":items[0]["item_type_code"]}).mappings().first()
  if not template: raise TemplateApplicationError("No PUBLISHED template exists for this item type.")
  return order,list(items),dict(template)
 def _values(conn:Any,item:Mapping[str,Any]):
  employee=conn.execute(text("SELECT e.full_name,p.name position_name,ou.name org_unit_name FROM public.employees e LEFT JOIN public.positions p ON p.position_id=e.position_id LEFT JOIN public.org_units ou ON ou.unit_id=e.org_unit_id WHERE e.employee_id=:id"),{"id":item["employee_id"]}).mappings().first()
  payload=item["payload"] or {}; posru=_snapshot(payload,"position_name",str((employee or {}).get("position_name") or "")); unitru=_snapshot(payload,"org_unit_name",str((employee or {}).get("org_unit_name") or "")); poskk=_snapshot(payload,"position_name","","kk"); unitkk=_snapshot(payload,"org_unit_name","","kk"); warnings=[]; missing=[]
+ if str(item["item_type_code"]) == "LEAVE.ANNUAL.RECALL":
+  from app.services.personnel_order_recall_contract import values as recall_values
+  try: return recall_values(payload, item.get("effective_date")), [], []
+  except ValueError as exc: raise TemplateApplicationError(str(exc)) from exc
  if str(item["item_type_code"]) == "LEAVE.CHILDCARE.GRANT":
   from app.services.personnel_order_childcare_contract import childcare_values
   try: return childcare_values(payload, org_unit_ru=_snapshot(payload, "source_org_unit_name", unitru)), [], []
@@ -96,8 +104,13 @@ def _values(conn:Any,item:Mapping[str,Any]):
    if basis["document_date"]: values.update({"basis.application_date_ru":" от "+format_leave_date(basis["document_date"],"ru"),"basis.application_date_kk":" "+format_leave_date(basis["document_date"],"kk")+" күнгі"})
    if basis["document_number"]:values["basis.application_number_suffix"]=" № "+str(basis["document_number"])
  return values,warnings,missing
-def _render(template:Mapping[str,Any],values:Mapping[str,str]):
- texts={k:template[k] for k in _FIELDS}; validate_template_texts(str(template["item_type_code"]),texts); missing=set()
+def _render(template:Mapping[str,Any],values:Mapping[str,str], *, draft_preview:bool=False):
+ texts={k:template[k] for k in _FIELDS}
+ if draft_preview:
+  from app.services.personnel_order_template_draft_service import _validate
+  _validate(texts,str(template["item_type_code"]),require_complete=False)
+ else: validate_template_texts(str(template["item_type_code"]),texts)
+ missing=set()
  def each(key,value):
   def repl(match):
    token=match.group(1); value=values.get(f"{token}.{'kk' if key.endswith('_kk') else 'ru'}",values.get(token,"")); missing.add(token) if not value.strip() and not token.startswith("basis.application_") else None; return value
@@ -129,26 +142,34 @@ def preview_template_application(order_id:int)->dict[str,Any]:
  with engine.connect() as conn:return _preview(conn,order_id)
 def apply_template_application(order_id:int,actor_user_id:int,*,expected_document_revision:int,confirm_replace_overrides:bool=False,confirm_reapply:bool=False)->dict[str,Any]:
     with engine.begin() as conn:
-        preview = _preview(conn, order_id)
-        order, items, template = _order(conn, order_id)
-        blocked = [str(entry["item_number"]) for entry in preview["items"] if entry.get("blocked")]
-        if blocked:
-            raise TemplateApplicationError("Template application is blocked for item(s): " + ", ".join(blocked))
-        if int(order["document_revision"]) != expected_document_revision:
-            raise TemplateApplicationError("Order revision conflict.", True)
-        if preview["has_overrides"] and not confirm_replace_overrides:
-            raise TemplateApplicationError("Manual overrides require explicit replacement confirmation.", True)
-        if preview["has_prior_application"] and not confirm_reapply:
-            raise TemplateApplicationError("Template was already applied; explicit reapply confirmation is required.", True)
-        before = _blocks(conn, order_id, [int(x["item_id"]) for x in items])
-        for lang in ("ru", "kk"):
-            for block in ("title", "preamble"):
-                conn.execute(text("UPDATE public.personnel_order_editorial_blocks SET generated_text=:v,override_text=NULL,revision=revision+1,updated_at=now() WHERE order_id=:id AND locale=:l AND block_type=:b"), {"v": preview["order_proposed"][f"{block}_{lang}"], "id": order_id, "l": lang, "b": block})
-        for entry in preview["items"]:
-            for lang in ("ru", "kk"):
-                for block in ("body", "basis"):
-                    conn.execute(text("UPDATE public.personnel_order_item_editorial_blocks SET generated_text=:v,override_text=NULL,revision=revision+1,updated_at=now() WHERE order_item_id=:id AND locale=:l AND block_type=:b"), {"v": entry["proposed"][f"{block}_{lang}"], "id": entry["order_item_id"], "l": lang, "b": block})
-        if AUDIT_INSERT_HOOK:
-            AUDIT_INSERT_HOOK()
-        conn.execute(text("INSERT INTO public.personnel_order_template_applications(order_id,order_item_id,template_version_id,template_snapshot,rendered_snapshot,previous_editorial_blocks,applied_by_user_id) VALUES(:o,:i,:t,CAST(:s AS jsonb),CAST(:r AS jsonb),CAST(:p AS jsonb),:a)"), {"o": order_id, "i": items[0]["item_id"], "t": template["template_version_id"], "s": json.dumps({k: template[k] for k in _FIELDS}, ensure_ascii=False), "r": json.dumps({"order": preview["order_proposed"], "items": preview["items"]}, ensure_ascii=False, default=str), "p": json.dumps([dict(x) for x in before], default=str), "a": actor_user_id})
+        apply_template_application_tx(conn, order_id, actor_user_id,
+            expected_document_revision=expected_document_revision,
+            confirm_replace_overrides=confirm_replace_overrides, confirm_reapply=confirm_reapply)
     return get_editorial_state(order_id)
+
+
+def apply_template_application_tx(conn: Any, order_id: int, actor_user_id: int, *,
+    expected_document_revision: int, confirm_replace_overrides: bool = False,
+    confirm_reapply: bool = False) -> None:
+    preview = _preview(conn, order_id)
+    order, items, template = _order(conn, order_id)
+    blocked = [str(entry["item_number"]) for entry in preview["items"] if entry.get("blocked")]
+    if blocked:
+        raise TemplateApplicationError("Template application is blocked for item(s): " + ", ".join(blocked))
+    if int(order["document_revision"]) != expected_document_revision:
+        raise TemplateApplicationError("Order revision conflict.", True)
+    if preview["has_overrides"] and not confirm_replace_overrides:
+        raise TemplateApplicationError("Manual overrides require explicit replacement confirmation.", True)
+    if preview["has_prior_application"] and not confirm_reapply:
+        raise TemplateApplicationError("Template was already applied; explicit reapply confirmation is required.", True)
+    before = _blocks(conn, order_id, [int(x["item_id"]) for x in items])
+    for lang in ("ru", "kk"):
+        for block in ("title", "preamble"):
+            conn.execute(text("UPDATE public.personnel_order_editorial_blocks SET generated_text=:v,override_text=NULL,revision=revision+1,updated_at=now() WHERE order_id=:id AND locale=:l AND block_type=:b"), {"v": preview["order_proposed"][f"{block}_{lang}"], "id": order_id, "l": lang, "b": block})
+    for entry in preview["items"]:
+        for lang in ("ru", "kk"):
+            for block in ("body", "basis"):
+                conn.execute(text("UPDATE public.personnel_order_item_editorial_blocks SET generated_text=:v,override_text=NULL,revision=revision+1,updated_at=now() WHERE order_item_id=:id AND locale=:l AND block_type=:b"), {"v": entry["proposed"][f"{block}_{lang}"], "id": entry["order_item_id"], "l": lang, "b": block})
+    if AUDIT_INSERT_HOOK:
+        AUDIT_INSERT_HOOK()
+    conn.execute(text("INSERT INTO public.personnel_order_template_applications(order_id,order_item_id,template_version_id,template_snapshot,rendered_snapshot,previous_editorial_blocks,applied_by_user_id) VALUES(:o,:i,:t,CAST(:s AS jsonb),CAST(:r AS jsonb),CAST(:p AS jsonb),:a)"), {"o": order_id, "i": items[0]["item_id"], "t": template["template_version_id"], "s": json.dumps({k: template[k] for k in _FIELDS}, ensure_ascii=False), "r": json.dumps({"order": preview["order_proposed"], "items": preview["items"]}, ensure_ascii=False, default=str), "p": json.dumps([dict(x) for x in before], default=str), "a": actor_user_id})

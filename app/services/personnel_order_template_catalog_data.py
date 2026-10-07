@@ -345,3 +345,13 @@ CATALOG_PROJECTIONS = {'HIRE': {'title_ru': 'О приёме на работу',
                                                                                 '«___» ______________ 20___ ж.\n'
                                                                                 'Орындаушы: [Орындаушының аты-жөні]'}}},
                                  'template_detail': None}}
+
+from app.services.personnel_order_recall_contract import TEXTS as RECALL_TEXTS
+CATALOG_PROJECTIONS['LEAVE.ANNUAL.RECALL'] = {
+    'title_ru': RECALL_TEXTS['title_ru'], 'title_kk': RECALL_TEXTS['title_kk'],
+    'source': 'BUILT_IN', 'support_level': 'DRAFT_ONLY', 'supported_locales': ['ru', 'kk'],
+    'uses_specialized_generator': True, 'is_pilot': False, 'editor_available': True,
+    'required_fields': ['ФИО', 'Должность RU/KZ', 'Подразделение RU/KZ', 'Дата отзыва', 'Основания RU/KZ'],
+    'notes': 'Текст черновика и применение шаблона. Пересчёт отпуска и кадровые события не поддерживаются.',
+    'pilot_detail': None, 'template_detail': None,
+}

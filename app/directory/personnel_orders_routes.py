@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Any, Dict, Optional
+from typing import Annotated, Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
@@ -114,7 +114,7 @@ from app.services.personnel_order_document_review_service import (
 from app.services.personnel_order_document_header_service import duplicate_preview, patch_document_header
 from app.services.personnel_order_document_item_service import list_document_items, patch_document_item
 from app.services.personnel_order_manual_draft_service import create_manual_draft
-from app.services.personnel_order_template_draft_service import TemplateDraftError, get_published
+from app.services.personnel_order_template_draft_service import TemplateDraftError, get_published, list_templates
 from app.db.models.personnel_orders import (
     LIFECYCLE_AUDIT_ACTION_DOCUMENT_CONFIRMED,
     LIFECYCLE_AUDIT_ACTION_DOCUMENT_REOPENED,
@@ -180,23 +180,40 @@ def personnel_order_quality_control_route(
         raise as_http500(exc)
 
 
-@router.get("/personnel-orders/templates/{item_type_code}/published-title", response_model=PersonnelOrderPublishedTemplateTitleOut)
-def get_personnel_order_published_template_title(item_type_code: str, _user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+@router.get("/personnel-orders/templates/{item_type_code}/published-variants")
+def get_personnel_order_published_variants(item_type_code: str, _user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
     require_personnel_admin_or_403(_user)
     try:
-        template = get_published(item_type_code)
+        rows = list_templates(item_type_code, published_only=True)
+        keys = ("template_id", "template_version_id", "version_number", "name_ru", "name_kk", "title_ru", "title_kk", "is_default")
+        return {"items": [{key: row[key] for key in keys} for row in rows]}
+    except TemplateDraftError as exc:
+        raise validation_error_to_http422(PersonnelOrderValidationError(str(exc))) from exc
+
+
+@router.get("/personnel-orders/templates/{item_type_code}/published-title", response_model=PersonnelOrderPublishedTemplateTitleOut)
+def get_personnel_order_published_template_title(item_type_code: str, _user: Dict[str, Any] = Depends(get_current_user), template_version_id: Annotated[int | None, Query(ge=1)] = None) -> Dict[str, Any]:
+    require_personnel_admin_or_403(_user)
+    try:
+        if template_version_id is None:
+            template = get_published(item_type_code)
+        else:
+            from app.db.engine import engine
+            from sqlalchemy import text
+            with engine.connect() as conn:
+                template = conn.execute(text("SELECT * FROM public.personnel_order_template_versions WHERE template_version_id=:id AND item_type_code=:type AND status='PUBLISHED'"), {"id": template_version_id, "type": item_type_code}).mappings().first()
     except TemplateDraftError as exc:
         raise validation_error_to_http422(PersonnelOrderValidationError(str(exc))) from exc
     if template is None:
         raise HTTPException(status_code=404, detail={"code": "PUBLISHED_TEMPLATE_NOT_FOUND"})
-    return {"item_type_code": template["item_type_code"], "title_ru": template["title_ru"], "title_kk": template["title_kk"]}
+    return {"template_version_id": template.get("template_version_id"), "item_type_code": template["item_type_code"], "title_ru": template["title_ru"], "title_kk": template["title_kk"]}
 
 
 @router.post("/personnel-orders/manual-draft", response_model=PersonnelOrderManualDraftCreateOut, status_code=201)
 def create_manual_personnel_order_draft_route(payload: PersonnelOrderManualDraftCreateIn, user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
     require_personnel_admin_or_403(user)
     try:
-        return call_service(create_manual_draft, created_by=_require_user_id(user), **payload.model_dump())
+        return call_service(create_manual_draft, created_by=_require_user_id(user), **payload.model_dump(exclude_none=True))
     except PersonnelOrderValidationError as exc:
         raise validation_error_to_http422(exc)
     except PersonnelOrderConflictError as exc:

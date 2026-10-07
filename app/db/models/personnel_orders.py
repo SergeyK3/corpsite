@@ -56,6 +56,7 @@ MVP_ORDER_TYPE_CODES = (
 
 MVP_ITEM_TYPE_CODES = MVP_ORDER_TYPE_CODES
 LEAVE_DRAFT_ITEM_TYPE_CODES = (
+    "LEAVE.ANNUAL.RECALL",
     "LEAVE.ANNUAL.GRANT",
     "LEAVE.UNPAID.GRANT",
     ORDER_TYPE_LEAVE_CHILDCARE_GRANT,
@@ -195,7 +196,7 @@ class PersonnelOrder(Base):
         CheckConstraint(
             "order_type_code IN "
             "('HIRE', 'TRANSFER', 'TERMINATION', 'RETURN_FROM_CHILDCARE_LEAVE', 'CONCURRENT_DUTY_START', "
-            "'CONCURRENT_DUTY_END', 'COMPOSITE', 'LEAVE.ANNUAL.GRANT', "
+            "'CONCURRENT_DUTY_END', 'COMPOSITE', 'LEAVE.ANNUAL.RECALL', 'LEAVE.ANNUAL.GRANT', "
             "'LEAVE.UNPAID.GRANT', 'LEAVE.CHILDCARE.GRANT', 'SUPPLEMENTARY_PAY')",
             name="chk_personnel_orders_order_type_code",
         ),
@@ -218,6 +219,7 @@ class PersonnelOrder(Base):
     )
     status: Mapped[str] = mapped_column(Text, nullable=False)
     document_revision: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
+    selected_template_version_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
     source_title: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     source_title_locale: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     source_mode: Mapped[str] = mapped_column(Text, nullable=False)
@@ -279,7 +281,7 @@ class PersonnelOrderItem(Base):
         CheckConstraint(
             "item_type_code IN "
             "('HIRE', 'TRANSFER', 'TERMINATION', 'RETURN_FROM_CHILDCARE_LEAVE', 'CONCURRENT_DUTY_START', "
-            "'CONCURRENT_DUTY_END', 'LEAVE.ANNUAL.GRANT', "
+            "'CONCURRENT_DUTY_END', 'LEAVE.ANNUAL.RECALL', 'LEAVE.ANNUAL.GRANT', "
             "'LEAVE.UNPAID.GRANT', 'LEAVE.CHILDCARE.GRANT', 'SUPPLEMENTARY_PAY')",
             name="chk_personnel_order_items_item_type_code",
         ),

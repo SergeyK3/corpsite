@@ -27,6 +27,7 @@ export const PERSONNEL_ORDER_TYPE_GROUP: Record<PersonnelOrderCreateType, Person
   CONCURRENT_DUTY_START: "concurrent_pay",
   CONCURRENT_DUTY_END: "concurrent_pay",
   RETURN_FROM_CHILDCARE_LEAVE: "parenthood",
+  "LEAVE.ANNUAL.RECALL": "annual",
   "LEAVE.ANNUAL.GRANT": "annual",
   "LEAVE.UNPAID.GRANT": "unpaid",
   "LEAVE.CHILDCARE.GRANT": "parenthood",

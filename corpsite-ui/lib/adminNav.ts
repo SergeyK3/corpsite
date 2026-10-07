@@ -86,6 +86,11 @@ export function isForbiddenAdminRoute(
   if (pathname.startsWith("/admin/system")) {
     return !canSeeSysadminCabinetNav(me);
   }
+  // Template API access is granted by the sysadmin cabinet capability, even
+  // when the user's primary role is ADMIN for personnel-language settings.
+  if (pathname === "/admin/templates" || pathname.startsWith("/admin/templates/")) {
+    return !canSeeSysadminCabinetNav(me);
+  }
   if (pathname.startsWith("/regular-task-runs")) {
     return !canSeeRegularTaskRunsJournal(me);
   }

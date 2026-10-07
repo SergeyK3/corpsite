@@ -2,11 +2,14 @@
 
 import * as React from "react";
 import { usePersonnelSectionLanguage } from "../_lib/personnelSectionLanguage";
+import { PERSONNEL_ORDER_CREATE_TYPES } from "../_lib/personnelOrderLabels";
 import PersonnelOrderTypeMenu from "./PersonnelOrderTypeMenu";
 
 import {
   createManualPersonnelOrderDraft,
   getPersonnelOrderPublishedTemplateTitle,
+  getPersonnelOrderPublishedVariants,
+  type PersonnelPublishedTemplateVariant,
   mapPersonnelOrdersApiError,
   previewPersonnelOrderHeaderDuplicate,
   type PersonnelOrderManualDraftCreateResult,
@@ -15,6 +18,8 @@ import { personnelOrderCanonicalTitle } from "../_lib/personnelOrderCanonicalTit
 import { resolvePersonnelOrderDocumentForms, resolvePersonnelOrderOrgUnitForms } from "../_lib/personnelOrderDocumentForms";
 import { russianEmployeeGenitiveForOrder, savedRussianEmployeeNameForm } from "../_lib/personnelOrderRussianWording";
 import { calculateKazakhOrgUnitGenitive, calculateKazakhPersonForm, firstNonEmpty } from "../_lib/kazakhDocumentForms";
+import {mapEmployeesResponseToSearchOptions} from "../_lib/personnelOrderEmployeeSearch";
+import {recallBasis, recallEmployeePrefill} from "../_lib/personnelOrderRecallPrefill";
 import { getEmployee, getEmployees } from "@/app/directory/employees/_lib/api.client";
 import type { EmployeeDTO } from "@/app/directory/employees/_lib/types";
 import { loadOrgUnitSelectOptions, type OrgUnitSelectOption } from "@/lib/orgUnitsSelect";
@@ -145,6 +150,20 @@ export default function PersonnelOrderCreateDialog({
 }: Props) {
   const { language: sectionLanguage } = usePersonnelSectionLanguage();
   const [type, setType] = React.useState("");
+  const [selectedVersion, setSelectedVersion] = React.useState<number | undefined>();
+  const [variants, setVariants] = React.useState<Record<string, PersonnelPublishedTemplateVariant[]>>({});
+  const [variantsError, setVariantsError] = React.useState(false);
+  const [variantsLoading, setVariantsLoading] = React.useState(true);
+  React.useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setVariantsLoading(true); setVariantsError(false); setSelectedVersion(undefined);
+    Promise.all(PERSONNEL_ORDER_CREATE_TYPES.map(async code => [code, (await getPersonnelOrderPublishedVariants(code)).items] as const))
+      .then(entries => { if (!cancelled) setVariants(Object.fromEntries(entries)); })
+      .catch(() => { if (!cancelled) setVariantsError(true); })
+      .finally(() => { if (!cancelled) setVariantsLoading(false); });
+    return () => { cancelled = true; };
+  }, [open]);
   const [number, setNumber] = React.useState("");
   const [orderDate, setOrderDate] = React.useState("");
   const [locale, setLocale] = React.useState<"kk" | "ru">("kk");
@@ -177,6 +196,15 @@ export default function PersonnelOrderCreateDialog({
   const dialogRef = React.useRef<HTMLElement>(null);
   const restoreFocusRef = React.useRef<HTMLElement | null>(null);
 
+  const recall = type === "LEAVE.ANNUAL.RECALL";
+  const [recallFields, setRecallFields] = React.useState({recall_position_kk: "", recall_org_unit_kk: "", basis_ru: "", basis_kk: ""});
+  const [recallName,setRecallName]=React.useState("");
+  const [recallCases,setRecallCases]=React.useState({ru:"",kk:""});
+  const [recallCaseSuggestions,setRecallCaseSuggestions]=React.useState({ru:false,kk:false});
+  const recallEdited=React.useRef(new Set<string>());
+  const [selectingEmployee,setSelectingEmployee]=React.useState(false);
+  const [employeeSearchError,setEmployeeSearchError]=React.useState("");
+  const [employeeSearchFinished,setEmployeeSearchFinished]=React.useState(false);
   const unpaid = type === "LEAVE.UNPAID.GRANT";
   const childcare = type === "LEAVE.CHILDCARE.GRANT";
   const periodLeave = unpaid || childcare;
@@ -191,8 +219,8 @@ export default function PersonnelOrderCreateDialog({
   ] as Array<[keyof Forms, string]>).filter(([key]) => !kk[key].trim()).map(([, label]) => label);
   const resolvedTitle = published?.[locale].trim() || personnelOrderCanonicalTitle(type, locale);
   const canSubmit = Boolean(
-    !busy &&
-      type &&
+    !busy && !variantsLoading && !variantsError && (!selectedVersion || (published && !publishedTitleError)) &&
+      type && (!recall || (recallName.trim() && org.trim() && position.trim() && Object.values(recallFields).every(value => value.trim()))) &&
       number.trim() &&
       orderDate &&
       resolvedTitle &&
@@ -209,18 +237,36 @@ export default function PersonnelOrderCreateDialog({
     const requestId = ++employeeSelectionId.current;
     ruGenitiveEdited.current = false;
     editedPositionForms.current.clear();
+    if(recall){
+      recallEdited.current.clear();setRecallFields({recall_position_kk:"",recall_org_unit_kk:"",basis_ru:"",basis_kk:""});
+      setRecallCases({ru:"",kk:""});setRecallName(candidate.fio || "");
+      setEmployee(null);setMatches([]);setQuery(candidate.fio || "");setSelectingEmployee(true);
+    }
     setKk(current => ({ ...current, employee_full_name_genitive_ru: "", position_document_possessive_kk: "", position_document_nominative_ru: "", org_unit_document_genitive_kk: "" }));
     const selected = candidate.id
       ? await getEmployee(String(candidate.id)).catch(() => candidate)
       : candidate;
     if (requestId !== employeeSelectionId.current) return;
     setEmployee(selected);
+    setSelectingEmployee(false);
     setQuery(selected.fio || "");
     setMatches([]);
-    setOrg(selected.active_assignment_id ? selected.org_unit?.name || "" : "");
-    setSelectedOrgUnit(selected.active_assignment_id ? selected.org_unit : null);
-    setPosition(selected.active_assignment_id ? selected.position?.name || "" : "");
-    const forms = documentForms(selected, selected.active_assignment_id ? selected.org_unit : null);
+    const hasAssignment = selected.has_current_assignment ?? Boolean(selected.active_assignment_id || (recall && selected.position && selected.org_unit));
+    setOrg(hasAssignment ? selected.org_unit?.name || "" : "");
+    setSelectedOrgUnit(hasAssignment ? selected.org_unit : null);
+    setPosition(hasAssignment ? selected.position?.job_nameru || selected.position?.name || "" : "");
+    const forms = documentForms(selected, hasAssignment ? selected.org_unit : null);
+    if(recall){
+      const fill=recallEmployeePrefill(selected);
+      setRecallName(fill.fullName);setPosition(fill.positionRu);setOrg(fill.unitRu);
+      setRecallFields(current=>({
+        recall_position_kk:recallEdited.current.has('recall_position_kk')?current.recall_position_kk:fill.positionKk,
+        recall_org_unit_kk:recallEdited.current.has('recall_org_unit_kk')?current.recall_org_unit_kk:fill.unitKk,
+        basis_ru:recallEdited.current.has('basis_ru')?current.basis_ru:fill.basisRu,
+        basis_kk:recallEdited.current.has('basis_kk')?current.basis_kk:fill.basisKk,
+      }));
+      setRecallCases({ru:fill.genitiveRu,kk:fill.genitiveKk});setRecallCaseSuggestions({ru:fill.suggestedRu,kk:fill.suggestedKk});
+    }
     setKk(current => ({ ...forms,
       employee_full_name_genitive_ru: ruGenitiveEdited.current ? current.employee_full_name_genitive_ru : forms.employee_full_name_genitive_ru,
       position_document_possessive_kk: editedPositionForms.current.has("position_document_possessive_kk") ? current.position_document_possessive_kk : forms.position_document_possessive_kk,
@@ -228,7 +274,7 @@ export default function PersonnelOrderCreateDialog({
       org_unit_document_genitive_kk: editedPositionForms.current.has("org_unit_document_genitive_kk") ? current.org_unit_document_genitive_kk : forms.org_unit_document_genitive_kk,
     }));
     setFormsExpanded(!Object.entries(forms).every(([key, value]) => (!childcare && key === "employee_full_name_genitive_ru") || value.trim()));
-  }, [childcare]);
+  }, [childcare,recall]);
 
   React.useEffect(() => {
     if (!open || !type) return;
@@ -245,7 +291,8 @@ export default function PersonnelOrderCreateDialog({
     setSelectedOrgUnit(next);
     setOrg(next?.name || "");
     setKk((current) => ({ ...current, org_unit_document_genitive_kk: orgUnitDocumentText(next) }));
-  }, [orgUnitOptions]);
+    if(recall)setRecallFields(current=>({...current,recall_org_unit_kk:next?.name_kk || ""}));
+  }, [orgUnitOptions,recall]);
 
   React.useEffect(() => {
     const id = ++templateId.current;
@@ -258,7 +305,7 @@ export default function PersonnelOrderCreateDialog({
     setPublished(null);
     setPublishedTitleError(null);
     setTitle("");
-    void getPersonnelOrderPublishedTemplateTitle(type)
+    void getPersonnelOrderPublishedTemplateTitle(type, ...(selectedVersion == null ? [] : [selectedVersion]))
       .then((result) => {
         if (id !== templateId.current) return;
         const titles = { kk: result.title_kk, ru: result.title_ru };
@@ -276,7 +323,7 @@ export default function PersonnelOrderCreateDialog({
         setTitle(personnelOrderCanonicalTitle(type, locale));
         setPublishedTitleError("Для выбранного типа отсутствует опубликованный шаблон: будет создан черновик без автоматического применения полного шаблона.");
       });
-  }, [locale, open, type]);
+  }, [locale, open, type, selectedVersion]);
 
   React.useEffect(() => {
     setTitle(published?.[locale].trim() || personnelOrderCanonicalTitle(type, locale));
@@ -285,11 +332,16 @@ export default function PersonnelOrderCreateDialog({
   React.useEffect(() => {
     if (!open || !type) return;
     const trimmedQuery = query.trim();
-    if (employee || trimmedQuery.length < 2) {
+    if (employee || selectingEmployee || trimmedQuery.length < 2) {
+      searchId.current += 1;
+      setEmployeeSearchFinished(false);
       setMatches([]);
       return;
     }
     const id = ++searchId.current;
+    setEmployeeSearchError("");
+    setEmployeeSearchFinished(false);
+    setMatches([]);
     void getEmployees({
       q: trimmedQuery,
       status: "active",
@@ -298,10 +350,16 @@ export default function PersonnelOrderCreateDialog({
       offset: 0,
     })
       .then((result) => {
-        if (id === searchId.current) setMatches(result.items);
+        if (id === searchId.current) {
+          setEmployeeSearchFinished(true);
+          const options=mapEmployeesResponseToSearchOptions(result,{activeOnly:true});
+          const ids=new Set<number>();
+          setMatches(options.filter(option=>{if(ids.has(option.employee_id))return false;ids.add(option.employee_id);return true;})
+            .map(option=>result.items.find(item=>Number(item.id)===option.employee_id)!).filter(Boolean));
+        }
       })
-      .catch(() => undefined);
-  }, [employee, initialOrgUnitId, open, query, type]);
+      .catch(() => {if(id===searchId.current){setEmployeeSearchFinished(true);setEmployeeSearchError("search");}});
+  }, [employee, initialOrgUnitId, open, query, type,selectingEmployee]);
 
   React.useEffect(() => {
     if (!open || !type || !initialEmployeeId) return;
@@ -350,9 +408,17 @@ export default function PersonnelOrderCreateDialog({
 
   if (!open) return null;
 
-  function changeType(nextType: string) {
+  function changeType(nextType: string, versionId?: number) {
+    setSelectedVersion(versionId);
     ++templateId.current;
     setType(nextType);
+    setRecallFields({recall_position_kk: "", recall_org_unit_kk: "", basis_ru: "", basis_kk: ""});
+    recallEdited.current.clear();setRecallCases({ru:"",kk:""});setRecallName("");
+    if(nextType === 'LEAVE.ANNUAL.RECALL' && employee){
+      const fill=recallEmployeePrefill(employee);setRecallName(fill.fullName);setPosition(fill.positionRu);setOrg(fill.unitRu);
+      setRecallFields({recall_position_kk:fill.positionKk,recall_org_unit_kk:fill.unitKk,basis_ru:fill.basisRu,basis_kk:fill.basisKk});
+      setRecallCases({ru:fill.genitiveRu,kk:fill.genitiveKk});setRecallCaseSuggestions({ru:fill.suggestedRu,kk:fill.suggestedKk});
+    }
     setPublished(null);
     setPublishedTitleError(null);
     setTitle("");
@@ -367,7 +433,7 @@ export default function PersonnelOrderCreateDialog({
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (busy) return;
+    if (busy || variantsLoading || variantsError) return;
     setError(null);
     setBusy(true);
     try {
@@ -380,6 +446,7 @@ export default function PersonnelOrderCreateDialog({
         ? Math.floor((Date.parse(`${end}T00:00:00`) - Date.parse(`${start}T00:00:00`)) / 86400000) + 1
         : undefined;
       const result = await createManualPersonnelOrderDraft({
+        ...(selectedVersion == null ? {} : { template_version_id: selectedVersion }),
         order_number: number,
         order_date: orderDate,
         source_title: resolvedTitle,
@@ -390,7 +457,7 @@ export default function PersonnelOrderCreateDialog({
         effective_date: periodLeave ? start : effective,
         period_start: periodLeave ? start : null,
         period_end: periodLeave ? end : null,
-        item_payload: periodLeave
+        item_payload: recall ? {...recallFields,source_employee_name:recallName} : periodLeave
           ? {
               ...(childcare ? { leave_start: start, leave_end: end, leave_days: days } : { leave: { period_type: start === end ? "SINGLE_DAY" : "CONTINUOUS_RANGE", start, end, days } }),
               document_forms_kk: {
@@ -407,7 +474,10 @@ export default function PersonnelOrderCreateDialog({
               assignment: { org_unit: { id: selectedOrgUnit?.unit_id || null, name: org || null }, position: { id: employee.position?.id || null, name: position || null } },
               basis: childcare ? { kind: "PERSONAL_APPLICATION", date: applicationDate, number: applicationNumber || null, birth_certificate: { date: certificateDate, number: certificateNumber } } : { kind: "PERSONAL_APPLICATION" },
             }
-          : undefined,
+          : {
+              document_forms_kk: { position_document_possessive_kk: kk.position_document_possessive_kk, org_unit_document_genitive_kk: kk.org_unit_document_genitive_kk, employee_full_name_dative_kk: kk.employee_full_name_dative_kk, employee_full_name_genitive_kk: kk.employee_full_name_genitive_kk },
+              document_forms_ru: { position_document_nominative_ru: kk.position_document_nominative_ru, employee_full_name_dative_ru: kk.employee_full_name_dative_ru },
+            },
       });
       onCreated(result);
       onClose();
@@ -420,30 +490,41 @@ export default function PersonnelOrderCreateDialog({
 
   const selectedEmployee = employee ? (
     <>
-      <input aria-label="Сотрудник" readOnly value={employee.fio || ""} className={inputClassName} />
+      <input type="hidden" name="employee_id" value={employee.id || ""} data-testid="selected-employee-id" />
+      <input aria-label="Сотрудник" readOnly={!recall} value={recall?recallName:employee.fio || ""} onChange={event=>{
+        const name=event.target.value;setRecallName(name);
+        const fill=recallEmployeePrefill({fio:name} as EmployeeDTO);setRecallCases({ru:fill.genitiveRu,kk:fill.genitiveKk});
+        setRecallCaseSuggestions({ru:fill.suggestedRu,kk:fill.suggestedKk});
+        setRecallFields(current=>({...current,basis_ru:recallEdited.current.has('basis_ru')?current.basis_ru:fill.basisRu,basis_kk:recallEdited.current.has('basis_kk')?current.basis_kk:fill.basisKk}));
+      }} className={inputClassName} />
       <button type="button" disabled={busy} className="text-sm text-blue-600" onClick={() => {
         ++employeeSelectionId.current;
         setEmployee(null); setQuery(""); setMatches([]);
         setSelectedOrgUnit(null); setOrg(""); setPosition(""); setKk(blankForms());
+        setRecallName("");setRecallCases({ru:"",kk:""});setRecallFields({recall_position_kk:"",recall_org_unit_kk:"",basis_ru:"",basis_kk:""});recallEdited.current.clear();
         editedPositionForms.current.clear(); ruGenitiveEdited.current = false;
       }}>Сменить сотрудника</button>
       <Field label="Подразделение">
-        <select aria-label="Подразделение" value={selectedOrgUnit?.unit_id ?? ""} onChange={(event) => changeOrgUnit(event.target.value)} className={inputClassName}>
+        {recall ? <input aria-label="Подразделение" value={org} onChange={event=>setOrg(event.target.value)} maxLength={300} className={inputClassName}/> : null}
+        <select aria-label={recall?"Выбор подразделения":"Подразделение"} value={selectedOrgUnit?.unit_id ?? ""} onChange={(event) => changeOrgUnit(event.target.value)} className={inputClassName}>
           <option value="">Выберите подразделение</option>
           {selectedOrgUnit?.unit_id != null && !orgUnitOptions.some((item) => item.unit_id === selectedOrgUnit.unit_id) ? <option value={selectedOrgUnit.unit_id}>{selectedOrgUnit.name}</option> : null}
           {orgUnitOptions.map((item) => <option key={item.unit_id} value={item.unit_id}>{item.name}</option>)}
         </select>
       </Field>
       <Field label="Должность">
-        <select aria-label="Должность" value={position} onChange={(event) => setPosition(event.target.value)} className={inputClassName}>
+        {recall ? <input aria-label="Должность" value={position} onChange={event => setPosition(event.target.value)} maxLength={300} className={inputClassName} /> : <select aria-label="Должность" value={position} onChange={(event) => setPosition(event.target.value)} className={inputClassName}>
           <option value="">Выберите должность</option>
           {position ? <option value={position}>{position}</option> : null}
-        </select>
+        </select>}
       </Field>
     </>
   ) : (
     <div className="relative z-20">
-      <input aria-label="Сотрудник" value={query} onChange={(event) => setQuery(event.target.value)} className={inputClassName} />
+      <input aria-label="Сотрудник" value={query} disabled={selectingEmployee} onChange={(event) => setQuery(event.target.value)} className={inputClassName} />
+      {selectingEmployee?<p role="status">{sectionLanguage==='kk'?'Қызметкер деректері жүктелуде…':'Загружаются данные сотрудника…'}</p>:null}
+      {employeeSearchError?<p role="alert">{sectionLanguage==='kk'?'Қызметкерлерді жүктеу мүмкін болмады. Іздеуді қайталаңыз.':'Не удалось загрузить сотрудников. Повторите поиск.'}</p>:null}
+      {recall && employeeSearchFinished && !employeeSearchError && matches.length===0 && query.trim().length>=2?<p role="status">{sectionLanguage==='kk'?'Қызметкерлер табылмады. Аты-жөнін немесе бөлімшені тексеріңіз.':'Сотрудники не найдены. Проверьте фамилию или подразделение.'}</p>:null}
       {matches.length > 0 ? (
         <div role="listbox" className="mt-1 overflow-hidden rounded-lg border border-zinc-200 bg-white shadow-lg dark:border-zinc-700 dark:bg-zinc-900">
           {matches.map((candidate) => (
@@ -451,10 +532,11 @@ export default function PersonnelOrderCreateDialog({
               key={candidate.id}
               type="button"
               role="option"
+              data-employee-id={candidate.id}
               className="block w-full px-3 py-2 text-left text-sm text-zinc-900 hover:bg-blue-50 focus:bg-blue-50 focus:outline-none dark:text-zinc-50 dark:hover:bg-zinc-800"
               onClick={() => void choose(candidate)}
             >
-              {candidate.fio}
+              {candidate.fio}{recall?<span className="block text-xs font-normal text-zinc-500">{candidate.org_unit?.name || (sectionLanguage==='kk'?'Бөлімше көрсетілмеген':'Подразделение не указано')}</span>:null}
             </button>
           ))}
         </div>
@@ -489,7 +571,8 @@ export default function PersonnelOrderCreateDialog({
           if (event.key === "Enter" && event.target instanceof HTMLInputElement && event.target.type !== "submit") event.preventDefault();
         }}>
           <div data-testid="personnel-order-create-body" className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-5 py-4">
-            <PersonnelOrderTypeMenu value={type} language={sectionLanguage} onChange={changeType} />
+            <PersonnelOrderTypeMenu value={type} language={sectionLanguage} onChange={changeType} variants={variants} selectedVersion={selectedVersion} disabled={variantsLoading || variantsError} />
+            {variantsError ? <p role="alert">Не удалось загрузить варианты шаблонов. Откройте форму повторно.</p> : null}
             <Field label="Номер приказа"><input aria-label="Номер приказа" required value={number} onChange={(event) => setNumber(event.target.value)} className={inputClassName} /></Field>
             <Field label="Дата приказа"><input aria-label="Дата приказа" type="date" required value={orderDate} onChange={(event) => setOrderDate(event.target.value)} className={inputClassName} /></Field>
             <Field label="Язык"><select aria-label="Язык" value={locale} onChange={(event) => setLocale(event.target.value as "kk" | "ru")} className={inputClassName}><option value="kk">Қазақша</option><option value="ru">Русский</option></select></Field>
@@ -508,9 +591,11 @@ export default function PersonnelOrderCreateDialog({
                 <p className="text-xs">Дата выдачи свидетельства — не дата рождения ребёнка. Дата окончания отпуска вводится отдельно.</p>
                 <Field label="ФИО сотрудника в родительном падеже (RU)"><input required value={kk.employee_full_name_genitive_ru} onChange={e=>{ ruGenitiveEdited.current = true; setKk(previous=>({...previous, employee_full_name_genitive_ru:e.target.value})); }} className={inputClassName} /></Field>
               </> : null}
-              {employee ? <details open={formsExpanded} onToggle={(event) => setFormsExpanded(event.currentTarget.open)} className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-700" data-testid="personnel-order-text-forms">
+              </> : <Field label="Дата действия"><input aria-label="Дата действия" type="date" required value={effective} onChange={(event) => setEffective(event.target.value)} className={inputClassName} /></Field>}
+            </> : null}
+              {employee && !recall ? <details open={formsExpanded} onToggle={(event) => setFormsExpanded(event.currentTarget.open)} className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-700" data-testid="personnel-order-text-forms">
                 <summary className="cursor-pointer text-sm font-medium">{formsComplete ? "Формы для текста приказа заполнены автоматически" : "Формы для текста приказа"}</summary>
-              {missingFormLabels.length ? <p role="alert" className="mt-2 text-sm text-amber-800">Необходимо заполнить: {missingFormLabels.join(", ")}.</p> : null}
+              {periodLeave && missingFormLabels.length ? <p role="alert" className="mt-2 text-sm text-amber-800">Необходимо заполнить: {missingFormLabels.join(", ")}.</p> : null}
               {!kk.position_document_possessive_kk.trim() ? <p className="text-xs text-amber-700">В справочнике должности нет казахского названия или сохранённой документной формы. Заполните КК-должность вручную.</p> : <p className="text-xs text-zinc-500">Документные формы редактируемые; рассчитанную форму из названия справочника проверьте.</p>}
               <div className="mt-3 space-y-3">{([
                 ["position_document_possessive_kk", "Должность в тексте приказа (KK)"],
@@ -521,12 +606,29 @@ export default function PersonnelOrderCreateDialog({
               ] as Array<[keyof Forms, string]>).map(([key, label]) => <Field key={key} label={label}><input aria-label={label} value={kk[key]} onChange={(event) => { editedPositionForms.current.add(key); setKk((value) => ({ ...value, [key]: event.target.value })); }} className={inputClassName} /></Field>)}<Field label="Подразделение в тексте приказа (KK)"><input aria-label="Подразделение в тексте приказа (KK)" value={kk.org_unit_document_genitive_kk} onChange={(event) => { editedPositionForms.current.add("org_unit_document_genitive_kk"); setKk((value) => ({ ...value, org_unit_document_genitive_kk: event.target.value })); }} className={inputClassName} />{!hasKazakhOrgUnitText(selectedOrgUnit) ? <p className="text-xs font-normal text-amber-700 dark:text-amber-300">В справочнике отсутствует казахское название выбранного подразделения.</p> : null}</Field></div>
               </details>
               : null}
-              </> : <Field label="Дата действия"><input aria-label="Дата действия" type="date" required value={effective} onChange={(event) => setEffective(event.target.value)} className={inputClassName} /></Field>}
-            </> : null}
+
+            {recall ? <div className="grid w-full gap-3 sm:grid-cols-2">{([['recall_position_kk',sectionLanguage === 'kk' ? 'Лауазым KZ' : 'Должность KZ'],['recall_org_unit_kk',sectionLanguage === 'kk' ? 'Бөлімше KZ' : 'Подразделение KZ'],['basis_ru','Основание RU'],['basis_kk','Негіз KZ']] as const).map(([key,label]) => <Field key={key} label={label}><input aria-label={label} value={recallFields[key]} onChange={event => { recallEdited.current.add(key); setRecallFields(current => ({...current,[key]:event.target.value})); }} className={inputClassName} /></Field>)}</div> : null}
+            {recall && employee && (!position || !org || !recallFields.recall_position_kk || !recallFields.recall_org_unit_kk)?<p className="text-xs text-amber-700">{sectionLanguage==='kk'?'Қызметкер карточкасында RU/KZ деректері толық емес. Бұйрық мәтіні үшін жетіспейтін атауларды енгізіңіз.':'В карточке сотрудника нет всех данных на RU/KZ. Заполните недостающие названия для текста приказа.'}</p>:null}
+            {recall && employee ? <section className="space-y-2 sm:col-span-2" data-testid="recall-name-case-fields">
+              <h3 className="text-sm font-medium">{sectionLanguage==='kk'?'Негіздер үшін аты-жөнінің септік нысандары':'Падежные формы ФИО для оснований'}</h3>
+              {recallCaseSuggestions.ru || recallCaseSuggestions.kk ? <p className="text-xs text-zinc-600">{sectionLanguage==='kk'?'Ұсынылған септік нысандарын тексеріңіз; оларды өзгертуге болады.':'Предложенные падежные формы проверьте; их можно уточнить.'}</p>:null}
+              {(!recallCases.ru || !recallCases.kk) ? <p className="text-xs text-amber-700">{sectionLanguage==='kk'?'Қажетті септік нысаны жоқ. Оны немесе негіз мәтінін қолмен енгізіңіз.':'Нужная падежная форма не определена. Введите её или текст основания вручную.'}</p>:null}
+              <div className="grid gap-3 sm:grid-cols-2">{(['ru','kk'] as const).map(locale=>{
+                const label=locale==='ru'?'ФИО в родительном падеже (RU)':'Аты-жөні ілік септігінде (KZ)';
+                return <Field key={locale} label={label}><input aria-label={label} value={recallCases[locale]} maxLength={300} onChange={event=>{
+                  const value=event.target.value;setRecallCases(current=>({...current,[locale]:value}));
+                  setRecallCaseSuggestions(current=>({...current,[locale]:false}));
+                  const key=locale==='ru'?'basis_ru':'basis_kk';if(!recallEdited.current.has(key))setRecallFields(current=>({...current,[key]:recallBasis(locale,value)}));
+                }} className={inputClassName}/>
+                  <button type="button" disabled={!recallCases[locale].trim()} onClick={()=>{const key=locale==='ru'?'basis_ru':'basis_kk';recallEdited.current.delete(key);setRecallFields(current=>({...current,[key]:recallBasis(locale,recallCases[locale])}));}} className="text-xs text-blue-700">{sectionLanguage==='kk'?'Негізді ұсыну':'Предложить основание'} {locale==='ru'?'RU':'KZ'}</button>
+                </Field>;
+              })}</div>
+            </section>:null}
             {error ? <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900/70 dark:bg-red-950/40 dark:text-red-200">{error}</p> : null}
           </div>
           <footer data-testid="personnel-order-create-footer" className="flex shrink-0 justify-end gap-3 border-t border-zinc-200 bg-white px-5 py-4 dark:border-zinc-800 dark:bg-zinc-950">
             <button type="button" onClick={requestClose} disabled={busy} className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-800 shadow-sm hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800">Отмена</button>
+
             <button type="submit" disabled={!canSubmit} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-blue-300 dark:disabled:bg-blue-900">{busy ? "Создание…" : "Создать приказ"}</button>
           </footer>
         </form>

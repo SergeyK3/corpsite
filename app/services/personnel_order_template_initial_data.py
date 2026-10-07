@@ -115,3 +115,6 @@ INITIAL_TEXTS_BY_TYPE: Final[dict[str, InitialTexts]] = {'HIRE': {'title_ru': '�
                                                      '{{rate}} ставкамен жұмысқа шықсын.',
                                  'basis_template_ru': 'Основание: {{basis}}.',
                                  'basis_template_kk': 'Негіз: {{basis}}.'}}
+
+from app.services.personnel_order_recall_contract import TEXTS as RECALL_TEXTS
+INITIAL_TEXTS_BY_TYPE['LEAVE.ANNUAL.RECALL'] = RECALL_TEXTS

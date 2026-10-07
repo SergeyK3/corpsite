@@ -444,6 +444,10 @@ class PersonnelOrderDocumentSubjectContextIn(BaseModel):
     position_name: Optional[str] = Field(default=None, max_length=300)
     specialty: Optional[str] = Field(default=None, max_length=300)
     rate: Optional[str] = Field(default=None, max_length=40)
+    recall_position_kk: Optional[str] = Field(default=None, max_length=300)
+    recall_org_unit_kk: Optional[str] = Field(default=None, max_length=300)
+    basis_ru: Optional[str] = Field(default=None, max_length=2000)
+    basis_kk: Optional[str] = Field(default=None, max_length=2000)
     basis_type: Optional[Literal["PERSONAL_APPLICATION", "OTHER"]] = None
 
 
@@ -469,6 +473,10 @@ class PersonnelOrderDocumentItemOut(BaseModel):
     position_name: Optional[str] = None
     specialty: Optional[str] = None
     rate: Optional[str] = None
+    recall_position_kk: Optional[str] = Field(default=None, max_length=300)
+    recall_org_unit_kk: Optional[str] = Field(default=None, max_length=300)
+    basis_ru: Optional[str] = Field(default=None, max_length=2000)
+    basis_kk: Optional[str] = Field(default=None, max_length=2000)
     needs_employee_link: bool = False
     effective_date: Optional[str] = None
 
@@ -490,6 +498,7 @@ class PersonnelOrderUnresolvedSubjectIn(BaseModel):
 
 class PersonnelOrderManualDraftCreateIn(BaseModel):
     model_config = {"extra": "forbid"}
+    template_version_id: Optional[int] = Field(default=None, ge=1)
     order_number: str = Field(..., min_length=1, max_length=200)
     order_date: date
     source_title: str = Field(..., min_length=1, max_length=2000)
@@ -518,6 +527,7 @@ class PersonnelOrderManualDraftCreateIn(BaseModel):
 
 
 class PersonnelOrderPublishedTemplateTitleOut(BaseModel):
+    template_version_id: Optional[int] = None
     item_type_code: str
     title_ru: str
     title_kk: str

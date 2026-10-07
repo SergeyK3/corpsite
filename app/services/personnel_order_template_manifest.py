@@ -190,7 +190,7 @@ def export_drafts(item_types: Sequence[str], *, db_engine: Any = default_engine,
     with db_engine.connect() as connection:
         for item_type_code in item_types:
             get_personnel_order_template_spec(item_type_code)
-            row = connection.execute(text("""SELECT title_ru, title_kk, preamble_ru, preamble_kk, body_template_ru, body_template_kk, basis_template_ru, basis_template_kk FROM public.personnel_order_template_versions WHERE item_type_code=:type AND status='DRAFT' ORDER BY revision DESC, template_version_id DESC LIMIT 1"""), {"type": item_type_code}).mappings().first()
+            row = connection.execute(text("""SELECT title_ru, title_kk, preamble_ru, preamble_kk, body_template_ru, body_template_kk, basis_template_ru, basis_template_kk FROM public.personnel_order_template_versions WHERE item_type_code=:type AND template_id IN (SELECT template_id FROM public.personnel_order_templates WHERE item_type_code=:type AND is_default) AND status='DRAFT' ORDER BY revision DESC, template_version_id DESC LIMIT 1"""), {"type": item_type_code}).mappings().first()
             if row is None: raise ManifestError(f"No DRAFT exists for {item_type_code}")
             drafts[item_type_code] = {field: row[field] for field in TEXT_FIELDS}
     return {item_type_code: write_manifest(item_type_code, values, root) for item_type_code, values in drafts.items()}
@@ -259,19 +259,19 @@ def sync_manifests(*, apply: bool, db_engine: Any = default_engine, root: Path =
     if not apply:
         with db_engine.connect() as connection:
             for item_type_code, chain in chains.items():
-                row = connection.execute(text("SELECT * FROM public.personnel_order_template_versions WHERE item_type_code=:type AND status='DRAFT' UNION ALL SELECT * FROM public.personnel_order_template_versions WHERE item_type_code=:type AND status='PUBLISHED' LIMIT 1"), {"type": item_type_code}).mappings().first()
+                row = connection.execute(text("SELECT * FROM public.personnel_order_template_versions WHERE item_type_code=:type AND template_id IN (SELECT template_id FROM public.personnel_order_templates WHERE item_type_code=:type AND is_default) AND status='DRAFT' UNION ALL SELECT * FROM public.personnel_order_template_versions WHERE item_type_code=:type AND template_id IN (SELECT template_id FROM public.personnel_order_templates WHERE item_type_code=:type AND is_default) AND status='PUBLISHED' LIMIT 1"), {"type": item_type_code}).mappings().first()
                 results[item_type_code] = _sync_plan(chain, row)[0]
         return results
     with db_engine.begin() as connection:
         planned: list[tuple[str, Sequence[Mapping[str, Any]], Mapping[str, Any] | None, str]] = []
         for item_type_code, chain in chains.items():
-            row = connection.execute(text("SELECT * FROM public.personnel_order_template_versions WHERE item_type_code=:type AND status IN ('DRAFT','PUBLISHED') ORDER BY CASE status WHEN 'DRAFT' THEN 0 ELSE 1 END FOR UPDATE"), {"type": item_type_code}).mappings().first()
+            row = connection.execute(text("SELECT * FROM public.personnel_order_template_versions WHERE item_type_code=:type AND template_id IN (SELECT template_id FROM public.personnel_order_templates WHERE item_type_code=:type AND is_default) AND status IN ('DRAFT','PUBLISHED') ORDER BY CASE status WHEN 'DRAFT' THEN 0 ELSE 1 END FOR UPDATE"), {"type": item_type_code}).mappings().first()
             status, manifests = _sync_plan(chain, row); results[item_type_code] = status; planned.append((item_type_code, manifests, row, status))
         if any(status == "CONFLICT" for _, _, _, status in planned): return results
         for item_type_code, manifests, row, status in planned:
             if status == "CREATE":
                 values = {field: manifests[-1][field] for field in TEXT_FIELDS}
-                connection.execute(text("""INSERT INTO public.personnel_order_template_versions (item_type_code, version_number, status, title_ru, title_kk, preamble_ru, preamble_kk, body_template_ru, body_template_kk, basis_template_ru, basis_template_kk) VALUES (:type, (SELECT COALESCE(MAX(version_number), 0) + 1 FROM public.personnel_order_template_versions WHERE item_type_code=:type), 'DRAFT', :title_ru, :title_kk, :preamble_ru, :preamble_kk, :body_template_ru, :body_template_kk, :basis_template_ru, :basis_template_kk)"""), {**values, "type": item_type_code})
+                connection.execute(text("""INSERT INTO public.personnel_order_template_versions (item_type_code, version_number, status, title_ru, title_kk, preamble_ru, preamble_kk, body_template_ru, body_template_kk, basis_template_ru, basis_template_kk) VALUES (:type, (SELECT COALESCE(MAX(version_number), 0) + 1 FROM public.personnel_order_template_versions WHERE item_type_code=:type AND template_id IN (SELECT template_id FROM public.personnel_order_templates WHERE item_type_code=:type AND is_default)), 'DRAFT', :title_ru, :title_kk, :preamble_ru, :preamble_kk, :body_template_ru, :body_template_kk, :basis_template_ru, :basis_template_kk)"""), {**values, "type": item_type_code})
             elif status == "UPDATE":
                 for manifest in manifests:
                     values = {field: manifest[field] for field in TEXT_FIELDS}

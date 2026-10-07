@@ -298,6 +298,10 @@ def generate_order_block(
     order_type = str(order_ctx.get("order_type_code") or "").strip().upper()
     legal_basis = _clean(order_ctx.get("legal_basis_article"))
 
+    if order_type == "LEAVE.ANNUAL.RECALL":
+        from app.services.personnel_order_recall_contract import TEXTS
+        value = TEXTS[f"{normalized_type}_{lang}"] if normalized_type in {"title", "preamble"} else ""
+        return _result(generated_text=value, generator_key=f"annual_recall.{normalized_type}", fingerprint_payload={"type": order_type, "locale": lang, "text": value})
     if normalized_type == ORDER_BLOCK_TYPE_TITLE:
         titles = DOCUMENT_TITLES.get(order_type) or DOCUMENT_TITLES[ORDER_TYPE_COMPOSITE]
         text = titles.get(lang) or titles["ru"]
@@ -386,6 +390,10 @@ def generate_item_body(locale: str, item_ctx: Mapping[str, Any]) -> Dict[str, st
     """Generate item body text (ported from personnelOrderPrintItemText.ts)."""
     lang = _locale(locale)
     item_type = str(item_ctx.get("item_type_code") or "").strip().upper()
+    if item_type == "LEAVE.ANNUAL.RECALL":
+        from app.services.personnel_order_recall_contract import values, render
+        data = values(item_ctx.get("recall_payload") or {}, item_ctx.get("effective_date"))
+        return _result(generated_text=render(f"body_template_{lang}", data), generator_key=GENERATOR_KEY_ITEM_BODY, fingerprint_payload={"type": item_type, "locale": lang, "values": data})
     if item_type == ORDER_TYPE_LEAVE_CHILDCARE_GRANT:
         values = childcare_values(item_ctx.get("childcare_payload") or {}, org_unit_ru=_localized_name(item_ctx.get("org_unit_name"), "ru"))
         return _result(generated_text=render_childcare(f"body_template_{lang}", values), generator_key=GENERATOR_KEY_ITEM_BODY, fingerprint_payload={"type": item_type, "locale": lang, "values": values})
@@ -642,6 +650,10 @@ def generate_item_body(locale: str, item_ctx: Mapping[str, Any]) -> Dict[str, st
 def generate_basis_text(locale: str, basis_fact: Mapping[str, Any]) -> Dict[str, str]:
     """Generate basis wording (ported from personnelOrderBasisGenerate.ts)."""
     lang = _locale(locale)
+    if basis_fact.get("item_type_code") == "LEAVE.ANNUAL.RECALL":
+        from app.services.personnel_order_recall_contract import values, render
+        data = values(basis_fact.get("recall_payload") or {}, basis_fact.get("effective_date"))
+        return _result(generated_text=render(f"basis_template_{lang}", data), generator_key=GENERATOR_KEY_ITEM_BASIS, fingerprint_payload={"type": "LEAVE.ANNUAL.RECALL", "locale": lang, "values": data})
     if basis_fact.get("item_type_code") == ORDER_TYPE_LEAVE_CHILDCARE_GRANT:
         values = childcare_values(basis_fact.get("childcare_payload") or {}, org_unit_ru=_localized_name(basis_fact.get("org_unit_name"), "ru"))
         return _result(generated_text=render_childcare(f"basis_template_{lang}", values), generator_key=GENERATOR_KEY_ITEM_BASIS, fingerprint_payload={"type": ORDER_TYPE_LEAVE_CHILDCARE_GRANT, "locale": lang, "values": values})

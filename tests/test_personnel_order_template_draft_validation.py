@@ -25,6 +25,7 @@ def _initial_texts(item_type_code: str = EDITABLE_TYPE) -> dict[str, str]:
 
 def test_readable_initial_texts_match_the_ten_type_golden_snapshot() -> None:
     expected_hashes = {
+        "LEAVE.ANNUAL.RECALL": "bbddeb517479b8b78555e58b95b1f083ee9e00e47b759630cf42465ca054bedb",
         "HIRE": "96444278a247538672dfb544559359d08cc3b54e0de182d2d3fb0617320658fa",
         "TRANSFER": "3a6d711e7484839479a98697da7e91a6a2f27b5fab315ad38c3f295722005995",
         "TERMINATION": "bc34ed5af9bbc3e3e1fd7dd874aeebecc9b2d2b918692526c59abaabfc2c78a2",
@@ -94,6 +95,7 @@ class _DraftStore:
             now = datetime.now(timezone.utc)
             self.row = {
                 "template_version_id": 101,
+                "template_id": values["template"],
                 "item_type_code": values["type"],
                 "version_number": 1,
                 "status": "DRAFT",
@@ -119,6 +121,9 @@ class _DraftStore:
 def draft_store(monkeypatch: pytest.MonkeyPatch) -> _DraftStore:
     store = _DraftStore()
     monkeypatch.setattr(draft_service, "engine", store)
+    # These content/revision tests isolate the version store. Identity resolution
+    # and independent publication are covered against real PostgreSQL separately.
+    monkeypatch.setattr(draft_service, "_resolve_template", lambda conn, code, template_id, **kwargs: template_id or 1)
     return store
 
 
@@ -200,6 +205,28 @@ def test_termination_save_uses_safe_required_lookup_and_succeeds(draft_store: _D
 
     assert saved["revision"] == created["revision"] + 1
     assert draft_service.get_draft(item_type)["body_template_ru"] == values["body_template_ru"]
+
+
+def test_incomplete_return_text_can_save_and_preview_without_publication(draft_store: _DraftStore) -> None:
+    code = "RETURN_FROM_CHILDCARE_LEAVE"
+    created = draft_service.create_draft_from_working_copy(code, "INITIAL", None, None, _initial_texts(code), actor_user_id=77)
+    values = _initial_texts(code)
+    values.update(body_template_ru="1. Тестовый текст {{employee.full_name}} с {{effective_date}}.\n\n2. Второй абзац.",
+                  body_template_kk="1. {{employee.full_name}} {{effective_date}} бастап.\n\n2. Екінші абзац.",
+                  basis_template_ru="", basis_template_kk="")
+    with pytest.raises(TemplateDraftError):
+        _validate(values, code)
+    saved = draft_service.save_draft(code, created["revision"], values, actor_user_id=77,
+        expected_template_version_id=created["template_version_id"])
+    assert saved["revision"] == created["revision"] + 1
+    assert draft_service.get_draft(code)["body_template_ru"] == values["body_template_ru"]
+    result = preview_draft(code, values)
+    assert result["ru"]["body"].startswith("1.") and "\n\n2." in result["ru"]["body"]
+    assert result["kk"]["basis"] == ""
+    with pytest.raises(TemplateDraftError):
+        _validate({field: saved[field] for field in draft_service.TEXT_FIELDS}, code)
+    with pytest.raises(TemplateDraftError):
+        draft_service.save_draft(code, saved["revision"], values, actor_user_id=77, expected_template_version_id=saved["template_version_id"] + 1)
 
 
 def test_legacy_termination_without_unused_leave_days_still_previews() -> None:

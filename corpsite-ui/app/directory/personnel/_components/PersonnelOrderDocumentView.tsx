@@ -104,10 +104,10 @@ export default function PersonnelOrderDocumentView({
       <p className="whitespace-pre-wrap text-sm leading-6">{document.preamble}</p>
       <div className="text-center font-semibold">{document.directive}</div>
 
-      <ol className="list-decimal space-y-4 pl-6">
+      <ol className={detail.order.order_type_code === "LEAVE.ANNUAL.RECALL" ? "list-none space-y-4" : "list-decimal space-y-4 pl-6"}>
         {document.points.map((point, index) => (
           <li key={index} className="pl-1 text-sm leading-6">
-            <p>{point.text}</p>
+            <p className={detail.order.order_type_code === "LEAVE.ANNUAL.RECALL" ? "whitespace-pre-wrap" : undefined}>{point.text}</p>
             {point.basis.length ? (
               <p className="mt-2"><span className="font-medium">{ui.basis}:</span> {point.basis.map((entry) => normalizePersonnelOrderBasisText(entry, language)).filter(Boolean).join("; ")}.</p>
             ) : null}
