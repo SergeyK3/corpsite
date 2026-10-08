@@ -36,14 +36,14 @@ export function resolvePersonnelOrderDocumentForms(position: PositionReference, 
   return {
     position_document_possessive_kk: firstText(
       record(source.document_forms_kk).position_document_possessive_kk,
-      source.position_document_possessive_kk, position?.document_possessive_kk,
-      position?.job_namekk_doc,
+      source.position_document_possessive_kk, position?.job_namekk_doc,
+      position?.document_possessive_kk,
       calculateKazakhPositionPossessive(position?.name_kk).value,
     ),
     position_document_nominative_ru: firstText(
       record(source.document_forms_ru).position_document_nominative_ru,
-      source.position_document_nominative_ru, position?.document_nominative_ru,
-      position?.job_nameru,
+      source.position_document_nominative_ru, position?.job_nameru,
+      position?.document_nominative_ru,
       russian ? russian[0].toLocaleLowerCase("ru-RU") + russian.slice(1) : "",
     ),
   };

@@ -184,9 +184,16 @@ def personnel_order_quality_control_route(
 def get_personnel_order_published_variants(item_type_code: str, _user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
     require_personnel_admin_or_403(_user)
     try:
+        from app.db.engine import engine
+        from app.services.personnel_order_creation_schema import creation_capabilities
+        with engine.connect() as conn:
+            capabilities=creation_capabilities(conn,item_type_code)
+        public_capabilities={key:capabilities[key] for key in ('independent_supported','creation_supported','creation_reason','schema_mode')}
+        if not capabilities['independent_supported']:
+            return {"items":[],**public_capabilities}
         rows = list_templates(item_type_code, published_only=True)
         keys = ("template_id", "template_version_id", "version_number", "name_ru", "name_kk", "title_ru", "title_kk", "is_default")
-        return {"items": [{key: row[key] for key in keys} for row in rows]}
+        return {"items": [{key: row[key] for key in keys} for row in rows],**public_capabilities}
     except TemplateDraftError as exc:
         raise validation_error_to_http422(PersonnelOrderValidationError(str(exc))) from exc
 

@@ -23,6 +23,8 @@ export default function PersonnelTemplateVariants({ item, catalog = [item], init
   const [versions, setVersions] = useState<PersonnelOrderTemplateDraft[]>([]);
   const [source, setSource] = useState<number>();
   const [copying, setCopying] = useState(false);
+  const [legacySchema, setLegacySchema] = useState(false);
+  const [loadStatus, setLoadStatus] = useState<number>();
   const [error, setError] = useState<"" | "templates" | "versions" | "copy">("");
   const [createdDraft, setCreatedDraft] = useState<PersonnelOrderTemplateDraft | undefined>(initialDraft);
   const [publication, setPublication] = useState<PersonnelOrderTemplateDraft>();
@@ -55,6 +57,7 @@ export default function PersonnelTemplateVariants({ item, catalog = [item], init
     // save/publication, so its success/error state is not discarded.
     if (loadedType.current !== editorItem.type_code) setTemplatesLoaded(false);
     setError("");
+    setLegacySchema(false); setLoadStatus(undefined);
     listPersonnelIndependentTemplates(editorItem.type_code).then(result => {
       if (cancelled) return;
       setTemplates(result.items);
@@ -66,7 +69,14 @@ export default function PersonnelTemplateVariants({ item, catalog = [item], init
         setSelected(fallback);
         if (selected != null) onSelected?.(fallback);
       }
-    }).catch(() => { if (!cancelled) setError("templates"); });
+    }).catch(cause => {
+      if (cancelled) return;
+      setError("templates"); setLoadStatus(cause?.status);
+      if (cause?.details?.detail?.code === "TEMPLATE_SCHEMA_REQUIRED") {
+        setLegacySchema(true); setTemplates([]); setTemplatesLoaded(true);
+        setSelected(undefined); if (selected != null) onSelected?.(undefined);
+      }
+    });
     return () => { cancelled = true; };
   }, [editorItem.type_code, refresh]);
   useEffect(() => {
@@ -89,7 +99,10 @@ export default function PersonnelTemplateVariants({ item, catalog = [item], init
     (selected == null ? templates.length === 0 : templates.find(t => t.template_id === selected)?.is_default === true);
   // The dialog loads its own sources. Opening it must not wait for this card's
   // versions, or a failed read leaves a visible button silently disabled.
-  const copyBlockedReason = ready === false
+  const schemaReason = kk
+    ? "Дербес үлгілер үшін БД құрылымын hrrecall001 нұсқасына келісілген жаңарту қажет. Бұрынғы үлгілердің редакторы қолжетімді; БД автоматты түрде өзгермейді."
+    : "Для независимых вариантов требуется согласованное обновление структуры БД до hrrecall001. Редактор прежних шаблонов доступен; БД автоматически не изменяется.";
+  const copyBlockedReason = legacySchema ? schemaReason : ready === false
     ? languageError
       ? (kk ? "Кадр бөлімінің тілін жүктеу мүмкін болмады. Жүктеуді қайталаңыз." : "Не удалось загрузить язык кадрового раздела. Повторите загрузку.")
       : (kk ? "Кадр бөлімінің тілі жүктелуде. Жүктелгеннен кейін диалог қолжетімді болады." : "Загружается язык кадрового раздела. После загрузки диалог станет доступен.")
@@ -121,11 +134,11 @@ export default function PersonnelTemplateVariants({ item, catalog = [item], init
         {kk ? t.name_kk || t.name_ru : t.name_ru || t.name_kk}{t.is_default ? (kk ? " · Әдепкі" : " · По умолчанию") : ""}
       </button>)}
     </div>
-    {errorMessage && !copying ? <p role="alert">{errorMessage}</p> : null}
+    {errorMessage && !copying && !legacySchema ? <p role="alert">{errorMessage}{loadStatus ? ` (HTTP ${loadStatus})` : ""}</p> : null}
     {publication && publication.template_id === selected ? <p role="status" data-testid="template-publication-success" className="text-sm text-emerald-700">{kk ? `«${selectedTemplate?.name_kk || publication.title_kk}» үлгісінің v${publication.version_number} нұсқасы жарияланды.` : `Версия v${publication.version_number} шаблона «${selectedTemplate?.name_ru || publication.title_ru}» опубликована.`}</p> : null}
     {copyForm}
     {changingType && versions[0] && selectedTemplate ? <PersonnelTemplateTypeDialog draft={{...versions[0], name_ru: selectedTemplate.name_ru, name_kk: selectedTemplate.name_kk}} catalog={catalog} onClose={() => setChangingType(false)} onChanged={draft => { setChangingType(false); setCreatedDraft(draft); setEditorItem(catalog.find(item => item.type_code === draft.item_type_code)!); setRefresh(n => n + 1); onCreated?.(draft); }} /> : null}
     {removing && selectedTemplate ? <PersonnelTemplateRemoveDialog template={selectedTemplate} onClose={() => setRemoving(false)} onRemoved={() => { setRemoving(false); setSelected(undefined); setCreatedDraft(undefined); setRefresh(n => n + 1); onSelected?.(undefined); }} /> : null}
-    {templatesLoaded && (selected == null || selectedTemplate) ? renderEditor(selected, published => { if (published?.status === "PUBLISHED") { setPublication(published); setCreatedDraft(undefined); } setRefresh(n => n + 1); }, copyActions, null, createdDraft?.template_id === selected ? createdDraft : undefined, editorItem, selectedTemplate) : <div>{copyActions}<p role="status">{kk ? "Үлгі жүктелуде…" : "Загрузка шаблона…"}</p></div>}
+    {templatesLoaded && (selected == null || selectedTemplate) ? renderEditor(selected, published => { if (published?.status === "PUBLISHED") { setPublication(published); setCreatedDraft(undefined); } setRefresh(n => n + 1); }, copyActions, null, createdDraft?.template_id === selected ? createdDraft : undefined, editorItem, selectedTemplate) : <div>{copyActions}{!error ? <p role="status">{kk ? "Үлгі жүктелуде…" : "Загрузка шаблона…"}</p> : null}</div>}
   </section>;
 }

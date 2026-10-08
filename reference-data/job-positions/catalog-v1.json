@@ -1,0 +1,824 @@
+{
+  "format": "job-positions-catalog-v1",
+  "source": {
+    "file": "positions_catalog_review_v2.xlsx",
+    "sha256": "d48db2569e544f180b3fb1c44529e1853d25e15099998104e5d95e686ca78b54",
+    "sheet": "catl_job",
+    "table": "CatlJobPositionsV2",
+    "range": "A1:E89"
+  },
+  "items": [
+    {
+      "job_code": "ARCHIVIST",
+      "job_nameru": "Архивариус",
+      "job_namekk": "Мұрағатшы",
+      "job_namekk_doc": "мұрағатшысы",
+      "legacy_position_ids": [
+        1
+      ]
+    },
+    {
+      "job_code": "AUDITOR",
+      "job_nameru": "Аудитор",
+      "job_namekk": "Аудитор",
+      "job_namekk_doc": "аудиторы",
+      "legacy_position_ids": [
+        2
+      ]
+    },
+    {
+      "job_code": "ACCOUNTANT",
+      "job_nameru": "Бухгалтер",
+      "job_namekk": "Бухгалтер",
+      "job_namekk_doc": "бухгалтері",
+      "legacy_position_ids": [
+        3
+      ]
+    },
+    {
+      "job_code": "ACCOUNTANT_CASHIER",
+      "job_nameru": "Бухгалтер-кассир",
+      "job_namekk": "Бухгалтер-кассир",
+      "job_namekk_doc": "бухгалтер-кассирі",
+      "legacy_position_ids": [
+        4
+      ]
+    },
+    {
+      "job_code": "DRIVER",
+      "job_nameru": "Водитель",
+      "job_namekk": "Жүргізуші",
+      "job_namekk_doc": "жүргізушісі",
+      "legacy_position_ids": [
+        5
+      ]
+    },
+    {
+      "job_code": "PHYSICIAN",
+      "job_nameru": "Врач",
+      "job_namekk": "Дәрігер",
+      "job_namekk_doc": "дәрігері",
+      "legacy_position_ids": [
+        6
+      ]
+    },
+    {
+      "job_code": "CHIEF_NURSE",
+      "job_nameru": "Главная медсестра",
+      "job_namekk": "Бас мейіргер",
+      "job_namekk_doc": "бас мейіргері",
+      "legacy_position_ids": [
+        7
+      ]
+    },
+    {
+      "job_code": "ACC_HEAD",
+      "job_nameru": "Главный бухгалтер",
+      "job_namekk": "Бас бухгалтер",
+      "job_namekk_doc": "бас бухгалтері",
+      "legacy_position_ids": [
+        8
+      ]
+    },
+    {
+      "job_code": "YARD_CLEANER",
+      "job_nameru": "Дворник",
+      "job_namekk": "Аула сыпырушы",
+      "job_namekk_doc": "аула сыпырушысы",
+      "legacy_position_ids": [
+        9
+      ]
+    },
+    {
+      "job_code": "DISINFECTOR",
+      "job_nameru": "Дезинфектор",
+      "job_namekk": "Дезинфектор",
+      "job_namekk_doc": "дезинфекторы",
+      "legacy_position_ids": [
+        10
+      ]
+    },
+    {
+      "job_code": "DIET_NURSE",
+      "job_nameru": "Диетическая медсестра",
+      "job_namekk": "Диеталық мейіргер",
+      "job_namekk_doc": "диеталық мейіргері",
+      "legacy_position_ids": [
+        11
+      ]
+    },
+    {
+      "job_code": "LAUNDRY_HEAD",
+      "job_nameru": "Заведующая прачечной",
+      "job_namekk": "Кір жуу орнының меңгерушісі",
+      "job_namekk_doc": "кір жуу орнының меңгерушісі",
+      "legacy_position_ids": [
+        12
+      ]
+    },
+    {
+      "job_code": "WAREHOUSE_HEAD",
+      "job_nameru": "Заведующий складом",
+      "job_namekk": "Қойма меңгерушісі",
+      "job_namekk_doc": "қойма меңгерушісі",
+      "legacy_position_ids": [
+        13
+      ]
+    },
+    {
+      "job_code": "DEPUTY_DIRECTOR",
+      "job_nameru": "Заместитель директора",
+      "job_namekk": "Директордың орынбасары",
+      "job_namekk_doc": "директордың орынбасары",
+      "legacy_position_ids": [
+        14
+      ]
+    },
+    {
+      "job_code": "ENGINEER",
+      "job_nameru": "Инженер",
+      "job_namekk": "Инженер",
+      "job_namekk_doc": "инженері",
+      "legacy_position_ids": [
+        16
+      ]
+    },
+    {
+      "job_code": "MEDICAL_PHYSICIST_ENGINEER",
+      "job_nameru": "Инженер — медицинский физик",
+      "job_namekk": "Инженер-медицина физигі",
+      "job_namekk_doc": "инженер-медицина физигі",
+      "legacy_position_ids": [
+        17
+      ]
+    },
+    {
+      "job_code": "CASHIER",
+      "job_nameru": "Кассир",
+      "job_namekk": "Кассир",
+      "job_namekk_doc": "кассирі",
+      "legacy_position_ids": [
+        18
+      ]
+    },
+    {
+      "job_code": "FACILITY_SUPERVISOR",
+      "job_nameru": "Комендант",
+      "job_namekk": "Комендант",
+      "job_namekk_doc": "коменданты",
+      "legacy_position_ids": [
+        19
+      ]
+    },
+    {
+      "job_code": "COURIER",
+      "job_nameru": "Курьер",
+      "job_namekk": "Курьер",
+      "job_namekk_doc": "курьері",
+      "legacy_position_ids": [
+        20
+      ]
+    },
+    {
+      "job_code": "KITCHEN_WORKER",
+      "job_nameru": "Рабочий кухни",
+      "job_namekk": "Асүй жұмысшысы",
+      "job_namekk_doc": "асүй жұмысшысы",
+      "legacy_position_ids": [
+        21
+      ]
+    },
+    {
+      "job_code": "LAB_ASSISTANT",
+      "job_nameru": "Лаборант",
+      "job_namekk": "Зертханашы",
+      "job_namekk_doc": "зертханашысы",
+      "legacy_position_ids": [
+        22
+      ]
+    },
+    {
+      "job_code": "LIFT_OPERATOR",
+      "job_nameru": "Лифтер",
+      "job_namekk": "Лифтші",
+      "job_namekk_doc": "лифтшісі",
+      "legacy_position_ids": [
+        23
+      ]
+    },
+    {
+      "job_code": "NURSE",
+      "job_nameru": "Медсестра",
+      "job_namekk": "Мейіргер",
+      "job_namekk_doc": "мейіргері",
+      "legacy_position_ids": [
+        25,
+        27
+      ]
+    },
+    {
+      "job_code": "MEDICAL_REGISTRAR",
+      "job_nameru": "медрегистратор",
+      "job_namekk": "Медициналық тіркеуші",
+      "job_namekk_doc": "медициналық тіркеушісі",
+      "legacy_position_ids": [
+        26
+      ]
+    },
+    {
+      "job_code": "MEDICAL_STATISTICIAN",
+      "job_nameru": "Медицинский статистик",
+      "job_namekk": "Медициналық статистик",
+      "job_namekk_doc": "медициналық статистигі",
+      "legacy_position_ids": [
+        28,
+        717
+      ]
+    },
+    {
+      "job_code": "MANAGER",
+      "job_nameru": "Менеджер",
+      "job_namekk": "Менеджер",
+      "job_namekk_doc": "менеджері",
+      "legacy_position_ids": [
+        29
+      ]
+    },
+    {
+      "job_code": "INSTALLER",
+      "job_nameru": "Монтажник",
+      "job_namekk": "Монтажшы",
+      "job_namekk_doc": "монтажшысы",
+      "legacy_position_ids": [
+        30
+      ]
+    },
+    {
+      "job_code": "DEPARTMENT_CHIEF",
+      "job_nameru": "Начальник отдела",
+      "job_namekk": "Бөлім бастығы",
+      "job_namekk_doc": "бөлім бастығы",
+      "legacy_position_ids": [
+        31
+      ]
+    },
+    {
+      "job_code": "OPERATOR",
+      "job_nameru": "Оператор",
+      "job_namekk": "Оператор",
+      "job_namekk_doc": "операторы",
+      "legacy_position_ids": [
+        32
+      ]
+    },
+    {
+      "job_code": "TRANSLATOR",
+      "job_nameru": "Переводчик",
+      "job_namekk": "Аудармашы",
+      "job_namekk_doc": "аудармашысы",
+      "legacy_position_ids": [
+        33
+      ]
+    },
+    {
+      "job_code": "CARPENTER",
+      "job_nameru": "Плотник",
+      "job_namekk": "Ағаш ұстасы",
+      "job_namekk_doc": "ағаш ұстасы",
+      "legacy_position_ids": [
+        34
+      ]
+    },
+    {
+      "job_code": "COOK",
+      "job_nameru": "Повар",
+      "job_namekk": "Аспаз",
+      "job_namekk_doc": "аспазы",
+      "legacy_position_ids": [
+        35
+      ]
+    },
+    {
+      "job_code": "PROVISOR",
+      "job_nameru": "Провизор",
+      "job_namekk": "Провизор",
+      "job_namekk_doc": "провизоры",
+      "legacy_position_ids": [
+        36
+      ]
+    },
+    {
+      "job_code": "PSYCHOLOGIST",
+      "job_nameru": "Психолог",
+      "job_namekk": "Психолог",
+      "job_namekk_doc": "психологі",
+      "legacy_position_ids": [
+        37
+      ]
+    },
+    {
+      "job_code": "WORKER",
+      "job_nameru": "Рабочий",
+      "job_namekk": "Жұмысшы",
+      "job_namekk_doc": "жұмысшысы",
+      "legacy_position_ids": [
+        38
+      ]
+    },
+    {
+      "job_code": "CHEMOTHERAPY_SERVICE_HEAD",
+      "job_nameru": "Руководитель службы химиотерапии",
+      "job_namekk": "Химиотерапия қызметінің басшысы",
+      "job_namekk_doc": "химиотерапия қызметінің басшысы",
+      "legacy_position_ids": [
+        39
+      ]
+    },
+    {
+      "job_code": "HOUSEKEEPING_SERVICE_HEAD",
+      "job_nameru": "Руководитель хозяйственной службы",
+      "job_namekk": "Шаруашылық қызметінің басшысы",
+      "job_namekk_doc": "шаруашылық қызметінің басшысы",
+      "legacy_position_ids": [
+        40
+      ]
+    },
+    {
+      "job_code": "SANITARY_WORKER",
+      "job_nameru": "Санитар",
+      "job_namekk": "Санитар",
+      "job_namekk_doc": "санитары",
+      "legacy_position_ids": [
+        41
+      ]
+    },
+    {
+      "job_code": "SANITARY_WORKER_FEMALE",
+      "job_nameru": "Санитарка",
+      "job_namekk": "Санитар",
+      "job_namekk_doc": "санитары",
+      "legacy_position_ids": [
+        42
+      ]
+    },
+    {
+      "job_code": "SANITARY_BUFFET_WORKER",
+      "job_nameru": "Санитарка-буфетчица",
+      "job_namekk": "Санитар-буфетші",
+      "job_namekk_doc": "санитар-буфетшісі",
+      "legacy_position_ids": [
+        43
+      ]
+    },
+    {
+      "job_code": "SISTER_HOUSEKEEPER",
+      "job_nameru": "сестра-хозяйка",
+      "job_namekk": "шаруа бикесі",
+      "job_namekk_doc": "шаруа бикесі",
+      "legacy_position_ids": [
+        44
+      ]
+    },
+    {
+      "job_code": "SYSTEM_ADMINISTRATOR",
+      "job_nameru": "системный администратор",
+      "job_namekk": "Жүйелік әкімші",
+      "job_namekk_doc": "жүйелік әкімшісі",
+      "legacy_position_ids": [
+        45
+      ]
+    },
+    {
+      "job_code": "PLUMBER",
+      "job_nameru": "Слесарь-сантехник",
+      "job_namekk": "Слесарь-сантехник",
+      "job_namekk_doc": "слесарь-сантехнигі",
+      "legacy_position_ids": [
+        46
+      ]
+    },
+    {
+      "job_code": "SPECIALIST",
+      "job_nameru": "Специалист",
+      "job_namekk": "Маман",
+      "job_namekk_doc": "маманы",
+      "legacy_position_ids": [
+        48
+      ]
+    },
+    {
+      "job_code": "SENIOR_NURSE",
+      "job_nameru": "Старшая медсестра",
+      "job_namekk": "Аға мейіргер",
+      "job_namekk_doc": "аға мейіргері",
+      "legacy_position_ids": [
+        49
+      ]
+    },
+    {
+      "job_code": "SENIOR_LAB_ASSISTANT",
+      "job_nameru": "Старший лаборант",
+      "job_namekk": "Аға зертханашы",
+      "job_namekk_doc": "аға зертханашысы",
+      "legacy_position_ids": [
+        50
+      ]
+    },
+    {
+      "job_code": "SENIOR_SYSTEM_ADMINISTRATOR",
+      "job_nameru": "Старший системный администратор",
+      "job_namekk": "Аға жүйелік әкімші",
+      "job_namekk_doc": "аға жүйелік әкімшісі",
+      "legacy_position_ids": [
+        51
+      ]
+    },
+    {
+      "job_code": "ROOM_CLEANER",
+      "job_nameru": "Уборщик помещений",
+      "job_namekk": "Үй-жайларды тазалаушы",
+      "job_namekk_doc": "үй-жайларды тазалаушысы",
+      "legacy_position_ids": [
+        53
+      ]
+    },
+    {
+      "job_code": "PHARMACIST",
+      "job_nameru": "Фармацевт",
+      "job_namekk": "Фармацевт",
+      "job_namekk_doc": "фармацевті",
+      "legacy_position_ids": [
+        54
+      ]
+    },
+    {
+      "job_code": "ECONOMIST",
+      "job_nameru": "Экономист",
+      "job_namekk": "Экономист",
+      "job_namekk_doc": "экономисті",
+      "legacy_position_ids": [
+        55,
+        90,
+        91,
+        92
+      ]
+    },
+    {
+      "job_code": "ELECTRICIAN",
+      "job_nameru": "Электрик",
+      "job_namekk": "Электрик",
+      "job_namekk_doc": "электригі",
+      "legacy_position_ids": [
+        56
+      ]
+    },
+    {
+      "job_code": "ELECTRICAL_FITTER",
+      "job_nameru": "Электромонтер",
+      "job_namekk": "Электрмонтер",
+      "job_namekk_doc": "электрмонтері",
+      "legacy_position_ids": [
+        57
+      ]
+    },
+    {
+      "job_code": "LAWYER",
+      "job_nameru": "Юрист",
+      "job_namekk": "Заңгер",
+      "job_namekk_doc": "заңгері",
+      "legacy_position_ids": [
+        58
+      ]
+    },
+    {
+      "job_code": "CHIEF_ECONOMIST",
+      "job_nameru": "Главный экономист",
+      "job_namekk": "Бас экономист",
+      "job_namekk_doc": "бас экономисті",
+      "legacy_position_ids": [
+        59
+      ]
+    },
+    {
+      "job_code": "PROC_HEAD",
+      "job_nameru": "Руководитель отдела государственных закупок",
+      "job_namekk": "Мемлекеттік сатып алу бөлімінің басшысы",
+      "job_namekk_doc": "мемлекеттік сатып алу бөлімінің басшысы",
+      "legacy_position_ids": [
+        60
+      ]
+    },
+    {
+      "job_code": "PHYSICIAN_STATISTICIAN",
+      "job_nameru": "Врач-статистик",
+      "job_namekk": "Дәрігер-статистик",
+      "job_namekk_doc": "дәрігер-статистигі",
+      "legacy_position_ids": [
+        61
+      ]
+    },
+    {
+      "job_code": "DIRECTOR",
+      "job_nameru": "Директор",
+      "job_namekk": "Директор",
+      "job_namekk_doc": "директоры",
+      "legacy_position_ids": [
+        62
+      ]
+    },
+    {
+      "job_code": "PHARMACY_HEAD",
+      "job_nameru": "Заведующий аптекой",
+      "job_namekk": "Дәріхана меңгерушісі",
+      "job_namekk_doc": "дәріхана меңгерушісі",
+      "legacy_position_ids": [
+        63
+      ]
+    },
+    {
+      "job_code": "CLINICAL_DEPARTMENT_HEAD",
+      "job_nameru": "Заведующий клиническим отделением",
+      "job_namekk": "Клиникалық бөлімше меңгерушісі",
+      "job_namekk_doc": "клиникалық бөлімшесінің меңгерушісі",
+      "legacy_position_ids": [
+        64,
+        65,
+        66,
+        67,
+        68,
+        69,
+        70,
+        71,
+        72,
+        73,
+        74,
+        75
+      ]
+    },
+    {
+      "job_code": "ACC_DEPUTY",
+      "job_nameru": "Заместитель главного бухгалтера",
+      "job_namekk": "Бас бухгалтердің орынбасары",
+      "job_namekk_doc": "бас бухгалтердің орынбасары",
+      "legacy_position_ids": [
+        76
+      ]
+    },
+    {
+      "job_code": "DEP_ADMIN",
+      "job_nameru": "Заместитель по административным вопросам",
+      "job_namekk": "Әкімшілік мәселелер жөніндегі орынбасар",
+      "job_namekk_doc": "әкімшілік мәселелер жөніндегі орынбасары",
+      "legacy_position_ids": [
+        77
+      ]
+    },
+    {
+      "job_code": "DEP_OUTPATIENT_AUDIT",
+      "job_nameru": "Заместитель по диспансеру и внутренней экспертизе",
+      "job_namekk": "Диспансер және ішкі сараптама жөніндегі орынбасар",
+      "job_namekk_doc": "диспансер және ішкі сараптама жөніндегі орынбасары",
+      "legacy_position_ids": [
+        78
+      ]
+    },
+    {
+      "job_code": "DEP_MED",
+      "job_nameru": "Заместитель по лечебной работе",
+      "job_namekk": "Емдеу жұмысы жөніндегі орынбасар",
+      "job_namekk_doc": "емдеу жұмысы жөніндегі орынбасары",
+      "legacy_position_ids": [
+        79
+      ]
+    },
+    {
+      "job_code": "DEP_STRATEGY",
+      "job_nameru": "Заместитель по стратегии",
+      "job_namekk": "Стратегия жөніндегі орынбасар",
+      "job_namekk_doc": "стратегия жөніндегі орынбасары",
+      "legacy_position_ids": [
+        80
+      ]
+    },
+    {
+      "job_code": "STAT_HEAD_DEPUTY",
+      "job_nameru": "Заместитель руководителя отдела статистики",
+      "job_namekk": "Статистика бөлімі басшысының орынбасары",
+      "job_namekk_doc": "статистика бөлімі басшысының орынбасары",
+      "legacy_position_ids": [
+        81
+      ]
+    },
+    {
+      "job_code": "HEAD",
+      "job_nameru": "Руководитель",
+      "job_namekk": "Басшы",
+      "job_namekk_doc": "басшысы",
+      "legacy_position_ids": [
+        84
+      ]
+    },
+    {
+      "job_code": "QM_HEAD",
+      "job_nameru": "Руководитель ОВЭиПД",
+      "job_namekk": "ОВЭиПД басшысы",
+      "job_namekk_doc": "ОВЭиПД басшысы",
+      "legacy_position_ids": [
+        85
+      ]
+    },
+    {
+      "job_code": "HR_HEAD",
+      "job_nameru": "Руководитель отдела кадров",
+      "job_namekk": "Кадрлар бөлімінің басшысы",
+      "job_namekk_doc": "кадрлар бөлімінің басшысы",
+      "legacy_position_ids": [
+        86
+      ]
+    },
+    {
+      "job_code": "STAT_HEAD",
+      "job_nameru": "Руководитель отдела статистики",
+      "job_namekk": "Статистика бөлімінің басшысы",
+      "job_namekk_doc": "статистика бөлімінің басшысы",
+      "legacy_position_ids": [
+        87
+      ]
+    },
+    {
+      "job_code": "ADMISSION_HEAD",
+      "job_nameru": "Руководитель приемного отделения",
+      "job_namekk": "Қабылдау бөлімшесінің басшысы",
+      "job_namekk_doc": "қабылдау бөлімшесінің басшысы",
+      "legacy_position_ids": [
+        88
+      ]
+    },
+    {
+      "job_code": "SENIOR_ECONOMIST",
+      "job_nameru": "Старший экономист",
+      "job_namekk": "Аға экономист",
+      "job_namekk_doc": "аға экономисті",
+      "legacy_position_ids": [
+        89
+      ]
+    },
+    {
+      "job_code": "HR_MANAGER",
+      "job_nameru": "Менеджер по управлению человеческими ресурсами",
+      "job_namekk": "Адам ресурстарын басқару менеджері",
+      "job_namekk_doc": "адам ресурстарын басқару менеджері",
+      "legacy_position_ids": [
+        340
+      ]
+    },
+    {
+      "job_code": "SECRETARY_REFERENT",
+      "job_nameru": "секретарь-референт",
+      "job_namekk": "Хатшы-референт",
+      "job_namekk_doc": "хатшы-референті",
+      "legacy_position_ids": [
+        341
+      ]
+    },
+    {
+      "job_code": "KAZAKH_TRANSLATOR",
+      "job_nameru": "Переводчик казахского языка",
+      "job_namekk": "Қазақ тілі аудармашысы",
+      "job_namekk_doc": "қазақ тілі аудармашысы",
+      "legacy_position_ids": [
+        342
+      ]
+    },
+    {
+      "job_code": "DEPARTMENT_HEAD_UNSPECIFIED",
+      "job_nameru": "Заведующий отделением",
+      "job_namekk": "Бөлімше меңгерушісі",
+      "job_namekk_doc": "бөлімше меңгерушісі",
+      "legacy_position_ids": [
+        714
+      ]
+    },
+    {
+      "job_code": "LAUNDRY_MACHINE_OPERATOR",
+      "job_nameru": "Машинист по стирке белья",
+      "job_namekk": "Кір жуу машинисі",
+      "job_namekk_doc": "кір жуу машинисі",
+      "legacy_position_ids": [
+        715
+      ]
+    },
+    {
+      "job_code": "SOCIAL_WORKER",
+      "job_nameru": "Социальный работник",
+      "job_namekk": "Әлеуметтік қызметкер",
+      "job_namekk_doc": "әлеуметтік қызметкері",
+      "legacy_position_ids": [
+        716
+      ]
+    },
+    {
+      "job_code": "TECHNICIAN",
+      "job_nameru": "Техник",
+      "job_namekk": "Техник",
+      "job_namekk_doc": "технигі",
+      "legacy_position_ids": [
+        718
+      ]
+    },
+    {
+      "job_code": "OCCUPATIONAL_SAFETY_HEAD",
+      "job_nameru": "Заведующий по охране труда и технике безопасности",
+      "job_namekk": "Еңбекті қорғау және қауіпсіздік техникасы жөніндегі меңгеруші",
+      "job_namekk_doc": "еңбекті қорғау және қауіпсіздік техникасы жөніндегі меңгерушісі",
+      "legacy_position_ids": [
+        719
+      ]
+    },
+    {
+      "job_code": "PATIENT_TRANSPORT_SANITARY_WORKER",
+      "job_nameru": "Санитар по транспортировке пациентов",
+      "job_namekk": "Пациенттерді тасымалдау жөніндегі санитар",
+      "job_namekk_doc": "пациенттерді тасымалдау жөніндегі санитары",
+      "legacy_position_ids": [
+        720
+      ]
+    },
+    {
+      "job_code": "EXPERT_PHYSICIAN",
+      "job_nameru": "Врач-эксперт",
+      "job_namekk": "Дәрігер-сарапшы",
+      "job_namekk_doc": "дәрігер-сарапшысы",
+      "legacy_position_ids": [
+        93,
+        94,
+        95,
+        96,
+        721
+      ]
+    },
+    {
+      "job_code": "ADMIN_HOUSEKEEPING_SERVICE_HEAD",
+      "job_nameru": "Руководитель административно-хозяйственной службы",
+      "job_namekk": "Әкімшілік-шаруашылық қызметінің басшысы",
+      "job_namekk_doc": "әкімшілік-шаруашылық қызметінің басшысы",
+      "legacy_position_ids": [
+        722
+      ]
+    },
+    {
+      "job_code": "BUFFET_WORKER",
+      "job_nameru": "Буфетчица",
+      "job_namekk": "Буфетші",
+      "job_namekk_doc": "буфетшісі",
+      "legacy_position_ids": [
+        723
+      ]
+    },
+    {
+      "job_code": "ACCOUNTANT_ECONOMIST",
+      "job_nameru": "Бухгалтер-экономист",
+      "job_namekk": "Бухгалтер-экономист",
+      "job_namekk_doc": "бухгалтер-экономисті",
+      "legacy_position_ids": [
+        724
+      ]
+    },
+    {
+      "job_code": "DEPARTMENT_MANAGER",
+      "job_nameru": "Руководитель отдела",
+      "job_namekk": "Бөлім басшысы",
+      "job_namekk_doc": "бөлім басшысы",
+      "legacy_position_ids": [
+        725
+      ]
+    },
+    {
+      "job_code": "SENIOR_RESIDENT_PHYSICIAN",
+      "job_nameru": "Старший ординатор",
+      "job_namekk": "Аға ординатор",
+      "job_namekk_doc": "аға ординаторы",
+      "legacy_position_ids": [
+        726
+      ]
+    },
+    {
+      "job_code": "COMPLIANCE_OFFICER",
+      "job_nameru": "Комплаенс-офицер",
+      "job_namekk": "Комплаенс-офицер",
+      "job_namekk_doc": "комплаенс-офицері",
+      "legacy_position_ids": [
+        727
+      ]
+    },
+    {
+      "job_code": "CHIEF_ENGINEER",
+      "job_nameru": "Главный инженер",
+      "job_namekk": "Бас инженер",
+      "job_namekk_doc": "бас инженері",
+      "legacy_position_ids": [
+        728
+      ]
+    }
+  ]
+}

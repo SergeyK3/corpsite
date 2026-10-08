@@ -36,6 +36,38 @@ from app.services.position_dependencies_service import (
 
 router = APIRouter()
 
+
+class JobCatalogEdit(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    job_nameru: str = Field(min_length=1, max_length=500)
+    job_namekk: str = Field(min_length=1, max_length=500)
+    job_namekk_doc: str = Field(min_length=1, max_length=500)
+
+
+@router.get("/job-positions")
+def list_job_catalog(user: Dict[str, Any] = Depends(get_current_user)):
+    scope = compute_scope(int(user["user_id"]), user)
+    require_personnel_visibility_or_403(user, scope)
+    with engine.connect() as conn:
+        rows = conn.execute(text("""SELECT j.*,
+            ARRAY(SELECT m.position_id FROM public.position_job_catalog m
+                  WHERE m.job_code=j.job_code ORDER BY m.position_id) AS legacy_position_ids
+            FROM public.job_positions_catalog j ORDER BY j.job_nameru, j.job_code""")).mappings().all()
+    return {"items": [dict(row) for row in rows], "can_edit": _is_privileged(user)}
+
+
+@router.put("/job-positions/{job_code}")
+def edit_job_catalog(job_code: str, payload: JobCatalogEdit, user: Dict[str, Any] = Depends(get_current_user)):
+    if not _is_privileged(user):
+        raise HTTPException(status_code=403, detail="Forbidden.")
+    with engine.begin() as conn:
+        row = conn.execute(text("""UPDATE public.job_positions_catalog
+            SET job_nameru=:job_nameru, job_namekk=:job_namekk, job_namekk_doc=:job_namekk_doc
+            WHERE job_code=:job_code RETURNING *"""), {"job_code": job_code, **payload.model_dump()}).mappings().first()
+        if not row:
+            raise HTTPException(status_code=404, detail="Job code not found.")
+    return dict(row)
+
 ALLOWED_CATEGORIES = {"leaders", "medical", "admin", "technical", "other"}
 POSITION_LIST_SCOPES = {"used", "allowed"}
 POSITION_DELETE_STATUSES = {"deletable", "blocked"}

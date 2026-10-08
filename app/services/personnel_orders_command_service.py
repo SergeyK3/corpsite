@@ -790,6 +790,9 @@ def create_personnel_order_item(
 
         if employee_id is not None:
             _ensure_employee_exists(conn, employee_id)
+            from app.services.personnel_order_catalog_context import employee_catalog_context, snapshot_catalog_forms
+            normalized_payload = snapshot_catalog_forms(normalized_payload, employee_catalog_context(conn, employee_id, effective_date))
+            payload_json = json.dumps(normalized_payload, ensure_ascii=False)
         _validate_leave_draft_item(
             item_type_code=normalized_type,
             employee_id=employee_id,

@@ -89,11 +89,22 @@ def _values(conn:Any,item:Mapping[str,Any]):
  if not unpaid:
   poskk=poskk or localized_personnel_order_position(posru,"kk") or posru; unitkk=unitkk or unitru
  forms={field:_document_form_kk(payload,field) for field in ("org_unit.document_genitive_kk","position.document_possessive_kk","employee.full_name_dative_kk","employee.full_name_genitive_kk")}
+ # Stored forms apply to every supported template, including title tokens.
+ saved_ru=_mapped_text(payload.get("document_forms_ru"),"position_document_nominative_ru")
+ posru=saved_ru or _snapshot(payload,"source_position_name",posru)
+ poskk=forms["position.document_possessive_kk"] or poskk
+ unitru=_snapshot(payload,"source_org_unit_name",unitru)
+ unitkk=forms["org_unit.document_genitive_kk"] or unitkk
  if unpaid:
   for field,value in forms.items():
    if not value:
     warnings.append({"code":"KK_DOCUMENT_FORM_MISSING","message":f"Missing confirmed document form: {field}."}); missing.append(field)
  values={"employee.full_name":_name(payload,employee),"employee.full_name_dative_ru":_document_form_ru(payload,"employee.full_name_dative_ru"),"position.title_ru":posru,"position.document_nominative_ru":document_nominative_personnel_order_position(posru),"position.title_kk":poskk,"org_unit.title_ru":unitru,"org_unit.title_kk":unitkk,**forms,"effective_date":str(item.get("effective_date") or ""),"effective_date_local":str(item.get("effective_date") or ""),"termination.reason.ru":termination_reason_text(payload.get("termination_reason") or payload.get("reason"),"ru"),"termination.reason.kk":termination_reason_text(payload.get("termination_reason") or payload.get("reason"),"kk"),"termination.unused_leave_days":str(payload.get("unused_leave_days") or ""),"basis":str(payload.get("basis") or "")}
+ if saved_ru: values["position.document_nominative_ru"]=saved_ru
+ # New catalog snapshots keep nominal titles separate from grammatical forms.
+ # Legacy payloads keep their existing resolution; no current catalog is read.
+ for key,field in (("position_title_ru","position.title_ru"),("position_title_kk","position.title_kk"),("org_unit_title_kk","org_unit.title_kk")):
+  if payload.get(key): values[field]=str(payload[key])
  if unpaid:
   try: p=unpaid_leave_period(payload)
   except UnpaidLeaveContractError as exc: raise TemplateApplicationError(str(exc)) from exc

@@ -2,6 +2,11 @@ import { describe, expect, it } from "vitest";
 import { resolvePersonnelOrderDocumentForms, resolvePersonnelOrderOrgUnitForms } from "./personnelOrderDocumentForms";
 
 describe("position document forms", () => {
+  it("prefers approved catalog forms over historical position defaults while preserving manual input",()=>{
+    const position={name:"Историческая должность",document_nominative_ru:"Историческая RU",document_possessive_kk:"Историческая KK",job_nameru:"Заведующий клиническим отделением",job_namekk_doc:"клиникалық бөлімшесінің меңгерушісі"};
+    expect(resolvePersonnelOrderDocumentForms(position)).toEqual({position_document_nominative_ru:position.job_nameru,position_document_possessive_kk:position.job_namekk_doc});
+    expect(resolvePersonnelOrderDocumentForms(position,{document_forms_kk:{position_document_possessive_kk:"Ручная"}}).position_document_possessive_kk).toBe("Ручная");
+  });
   it("uses canonical job fields, preserves saved forms, and ignores a stale employee position", () => {
     const position = { name: "Старое название", name_kk: "мейіргер", job_code: "NURSE", job_nameru: "Медицинская сестра", job_namekk: "Мейіргер", job_namekk_doc: "Согласованная форма KK" };
     expect(resolvePersonnelOrderDocumentForms(position)).toEqual({ position_document_nominative_ru: "Медицинская сестра", position_document_possessive_kk: "Согласованная форма KK" });

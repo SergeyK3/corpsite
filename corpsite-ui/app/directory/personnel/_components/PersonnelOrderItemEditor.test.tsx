@@ -314,7 +314,7 @@ describe("item save → editorial generation integration", () => {
     ui.generate();
     await waitFor(() => expect(generatePersonnelOrderEditorial).toHaveBeenCalledTimes(1));
     expect(updatePersonnelOrderItem).toHaveBeenCalledTimes(1);
-    expect(updatePersonnelOrderItem).toHaveBeenCalledBefore(generatePersonnelOrderEditorial);
+    expect(vi.mocked(updatePersonnelOrderItem)).toHaveBeenCalledBefore(vi.mocked(generatePersonnelOrderEditorial));
   });
 
   it("retains input and stops generation if PATCH fails", async () => {
@@ -1054,7 +1054,7 @@ describe("PersonnelOrderItemEditor RATE_CHANGE", () => {
     };
     expect(body.item_type_code).toBe("TRANSFER");
     expect(body.employee_id).toBe(138);
-    expect(body.payload).toEqual({ to_rate: 0.75 });
+    expect(body.payload).toEqual({ to_rate: 0.75, job_code: null, position_title_ru: null, position_title_kk: null, org_unit_title_kk: null, source_org_unit_name: "Отдел кадров", document_forms_ru: { position_document_nominative_ru: "руководитель отдела кадров" } });
   });
 });
 

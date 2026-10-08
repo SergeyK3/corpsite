@@ -9,6 +9,25 @@ vi.mock("@/app/directory/personnel/_lib/personnelSectionLanguage", () => ({ useP
 afterEach(() => { cleanup(); vi.resetAllMocks(); sectionLanguage.language = "ru"; });
 beforeEach(() => { Object.defineProperty(HTMLDialogElement.prototype, "showModal", { configurable: true, value: function () { this.setAttribute("open", ""); } }); vi.mocked(listPersonnelTemplateVersions).mockResolvedValue({items: []}); });
 
+it("opens the existing default card when independent schema is not migrated and explains copying availability",async()=>{
+  vi.mocked(listPersonnelIndependentTemplates).mockRejectedValue({status:503,details:{detail:{code:"TEMPLATE_SCHEMA_REQUIRED"}}});
+  const editor=vi.fn((_id,_changed,actions)=><div>Existing template card{actions}</div>);
+  render(<PersonnelTemplateVariants item={{type_code:"LEAVE.UNPAID.GRANT",editor_available:true} as PersonnelOrderTemplateCatalogItem} renderEditor={editor}/>);
+  await screen.findByText("Existing template card");
+  expect(editor).toHaveBeenCalledWith(undefined,expect.any(Function),expect.anything(),null,undefined,expect.anything(),undefined);
+  expect(screen.getByRole("button",{name:"Создать на основе…",exact:true})).toBeDisabled();
+  expect(screen.getByRole("status")).toHaveTextContent("hrrecall001");
+  expect(listPersonnelTemplateVersions).not.toHaveBeenCalled();
+});
+
+it("shows a failed independent read explicitly without a permanent loading indicator or a wrong scoped card",async()=>{
+  vi.mocked(listPersonnelIndependentTemplates).mockRejectedValue({status:500});
+  const editor=vi.fn(()=>null);
+  render(<PersonnelTemplateVariants item={{type_code:"LEAVE.ANNUAL.RECALL"} as PersonnelOrderTemplateCatalogItem} initialTemplateId={101} renderEditor={editor}/>);
+  await screen.findByRole("alert");expect(screen.getByRole("alert")).toHaveTextContent("HTTP 500");
+  expect(screen.queryByText("Загрузка шаблона…")).not.toBeInTheDocument();expect(editor).not.toHaveBeenCalled();
+});
+
 it("waits for template membership before requesting versions or opening the editor", async () => {
   let resolve!: (value: Awaited<ReturnType<typeof listPersonnelIndependentTemplates>>) => void;
   vi.mocked(listPersonnelIndependentTemplates).mockReturnValue(new Promise(done => {resolve = done;}));

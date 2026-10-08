@@ -13,6 +13,7 @@ import { loadOrgUnitSelectOptions } from "@/lib/orgUnitsSelect";
 let pathname = "/directory/personnel/orders";
 vi.mock("next/navigation", () => ({ usePathname: () => pathname }));
 vi.mock("@/lib/api", async () => ({ ...(await vi.importActual<object>("@/lib/api")), apiFetchJson: vi.fn() }));
+vi.mock("../_lib/personnelOrdersApi.client", async () => ({ ...(await vi.importActual<object>("../_lib/personnelOrdersApi.client")), getPersonnelOrderPublishedVariants: vi.fn().mockResolvedValue({ items: [] }) }));
 vi.mock("@/lib/orgUnitsSelect", () => ({ loadOrgUnitSelectOptions: vi.fn() }));
 beforeEach(() => {
   pathname = "/directory/personnel/orders";
@@ -59,6 +60,7 @@ it("does not change document language when shared language changes", async () =>
   fireEvent.change(screen.getByLabelText("Язык кадрового раздела"), { target: { value: "kk" } });
   await waitFor(() => expect(screen.getByLabelText("Кадр бөлімінің тілі")).toHaveValue("kk"));
   expect(screen.getByLabelText("Язык")).toHaveValue("ru");
+  await waitFor(() => expect(screen.getByRole("button", { name: "Тип кадрового приказа" })).toBeEnabled());
   fireEvent.click(screen.getByRole("button", { name: "Тип кадрового приказа" }));
   fireEvent.change(screen.getByRole("searchbox"), { target: { value: "Жұмысқа қабылдау" } });
   expect(screen.getByRole("menuitem", { name: "Жұмысқа қабылдау туралы" })).toBeInTheDocument();

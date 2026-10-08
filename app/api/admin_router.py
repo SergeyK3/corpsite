@@ -100,7 +100,7 @@ def admin_list_personnel_order_templates(
 
 
 def _template_draft_error(exc: TemplateDraftError) -> HTTPException:
-    return HTTPException(status_code=409 if exc.conflict else 400, detail={"code": exc.code, "message": str(exc)})
+    return HTTPException(status_code=503 if exc.code == "TEMPLATE_SCHEMA_REQUIRED" else 409 if exc.conflict else 400, detail={"code": exc.code, "message": str(exc)})
 
 
 @router.get("/personnel-order-templates/{item_type_code}/templates")

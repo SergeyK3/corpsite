@@ -387,8 +387,8 @@ def _employee_select_sql(emp_rel: str, emp_cols: List[str]) -> Tuple[str, Dict[s
                 f" LEFT JOIN public.{pos_rel} current_p"
                 f" ON CAST(current_p.{pos_id_col} AS TEXT) = CAST(current_pa.position_id AS TEXT)"
             )
-            effective_position_id_expr = f"COALESCE(current_p.{pos_id_col}, p.{pos_id_col})"
-            effective_position_name_expr = f"COALESCE(current_p.{pos_name_col}, p.{pos_name_col})"
+            effective_position_id_expr = f"CASE WHEN current_pa.assignment_id IS NOT NULL THEN current_p.{pos_id_col} ELSE p.{pos_id_col} END"
+            effective_position_name_expr = f"CASE WHEN current_pa.assignment_id IS NOT NULL THEN current_p.{pos_name_col} ELSE p.{pos_name_col} END"
             effective_position_category_expr = (
                 f"COALESCE(current_p.{pos_category_col}, p.{pos_category_col})"
                 if pos_category_col
@@ -421,10 +421,19 @@ def _employee_select_sql(emp_rel: str, emp_cols: List[str]) -> Tuple[str, Dict[s
         )
 
     # All dictionary fields must belong to the same selected assignment.
+    select_parts.append(f"{has_current_assignment_expr} AS has_current_assignment")
     if pos_fk and pos_rel and pos_id_col and pos_name_col:
         position_record = "CASE WHEN current_pa.assignment_id IS NOT NULL THEN to_jsonb(current_p) ELSE to_jsonb(p) END" if current_position_available else "to_jsonb(p)"
         for field in ("name_kk", "document_possessive_kk", "document_nominative_ru"):
             select_parts.append(f"NULLIF(BTRIM(({position_record}) ->> '{field}'), '') AS pos_{field}")
+        relations = _list_relations()
+        if ("job_positions_catalog", "table") in relations and ("position_job_catalog", "table") in relations:
+            join_sql += (
+                f" LEFT JOIN public.position_job_catalog job_map ON job_map.position_id = ({effective_position_id_expr})"
+                " LEFT JOIN public.job_positions_catalog job_catalog ON job_catalog.job_code = job_map.job_code"
+            )
+            for field in ("job_code", "job_nameru", "job_namekk", "job_namekk_doc"):
+                select_parts.append(f"job_catalog.{field} AS pos_{field}")
     org_unit_expr = "CASE WHEN current_pa.assignment_id IS NOT NULL THEN current_pa.org_unit_id ELSE e.org_unit_id END" if current_position_available else "e.org_unit_id"
     select_parts.append(f"{org_unit_expr} AS e_org_unit_id")
     # Org Units (canonical table)
@@ -526,6 +535,7 @@ def _normalize_employee_joined(row: Dict[str, Any], emp_rel: str) -> Dict[str, A
     return {
         "id": str(row.get("e_id")) if row.get("e_id") is not None else None,
         "person_id": int(row["e_person_id"]) if row.get("e_person_id") is not None else None,
+        "has_current_assignment": bool(row.get("has_current_assignment")),
         "fio": fio,
         "last_name": row.get("person_last_name") or row.get("e_last"),
         "first_name": row.get("person_first_name") or row.get("e_first"),
@@ -536,6 +546,7 @@ def _normalize_employee_joined(row: Dict[str, Any], emp_rel: str) -> Dict[str, A
             "name_kk": row.get("pos_name_kk"),
             "document_possessive_kk": row.get("pos_document_possessive_kk"),
             "document_nominative_ru": row.get("pos_document_nominative_ru"),
+            **{field: row.get(f"pos_{field}") for field in ("job_code", "job_nameru", "job_namekk", "job_namekk_doc")},
         },
         "org_unit": {
             "unit_id": org_unit_id,

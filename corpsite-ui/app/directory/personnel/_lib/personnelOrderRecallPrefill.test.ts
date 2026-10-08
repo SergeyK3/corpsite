@@ -5,6 +5,10 @@ import {recallEmployeePrefill} from "./personnelOrderRecallPrefill";
 const employee={id:"77",fio:"Мусабеков Арман Ерланович",has_current_assignment:true,
  position:{id:6,name:"Врач",job_nameru:"врач",job_namekk:"дәрігер",job_namekk_doc:"дәрігері"},
  org_unit:{unit_id:59,name:"Терапия",name_kk:"Терапия",document_genitive_kk:"Терапия бөлімшесінің"}} as EmployeeDTO;
+it("uses the exact normalized profession titles and the assignment unit for a mapped department head",()=>{
+ const result=recallEmployeePrefill({...employee,position:{id:71,name:"Заведующий отделением химиотерапии 1",name_kk:"№ 1 химиотерапия бөлімшесінің меңгерушісі",document_nominative_ru:"Историческая форма",job_code:"CLINICAL_DEPARTMENT_HEAD",job_nameru:"Заведующий клиническим отделением",job_namekk:"Клиникалық бөлімше меңгерушісі",job_namekk_doc:"клиникалық бөлімшесінің меңгерушісі"},org_unit:{unit_id:45,name:"Химиотерапия 1",name_kk:"№1 химиотерапия бөлімшесі"}} as EmployeeDTO);
+ expect(result.positionRu).toBe("Заведующий клиническим отделением");expect(result.positionKk).toBe("Клиникалық бөлімше меңгерушісі");expect(result.unitKk).toBe("№1 химиотерапия бөлімшесі");
+});
 it("uses existing case suggestions and nominative bilingual placement for recall",()=>{
  const result=recallEmployeePrefill(employee);
  expect(result.genitiveRu).toBe("Мусабекова Армана Ерлановича");

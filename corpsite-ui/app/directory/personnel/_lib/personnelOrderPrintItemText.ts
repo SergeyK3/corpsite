@@ -165,6 +165,17 @@ export function renderPersonnelOrderPrintItemText(
   ctx: PersonnelOrderPrintItemContext,
   language: PersonnelOrderPrintLanguage,
 ): string[] {
+  const ru = ctx.payload.document_forms_ru as Record<string, unknown> | undefined;
+  const kk = ctx.payload.document_forms_kk as Record<string, unknown> | undefined;
+  const positionRu = String(ru?.position_document_nominative_ru || "").trim();
+  const positionKk = String(kk?.position_document_possessive_kk || "").trim();
+  if (positionRu || positionKk) {
+    ctx = { ...ctx, positionName: {
+      ...ctx.positionName,
+      ...(positionRu ? { ru: positionRu } : {}),
+      ...(positionKk ? { kk: positionKk } : {}),
+    } };
+  }
   const type = String(ctx.itemTypeCode || "").trim().toUpperCase();
   const renderOne = (lang: "kk" | "ru") => {
     let text: string;
@@ -191,7 +202,7 @@ export function renderPersonnelOrderPrintItemText(
 
   if (language === "kk") return [renderOne("kk")];
   if (language === "ru") return [renderOne("ru")];
-  const kk = renderOne("kk");
-  const ru = renderOne("ru");
-  return kk === ru ? [kk] : [kk, ru];
+  const kkText = renderOne("kk");
+  const ruText = renderOne("ru");
+  return kkText === ruText ? [kkText] : [kkText, ruText];
 }

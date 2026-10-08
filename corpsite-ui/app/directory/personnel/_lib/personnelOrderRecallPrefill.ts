@@ -22,7 +22,7 @@ export function recallEmployeePrefill(employee: EmployeeDTO) {
   const genitiveKk=storedKk || (hasName && /^[\p{L}]+$/u.test(surname) && !calculatedKk.needsReview ? calculatedKk.value : "");
   return {
     fullName: employee.fio || "",
-    positionRu: current ? firstNonEmpty(forms.position_document_nominative_ru,employee.position?.job_nameru,employee.position?.name) : "",
+    positionRu: current ? firstNonEmpty(employee.position?.job_nameru,forms.position_document_nominative_ru,employee.position?.name) : "",
     positionKk: current ? firstNonEmpty(employee.position?.job_namekk,employee.position?.name_kk) : "",
     unitRu: current ? employee.org_unit?.name || "" : "",
     unitKk: current ? employee.org_unit?.name_kk || "" : "",

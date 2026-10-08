@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 
 import PersonnelOrderCreateDialog from "./PersonnelOrderCreateDialog";
@@ -60,7 +60,7 @@ import { personnelOrderTypeLabel } from "../_lib/personnelOrderLabels";
 vi.mock("../_lib/personnelOrdersApi.client", async () => ({
   ...(await vi.importActual<object>("../_lib/personnelOrdersApi.client")),
   getPersonnelOrderPublishedTemplateTitle: vi.fn(),
-  getPersonnelOrderPublishedVariants: vi.fn().mockResolvedValue({ items: [] }),
+  getPersonnelOrderPublishedVariants: vi.fn().mockResolvedValue({ items: [], independent_supported: false }),
   previewPersonnelOrderHeaderDuplicate: vi.fn(),
   createManualPersonnelOrderDraft: vi.fn(),
 }));
@@ -69,6 +69,7 @@ vi.mock("@/lib/orgUnitsSelect", () => ({ loadOrgUnitSelectOptions: vi.fn() }));
 
 import {
   PERSONNEL_ORDER_CREATE_TYPE_OPTIONS,
+  getPersonnelOrderPublishedVariants,
   createManualPersonnelOrderDraft,
   getPersonnelOrderPublishedTemplateTitle,
   previewPersonnelOrderHeaderDuplicate,
@@ -112,6 +113,36 @@ const transferTitles = {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.mocked(getPersonnelOrderPublishedVariants).mockReset().mockResolvedValue({items:[],independent_supported:false});
+});
+
+it("shows variant load errors and blocks creation instead of silently falling back",async()=>{
+  vi.mocked(getPersonnelOrderPublishedVariants).mockRejectedValue(new Error('Schema unavailable'));
+  setup();
+  expect(screen.getByRole('button',{name:'Тип кадрового приказа'})).toBeEnabled();
+  await chooseTypeInMenu('LEAVE.ANNUAL.GRANT');await selectEmployee();
+  fireEvent.change(screen.getByLabelText('Номер приказа'),{target:{value:'LEGACY-UNIT'}});
+  fireEvent.change(screen.getByLabelText('Дата приказа'),{target:{value:'2026-10-07'}});
+  fireEvent.change(screen.getByLabelText('Дата действия'),{target:{value:'2026-10-12'}});
+  expect(await screen.findByRole('alert')).toHaveTextContent('Schema unavailable');
+  expect(screen.getByRole('button',{name:'Создать приказ',exact:true})).toBeDisabled();
+  fireEvent.submit(screen.getByRole('button',{name:'Создать приказ',exact:true}).closest('form')!);
+  expect(previewPersonnelOrderHeaderDuplicate).not.toHaveBeenCalled();
+  expect(createManualPersonnelOrderDraft).not.toHaveBeenCalled();
+  vi.mocked(getPersonnelOrderPublishedVariants).mockResolvedValue({items:[],independent_supported:false});
+  fireEvent.click(screen.getByRole('button',{name:'Жүктеуді қайталау'}));
+  await waitFor(()=>expect(screen.getByRole('button',{name:'Создать приказ',exact:true})).toBeEnabled());
+});
+
+it("allows recall selection but blocks its creation when the actual schema does not allow the code",async()=>{
+  vi.mocked(getPersonnelOrderPublishedVariants).mockImplementation(async code=>({items:[],independent_supported:false,creation_supported:code!=='LEAVE.ANNUAL.RECALL',creation_reason:code==='LEAVE.ANNUAL.RECALL'?'Requires hrrecall001':null}));
+  setup();await chooseTypeInMenu('LEAVE.ANNUAL.RECALL');
+  await screen.findByTestId('order-type-schema-unavailable');
+  expect(screen.getByTestId('order-type-schema-unavailable')).toHaveTextContent('hrrecall001');
+  expect(screen.getByRole('button',{name:'Создать приказ',exact:true})).toBeDisabled();
+  expect(screen.getByRole('button',{name:'Тип кадрового приказа'})).toBeEnabled();
+  await chooseTypeInMenu('LEAVE.ANNUAL.GRANT');
+  expect(screen.queryByTestId('order-type-schema-unavailable')).not.toBeInTheDocument();
 });
 
 function setup(onClose = vi.fn(), onCreated = vi.fn()) {
@@ -127,6 +158,66 @@ function setup(onClose = vi.fn(), onCreated = vi.fn()) {
   const view = render(<PersonnelOrderCreateDialog open onClose={onClose} onCreated={onCreated} />);
   return { onClose, onCreated, ...view };
 }
+
+const recallVariant = {template_id:8,template_version_id:13,version_number:1,name_ru:"Об отзыве из отпуска",name_kk:"Еңбек демалысынан шақырту туралы",title_ru:"Об отзыве из отпуска",title_kk:"Еңбек демалысынан шақырту туралы",is_default:false};
+
+async function fillRecall(select = true) {
+  if (select) await selectEmployee();
+  for (const [label,value] of [["Номер приказа","RECALL-SLOW"],["Дата приказа","2026-10-08"],["Дата действия","2026-10-12"],["Лауазым KZ","дәрігер"],["Бөлімше KZ","Терапия"],["Основание RU","Служебная записка"],["Негіз KZ","Қызметтік хат"]]) {
+    fireEvent.change(screen.getByLabelText(label),{target:{value}});
+  }
+}
+
+it("resolves version 13 after early recall selection and waits for that version's title before submitting",async()=>{
+  let resolveVariants!: (value: Awaited<ReturnType<typeof getPersonnelOrderPublishedVariants>>) => void;
+  let resolveTitle!: (value: Awaited<ReturnType<typeof getPersonnelOrderPublishedTemplateTitle>>) => void;
+  vi.mocked(getPersonnelOrderPublishedVariants).mockImplementation(code=>code==='LEAVE.ANNUAL.RECALL'
+    ? new Promise(resolve=>{resolveVariants=resolve;}) : Promise.resolve({items:[],independent_supported:false}));
+  setup();
+  vi.mocked(getPersonnelOrderPublishedTemplateTitle).mockImplementation(()=>new Promise(resolve=>{resolveTitle=resolve;}));
+  await chooseTypeInMenu('LEAVE.ANNUAL.RECALL');await fillRecall();
+  const submit=screen.getByRole('button',{name:'Создать приказ',exact:true});
+  expect(submit).toBeDisabled();fireEvent.submit(submit.closest('form')!);
+  expect(getPersonnelOrderPublishedTemplateTitle).not.toHaveBeenCalled();expect(createManualPersonnelOrderDraft).not.toHaveBeenCalled();
+  await act(async()=>resolveVariants({items:[recallVariant],independent_supported:true}));
+  await waitFor(()=>expect(getPersonnelOrderPublishedTemplateTitle).toHaveBeenLastCalledWith('LEAVE.ANNUAL.RECALL',13));
+  expect(submit).toBeDisabled();fireEvent.submit(submit.closest('form')!);expect(previewPersonnelOrderHeaderDuplicate).not.toHaveBeenCalled();
+  vi.mocked(previewPersonnelOrderHeaderDuplicate).mockResolvedValue({blocking:false,warnings:[],candidates:[]});
+  vi.mocked(createManualPersonnelOrderDraft).mockResolvedValue({order_id:1} as never);
+  await act(async()=>resolveTitle({...recallVariant,item_type_code:'LEAVE.ANNUAL.RECALL'}));
+  await waitFor(()=>expect(submit).toBeEnabled());fireEvent.click(submit);
+  await waitFor(()=>expect(createManualPersonnelOrderDraft).toHaveBeenCalledWith(expect.objectContaining({template_version_id:13,item_type_code:'LEAVE.ANNUAL.RECALL'})));
+});
+
+it("requires an explicit version when multiple variants arrive after early type selection",async()=>{
+  let resolveVariants!: (value: Awaited<ReturnType<typeof getPersonnelOrderPublishedVariants>>) => void;
+  vi.mocked(getPersonnelOrderPublishedVariants).mockImplementation(code=>code==='LEAVE.ANNUAL.RECALL'
+    ? new Promise(resolve=>{resolveVariants=resolve;}) : Promise.resolve({items:[],independent_supported:false}));
+  setup();await chooseTypeInMenu('LEAVE.ANNUAL.RECALL');await fillRecall();
+  await act(async()=>resolveVariants({items:[recallVariant,{...recallVariant,template_id:9,template_version_id:14,name_kk:'Екінші үлгі'}],independent_supported:true}));
+  expect(screen.getByRole('button',{name:'Создать приказ',exact:true})).toBeDisabled();expect(getPersonnelOrderPublishedTemplateTitle).not.toHaveBeenCalled();
+  vi.mocked(getPersonnelOrderPublishedTemplateTitle).mockResolvedValue({...recallVariant,item_type_code:'LEAVE.ANNUAL.RECALL'});
+  await chooseTypeInMenu('LEAVE.ANNUAL.RECALL');fireEvent.click(document.querySelector('[data-template-version="13"]')!);
+  await fillRecall(false);
+  await waitFor(()=>expect(screen.getByRole('button',{name:'Создать приказ',exact:true})).toBeEnabled());
+  expect(getPersonnelOrderPublishedTemplateTitle).toHaveBeenLastCalledWith('LEAVE.ANNUAL.RECALL',13);
+});
+
+it("blocks independent creation if there is no published version",async()=>{
+  vi.mocked(getPersonnelOrderPublishedVariants).mockResolvedValue({items:[],independent_supported:true});
+  setup();await chooseTypeInMenu('LEAVE.ANNUAL.RECALL');await fillRecall();
+  expect(screen.getByRole('button',{name:'Создать приказ',exact:true})).toBeDisabled();
+  expect(getPersonnelOrderPublishedTemplateTitle).not.toHaveBeenCalled();fireEvent.submit(screen.getByRole('button',{name:'Создать приказ',exact:true}).closest('form')!);
+  expect(createManualPersonnelOrderDraft).not.toHaveBeenCalled();
+});
+
+it("blocks a title response for the wrong version",async()=>{
+  vi.mocked(getPersonnelOrderPublishedVariants).mockImplementation(async code=>({items:code==='LEAVE.ANNUAL.RECALL'?[recallVariant]:[],independent_supported:true}));
+  setup();vi.mocked(getPersonnelOrderPublishedTemplateTitle).mockResolvedValue({...recallVariant,template_version_id:14,item_type_code:'LEAVE.ANNUAL.RECALL'});
+  await chooseTypeInMenu('LEAVE.ANNUAL.RECALL');await fillRecall();
+  expect(await screen.findByRole('alert')).toHaveTextContent('не соответствует выбранной версии');expect(screen.getByRole('button',{name:'Создать приказ',exact:true})).toBeDisabled();
+  fireEvent.submit(screen.getByRole('button',{name:'Создать приказ',exact:true}).closest('form')!);expect(createManualPersonnelOrderDraft).not.toHaveBeenCalled();
+});
 
 async function selectType(type: "LEAVE.UNPAID.GRANT" | "LEAVE.CHILDCARE.GRANT" | "TRANSFER") {
   await chooseTypeInMenu(type);
@@ -364,7 +455,8 @@ it("uses a canonical title when PUBLISHED template is absent", async () => {
   setup();
   vi.mocked(getPersonnelOrderPublishedTemplateTitle).mockRejectedValueOnce(new Error("not found"));
   await selectType("TRANSFER");
-  expect(await screen.findByRole("alert")).toHaveTextContent("отсутствует опубликованный шаблон");
+  expect(await screen.findByRole("alert")).toHaveTextContent("not found");
+  expect(screen.getByRole("button",{name:"Создать приказ",exact:true})).toBeDisabled();
   expect(screen.getByLabelText("Название приказа")).toHaveValue("Ауыстыру туралы");
   expect(createManualPersonnelOrderDraft).not.toHaveBeenCalled();
 });
@@ -373,7 +465,7 @@ it("prefills the approved childcare titles in both languages without a published
   setup();
   vi.mocked(getPersonnelOrderPublishedTemplateTitle).mockRejectedValue(new Error("not found"));
   await selectType("LEAVE.CHILDCARE.GRANT");
-  expect(await screen.findByRole("alert")).toHaveTextContent("отсутствует опубликованный шаблон");
+  expect(await screen.findByRole("alert")).toHaveTextContent("not found");
   expect(screen.getByLabelText("Название приказа")).toHaveValue("Бала күтіміне байланысты жалақы сақталмайтын демалыс туралы");
   fireEvent.change(screen.getByLabelText("Язык"), { target: { value: "ru" } });
   await waitFor(() => expect(screen.getByLabelText("Название приказа")).toHaveValue("О неоплачиваемом отпуске по уходу за ребенком"));
@@ -556,4 +648,29 @@ it("prevents a second request while the first create request is pending", async 
   await waitFor(() => expect(createManualPersonnelOrderDraft).toHaveBeenCalledTimes(1));
   expect(screen.getByRole("button", { name: "Создание…" })).toBeDisabled();
   resolveCreate?.({ order_id: 1 } as never);
+});
+
+it("shows all required-field blockers beside Create and removes them when complete", async () => {
+  setup();
+  const blockers=screen.getByTestId("personnel-order-create-blockers");
+  expect(screen.getByTestId("personnel-order-create-footer")).toContainElement(blockers);
+  expect(blockers).toHaveTextContent("Бұйрық нөмірін енгізіңіз");
+  expect(blockers).toHaveTextContent("Қызметкерді үміткерлер тізімінен таңдаңыз");
+  expect(screen.getByRole("button",{name:"Создать приказ"})).toHaveAttribute("aria-describedby","personnel-order-create-blockers");
+  await fillValidUnpaid();
+  expect(screen.queryByTestId("personnel-order-create-blockers")).not.toBeInTheDocument();
+});
+
+it("keeps the schema blocker beside Create even after required recall fields are filled", async () => {
+  vi.mocked(getPersonnelOrderPublishedVariants).mockResolvedValue({items:[],creation_supported:false,creation_reason:"Схема не поддерживает отзыв"});
+  setup();
+  vi.mocked(getEmployee).mockResolvedValueOnce({...employeeDetail,position:{...employee.position,name_kk:null}});
+  await chooseTypeInMenu("LEAVE.ANNUAL.RECALL");await selectEmployee();
+  await waitFor(()=>expect(screen.getByTestId("personnel-order-create-blockers")).toHaveTextContent("Қазіргі ДБ құрылымы"));
+  expect(screen.getByTestId("recall-position-kz-missing")).toBeInTheDocument();
+  const field=screen.getByLabelText("Лауазым KZ");
+  expect(field).toBeEnabled();fireEvent.change(field,{target:{value:"дәрігер"}});
+  expect(field).toHaveValue("дәрігер");
+  expect(screen.getByTestId("personnel-order-create-blockers")).not.toHaveTextContent("Лауазымды KZ тілінде толтырыңыз");
+  expect(screen.getByRole("button",{name:"Создать приказ"})).toBeDisabled();
 });

@@ -400,7 +400,18 @@ def generate_item_body(locale: str, item_ctx: Mapping[str, Any]) -> Dict[str, st
     employee_name = item_ctx.get("employee_name")
     effective_date = item_ctx.get("effective_date")
     org_unit_name = item_ctx.get("org_unit_name")
+    if _clean(item_ctx.get("org_unit_document_genitive_kk")):
+        org_unit_name = {"ru": _localized_name(org_unit_name, "ru"), "kk": _clean(item_ctx.get("org_unit_document_genitive_kk"))}
     position_name = item_ctx.get("position_name")
+    # Stored document forms are shared by every order type. No live dictionary
+    # lookup occurs here, so editing the catalog cannot rewrite old orders.
+    ru_position = _clean(item_ctx.get("position_document_nominative_ru"))
+    kk_position = _clean(item_ctx.get("position_document_possessive_kk"))
+    if ru_position or kk_position:
+        position_name = {
+            "ru": ru_position or _localized_position(position_name, "ru"),
+            "kk": kk_position or _localized_position(position_name, "kk"),
+        }
     to_org_unit_name = item_ctx.get("to_org_unit_name")
     to_position_name = item_ctx.get("to_position_name")
     rate = item_ctx.get("rate")
@@ -515,7 +526,7 @@ def generate_item_body(locale: str, item_ctx: Mapping[str, Any]) -> Dict[str, st
             date_part = f" {_format_date_from(effective_date, lang)} бастап" if has_effective_date else ""
             text = f"{date_part.strip()} {assignment_part} {fio}ға{rate_part} бала күтіміне байланысты демалыстан жұмысқа шығуға рұқсат берілсін."
         else:
-            ru_position = "врача (ординатора)" if str(position).casefold() == "врач (ординатор)" else position.lower()
+            ru_position = _clean(item_ctx.get("position_document_nominative_ru")) or ("врача (ординатора)" if str(position).casefold() == "врач (ординатор)" else position.lower())
             ru_org = "Инсультного центра" if str(org).casefold() == "инсультный центр" else org
             assignment_part = f" в должности {ru_position} {ru_org}" if has_assignment_context else ""
             rate_part = f" на {rate_value} ставки" if rate_value else ""

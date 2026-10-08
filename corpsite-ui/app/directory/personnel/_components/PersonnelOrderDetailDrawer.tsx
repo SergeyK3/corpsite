@@ -520,7 +520,7 @@ export default function PersonnelOrderDetailDrawer({
   const isHrHead = ["ADMIN", "HR_HEAD"].includes(String(me?.role_code || "").trim().toUpperCase());
   const journalSource = journalOrImportSourceTitle(order?.storage_json);
   const sourceTitle = journalSource.title;
-  const currentTitle = editorial?.order_blocks.find((block) => block.block_type === "title" && block.locale === orderLanguage)?.effective_text?.trim() || "—";
+  const currentTitle = editorial?.order_blocks.find((block) => block.block_type === "title" && block.locale === orderLanguage)?.effective_text?.trim() || order?.source_title?.trim() || "—";
   const documentAvailable = personnelOrderDocumentAvailable(detail, orderLanguage, editorial);
   const basisDocuments = Array.isArray(order?.storage_json?.basis_documents)
     ? order.storage_json.basis_documents

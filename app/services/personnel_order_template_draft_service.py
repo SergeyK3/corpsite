@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import re
+from functools import wraps
+from inspect import signature
 from typing import Any, Mapping
 
 from sqlalchemy import text
@@ -22,12 +24,41 @@ class TemplateDraftError(ValueError):
         self.code, self.conflict = code, conflict
 
 
+def independent_template_schema_available() -> bool:
+    with engine.connect() as conn:
+        return bool(conn.execute(text("SELECT to_regclass('public.personnel_order_templates') IS NOT NULL")).scalar_one())
+
+
+def require_independent_template_schema() -> None:
+    if not independent_template_schema_available():
+        raise TemplateDraftError("TEMPLATE_SCHEMA_REQUIRED", "Для независимых вариантов и отзыва требуется согласованное обновление структуры БД до hrrecall001. Прежние шаблоны доступны в редакторе; БД автоматически не изменяется.")
+
+
+def compatible_template_schema(function):
+    """Keep the existing per-type editor operational before stage-3 migration."""
+    @wraps(function)
+    def compatible(*args, **kwargs):
+        if independent_template_schema_available():
+            return function(*args, **kwargs)
+        arguments=signature(function).bind(*args, **kwargs)
+        arguments.apply_defaults()
+        values=dict(arguments.arguments)
+        if values.pop('template_id',None) is not None:
+            require_independent_template_schema()
+        if values.get('item_type_code') == 'LEAVE.ANNUAL.RECALL' and function.__name__ in {'create_draft_from_working_copy','save_draft','publish_draft'}:
+            require_independent_template_schema()
+        from app.services import personnel_order_template_legacy_service as legacy
+        return getattr(legacy,function.__name__)(**values)
+    return compatible
+
+
 def _row(row: Mapping[str, Any]) -> dict[str, Any]:
     result = {key: row[key] for key in (
-        "template_version_id", "template_id", "item_type_code", "version_number", "status", "revision",
+        "template_version_id", "item_type_code", "version_number", "status", "revision",
         "title_ru", "title_kk", "preamble_ru", "preamble_kk", "body_template_ru", "body_template_kk",
         "basis_template_ru", "basis_template_kk", "based_on_built_in", "created_at", "updated_at",
     )}
+    result["template_id"] = row.get("template_id")
     result["published_at"] = row.get("published_at")
     result["published_by_user_id"] = row.get("published_by_user_id")
     return result
@@ -62,6 +93,7 @@ def _resolve_template(conn: Any, item_type_code: str, template_id: int | None,
 
 def list_templates(item_type_code: str, *, published_only: bool = False) -> list[dict[str, Any]]:
     _assert_type(item_type_code)
+    require_independent_template_schema()
     with engine.connect() as conn:
         rows = conn.execute(text("""
           SELECT t.*, p.template_version_id, p.version_number, p.title_ru, p.title_kk,
@@ -79,6 +111,7 @@ def list_templates(item_type_code: str, *, published_only: bool = False) -> list
 
 def list_versions(item_type_code: str, template_id: int) -> list[dict[str, Any]]:
     _assert_type(item_type_code)
+    require_independent_template_schema()
     with engine.connect() as conn:
         scope = _resolve_template(conn, item_type_code, template_id)
         rows = conn.execute(text("SELECT * FROM public.personnel_order_template_versions WHERE template_id=:id ORDER BY version_number DESC"), {"id": scope}).mappings().all()
@@ -88,6 +121,7 @@ def list_versions(item_type_code: str, template_id: int) -> list[dict[str, Any]]
 def copy_template(item_type_code: str, source_version_id: int | None, name_ru: str, name_kk: str,
                   actor_user_id: int, expected_revision: int | None, *, base_source: str = "VERSION", source_type_code: str | None = None) -> dict[str, Any]:
     _assert_type(item_type_code)
+    require_independent_template_schema()
     source_type_code = source_type_code or item_type_code
     _assert_type(source_type_code)
     names = {"ru": name_ru.strip(), "kk": name_kk.strip()}
@@ -129,6 +163,7 @@ def remove_template(item_type_code: str, template_id: int, name_ru: str, name_kk
                     actor_user_id: int, *, archive: bool = False) -> dict[str, Any]:
     """Delete only unreferenced independent copies; archive keeps every identity."""
     _assert_type(item_type_code)
+    require_independent_template_schema()
     try:
         with engine.begin() as conn:
             template = conn.execute(text("SELECT * FROM public.personnel_order_templates WHERE template_id=:id AND item_type_code=:type FOR UPDATE"),
@@ -162,6 +197,7 @@ def change_template_type(item_type_code: str, template_id: int, target_type_code
                          actor_user_id: int) -> dict[str, Any]:
     """Rebind only an independent, never-used, single-version draft in place."""
     _assert_type(item_type_code)
+    require_independent_template_schema()
     _assert_type(target_type_code)
     with engine.begin() as conn:
         template = conn.execute(text("SELECT * FROM personnel_order_templates WHERE template_id=:id AND item_type_code=:type FOR UPDATE"), {"id": template_id, "type": item_type_code}).mappings().first()
@@ -216,6 +252,7 @@ def _validate(values: Mapping[str, str], item_type_code: str = EDITABLE_TYPE, *,
             raise TemplateDraftError("TEMPLATE_VARIABLE_REQUIRED", f"В {field} отсутствуют обязательные переменные: {', '.join(absent)}")
 
 
+@compatible_template_schema
 def get_draft(item_type_code: str, template_id: int | None = None) -> dict[str, Any] | None:
     _assert_type(item_type_code)
     with engine.connect() as conn:
@@ -224,6 +261,7 @@ def get_draft(item_type_code: str, template_id: int | None = None) -> dict[str, 
     return _row(row) if row else None
 
 
+@compatible_template_schema
 def get_published(item_type_code: str, template_id: int | None = None) -> dict[str, Any] | None:
     """Read the immutable published snapshot without creating a DRAFT."""
     _assert_type(item_type_code)
@@ -236,6 +274,7 @@ def get_published(item_type_code: str, template_id: int | None = None) -> dict[s
     return _row(row) if row else None
 
 
+@compatible_template_schema
 def get_editor_base(item_type_code: str, template_id: int | None = None) -> dict[str, Any]:
     """Read-only source for a client working copy; never creates a DRAFT."""
     published = get_published(item_type_code, template_id)
@@ -257,6 +296,7 @@ def get_editor_base(item_type_code: str, template_id: int | None = None) -> dict
             **dict(get_personnel_order_template_spec(item_type_code).initial_texts)}
 
 
+@compatible_template_schema
 def create_draft_from_working_copy(
     item_type_code: str,
     base_source: str,
@@ -296,6 +336,7 @@ def create_draft_from_working_copy(
     return _row(row)
 
 
+@compatible_template_schema
 def publish_draft(item_type_code: str, expected_revision: int, actor_user_id: int, template_id: int | None = None) -> dict[str, Any]:
     _assert_type(item_type_code)
     with engine.begin() as conn:
@@ -312,6 +353,7 @@ def publish_draft(item_type_code: str, expected_revision: int, actor_user_id: in
     return _row(row)
 
 
+@compatible_template_schema
 def save_draft(item_type_code: str, expected_revision: int, values: Mapping[str, str], actor_user_id: int, template_id: int | None = None, *, expected_template_version_id: int | None = None) -> dict[str, Any]:
     # A draft may be incomplete or carry tokens still being edited. Safety and
     # optimistic revision checks remain mandatory; publication validates fully.

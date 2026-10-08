@@ -861,4 +861,5 @@ export async function restorePersonnelOrder(orderId: number): Promise<PersonnelO
 }
 
 export type PersonnelPublishedTemplateVariant = {template_id: number; template_version_id: number; version_number: number; name_ru: string; name_kk: string; title_ru: string; title_kk: string; is_default: boolean};
-export const getPersonnelOrderPublishedVariants = (type: string) => requestJson<{items: PersonnelPublishedTemplateVariant[]}>("GET", `/directory/personnel-orders/templates/${encodeURIComponent(type)}/published-variants`, {fallback: "Не удалось загрузить варианты шаблона."});
+export type PersonnelPublishedVariantsResponse = {items: PersonnelPublishedTemplateVariant[]; independent_supported?: boolean; creation_supported?: boolean; creation_reason?: string | null; schema_mode?: "LEGACY" | "INDEPENDENT"};
+export const getPersonnelOrderPublishedVariants = (type: string) => requestJson<PersonnelPublishedVariantsResponse>("GET", `/directory/personnel-orders/templates/${encodeURIComponent(type)}/published-variants`, {fallback: "Не удалось загрузить варианты шаблона."});

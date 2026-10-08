@@ -152,24 +152,34 @@ export default function PersonnelOrderCreateDialog({
   const [type, setType] = React.useState("");
   const [selectedVersion, setSelectedVersion] = React.useState<number | undefined>();
   const [variants, setVariants] = React.useState<Record<string, PersonnelPublishedTemplateVariant[]>>({});
-  const [variantsError, setVariantsError] = React.useState(false);
+  const [variantErrors, setVariantErrors] = React.useState<Record<string, string>>({});
   const [variantsLoading, setVariantsLoading] = React.useState(true);
+  const [variantLoadAttempt, setVariantLoadAttempt] = React.useState(0);
+  const [creationCapabilities,setCreationCapabilities]=React.useState<Record<string,{independent_supported?:boolean;creation_supported?:boolean;creation_reason?:string|null}>>({});
   React.useEffect(() => {
     if (!open) return;
     let cancelled = false;
-    setVariantsLoading(true); setVariantsError(false); setSelectedVersion(undefined);
-    Promise.all(PERSONNEL_ORDER_CREATE_TYPES.map(async code => [code, (await getPersonnelOrderPublishedVariants(code)).items] as const))
-      .then(entries => { if (!cancelled) setVariants(Object.fromEntries(entries)); })
-      .catch(() => { if (!cancelled) setVariantsError(true); })
+    setVariantsLoading(true); setVariantErrors({}); setSelectedVersion(undefined);
+    setVariants({});setCreationCapabilities({});
+    Promise.allSettled(PERSONNEL_ORDER_CREATE_TYPES.map(async code => [code,await getPersonnelOrderPublishedVariants(code)] as const))
+      .then(results => {
+        if(cancelled)return;
+        const entries=results.flatMap(result=>result.status==='fulfilled'?[result.value]:[]);
+        setVariants(Object.fromEntries(entries.map(([code,response])=>[code,response.items])));
+        setCreationCapabilities(Object.fromEntries(entries.map(([code,response])=>[code,response])));
+        setVariantErrors(Object.fromEntries(results.flatMap((result,index)=>result.status==='rejected'
+          ? [[PERSONNEL_ORDER_CREATE_TYPES[index], mapPersonnelOrdersApiError(result.reason, "Не удалось загрузить варианты шаблона.")]] : [])));
+      })
       .finally(() => { if (!cancelled) setVariantsLoading(false); });
     return () => { cancelled = true; };
-  }, [open]);
+  }, [open, variantLoadAttempt]);
   const [number, setNumber] = React.useState("");
   const [orderDate, setOrderDate] = React.useState("");
   const [locale, setLocale] = React.useState<"kk" | "ru">("kk");
   const [title, setTitle] = React.useState("");
   const [published, setPublished] = React.useState<{ kk: string; ru: string } | null>(null);
   const [publishedTitleError, setPublishedTitleError] = React.useState<string | null>(null);
+  const [publishedFor, setPublishedFor] = React.useState("");
   const [query, setQuery] = React.useState(initialEmployeeQuery ?? "");
   const [employee, setEmployee] = React.useState<EmployeeDTO | null>(null);
   const [matches, setMatches] = React.useState<EmployeeDTO[]>([]);
@@ -218,16 +228,71 @@ export default function PersonnelOrderCreateDialog({
     ["employee_full_name_dative_ru", "ФИО в дательном падеже (RU)"],
   ] as Array<[keyof Forms, string]>).filter(([key]) => !kk[key].trim()).map(([, label]) => label);
   const resolvedTitle = published?.[locale].trim() || personnelOrderCanonicalTitle(type, locale);
-  const canSubmit = Boolean(
-    !busy && !variantsLoading && !variantsError && (!selectedVersion || (published && !publishedTitleError)) &&
-      type && (!recall || (recallName.trim() && org.trim() && position.trim() && Object.values(recallFields).every(value => value.trim()))) &&
-      number.trim() &&
-      orderDate &&
-      resolvedTitle &&
-      employee?.id &&
-      (periodLeave ? start && end && end >= start && formsComplete : effective) &&
-      (!childcare || (applicationDate && certificateDate && certificateNumber.trim())),
-  );
+  const typeVariants = variants[type] || [];
+  const resolvedVersion = !variantsLoading && !variantErrors[type]
+    ? typeVariants.find(variant => variant.template_version_id === selectedVersion)?.template_version_id
+      ?? (typeVariants.length === 1 ? typeVariants[0].template_version_id : undefined)
+    : undefined;
+  const legacyTemplates = creationCapabilities[type]?.independent_supported === false;
+  const versionResolved = !variantsLoading && !variantErrors[type] && Boolean(creationCapabilities[type])
+    && (resolvedVersion != null || legacyTemplates);
+  const templateKey = `${type}:${resolvedVersion ?? "legacy"}`;
+  const templateReady = versionResolved && publishedFor === templateKey && Boolean(published?.[locale]?.trim()) && !publishedTitleError;
+  const typeCreationBlocked=creationCapabilities[type]?.creation_supported===false;
+  const independentUnavailable=Object.values(creationCapabilities).some(value=>value.independent_supported===false);
+  const blockedReasons: string[] = [];
+  const missing = (condition: boolean, ru: string, kz: string) => {
+    if (condition) blockedReasons.push(sectionLanguage === "kk" ? kz : ru);
+  };
+  missing(busy, "Приказ создаётся. Дождитесь завершения.", "Бұйрық жасалып жатыр. Аяқталуын күтіңіз.");
+  missing(!type, "Выберите вид кадрового приказа.", "Кадрлық бұйрық түрін таңдаңыз.");
+  missing(typeCreationBlocked, creationCapabilities[type]?.creation_reason || "Выбранный вид недоступен в текущей схеме БД.", "Қазіргі ДБ құрылымы таңдалған бұйрық түрін сақтауға рұқсат етпейді. Үшінші кезеңнің көшіруі қажет.");
+  missing(variantsLoading, "Дождитесь загрузки вариантов шаблона и определения версии.", "Үлгі нұсқаларын жүктеу және нұсқаны анықтау аяқталуын күтіңіз.");
+  missing(Boolean(type && variantErrors[type]), variantErrors[type] || "", variantErrors[type] || "");
+  missing(Boolean(type && !variantsLoading && !variantErrors[type] && !versionResolved), typeVariants.length > 1
+    ? "Выберите опубликованную версию шаблона в меню вида приказа."
+    : "Для выбранного вида нет опубликованной версии шаблона. Опубликуйте шаблон перед созданием приказа.",
+    typeVariants.length > 1 ? "Бұйрық түрі мәзірінен жарияланған үлгі нұсқасын таңдаңыз." : "Таңдалған түр үшін жарияланған үлгі жоқ. Бұйрық жасамас бұрын үлгіні жариялаңыз.");
+  missing(Boolean(type && versionResolved && !templateReady), publishedTitleError || "Дождитесь загрузки выбранной версии шаблона.", publishedTitleError || "Таңдалған үлгі нұсқасының жүктелуін күтіңіз.");
+  missing(!number.trim(), "Введите номер приказа.", "Бұйрық нөмірін енгізіңіз.");
+  missing(!orderDate, "Укажите дату приказа.", "Бұйрық күнін көрсетіңіз.");
+  missing(!resolvedTitle, "Название приказа не загружено.", "Бұйрық атауы жүктелмеді.");
+  missing(!employee?.id, "Выберите сотрудника из списка кандидатов.", "Қызметкерді үміткерлер тізімінен таңдаңыз.");
+  if (periodLeave) {
+    missing(!start, "Укажите дату начала отпуска.", "Демалыстың басталу күнін көрсетіңіз.");
+    missing(!end, "Укажите дату окончания отпуска.", "Демалыстың аяқталу күнін көрсетіңіз.");
+    missing(Boolean(start && end && end < start), "Дата окончания отпуска раньше даты начала.", "Демалыстың аяқталу күні басталу күнінен ерте.");
+    const formNames: Record<keyof Forms, [string, string]> = {
+      org_unit_document_genitive_kk: ["Подразделение в тексте приказа (KZ)", "Бұйрық мәтініндегі бөлімше (KZ)"],
+      position_document_possessive_kk: ["Должность в тексте приказа (KZ)", "Бұйрық мәтініндегі лауазым (KZ)"],
+      position_document_nominative_ru: ["Должность в тексте приказа (RU)", "Бұйрық мәтініндегі лауазым (RU)"],
+      employee_full_name_dative_kk: ["ФИО в дательном падеже (KZ)", "Аты-жөні барыс септігінде (KZ)"],
+      employee_full_name_genitive_kk: ["ФИО в родительном падеже (KZ)", "Аты-жөні ілік септігінде (KZ)"],
+      employee_full_name_dative_ru: ["ФИО в дательном падеже (RU)", "Аты-жөні барыс септігінде (RU)"],
+      employee_full_name_genitive_ru: ["ФИО в родительном падеже (RU)", "Аты-жөні ілік септігінде (RU)"],
+    };
+    (Object.keys(formNames) as Array<keyof Forms>).forEach(key => {
+      if (key !== "employee_full_name_genitive_ru" || childcare)
+        missing(!kk[key].trim(), `Заполните поле «${formNames[key][0]}».`, `«${formNames[key][1]}» өрісін толтырыңыз.`);
+    });
+  } else {
+    missing(!effective, recall ? "Укажите дату отзыва." : "Укажите дату действия.", recall ? "Шақырту күнін көрсетіңіз." : "Күшіне ену күнін көрсетіңіз.");
+  }
+  if (recall) {
+    missing(!recallName.trim(), "Укажите ФИО сотрудника.", "Қызметкердің аты-жөнін көрсетіңіз.");
+    missing(!position.trim(), "Заполните должность RU.", "Лауазымды RU тілінде толтырыңыз.");
+    missing(!org.trim(), "Заполните подразделение RU.", "Бөлімшені RU тілінде толтырыңыз.");
+    missing(!recallFields.recall_position_kk.trim(), "Заполните должность KZ; при отсутствии перевода введите её вручную.", "Лауазымды KZ тілінде толтырыңыз; аудармасы болмаса, қолмен енгізіңіз.");
+    missing(!recallFields.recall_org_unit_kk.trim(), "Заполните подразделение KZ.", "Бөлімшені KZ тілінде толтырыңыз.");
+    missing(!recallFields.basis_ru.trim(), "Заполните основание RU.", "Негізді RU тілінде толтырыңыз.");
+    missing(!recallFields.basis_kk.trim(), "Заполните основание KZ.", "Негізді KZ тілінде толтырыңыз.");
+  }
+  if (childcare) {
+    missing(!applicationDate, "Укажите дату заявления.", "Өтініш күнін көрсетіңіз.");
+    missing(!certificateDate, "Укажите дату выдачи свидетельства о рождении.", "Туу туралы куәліктің берілген күнін көрсетіңіз.");
+    missing(!certificateNumber.trim(), "Введите номер свидетельства о рождении.", "Туу туралы куәлік нөмірін енгізіңіз.");
+  }
+  const canSubmit = blockedReasons.length === 0;
 
   const requestClose = React.useCallback(() => {
     if (!busy) onClose();
@@ -296,8 +361,9 @@ export default function PersonnelOrderCreateDialog({
 
   React.useEffect(() => {
     const id = ++templateId.current;
-    if (!open || !type) {
+    if (!open || !type || !versionResolved) {
       setPublished(null);
+      setPublishedFor("");
       setPublishedTitleError(null);
       setTitle("");
       return;
@@ -305,9 +371,13 @@ export default function PersonnelOrderCreateDialog({
     setPublished(null);
     setPublishedTitleError(null);
     setTitle("");
-    void getPersonnelOrderPublishedTemplateTitle(type, ...(selectedVersion == null ? [] : [selectedVersion]))
+    void getPersonnelOrderPublishedTemplateTitle(type, ...(resolvedVersion == null ? [] : [resolvedVersion]))
       .then((result) => {
         if (id !== templateId.current) return;
+        if (resolvedVersion != null && result.template_version_id !== resolvedVersion) {
+          setPublishedTitleError("Ответ сервера не соответствует выбранной версии шаблона. Повторите загрузку.");
+          return;
+        }
         const titles = { kk: result.title_kk, ru: result.title_ru };
         if (!titles[locale].trim()) {
           setPublished(null);
@@ -315,15 +385,16 @@ export default function PersonnelOrderCreateDialog({
           return;
         }
         setPublished(titles);
+        setPublishedFor(templateKey);
         setTitle(titles[locale].trim() || personnelOrderCanonicalTitle(type, locale));
       })
-      .catch(() => {
+      .catch((caught) => {
         if (id !== templateId.current) return;
         setPublished(null);
         setTitle(personnelOrderCanonicalTitle(type, locale));
-        setPublishedTitleError("Для выбранного типа отсутствует опубликованный шаблон: будет создан черновик без автоматического применения полного шаблона.");
+        setPublishedTitleError(`Не удалось загрузить опубликованный шаблон: ${mapPersonnelOrdersApiError(caught, "Опубликованный шаблон не найден.")}`);
       });
-  }, [locale, open, type, selectedVersion]);
+  }, [locale, open, type, resolvedVersion, versionResolved, templateKey]);
 
   React.useEffect(() => {
     setTitle(published?.[locale].trim() || personnelOrderCanonicalTitle(type, locale));
@@ -433,7 +504,7 @@ export default function PersonnelOrderCreateDialog({
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (busy || variantsLoading || variantsError) return;
+    if (!canSubmit || !templateReady) return;
     setError(null);
     setBusy(true);
     try {
@@ -446,7 +517,7 @@ export default function PersonnelOrderCreateDialog({
         ? Math.floor((Date.parse(`${end}T00:00:00`) - Date.parse(`${start}T00:00:00`)) / 86400000) + 1
         : undefined;
       const result = await createManualPersonnelOrderDraft({
-        ...(selectedVersion == null ? {} : { template_version_id: selectedVersion }),
+        ...(resolvedVersion == null ? {} : { template_version_id: resolvedVersion }),
         order_number: number,
         order_date: orderDate,
         source_title: resolvedTitle,
@@ -571,8 +642,12 @@ export default function PersonnelOrderCreateDialog({
           if (event.key === "Enter" && event.target instanceof HTMLInputElement && event.target.type !== "submit") event.preventDefault();
         }}>
           <div data-testid="personnel-order-create-body" className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-5 py-4">
-            <PersonnelOrderTypeMenu value={type} language={sectionLanguage} onChange={changeType} variants={variants} selectedVersion={selectedVersion} disabled={variantsLoading || variantsError} />
-            {variantsError ? <p role="alert">Не удалось загрузить варианты шаблонов. Откройте форму повторно.</p> : null}
+            <PersonnelOrderTypeMenu value={type} language={sectionLanguage} onChange={changeType} variants={variants} selectedVersion={resolvedVersion} disabled={busy} />
+            {variantsLoading ? <p role="status">{sectionLanguage==='kk'?'Үлгі нұсқалары жүктелуде; бұйрық түрін таңдауға болады.':'Загружаются варианты шаблонов; вид приказа уже можно выбрать.'}</p> : null}
+            {type && variantErrors[type] ? <p role="alert">{sectionLanguage==='kk'?'Үлгі нұсқаларын жүктеу қатесі: ':'Не удалось загрузить варианты шаблона: '}{variantErrors[type]}</p> : null}
+            {type && (variantErrors[type] || publishedTitleError) ? <button type="button" disabled={busy || variantsLoading} onClick={() => setVariantLoadAttempt(attempt => attempt + 1)} className="text-sm text-blue-700">{sectionLanguage === 'kk' ? 'Жүктеуді қайталау' : 'Повторить загрузку шаблонов'}</button> : null}
+            {independentUnavailable ? <p role="status">{sectionLanguage==='kk'?'Дербес үлгі нұсқалары осы БД құрылымында қолжетімсіз. Бұрынғы бұйрық түрлері мен негізгі үлгілері қолжетімді.':'Независимые варианты шаблонов недоступны в текущей схеме БД. Прежние виды приказов и основные шаблоны доступны.'}</p> : null}
+            {typeCreationBlocked ? <p role="alert" data-testid="order-type-schema-unavailable">{sectionLanguage==='kk'?`Қазіргі БД құрылымы ${type} бұйрық түрін сақтауға рұқсат етпейді. hrrecall001 көшіруін келісіп қолдану қажет; БД автоматты түрде өзгермейді.`:creationCapabilities[type]?.creation_reason || 'Выбранный вид недоступен в текущей схеме БД.'}</p> : null}
             <Field label="Номер приказа"><input aria-label="Номер приказа" required value={number} onChange={(event) => setNumber(event.target.value)} className={inputClassName} /></Field>
             <Field label="Дата приказа"><input aria-label="Дата приказа" type="date" required value={orderDate} onChange={(event) => setOrderDate(event.target.value)} className={inputClassName} /></Field>
             <Field label="Язык"><select aria-label="Язык" value={locale} onChange={(event) => setLocale(event.target.value as "kk" | "ru")} className={inputClassName}><option value="kk">Қазақша</option><option value="ru">Русский</option></select></Field>
@@ -608,6 +683,7 @@ export default function PersonnelOrderCreateDialog({
               : null}
 
             {recall ? <div className="grid w-full gap-3 sm:grid-cols-2">{([['recall_position_kk',sectionLanguage === 'kk' ? 'Лауазым KZ' : 'Должность KZ'],['recall_org_unit_kk',sectionLanguage === 'kk' ? 'Бөлімше KZ' : 'Подразделение KZ'],['basis_ru','Основание RU'],['basis_kk','Негіз KZ']] as const).map(([key,label]) => <Field key={key} label={label}><input aria-label={label} value={recallFields[key]} onChange={event => { recallEdited.current.add(key); setRecallFields(current => ({...current,[key]:event.target.value})); }} className={inputClassName} /></Field>)}</div> : null}
+            {recall && employee && !employee.position?.job_namekk?.trim() && !employee.position?.name_kk?.trim() ? <p data-testid="recall-position-kz-missing" className="text-xs text-amber-700">{sectionLanguage==='kk'?'Лауазым анықтамалығында қазақша атау жоқ. «Лауазым KZ» өрісін қолмен толтырыңыз.':'В справочнике должности нет казахского названия. Заполните «Должность KZ» вручную.'}</p> : null}
             {recall && employee && (!position || !org || !recallFields.recall_position_kk || !recallFields.recall_org_unit_kk)?<p className="text-xs text-amber-700">{sectionLanguage==='kk'?'Қызметкер карточкасында RU/KZ деректері толық емес. Бұйрық мәтіні үшін жетіспейтін атауларды енгізіңіз.':'В карточке сотрудника нет всех данных на RU/KZ. Заполните недостающие названия для текста приказа.'}</p>:null}
             {recall && employee ? <section className="space-y-2 sm:col-span-2" data-testid="recall-name-case-fields">
               <h3 className="text-sm font-medium">{sectionLanguage==='kk'?'Негіздер үшін аты-жөнінің септік нысандары':'Падежные формы ФИО для оснований'}</h3>
@@ -626,10 +702,16 @@ export default function PersonnelOrderCreateDialog({
             </section>:null}
             {error ? <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900/70 dark:bg-red-950/40 dark:text-red-200">{error}</p> : null}
           </div>
-          <footer data-testid="personnel-order-create-footer" className="flex shrink-0 justify-end gap-3 border-t border-zinc-200 bg-white px-5 py-4 dark:border-zinc-800 dark:bg-zinc-950">
+          <footer data-testid="personnel-order-create-footer" className="flex shrink-0 flex-col gap-3 border-t border-zinc-200 bg-white px-5 py-4 dark:border-zinc-800 dark:bg-zinc-950">
+            {!canSubmit ? <div id="personnel-order-create-blockers" data-testid="personnel-order-create-blockers" role="status" className="max-h-36 overflow-y-auto text-sm text-amber-800 dark:text-amber-200">
+              <p>{sectionLanguage === 'kk' ? 'Бұйрықты жасау үшін:' : 'Чтобы создать приказ:'}</p>
+              <ul className="list-disc pl-5">{blockedReasons.map(reason => <li key={reason}>{reason}</li>)}</ul>
+            </div> : null}
+            <div className="flex justify-end gap-3">
             <button type="button" onClick={requestClose} disabled={busy} className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-800 shadow-sm hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800">Отмена</button>
 
-            <button type="submit" disabled={!canSubmit} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-blue-300 dark:disabled:bg-blue-900">{busy ? "Создание…" : "Создать приказ"}</button>
+            <button type="submit" disabled={!canSubmit} aria-describedby={!canSubmit ? 'personnel-order-create-blockers' : undefined} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-blue-300 dark:disabled:bg-blue-900">{busy ? "Создание…" : "Создать приказ"}</button>
+            </div>
           </footer>
         </form>
       </section>

@@ -86,7 +86,13 @@ function writeDraftHeights(itemTypeCode: string, heights: Partial<Record<DraftHe
 }
 
 function draftErrorMessage(cause: unknown): string {
-  const error = cause as { message?: unknown; details?: { detail?: unknown } };
+  const error = cause as { status?: number; message?: unknown; details?: { detail?: unknown } };
+  const detail=error?.details?.detail;
+  if (detail && typeof detail === "object" && "code" in detail && detail.code === "TEMPLATE_SCHEMA_REQUIRED") {
+    return "Требуется согласованное обновление структуры БД до hrrecall001. БД автоматически не изменяется.";
+  }
+  if (error?.status === 403) return "Недостаточно прав управления кадровыми шаблонами.";
+  if (error?.status && error.status >= 500) return `Ошибка загрузки API (HTTP ${error.status}). Повторите попытку.`;
   const validation = Array.isArray(error?.details?.detail) ? error.details.detail[0] as { loc?: unknown; msg?: unknown } : null;
   if (validation) {
     const location = Array.isArray(validation.loc) ? validation.loc.filter((part) => part !== "body").join(".") : "";
@@ -94,6 +100,13 @@ function draftErrorMessage(cause: unknown): string {
     return location ? `Поле «${location}»: ${message}` : message;
   }
   return typeof error?.message === "string" && error.message.trim() ? error.message : "Не удалось выполнить действие.";
+}
+
+function templateLoadError(cause: unknown): string {
+  const error=cause as {status?: number; details?: {detail?: {code?: string}}};
+  if (error?.details?.detail?.code === "TEMPLATE_SCHEMA_REQUIRED") return draftErrorMessage(cause);
+  if (error?.status === 403) return "Недостаточно прав управления кадровыми шаблонами.";
+  return error?.status ? `Ответ API: HTTP ${error.status}.` : "Проверьте соединение и повторите загрузку.";
 }
 
 function GeneralPersonnelOrderRequirements() {
@@ -446,12 +459,14 @@ function TemplateDetail({ item, templateId, selectedTemplate, onChanged, copyAct
   const [published, setPublished] = useState<PersonnelOrderTemplateDraft | null>(null);
   const [openingEditor, setOpeningEditor] = useState(false);
   const [openError, setOpenError] = useState("");
+  const [loadError, setLoadError] = useState("");
   const openRequest = useRef(0);
   const loadRequest = useRef(0);
   const createdEditorRef = useRef<HTMLDivElement>(null);
   const draftExists = serverDraft?.status === "DRAFT";
   const reloadState = useCallback(() => {
     const request = ++loadRequest.current;
+    setLoadError("");
     // Both reads are unconditional: a first-version DRAFT has no PUBLISHED
     // predecessor, and neither read is allowed to create a DRAFT.
     void Promise.all([getPersonnelOrderTemplatePublished(item.type_code, ...templateArgs(templateId)), getPersonnelOrderTemplateDraft(item.type_code, ...templateArgs(templateId))])
@@ -461,10 +476,11 @@ function TemplateDetail({ item, templateId, selectedTemplate, onChanged, copyAct
         setServerDraft(nextDraft?.status === "DRAFT" ? nextDraft : null);
         if (templateId != null && selectedTemplate?.is_default === false && nextDraft?.status === "DRAFT") setEditor(current => current ?? { kind: "DRAFT", draft: nextDraft });
       })
-      .catch(() => {
+      .catch(cause => {
         if (request !== loadRequest.current) return;
         setPublished(null);
         setServerDraft(null);
+        setLoadError(`Не удалось загрузить черновик и опубликованную версию. ${templateLoadError(cause)}`);
       });
   }, [item.type_code, templateId, selectedTemplate?.is_default]);
   const openEditor = useCallback(() => {
@@ -478,11 +494,11 @@ function TemplateDetail({ item, templateId, selectedTemplate, onChanged, copyAct
         return { kind: "WORKING_COPY", workingCopy: { kind: "WORKING_COPY", template_id: templateId, item_type_code: base.item_type_code, base, ...editableDraftText(base) } };
       })
       .then((next) => { if (request === openRequest.current) setEditor(next); })
-      .catch(() => {
+      .catch(cause => {
         if (request === openRequest.current) {
           // Do not expose backend detail here: it can contain implementation
           // diagnostics. The user can safely retry the read-only bootstrap.
-          setOpenError("Не удалось открыть редактор. Повторите попытку.");
+          setOpenError(`Не удалось открыть редактор. Повторите попытку. ${templateLoadError(cause)}`);
         }
       })
       .finally(() => { if (request === openRequest.current) setOpeningEditor(false); });
@@ -493,7 +509,7 @@ function TemplateDetail({ item, templateId, selectedTemplate, onChanged, copyAct
     return () => { loadRequest.current += 1; openRequest.current += 1; };
   }, [item.type_code, item.editor_available, reloadState, createdDraft]);
   useEffect(() => {
-    if (createdDraft && editor) createdEditorRef.current?.scrollIntoView?.({ block: "start" });
+    if (editor) createdEditorRef.current?.scrollIntoView?.({ block: "start" });
   }, [createdDraft, Boolean(editor)]);
   return (
     <aside data-testid="personnel-order-template-detail" data-template-id={templateId} className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
@@ -501,6 +517,7 @@ function TemplateDetail({ item, templateId, selectedTemplate, onChanged, copyAct
       <p className="mt-2 text-sm">{item.type_code} · {item.support_level}</p>
       <div data-testid="personnel-template-actions" className="mt-3 flex flex-wrap items-center gap-2">{item.editor_available && !editor ? <><button aria-label={openingEditor ? "Открытие…" : (draftExists ? "Продолжить редактирование" : "Редактировать шаблон")} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-500 dark:text-zinc-950 dark:hover:bg-blue-400" type="button" onClick={openEditor} disabled={openingEditor}>{openingEditor ? "Открытие…" : (draftExists ? "Продолжить редактирование" : "Редактировать шаблон")}</button>{openingEditor ? <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400" data-testid="template-editor-opening">Открытие редактора…</p> : null}{openError ? <p className="mt-2 text-sm text-red-700" role="alert">{openError}</p> : null}</> : null}{copyActions}</div>
       {copyForm}
+      {loadError ? <div role="alert" className="mt-3 text-red-700">{loadError}<button type="button" onClick={reloadState} className="ml-2 rounded border px-3 py-2">Повторить загрузку карточки</button></div> : null}
       {published ? <section className="mt-4 rounded-lg border border-emerald-200 p-3" data-testid="template-published-read-only"><h4 className="font-semibold">Опубликованная версия шаблона</h4><p className="text-sm">Версия {published.version_number} · {published.status}</p><p className="mt-2 whitespace-pre-wrap text-sm">{localizedPersonnelTitle(published, language)}</p>{draftExists ? <p className="mt-2 text-sm text-amber-700">Имеется черновик следующей версии.</p> : null}</section> : null}
       <p className="mt-1 text-sm">{item.uses_specialized_generator ? "Специализированный генератор" : "Общий fallback"}</p>
       {detail ? <FormalizedTemplateDetail detail={detail} showCatalogPreview={!item.editor_available} /> : <>
@@ -519,6 +536,9 @@ export default function TemplatesPageClient() {
   const searchParams = useSearchParams();
   const activeSection = resolveTemplateSection(searchParams.get("section"));
   const [items, setItems] = useState<PersonnelOrderTemplateCatalogItem[]>([]);
+  const [catalogError, setCatalogError] = useState("");
+  const [catalogRefresh, setCatalogRefresh] = useState(0);
+  const selectedCardRef = useRef<HTMLDivElement>(null);
   const [group, setGroup] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [level, setLevel] = useState("ALL");
@@ -530,13 +550,19 @@ export default function TemplatesPageClient() {
     ?? items.find((item) => !group || PERSONNEL_ORDER_TYPE_GROUP[item.type_code as keyof typeof PERSONNEL_ORDER_TYPE_GROUP] === group);
 
   useEffect(() => {
+    if (selectedItem && displayedType) selectedCardRef.current?.scrollIntoView?.({block:"start"});
+  },[selectedItem?.type_code,displayedType]);
+
+  useEffect(() => {
     if (switchingType && selectedType === switchingType) setSwitchingType(null);
   }, [selectedType, switchingType]);
 
   useEffect(() => {
     if (activeSection !== TEMPLATE_SECTIONS.personnelOrders) return;
-    void listPersonnelOrderTemplateCatalog().then((data) => setItems(data.items)).catch(() => setItems([]));
-  }, [activeSection]);
+    let active=true; setCatalogError("");
+    void listPersonnelOrderTemplateCatalog().then(data => {if(active) setItems(data.items);}).catch(cause => {if(active) {setItems([]);setCatalogError(`Не удалось загрузить каталог кадровых шаблонов. ${templateLoadError(cause)}`);}});
+    return () => {active=false;};
+  }, [activeSection,catalogRefresh]);
 
   const visibleItems = useMemo(() => items.filter((item) => {
     if (group && PERSONNEL_ORDER_TYPE_GROUP[item.type_code as keyof typeof PERSONNEL_ORDER_TYPE_GROUP] !== group) return false;
@@ -573,11 +599,12 @@ export default function TemplatesPageClient() {
       ) : (
         <section className="space-y-3" aria-labelledby="personnel-order-templates-heading" data-testid="personnel-order-templates-catalog">
           <h2 id="personnel-order-templates-heading" className="text-xl font-semibold">Шаблоны кадровых приказов</h2>
+          {catalogError ? <div role="alert" className="text-red-700">{catalogError}<button type="button" onClick={()=>setCatalogRefresh(n=>n+1)} className="ml-2 rounded border px-3 py-2">Повторить загрузку каталога</button></div> : null}
           <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">Откройте выбранный шаблон для редактирования или создайте на его основе независимый черновик с названиями RU/KZ.</p>
-          {selectedItem ? <PersonnelTemplateVariants key={selectedItem.type_code} item={selectedItem} catalog={items} initialTemplateId={selectedItem.type_code === selectedType ? Number(searchParams.get("template_id")) || undefined : undefined} onSelected={id => { setCopiedDraft(undefined); const params = new URLSearchParams(searchParams.toString()); params.set("type", selectedItem.type_code); if (id) params.set("template_id", String(id)); else params.delete("template_id"); router.push(`/admin/templates?${params.toString()}`); }} initialDraft={copiedDraft?.item_type_code === selectedItem.type_code ? copiedDraft : undefined} onCreated={draft => { setGroup(null); setSwitchingType(draft.item_type_code); setCopiedDraft(draft); const params = new URLSearchParams(searchParams.toString()); params.set("type", draft.item_type_code); params.set("template_id", String(draft.template_id)); router.push(`/admin/templates?${params.toString()}`); }} renderEditor={(templateId, onChanged, copyActions, copyForm, createdDraft, editorItem = selectedItem, selectedTemplate) => <TemplateDetail key={`${editorItem.type_code}:${templateId || "default"}`} item={editorItem} selectedTemplate={selectedTemplate} templateId={templateId} onChanged={onChanged} copyActions={copyActions} copyForm={copyForm} createdDraft={createdDraft} />} /> : null}
           <div className="flex gap-2"><input aria-label="Поиск шаблонов кадровых приказов" value={query} onChange={(e) => setQuery(e.target.value)} className="rounded border px-2 py-1" /><select aria-label="Уровень поддержки" value={level} onChange={(e) => setLevel(e.target.value)} className="rounded border px-2 py-1"><option value="ALL">Все уровни</option><option value="SUPPORTED">SUPPORTED</option><option value="PARTIAL">PARTIAL</option><option value="NOT_IMPLEMENTED">NOT_IMPLEMENTED</option></select></div>
           <div role="group" aria-label={language === "kk" ? "Бұйрық топтары" : "Группы приказов"} className="mb-3 flex flex-wrap gap-2">{PERSONNEL_ORDER_GROUPS.map(entry => <button type="button" key={entry.id} aria-pressed={group === entry.id} onClick={() => { const nextGroup = group === entry.id ? null : entry.id; setGroup(nextGroup); if (nextGroup && selectedItem && PERSONNEL_ORDER_TYPE_GROUP[selectedItem.type_code as keyof typeof PERSONNEL_ORDER_TYPE_GROUP] !== nextGroup) { const nextItem = items.find(item => PERSONNEL_ORDER_TYPE_GROUP[item.type_code as keyof typeof PERSONNEL_ORDER_TYPE_GROUP] === nextGroup); if (nextItem) selectType(nextItem.type_code); } }} className="rounded border px-3 py-2">{entry[language]}</button>)}</div>
           <div className="grid gap-2 md:grid-cols-2" data-testid="personnel-order-template-list">{visibleItems.map((item) => <button type="button" key={item.type_code} onClick={() => selectType(item.type_code)} className="rounded border p-3 text-left" data-testid={`personnel-order-template-${item.type_code}`}><div className="font-medium">{localizedPersonnelTitle(item, language)}</div><div className="font-mono text-xs">{item.type_code}</div><div>{item.support_level} · {item.supported_locales.join(", ")} · Встроенный шаблон {item.is_pilot ? "· Пилот" : ""}</div></button>)}</div>
+          {selectedItem ? <div ref={selectedCardRef} className="scroll-mt-20" data-testid="selected-personnel-template-card"><PersonnelTemplateVariants key={selectedItem.type_code} item={selectedItem} catalog={items} initialTemplateId={selectedItem.type_code === selectedType ? Number(searchParams.get("template_id")) || undefined : undefined} onSelected={id => { setCopiedDraft(undefined); const params = new URLSearchParams(searchParams.toString()); params.set("type", selectedItem.type_code); if (id) params.set("template_id", String(id)); else params.delete("template_id"); router.push(`/admin/templates?${params.toString()}`); }} initialDraft={copiedDraft?.item_type_code === selectedItem.type_code ? copiedDraft : undefined} onCreated={draft => { setGroup(null); setSwitchingType(draft.item_type_code); setCopiedDraft(draft); const params = new URLSearchParams(searchParams.toString()); params.set("type", draft.item_type_code); params.set("template_id", String(draft.template_id)); router.push(`/admin/templates?${params.toString()}`); }} renderEditor={(templateId, onChanged, copyActions, copyForm, createdDraft, editorItem = selectedItem, selectedTemplate) => <TemplateDetail key={`${editorItem.type_code}:${templateId || "default"}`} item={editorItem} selectedTemplate={selectedTemplate} templateId={templateId} onChanged={onChanged} copyActions={copyActions} copyForm={copyForm} createdDraft={createdDraft} />} /></div> : null}
           <GeneralPersonnelOrderRequirements />
         </section>
       )}

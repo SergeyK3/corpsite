@@ -1,6 +1,11 @@
 import type { PersonnelOrderType } from "./personnelOrderLabels";
 
 export type ItemPayloadDraft = {
+  job_code?: string;
+  position_title_ru?: string;
+  position_title_kk?: string;
+  org_unit_title_kk?: string;
+  org_unit_title_ru?: string;
   work_periods?: Array<{ start: string; end: string; days: string }>;
   leave_start?: string;
   leave_end?: string;
@@ -105,6 +110,11 @@ export function itemPayloadDraftFromRecord(payload: Record<string, unknown> | nu
     workPeriods.push({ start: String(source.work_period_start || ""), end: String(source.work_period_end || ""), days: String(source.work_period_days || "") });
   }
   return {
+    org_unit_title_ru: asString("source_org_unit_name"),
+    job_code: source.job_code == null ? undefined : String(source.job_code),
+    position_title_ru: source.position_title_ru == null ? undefined : String(source.position_title_ru),
+    position_title_kk: source.position_title_kk == null ? undefined : String(source.position_title_kk),
+    org_unit_title_kk: source.org_unit_title_kk == null ? undefined : String(source.org_unit_title_kk),
     work_periods: workPeriods.length ? workPeriods : [{ start: "", end: "", days: "" }],
     leave_start: asString("leave_start", source.leave && typeof source.leave === "object" ? String((source.leave as Record<string, unknown>).start || "") : ""), leave_end: asString("leave_end", source.leave && typeof source.leave === "object" ? String((source.leave as Record<string, unknown>).end || "") : ""), leave_days: asString("leave_days", source.leave && typeof source.leave === "object" ? String((source.leave as Record<string, unknown>).days || "") : ""),
     work_period_start: asString("work_period_start"), work_period_end: asString("work_period_end"), work_period_days: asString("work_period_days"),
@@ -179,6 +189,16 @@ export function buildItemPayload(
 ): Record<string, unknown> {
   const type = String(itemTypeCode || "").trim().toUpperCase() as PersonnelOrderType;
   const payload: Record<string, unknown> = {};
+  if (draft.job_code !== undefined) payload.job_code = draft.job_code || null;
+  for (const key of ["position_title_ru", "position_title_kk", "org_unit_title_kk"] as const) {
+    if (draft[key] !== undefined) payload[key] = draft[key] || null;
+  }
+  const ruForms = { position_document_nominative_ru: draft.position_document_nominative_ru || "" };
+  const kkForms = { position_document_possessive_kk: draft.position_document_possessive_kk || "", org_unit_document_genitive_kk: draft.org_unit_document_genitive_kk || "" };
+  if (Object.values(ruForms).some(Boolean)) payload.document_forms_ru = ruForms;
+  if (Object.values(kkForms).some(Boolean)) payload.document_forms_kk = kkForms;
+  if (draft.org_unit_title_ru?.trim()) payload.source_org_unit_name = draft.org_unit_title_ru.trim();
+
 
   if (type === "LEAVE.ANNUAL.GRANT" || type === "LEAVE.UNPAID.GRANT" || type === "LEAVE.CHILDCARE.GRANT") {
     const leaveStart = String(draft.leave_start || "").trim();

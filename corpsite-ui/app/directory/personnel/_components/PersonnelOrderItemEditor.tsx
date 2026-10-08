@@ -519,6 +519,12 @@ export default function PersonnelOrderItemEditor({
       ...prev,
       org_unit_document_genitive_kk: "",
       position_document_possessive_kk: "",
+      position_document_nominative_ru: "",
+      org_unit_title_ru: "",
+      job_code: "",
+      position_title_ru: "",
+      position_title_kk: "",
+      org_unit_title_kk: "",
       employee_full_name_dative_kk: "",
       employee_full_name_genitive_kk: "",
       ...(itemTypeCode === "LEAVE.CHILDCARE.GRANT" ? { employee_full_name_dative_ru: "", employee_full_name_genitive_ru: "", position_document_nominative_ru: "" } : {}),
@@ -530,8 +536,9 @@ export default function PersonnelOrderItemEditor({
       if (selectionRevision !== employeeSelectionRevision.current) return;
       const selected = employeeDtoToSearchOption(details);
       const positionForms = resolvePersonnelOrderDocumentForms(details.position, details);
-      const storedOrgUnitGenitive = String(details.org_unit?.document_genitive_kk || "").trim();
-      const automaticOrgUnitGenitive = calculateKazakhOrgUnitGenitive(details.org_unit?.name_kk);
+      const assignmentUnit = details.has_current_assignment === false ? null : details.org_unit;
+      const storedOrgUnitGenitive = String(assignmentUnit?.document_genitive_kk || "").trim();
+      const automaticOrgUnitGenitive = calculateKazakhOrgUnitGenitive(assignmentUnit?.name_kk);
       const storedDative = explicitEmployeeKkNameForm(details, "employee_full_name_dative_kk");
       const storedGenitive = explicitEmployeeKkNameForm(details, "employee_full_name_genitive_kk");
       const automaticDative = calculateKazakhPersonForm(details, "dative");
@@ -543,7 +550,13 @@ export default function PersonnelOrderItemEditor({
       setCalculatedKkFields(calculated);
       setPayloadDraft((prev) => ({
         ...prev,
-        org_unit_document_genitive_kk: editedPositionForms.current.has("org_unit_document_genitive_kk") ? prev.org_unit_document_genitive_kk : resolvePersonnelOrderOrgUnitForms(details.org_unit).org_unit_document_genitive_kk,
+        org_unit_document_genitive_kk: editedPositionForms.current.has("org_unit_document_genitive_kk") ? prev.org_unit_document_genitive_kk : resolvePersonnelOrderOrgUnitForms(assignmentUnit).org_unit_document_genitive_kk,
+        org_unit_title_ru: resolvePersonnelOrderOrgUnitForms(assignmentUnit).org_unit_title_ru,
+        job_code: details.has_current_assignment === false ? "" : details.position?.job_code || "",
+        position_title_ru: details.has_current_assignment === false ? "" : details.position?.job_nameru || "",
+        position_title_kk: details.has_current_assignment === false ? "" : details.position?.job_namekk || "",
+        org_unit_title_kk: assignmentUnit?.name_kk || "",
+        position_document_nominative_ru: editedPositionForms.current.has("position_document_nominative_ru") ? prev.position_document_nominative_ru : positionForms.position_document_nominative_ru,
         position_document_possessive_kk: editedPositionForms.current.has("position_document_possessive_kk") ? prev.position_document_possessive_kk : positionForms.position_document_possessive_kk,
         employee_full_name_dative_kk: firstNonEmpty(storedDative, automaticDative.value),
         employee_full_name_genitive_kk: firstNonEmpty(storedGenitive, automaticGenitive.value),
@@ -775,6 +788,13 @@ export default function PersonnelOrderItemEditor({
       // Updating a form field must not erase imported context, placement,
       // basis ids, or other payload attributes not represented by inputs.
       const payload = { ...savedPayload, ...buildItemPayload(backendType, payloadDraft) };
+      for (const key of ["document_forms_ru", "document_forms_kk"] as const) {
+        const previous = savedPayload[key];
+        const incoming = payload[key];
+        if (previous && typeof previous === "object" && incoming && typeof incoming === "object") {
+          payload[key] = { ...previous, ...incoming };
+        }
+      }
       if (backendType === "LEAVE.UNPAID.GRANT") {
         // An edited legacy item must not carry its old triplet beside the
         // versioned `leave` object: the backend deliberately rejects two
@@ -818,7 +838,9 @@ export default function PersonnelOrderItemEditor({
     if (!registerPendingSave) return;
     registerPendingSave(() => {
       if (itemSaveInFlight.current) return itemSaveInFlight.current;
-      if (editingItemId != null && !hasUnsavedEdit) return Promise.resolve(true);
+      // A successful save clears the ref before React installs the next render's
+      // callback. A generation retry in that interval must not PATCH it again.
+      if (editingItemId != null && (savedFormSignature.current == null || savedFormSignature.current === formSignature)) return Promise.resolve(true);
       // The editor is rendered even before the operator starts a new item.
       // Generating text in that state must not attempt to save an empty
       // item (and, consequently, must not turn a normal generation into a
@@ -1433,6 +1455,14 @@ export default function PersonnelOrderItemEditor({
 
           <fieldset disabled={saving} className="space-y-4">
             {sectionOrder.map((section) => renderFormSection(section))}
+            {itemTypeCode !== "LEAVE.CHILDCARE.GRANT" && <section className="grid gap-3 sm:grid-cols-2" data-testid="common-position-document-forms">
+              <FormField label="RU: должность (документная форма)"><input value={payloadDraft.position_document_nominative_ru || ""} onChange={e => updatePayloadField("position_document_nominative_ru", e.target.value)} className={FIELD_INPUT_CLASS} /></FormField>
+              {itemTypeCode !== "LEAVE.UNPAID.GRANT" && <>
+                <FormField label="KK: лауазым (құжат нысаны)"><input value={payloadDraft.position_document_possessive_kk || ""} onChange={e => updatePayloadField("position_document_possessive_kk", e.target.value)} className={FIELD_INPUT_CLASS} /></FormField>
+                <FormField label="KK: подразделение в тексте"><input value={payloadDraft.org_unit_document_genitive_kk || ""} onChange={e => updatePayloadField("org_unit_document_genitive_kk", e.target.value)} className={FIELD_INPUT_CLASS} /></FormField>
+              </>}
+            </section>}
+
           </fieldset>
 
           {error ? (

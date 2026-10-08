@@ -37,7 +37,24 @@ describe("TemplatesPageClient draft lifecycle", () => {
   });
   afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
-  it("shows opening and copying actions before the catalog without an extra type selection", async () => {
+  it("reports catalog loading failures and retries instead of silently hiding all cards",async()=>{
+    vi.mocked(listPersonnelOrderTemplateCatalog).mockRejectedValueOnce({status:500});
+    setup();await screen.findByRole("alert");
+    expect(screen.getByRole("alert")).toHaveTextContent("каталог кадровых шаблонов");
+    expect(screen.getByRole("alert")).toHaveTextContent("HTTP 500");
+    fireEvent.click(screen.getByRole("button",{name:"Повторить загрузку каталога"}));
+    await screen.findByTestId("personnel-order-template-detail");
+  });
+
+  it("reports the failing version read on the card while preserving a visible editor entry",async()=>{
+    vi.mocked(getPersonnelOrderTemplateDraft).mockRejectedValue({status:500});
+    setup();await screen.findByRole("alert");
+    expect(screen.getByRole("alert")).toHaveTextContent("черновик и опубликованную версию");
+    expect(screen.getByRole("button",{name:"Редактировать шаблон"})).toBeEnabled();
+    expect(screen.getByRole("button",{name:"Повторить загрузку карточки"})).toBeEnabled();
+  });
+
+  it("shows the selected card after the tiles and before general requirements without an extra type selection", async () => {
     currentSearch = new URLSearchParams("section=personnel-orders");
     vi.mocked(apiFetchJson).mockResolvedValue({ language: "kk", can_edit: false });
     render(<PersonnelSectionLanguageProvider><TemplatesPageClient /></PersonnelSectionLanguageProvider>);
@@ -47,7 +64,8 @@ describe("TemplatesPageClient draft lifecycle", () => {
     const copyButton = screen.getByRole("button", { name: /Создать на основе|Негізінде жасау/ });
     expect(actions).toContainElement(copyButton);
     await waitFor(() => expect(copyButton).toBeEnabled());
-    expect(actions.compareDocumentPosition(screen.getByTestId("personnel-order-template-list")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByTestId("personnel-order-template-list").compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(actions.compareDocumentPosition(screen.getByTestId("personnel-order-common-requirements")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     fireEvent.click(copyButton);
     expect(screen.getByLabelText("Жаңа үлгінің орысша атауы")).toBeVisible();
     expect(screen.getByLabelText("Жаңа үлгінің қазақша атауы")).toBeVisible();

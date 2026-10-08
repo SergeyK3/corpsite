@@ -20,7 +20,9 @@ def _safe_context(payload: Mapping[str, Any], context: Optional[Mapping[str, Any
     out = dict(payload)
     for key, value in (context or {}).items():
         text_value = str(value or "").strip()
-        if key == "position_name": out["source_position_name"] = text_value
+        if key == "position_name":
+            out["source_position_name"] = text_value
+            out["document_forms_ru"] = {**dict(out.get("document_forms_ru") or {}), "position_document_nominative_ru": text_value}
         elif key == "org_unit_name": out["source_org_unit_name"] = text_value
         elif key in {"recall_position_kk", "recall_org_unit_kk", "basis_ru", "basis_kk"}: out[key] = text_value
         elif key == "specialty": out["document_specialty"] = text_value or None

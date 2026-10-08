@@ -121,6 +121,7 @@ class _DraftStore:
 def draft_store(monkeypatch: pytest.MonkeyPatch) -> _DraftStore:
     store = _DraftStore()
     monkeypatch.setattr(draft_service, "engine", store)
+    monkeypatch.setattr(draft_service, "independent_template_schema_available", lambda: True)
     # These content/revision tests isolate the version store. Identity resolution
     # and independent publication are covered against real PostgreSQL separately.
     monkeypatch.setattr(draft_service, "_resolve_template", lambda conn, code, template_id, **kwargs: template_id or 1)
