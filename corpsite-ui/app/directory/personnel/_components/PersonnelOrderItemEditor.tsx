@@ -289,6 +289,10 @@ export default function PersonnelOrderItemEditor({
   const orderTypeHint = orderTypeLabelForItemHint(orderTypeCode);
 
   const [editingItemId, setEditingItemId] = React.useState<number | null>(null);
+  const formDisclosure = React.useRef<HTMLDetailsElement>(null);
+  React.useEffect(() => {
+    if (formDisclosure.current) formDisclosure.current.open = false;
+  }, [orderId]);
   /** Saved employee_id when edit started; independent of current form fields (WP-PO-UX-001A). */
   const [editingItemSavedEmployeeId, setEditingItemSavedEmployeeId] = React.useState<number | null>(
     null,
@@ -319,6 +323,9 @@ export default function PersonnelOrderItemEditor({
   const [saving, setSaving] = React.useState(false);
   const [employeeSearchError, setEmployeeSearchError] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    if (error && formDisclosure.current) formDisclosure.current.open = true;
+  }, [error]);
   const employeeSelectionRevision = React.useRef(0);
   const ruGenitiveEdited = React.useRef(false);
   const editedPositionForms = React.useRef(new Set<string>());
@@ -622,6 +629,7 @@ export default function PersonnelOrderItemEditor({
     const savedEmployeeId =
       item.employee_id != null && Number(item.employee_id) > 0 ? Number(item.employee_id) : null;
     setEditingItemId(item.item_id);
+    if (formDisclosure.current) formDisclosure.current.open = true;
     setEditingItemSavedEmployeeId(savedEmployeeId);
     setItemTypeCode(normalizedUiType);
     setEmployeeId(item.employee_id ? String(item.employee_id) : "");
@@ -734,6 +742,7 @@ export default function PersonnelOrderItemEditor({
 
   async function saveItem(): Promise<boolean> {
     if (disabled) return false;
+    if (formDisclosure.current) formDisclosure.current.open = true;
     setError(null);
 
     const employeeNumeric = Number(employeeId);
@@ -821,10 +830,17 @@ export default function PersonnelOrderItemEditor({
           : await createPersonnelOrderItem(orderId, body);
       onChanged(detail);
       resetForm(itemTypeCode);
+      if (editingItemId == null && formDisclosure.current) {
+        const disclosure = formDisclosure.current;
+        const focusInside = disclosure.contains(document.activeElement);
+        disclosure.open = false;
+        if (focusInside) disclosure.querySelector("summary")?.focus({ preventScroll: true });
+      }
       if (editingItemId != null) setSaveNotice("Пункт сохранён. Сформируйте / обновите текст приказа.");
       return true;
     } catch (err) {
       const message = mapPersonnelOrdersApiError(err, "Не удалось сохранить пункт.");
+      if (formDisclosure.current) formDisclosure.current.open = true;
       setError(/(?:CONTINUOUS_RANGE|SINGLE_DAY) leave\.days must equal inclusive range days/i.test(message)
         ? "Количество календарных дней отпуска должно совпадать с выбранным периодом включительно."
         : message);
@@ -1440,15 +1456,16 @@ export default function PersonnelOrderItemEditor({
       </div>
 
       {!disabled ? (
+        <details ref={formDisclosure} className="rounded-xl border border-zinc-200 dark:border-zinc-800" data-testid="personnel-order-add-item-disclosure">
+          <summary className="cursor-pointer px-4 py-2 text-sm font-semibold text-zinc-900 focus-visible:outline-2 focus-visible:outline-blue-500 dark:text-zinc-100">
+            {editingItemId != null ? `Редактирование пункта #${editingItemId}` : "Добавить пункт"}
+          </summary>
         <form
-          className="space-y-4 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800"
+          className="space-y-4 border-t border-zinc-200 p-4 dark:border-zinc-800"
           onSubmit={handleSubmit}
         >
           <div>
-            <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-              {editingItemId != null ? `Редактирование пункта #${editingItemId}` : "Добавить пункт"}
-            </div>
-            <p className="mt-1 text-xs text-zinc-500">
+            <p className="text-xs text-zinc-500">
               Заполните поля пункта в указанном порядке. Тип пункта не заменяет тип приказа.
             </p>
           </div>
@@ -1493,6 +1510,7 @@ export default function PersonnelOrderItemEditor({
             ) : null}
           </div>
         </form>
+        </details>
       ) : null}
     </div>
   );

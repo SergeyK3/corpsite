@@ -228,6 +228,59 @@ async function selectEmployeeFromSearch() {
   });
 }
 
+describe("add-item disclosure", () => {
+  const disclosure = () => screen.getByTestId("personnel-order-add-item-disclosure") as HTMLDetailsElement;
+  const toggle = () => fireEvent.click(disclosure().querySelector("summary")!);
+
+  it("starts compact and preserves the mounted form across toggles", () => {
+    render(<PersonnelOrderItemEditor orderId={1} items={[]} onChanged={vi.fn()} />);
+    expect(disclosure()).not.toHaveAttribute("open");
+    toggle();
+    expect(disclosure()).toHaveAttribute("open");
+    const input = screen.getByTestId("personnel-order-employee-search-input");
+    fireEvent.change(input, { target: { value: "Введённый фигурант" } });
+    toggle();
+    expect(disclosure()).not.toHaveAttribute("open");
+    toggle();
+    expect(screen.getByTestId("personnel-order-employee-search-input")).toBe(input);
+    expect(input).toHaveValue("Введённый фигурант");
+  });
+
+  it("clears and collapses after a successful addition", async () => {
+    render(<PersonnelOrderItemEditor orderId={1} items={[]} onChanged={vi.fn()} />);
+    toggle();
+    fireEvent.change(screen.getByTestId("personnel-order-item-type-select"), { target: { value: "RATE_CHANGE" } });
+    await selectEmployeeFromSearch();
+    fireEvent.change(screen.getByTestId("personnel-order-new-rate-input"), { target: { value: "0.75" } });
+    fireEvent.click(screen.getByRole("button", { name: "Добавить пункт" }));
+    await waitFor(() => expect(createPersonnelOrderItem).toHaveBeenCalled());
+    await waitFor(() => expect(disclosure()).not.toHaveAttribute("open"));
+    toggle();
+    expect(screen.getByTestId("personnel-order-employee-search-input")).toHaveValue("");
+    expect(screen.getByTestId("personnel-order-new-rate-input")).toHaveValue("");
+  });
+
+  it("reopens on a failed request even if collapsed while saving, retaining data and error", async () => {
+    let rejectSave!: (reason: Error) => void;
+    vi.mocked(createPersonnelOrderItem).mockImplementationOnce(() => new Promise((_, reject) => { rejectSave = reject; }));
+    render(<PersonnelOrderItemEditor orderId={1} items={[]} onChanged={vi.fn()} />);
+    toggle();
+    fireEvent.change(screen.getByTestId("personnel-order-item-type-select"), { target: { value: "RATE_CHANGE" } });
+    await selectEmployeeFromSearch();
+    fireEvent.change(screen.getByTestId("personnel-order-new-rate-input"), { target: { value: "0.75" } });
+    fireEvent.click(screen.getByRole("button", { name: "Добавить пункт" }));
+    await waitFor(() => expect(createPersonnelOrderItem).toHaveBeenCalled());
+    toggle();
+    expect(disclosure()).not.toHaveAttribute("open");
+    rejectSave(new Error("Проверка ошибки добавления"));
+    await screen.findByText("Проверка ошибки добавления");
+    expect(disclosure()).toHaveAttribute("open");
+    expect(screen.getByTestId("personnel-order-new-rate-input")).toHaveValue("0.75");
+    toggle(); toggle();
+    expect(screen.getByText("Проверка ошибки добавления")).toBeInTheDocument();
+  });
+});
+
 describe("item save → editorial generation integration", () => {
   function setup() {
     let persisted: PersonnelOrderDetailResponse = {
