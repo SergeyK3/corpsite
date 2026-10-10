@@ -17,8 +17,10 @@ class _TransactionEngine:
     def connect(self): return nullcontext(self.connection)
 
 def _insert(conn, code, version, status, values):
-    return conn.execute(text("""insert into personnel_order_template_versions(item_type_code,version_number,status,title_ru,title_kk,preamble_ru,preamble_kk,body_template_ru,body_template_kk,basis_template_ru,basis_template_kk)
-      values(:type,:version,:status,:title_ru,:title_kk,:preamble_ru,:preamble_kk,:body_template_ru,:body_template_kk,:basis_template_ru,:basis_template_kk) returning template_version_id"""), {**values,"type":code,"version":version,"status":status}).scalar_one()
+    template_id=service._resolve_template(conn,code,None,create=True)
+    conn.execute(text("UPDATE personnel_order_template_versions SET status='ARCHIVED' WHERE template_id=:id AND status IN ('DRAFT',:status)"),{'id':template_id,'status':status})
+    return conn.execute(text("""insert into personnel_order_template_versions(template_id,item_type_code,version_number,status,title_ru,title_kk,preamble_ru,preamble_kk,body_template_ru,body_template_kk,basis_template_ru,basis_template_kk)
+      values(:template,:type,:version,:status,:title_ru,:title_kk,:preamble_ru,:preamble_kk,:body_template_ru,:body_template_kk,:basis_template_ru,:basis_template_kk) returning template_version_id"""), {**values,"template":template_id,"type":code,"version":version,"status":status}).scalar_one()
 
 def _seed(conn, suffix):
     code="TERMINATION"; values=dict(get_personnel_order_template_spec("TERMINATION").initial_texts); changed=dict(values); changed["title_ru"]+=suffix
@@ -32,8 +34,7 @@ def test_publish_does_not_create_next_draft(monkeypatch):
         code="TERMINATION"; other="HIRE"; initial=dict(get_personnel_order_template_spec(code).initial_texts)
         changed=dict(initial); changed["title_ru"] += " integration publication"
         def insert(item_type, version, status, values):
-            return conn.execute(text("""insert into personnel_order_template_versions(item_type_code,version_number,status,title_ru,title_kk,preamble_ru,preamble_kk,body_template_ru,body_template_kk,basis_template_ru,basis_template_kk)
-              values(:type,:version,:status,:title_ru,:title_kk,:preamble_ru,:preamble_kk,:body_template_ru,:body_template_kk,:basis_template_ru,:basis_template_kk) returning template_version_id"""), {**values,"type":item_type,"version":version,"status":status}).scalar_one()
+            return _insert(conn,item_type,version,status,values)
         old=insert(code, 900001, "PUBLISHED", initial)
         draft=insert(code, 900002, "DRAFT", changed)
         other_id=insert(other, 900001, "PUBLISHED", dict(get_personnel_order_template_spec(other).initial_texts))

@@ -51,6 +51,13 @@ afterEach(() => {
 });
 
 describe("PersonnelOrdersPageClient employee filter", () => {
+  it('sends the number query to the server so orders beyond the first 200 can be found',async()=>{
+    navigation.params='q=1128&record_quality=WORKING';
+    api.listPersonnelOrders.mockImplementation(async filters=>({items:filters.q==='1128'?[{order_id:5578,order_number:'1128',order_date:'2026-06-23',order_type_code:'CONCURRENT_DUTY_END',status:'DRAFT',item_count:2,employee_ids:[523,256],employee_names:['Руслан Әсем Нариманқызы','Алдиярова Айзада Ермекбайқызы'],storage_json:{}}]:[],total:filters.q==='1128'?1:693,limit:200,offset:0}));
+    render(<PersonnelOrdersPageClient/>);
+    expect(await screen.findByTestId('personnel-order-row-5578')).toBeInTheDocument();
+    expect(api.listPersonnelOrders).toHaveBeenCalledWith(expect.objectContaining({q:'1128',record_quality:'WORKING',employee_id:undefined,limit:200,offset:0}));
+  });
   it("opens a journal order in the drawer without replacing the page URL", async () => {
     api.listPersonnelOrders.mockResolvedValue({
       items: [{ order_id: 5018, order_number: "1192/1", order_date: "2026-07-06", order_type_code: "LEAVE.UNPAID.GRANT", status: "DRAFT", item_count: 1, employee_ids: [383], employee_names: ["Ильясова Ассель Адиловна"], storage_json: {} }],

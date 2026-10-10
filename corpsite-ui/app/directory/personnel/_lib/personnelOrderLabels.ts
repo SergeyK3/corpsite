@@ -57,7 +57,7 @@ export const PERSONNEL_ORDER_TYPE_LABELS: Record<PersonnelOrderType, string> = {
   RETURN_FROM_CHILDCARE_LEAVE: "Выход из отпуска по уходу за ребёнком",
   TRANSFER: "Перевод",
   TERMINATION: "Увольнение",
-  CONCURRENT_DUTY_START: "Совмещение (начало)",
+  CONCURRENT_DUTY_START: "О совмещении",
   CONCURRENT_DUTY_END: "Совмещение (окончание)",
   SUPPLEMENTARY_PAY: "Дополнительная оплата",
   "LEAVE.ANNUAL.RECALL": "Отзыв из трудового отпуска",

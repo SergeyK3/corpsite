@@ -31,7 +31,7 @@ def test_document_titles_kk_ru() -> None:
 def test_unpaid_leave_titles_kk_ru() -> None:
     ru = generate_order_block("title", "ru", {"order_type_code": "LEAVE.UNPAID.GRANT"})
     kk = generate_order_block("title", "kk", {"order_type_code": "LEAVE.UNPAID.GRANT"})
-    assert ru["generated_text"] == "О предоставлении отпуска без сохранения заработной платы"
+    assert ru["generated_text"] == "Об отпуске без содержания"
     assert kk["generated_text"] == "Жалақы сақталмайтын демалыс беру туралы"
 
 
@@ -245,13 +245,11 @@ def test_position_dictionary_translates_only_approved_pair_and_preserves_saved_k
     assert "сақталған атау" in preserved["generated_text"]
 
 
-def test_closing_has_default_responsibility_text() -> None:
+def test_closing_has_no_automatic_responsibility_text() -> None:
     kk = generate_order_block("closing", "kk", {"order_type_code": "HIRE"})
     ru = generate_order_block("closing", "ru", {"order_type_code": "HIRE"})
-    assert kk["generated_text"]
-    assert ru["generated_text"]
-    assert "бақылау" in kk["generated_text"]
-    assert "Контроль" in ru["generated_text"]
+    assert kk["generated_text"] == ""
+    assert ru["generated_text"] == ""
     assert kk["source_fingerprint"]
 
 
@@ -372,7 +370,7 @@ def test_unpaid_leave_body_uses_payload_and_snapshot_in_both_locales() -> None:
             assert value in text
     assert "без сохранения заработной платы" in ru["generated_text"]
     assert "жалақы сақталмайтын" in kk["generated_text"]
-    assert "аралығындағы 10 күнтізбелік күнге" in kk["generated_text"]
+    assert "аралығында 10 күнтізбелік күнге" in kk["generated_text"]
     assert "Основание:" not in ru["generated_text"]
     assert "Негіз:" not in kk["generated_text"]
 

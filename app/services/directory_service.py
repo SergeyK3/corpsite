@@ -997,6 +997,7 @@ def get_employee(
     scope_unit_ids: Optional[List[int]] = None,
     rbac_scope_unit_id: Optional[int] = None,
     employee_id: str,
+    include_assignments: bool = False,
 ) -> Dict[str, Any]:
     target_id_text = _normalize_employee_id_text(employee_id)
     if not target_id_text:
@@ -1044,14 +1045,37 @@ def get_employee(
         if not row:
             raise HTTPException(status_code=404, detail="Employee not found.")
 
-        active_assignment_id = _get_single_active_assignment_id(
-            conn,
-            person_id=(int(row["e_person_id"]) if row.get("e_person_id") is not None else None),
-        )
+        additional_assignments = []
+        available_assignments = []
+        person_id = int(row["e_person_id"]) if row.get("e_person_id") is not None else None
+        if include_assignments and person_id is not None and ("person_assignments", "table") in _list_relations():
+            assignment_rows = conn.execute(text("""
+                SELECT pa.assignment_id, pa.position_id, pa.org_unit_id, pa.rate, pa.is_primary, to_jsonb(p) AS position, to_jsonb(ou) AS org_unit
+                FROM public.person_assignments pa
+                LEFT JOIN public.positions p ON p.position_id=pa.position_id
+                LEFT JOIN public.org_units ou ON ou.unit_id=pa.org_unit_id
+                WHERE pa.person_id=:person AND pa.active_flag IS TRUE
+                  AND pa.lifecycle_status='active' AND pa.start_date<=CURRENT_DATE
+                  AND (pa.end_date IS NULL OR pa.end_date>=CURRENT_DATE)
+                ORDER BY pa.assignment_id
+            """), {"person": person_id}).mappings().all()
+            primary = [r for r in assignment_rows if r["is_primary"] is True]
+            available_assignments = [dict(r) for r in assignment_rows
+                if (scope_unit_ids is None or r["org_unit_id"] in scope_unit_ids)
+                and (effective_scope is None or r["org_unit_id"] == effective_scope)]
+            active_assignment_id = int(primary[0]["assignment_id"]) if len(primary) == 1 else None
+            additional_assignments = [dict(r) for r in assignment_rows if r["is_primary"] is False
+                and (scope_unit_ids is None or r["org_unit_id"] in scope_unit_ids)
+                and (effective_scope is None or r["org_unit_id"] == effective_scope)]
+        else:
+            active_assignment_id = _get_single_active_assignment_id(conn, person_id=person_id)
 
     result = _normalize_employee_joined(dict(row), emp_rel)
     result["active_assignment_id"] = active_assignment_id
     result["user"] = _fetch_linked_user(row.get("e_id"))
+    if include_assignments:
+        result["additional_assignments"] = additional_assignments
+        result["assignments"] = available_assignments
     return result
 
 

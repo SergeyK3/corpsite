@@ -1,6 +1,7 @@
 import type { PersonnelOrderPrintLanguage } from "./personnelOrderPrintLanguage";
 import {
   formatPersonnelOrderPrintDate,
+  formatPersonnelOrderActionStartDate,
   formatPersonnelOrderPrintStartDate,
   formatPersonnelOrderPrintRate,
   formatPersonnelOrderPrintRateValue,
@@ -56,7 +57,7 @@ function renderTransfer(ctx: PersonnelOrderPrintItemContext, lang: "kk" | "ru"):
     ctx.toRate != null && ctx.toRate !== ""
       ? formatPersonnelOrderPrintRateValue(ctx.toRate)
       : null;
-  const date = formatPersonnelOrderPrintDate(ctx.effectiveDate, lang);
+  const date = formatPersonnelOrderActionStartDate(ctx.effectiveDate, lang);
   if (lang === "kk") {
     const ratePart = rateValue ? `, ${rateValue} мөлшерлемесінде` : "";
     return `${fio} «${org}» бөлімшесіне «${position}» лауазымына${ratePart} ${date} бастап ауыстырылсын.`;
@@ -94,7 +95,7 @@ function renderConcurrentStart(ctx: PersonnelOrderPrintItemContext, lang: "kk" |
     ctx.totalRate != null && ctx.totalRate !== ""
       ? formatPersonnelOrderPrintRate(ctx.totalRate, lang)
       : null;
-  const date = formatPersonnelOrderPrintDate(ctx.effectiveDate, lang);
+  const date = formatPersonnelOrderActionStartDate(ctx.effectiveDate, lang);
   if (lang === "kk") {
     const totalPart = total ? ` Жалпы мөлшерлеме: ${total}.` : "";
     return `${fio} үшін қоса атқару ${concurrentValue} мөлшерлемесінде ${date} бастап белгіленсін.${totalPart}`;

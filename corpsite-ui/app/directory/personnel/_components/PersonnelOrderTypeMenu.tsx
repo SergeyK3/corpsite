@@ -71,7 +71,7 @@ export default function PersonnelOrderTypeMenu({ value, language, onChange, disa
   const [position, setPosition] = useState<Position>({ left: 8, top: 8, groupWidth: 280, itemWidth: 360, maxHeight: 460, side: "right" });
   const kk = language === "kk";
   const searching = query.trim().length > 0;
-  const results = searching ? searchPersonnelOrderTypes(query) : [];
+  const results = searching ? [...new Set([...searchPersonnelOrderTypes(query), ...Object.entries(variants).filter(([,rows]) => rows.some(row => `${row.name_ru} ${row.name_kk}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))).map(([code]) => code as PersonnelOrderCreateType)])] : [];
   const types = active ? personnelOrderGroupTypes(active) : [];
 
   function cancelHover() {
@@ -249,13 +249,23 @@ export default function PersonnelOrderTypeMenu({ value, language, onChange, disa
     }
   }
 
+  const variantName = (type: string, variant: PersonnelPublishedTemplateVariant) => {
+    const name = (kk ? variant.name_kk || variant.name_ru : variant.name_ru || variant.name_kk).trim();
+    const duplicates = (variants[type] || []).filter(v => (kk ? v.name_kk || v.name_ru : v.name_ru || v.name_kk).trim() === name);
+    return duplicates.length > 1 ? `${name} · #${variant.template_id}, ${kk ? "нұсқа" : "версия"} ${variant.version_number}` : name;
+  };
+  const selectedVariant = variants[value]?.find(v => v.template_version_id === selectedVersion);
+  const selectedName = selectedVariant ? variantName(value, selectedVariant) : "";
+  const typeLabel = value ? personnelOrderTypeLabel(value, language) : kk ? "Бұйрық түрін таңдаңыз" : "Выберите тип кадрового приказа";
+  const selectionLabel = selectedName || typeLabel;
+
   const menuItems = (codes: readonly PersonnelOrderCreateType[]) => codes.map(type => (
     <button key={type} type="button" role="menuitem" data-type-code={type} className={itemClass} onClick={() => choose(type)}
       aria-haspopup={(variants[type]?.length || 0) > 1 ? "menu" : undefined}
       aria-expanded={(variants[type]?.length || 0) > 1 ? variantType === type : undefined}
       onPointerEnter={event => { if (event.pointerType !== "touch") hoverType(type, { x: event.clientX, y: event.clientY }); }}
       onPointerMove={event => { if (variantType === type) variantOrigin.current = { x: event.clientX, y: event.clientY }; }}>
-      {personnelOrderTypeLabel(type, language)}
+      {(variants[type]?.length || 0) === 1 ? variantName(type, variants[type][0]) : personnelOrderTypeLabel(type, language)}
       {(variants[type]?.length || 0) > 1 ? <span aria-hidden="true"> ›</span> : null}
     </button>
   ));
@@ -267,7 +277,7 @@ export default function PersonnelOrderTypeMenu({ value, language, onChange, disa
         if (open) close();
         else { setQuery(""); setVariantType(null); setActive(value ? PERSONNEL_ORDER_TYPE_GROUP[value as PersonnelOrderCreateType] || null : null); setOpen(true); }
       }}>
-        <span>{value ? personnelOrderTypeLabel(value, language) : kk ? "Бұйрық түрін таңдаңыз" : "Выберите тип кадрового приказа"}{selectedVersion ? ` · ${(() => { const v = variants[value]?.find(v => v.template_version_id === selectedVersion); return v ? (kk ? v.name_kk || v.name_ru : v.name_ru || v.name_kk) : ""; })()}` : ""}</span>
+        <span>{selectionLabel}</span>
         <span aria-hidden="true">▾</span>
       </button>
       {open && createPortal(
@@ -308,7 +318,7 @@ export default function PersonnelOrderTypeMenu({ value, language, onChange, disa
             className="shrink-0 border-l border-zinc-200 p-2 dark:border-zinc-700" style={{ width: position.itemWidth }}>
             <p className="px-3 py-2 text-xs font-semibold text-zinc-500">{kk ? "Үлгі нұсқалары" : "Варианты шаблона"}</p>
             {variants[variantType].map(v => <button key={v.template_version_id} type="button" role="menuitem" data-template-version={v.template_version_id}
-              onClick={() => choose(variantType, v.template_version_id)} className={itemClass}>{kk ? v.name_kk || v.name_ru : v.name_ru || v.name_kk}</button>)}
+              onClick={() => choose(variantType, v.template_version_id)} className={itemClass}>{variantName(variantType, v)}</button>)}
           </div> : null}
         </div>, document.body,
       )}

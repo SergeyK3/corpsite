@@ -116,7 +116,7 @@ export default function PersonnelOrdersPageClient() {
       const body = await listPersonnelOrders({
         ...filters,
         order_id: undefined,
-        q: undefined,
+        q: filters.q,
         limit: 200,
         offset: 0,
       });

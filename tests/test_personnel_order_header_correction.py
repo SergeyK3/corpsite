@@ -49,6 +49,55 @@ def test_duplicate_rules_and_current_order_excluded(seed):
         assert not duplicate_preview(order_number="125\u2013\u043a",order_date=date(2026,7,10),order_id=one)["blocking"]
     finally:_clean(one);_clean(two)
 
+def test_deleted_draft_no_longer_reserves_its_number_and_date(seed,monkeypatch):
+    from contextlib import nullcontext
+    from app.services import personnel_order_draft_deletion_service as deletion, personnel_order_document_header_service as headers
+    number='HDR-delete-'+uuid4().hex;actor=int(seed['initiator_user_id'])
+    with engine.connect() as conn:
+        transaction=conn.begin()
+        class TransactionEngine:
+            def connect(self):return nullcontext(conn)
+            def begin(self):return nullcontext(conn)
+        monkeypatch.setattr(deletion,'engine',TransactionEngine());monkeypatch.setattr(headers,'engine',TransactionEngine())
+        one=conn.execute(text("INSERT INTO personnel_orders(order_number,order_date,order_type_code,status,source_mode,created_by) VALUES(:n,'2026-09-01','HIRE','DRAFT','PAPER',:actor) RETURNING order_id"),{'n':number,'actor':actor}).scalar_one()
+        try:
+            assert duplicate_preview(order_number=number,order_date=date(2026,9,1))['blocking']
+            deletion.execute(order_id=one,actor_user_id=actor,reason='Test deletion',confirmation_phrase=f'DELETE DRAFT ORDER {one}')
+            result=duplicate_preview(order_number=number,order_date=date(2026,9,1))
+            assert result=={'blocking':False,'warnings':[],'candidates':[]}
+            replacement=conn.execute(text("INSERT INTO personnel_orders(order_number,order_date,order_type_code,status,source_mode,created_by) VALUES(:n,'2026-09-01','HIRE','DRAFT','PAPER',:actor) RETURNING order_id"),{'n':number,'actor':actor}).scalar_one()
+            assert replacement!=one and duplicate_preview(order_number=number,order_date=date(2026,9,1))['candidates'][0]['order_id']==replacement
+        finally:transaction.rollback()
+
+@pytest.mark.parametrize('status',['DRAFT','REGISTERED','SIGNED','VOIDED'])
+def test_non_deleted_conflicts_keep_the_exact_record_and_metadata(seed,status):
+    from app.services.personnel_order_document_header_service import PersonnelOrderDuplicateError
+    number='HDR-active-'+uuid4().hex;one,actor=_order(seed,number=number,status='DRAFT' if status=='VOIDED' else status)
+    try:
+        if status=='VOIDED':
+            with engine.begin() as c:c.execute(text("UPDATE personnel_orders SET status='VOIDED',void_reason='Test void',voided_at=now(),voided_by=:actor WHERE order_id=:id"),{'id':one,'actor':actor})
+        result=duplicate_preview(order_number=number,order_date=date(2026,9,1))
+        assert result['blocking'] and result['candidates'][0]['order_id']==one
+        assert result['candidates'][0]['is_conflict'] and result['candidates'][0]['can_open']
+        assert result['candidates'][0]['record_quality']=='WORKING'
+        error=PersonnelOrderDuplicateError(result)
+        assert str(one) in error.message and number in error.message and '2026-09-01' in error.message
+    finally:_clean(one)
+
+def test_database_uniqueness_uses_normalized_number_date_and_allows_other_dates(seed):
+    from sqlalchemy.exc import IntegrityError
+    number='HDR-db-'+uuid4().hex;actor=int(seed['initiator_user_id'])
+    sql=text("INSERT INTO personnel_orders(order_number,order_date,order_type_code,status,source_mode,created_by) VALUES(:n,:day,'HIRE','DRAFT','PAPER',:actor) RETURNING order_id")
+    with engine.connect() as conn:
+        transaction=conn.begin()
+        try:
+            conn.execute(sql,{'n':number,'day':date(2026,9,1),'actor':actor})
+            conn.execute(sql,{'n':number,'day':date(2026,9,2),'actor':actor})
+            with pytest.raises(IntegrityError) as failure:
+                with conn.begin_nested():conn.execute(sql,{'n':'  '+number.upper().replace('-','–')+'  ','day':date(2026,9,1),'actor':actor})
+            assert failure.value.orig.diag.constraint_name=='uq_personnel_orders_active_number_date'
+        finally:transaction.rollback()
+
 def test_confirmed_header_change_reopens_once_and_preserves_facts(seed):
     oid,a=_order(seed,status="REGISTERED")
     try:

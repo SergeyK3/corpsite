@@ -57,8 +57,11 @@ class _RealTransactionEngine:
 
 
 def _pg_insert_template(conn: Any, code: str, version: int, status: str, values: dict[str, str]) -> int:
-    return conn.execute(text("""INSERT INTO personnel_order_template_versions(item_type_code,version_number,status,title_ru,title_kk,preamble_ru,preamble_kk,body_template_ru,body_template_kk,basis_template_ru,basis_template_kk)
-        VALUES(:type,:version,:status,:title_ru,:title_kk,:preamble_ru,:preamble_kk,:body_template_ru,:body_template_kk,:basis_template_ru,:basis_template_kk) RETURNING template_version_id"""), {**values, "type": code, "version": version, "status": status}).scalar_one()
+    from app.services.personnel_order_template_draft_service import _resolve_template
+    template_id=_resolve_template(conn,code,None,create=True)
+    conn.execute(text("UPDATE personnel_order_template_versions SET status='ARCHIVED' WHERE template_id=:id AND status IN ('DRAFT',:status)"),{'id':template_id,'status':status})
+    return conn.execute(text("""INSERT INTO personnel_order_template_versions(template_id,item_type_code,version_number,status,title_ru,title_kk,preamble_ru,preamble_kk,body_template_ru,body_template_kk,basis_template_ru,basis_template_kk)
+        VALUES(:template,:type,:version,:status,:title_ru,:title_kk,:preamble_ru,:preamble_kk,:body_template_ru,:body_template_kk,:basis_template_ru,:basis_template_kk) RETURNING template_version_id"""), {**values, "template":template_id,"type": code, "version": version, "status": status}).scalar_one()
 
 
 def _write(tmp_path: Path, values: dict[str, str]) -> Path:

@@ -28,13 +28,13 @@ def test_readable_initial_texts_match_the_ten_type_golden_snapshot() -> None:
         "LEAVE.ANNUAL.RECALL": "bbddeb517479b8b78555e58b95b1f083ee9e00e47b759630cf42465ca054bedb",
         "HIRE": "96444278a247538672dfb544559359d08cc3b54e0de182d2d3fb0617320658fa",
         "TRANSFER": "3a6d711e7484839479a98697da7e91a6a2f27b5fab315ad38c3f295722005995",
-        "TERMINATION": "bc34ed5af9bbc3e3e1fd7dd874aeebecc9b2d2b918692526c59abaabfc2c78a2",
-        "CONCURRENT_DUTY_START": "6d3af87099855f0270cc9c015e24fa44dfc98bcd8ea7f7ebccb2848dd77fcdce",
-        "CONCURRENT_DUTY_END": "6f9dc6cd6a6424d061d1d154142e18a4f02bdaaaa581f2d3fb96370bade07fc0",
-        "LEAVE.ANNUAL.GRANT": "9ac3b1e220d4f174350626cb65d97949abcdce9ddadb6ba02c4846242e7bb96d",
-        "LEAVE.UNPAID.GRANT": "df3b6b2c648e392e99cba29ce45ed9f15272f50e253420d4a37f0b62f13a3eed",
+        "TERMINATION": "9de2f78c755fe3015150117ced15279c550a77ca767f0937bec3e008cc0d516e",
+        "CONCURRENT_DUTY_START": "da7d8989a33a95d66725d4a1ac6602796d9fa5a4b77609a67dd77c0dbbd66e2c",
+        "CONCURRENT_DUTY_END": "23bd2e8eef271e6c2da00da1758c5d48591da90d1812c86bb6acf7a67662b829",
+        "LEAVE.ANNUAL.GRANT": "cf74a3322817548e5f18b82e98e745137c22291ddb2d8db68cf4590d28e39810",
+        "LEAVE.UNPAID.GRANT": "23723590c2419afb132196b65c5d3f2b48cc560c672f66e10f615dd35ea42f71",
         "LEAVE.CHILDCARE.GRANT": "696d0fa0986ec0b25d3aedb43c40dd4638040354b80b4b2f8d0a0d5e3e7e75a4",
-        "SUPPLEMENTARY_PAY": "bc5b0cfcb36a7bd4606ac327c896268ab020bc959a4ccdeb8ebde5d9a1cbad54",
+        "SUPPLEMENTARY_PAY": "48d0222fe185ddc1ebbb848a7016bcd6c37c41ae25410ff00352b09f1863891a",
         "RETURN_FROM_CHILDCARE_LEAVE": "bf6c0f6daf69edbf77df33015aedc20d253e15d68c84ad9f6c743edb41c7c3e3",
     }
     expected_fields = {"title_ru", "title_kk", "preamble_ru", "preamble_kk", "body_template_ru", "body_template_kk", "basis_template_ru", "basis_template_kk"}
@@ -88,6 +88,8 @@ class _DraftStore:
         sql = str(statement)
         self.statements.append(sql)
         values = values or {}
+        if sql.lstrip().startswith("UPDATE public.personnel_order_templates "):
+            return _Result(self.row)
         if sql.lstrip().startswith("SELECT"):
             return _Result(self.row)
         if sql.lstrip().startswith("INSERT"):
@@ -350,7 +352,7 @@ def test_draft_create_load_save_noop_and_conflict_are_isolated_to_template_versi
     assert conflict.value.code == "TEMPLATE_REVISION_CONFLICT"
     assert conflict.value.conflict is True
     assert admin_router._template_draft_error(conflict.value).status_code == 409
-    assert all("personnel_order_template_versions" in sql for sql in draft_store.statements)
+    assert all("personnel_order_template_versions" in sql or "UPDATE public.personnel_order_templates " in sql for sql in draft_store.statements)
     assert not any(word in "\n".join(draft_store.statements).lower() for word in ("personnel_orders", "employee_events", "assignments"))
 
 

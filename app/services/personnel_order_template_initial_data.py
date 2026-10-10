@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Final
 from app.services.personnel_order_childcare_contract import TEXTS as CHILDCARE_TEXTS
+from app.services.personnel_order_supplementary_pay_contract import BODY_RU as SUPPLEMENTARY_RU, BODY_KK as SUPPLEMENTARY_KK
 
 InitialTexts = dict[str, str]
 INITIAL_TEXTS_BY_TYPE: Final[dict[str, InitialTexts]] = {'HIRE': {'title_ru': 'О приёме на работу',
@@ -25,7 +26,7 @@ INITIAL_TEXTS_BY_TYPE: Final[dict[str, InitialTexts]] = {'HIRE': {'title_ru': '�
               'basis_template_ru': 'Основание: {{basis}}.',
               'basis_template_kk': 'Негіз: {{basis}}.'},
  'TERMINATION': {'title_ru': 'Об увольнении',
-                 'title_kk': 'Жұмыстан босату туралы',
+                 'title_kk': 'Еңбек шартын бұзу туралы',
                  'preamble_ru': 'В соответствии с Трудовым кодексом Республики Казахстан',
                  'preamble_kk': 'Қазақстан Республикасының Еңбек кодексіне сәйкес',
                  'body_template_ru': 'Уволить {{employee.full_name}}, {{position.title_ru}} подразделения '
@@ -42,8 +43,8 @@ INITIAL_TEXTS_BY_TYPE: Final[dict[str, InitialTexts]] = {'HIRE': {'title_ru': '�
                                      '{{termination.unused_leave_days}} күнтізбелік күніне есеп айырысу жүргізсін.',
                  'basis_template_ru': 'Основание: {{basis}}.',
                  'basis_template_kk': 'Негіз: {{basis}}.'},
- 'CONCURRENT_DUTY_START': {'title_ru': 'Об установлении совмещения',
-                           'title_kk': 'Қоса атқаруды белгілеу туралы',
+ 'CONCURRENT_DUTY_START': {'title_ru': 'О совмещении',
+                           'title_kk': 'Қоса атқару туралы',
                            'preamble_ru': 'В соответствии с Трудовым кодексом Республики Казахстан',
                            'preamble_kk': 'Қазақстан Республикасының Еңбек кодексіне сәйкес',
                            'body_template_ru': 'Установить {{employee.full_name}} совмещение в размере '
@@ -55,7 +56,7 @@ INITIAL_TEXTS_BY_TYPE: Final[dict[str, InitialTexts]] = {'HIRE': {'title_ru': '�
                            'basis_template_ru': 'Основание: {{basis}}.',
                            'basis_template_kk': 'Негіз: {{basis}}.'},
  'CONCURRENT_DUTY_END': {'title_ru': 'О прекращении совмещения',
-                         'title_kk': 'Қоса атқаруды тоқтату туралы',
+                         'title_kk': 'Ставканы алып тастау туралы',
                          'preamble_ru': 'В соответствии с Трудовым кодексом Республики Казахстан',
                          'preamble_kk': 'Қазақстан Республикасының Еңбек кодексіне сәйкес',
                          'body_template_ru': 'Прекратить совмещение для {{employee.full_name}} с {{effective_date}}. '
@@ -64,8 +65,8 @@ INITIAL_TEXTS_BY_TYPE: Final[dict[str, InitialTexts]] = {'HIRE': {'title_ru': '�
                                              'тоқтатылсын. Қалған мөлшерлеме: {{remaining.rate}}.',
                          'basis_template_ru': 'Основание: {{basis}}.',
                          'basis_template_kk': 'Негіз: {{basis}}.'},
- 'LEAVE.ANNUAL.GRANT': {'title_ru': 'О предоставлении ежегодного оплачиваемого трудового отпуска',
-                        'title_kk': 'Жыл сайынғы ақылы еңбек демалысын беру туралы',
+ 'LEAVE.ANNUAL.GRANT': {'title_ru': 'О трудовом отпуске',
+                        'title_kk': 'Еңбек демалысы туралы',
                         'preamble_ru': 'В соответствии с Трудовым кодексом Республики Казахстан',
                         'preamble_kk': 'Қазақстан Республикасының Еңбек кодексіне сәйкес',
                         'body_template_ru': 'Предоставить {{employee.full_name}}, {{position.title_ru}} подразделения '
@@ -78,7 +79,7 @@ INITIAL_TEXTS_BY_TYPE: Final[dict[str, InitialTexts]] = {'HIRE': {'title_ru': '�
                                             'ақылы еңбек демалысы берілсін.',
                         'basis_template_ru': 'Основание: {{basis}}.',
                         'basis_template_kk': 'Негіз: {{basis}}.'},
- 'LEAVE.UNPAID.GRANT': {'title_ru': 'О предоставлении отпуска без сохранения заработной платы',
+ 'LEAVE.UNPAID.GRANT': {'title_ru': 'Об отпуске без содержания',
                         'title_kk': 'Жалақы сақталмайтын демалыс беру туралы',
                         'preamble_ru': 'В соответствии с Трудовым кодексом Республики Казахстан',
                         'preamble_kk': 'Қазақстан Республикасының Еңбек кодексіне сәйкес',
@@ -97,10 +98,8 @@ INITIAL_TEXTS_BY_TYPE: Final[dict[str, InitialTexts]] = {'HIRE': {'title_ru': '�
                        'title_kk': 'Қосымша ақы туралы',
                        'preamble_ru': 'Условия дополнительной оплаты уточняются после сверки с DOCX.',
                        'preamble_kk': 'Қосымша ақының шарттары DOCX-пен салыстырылғаннан кейін нақтыланады.',
-                       'body_template_ru': 'Дополнительная оплата для {{employee.full_name}}: размер, период, '
-                                           'основание и условия требуют сверки с DOCX.',
-                       'body_template_kk': '{{employee.full_name}} үшін қосымша ақы: мөлшері, кезеңі, негізі және '
-                                           'шарттары DOCX-пен салыстыруды талап етеді.',
+                       'body_template_ru': SUPPLEMENTARY_RU,
+                       'body_template_kk': SUPPLEMENTARY_KK,
                        'basis_template_ru': 'Основание: {{basis}}.',
                        'basis_template_kk': 'Негіз: {{basis}}.'},
  'RETURN_FROM_CHILDCARE_LEAVE': {'title_ru': 'О выходе на работу из отпуска по уходу за ребёнком',
@@ -118,3 +117,7 @@ INITIAL_TEXTS_BY_TYPE: Final[dict[str, InitialTexts]] = {'HIRE': {'title_ru': '�
 
 from app.services.personnel_order_recall_contract import TEXTS as RECALL_TEXTS
 INITIAL_TEXTS_BY_TYPE['LEAVE.ANNUAL.RECALL'] = RECALL_TEXTS
+
+# Keep the built-in identity and surrounding text; only the directives change.
+from app.services.personnel_order_concurrent_end_contract import BODY_RU as CESSATION_RU, BODY_KK as CESSATION_KK
+INITIAL_TEXTS_BY_TYPE["CONCURRENT_DUTY_END"].update(body_template_ru=CESSATION_RU, body_template_kk=CESSATION_KK)

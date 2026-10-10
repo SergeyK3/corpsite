@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   buildPersonnelOrdersHref,
@@ -6,9 +6,15 @@ import {
   filterPersonnelOrdersBySearch,
   parsePersonnelOrdersFilters,
   type PersonnelOrderListItem,
+  createManualPersonnelOrderDraft,PersonnelOrderDuplicateError,
 } from "./personnelOrdersApi.client";
 
 describe("personnelOrdersApi.client", () => {
+  it('preserves conflict candidates from the backend 409 response',async()=>{
+    const duplicate={blocking:true,warnings:[],candidates:[{order_id:456,order_number:'123',order_date:'2026-10-09',status:'DRAFT',order_type_code:'HIRE',is_conflict:true,can_open:true}]};
+    vi.stubGlobal('fetch',vi.fn().mockResolvedValue(new Response(JSON.stringify({detail:{code:'DUPLICATE_ORDER_NUMBER_DATE',message:'Приказ № 123 уже существует (ID 456)',duplicate}}),{status:409})));
+    try{const error=await createManualPersonnelOrderDraft({} as never).catch(error=>error);expect(error).toMatchObject({duplicate,message:'Приказ № 123 уже существует (ID 456)'});expect(error).toBeInstanceOf(PersonnelOrderDuplicateError);}finally{vi.unstubAllGlobals();}
+  });
   it("builds query params for API filters", () => {
     const qs = buildPersonnelOrdersQueryParams(
       {

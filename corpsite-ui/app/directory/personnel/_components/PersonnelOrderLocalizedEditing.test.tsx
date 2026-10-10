@@ -108,7 +108,7 @@ describe("localized personnel order editing", () => {
       assignment: structuredClone(reread.items[0]?.payload.to_assignment),
     };
 
-    expect(renderPersonnelOrderDocument(reread, "ru", state)?.points[0]?.text).toContain("медбрат");
+    expect(renderPersonnelOrderDocument(reread, "ru", state)?.points[0]?.text).toBe("Перевести Иванова на должность медсестра.");
     expect(renderPersonnelOrderDocument(reread, "kk", state)?.points[0]?.text).toBe("мейіргер");
 
     const model = buildPersonnelOrderPrintViewModel(reread, {
@@ -117,7 +117,7 @@ describe("localized personnel order editing", () => {
     });
     expect(model.items[0]?.context.positionName).toEqual({ ru: "медбрат" });
     const ruPrintHtml = buildPersonnelOrderPrintDocumentHtml(model, "ru");
-    expect(ruPrintHtml).toContain("медбрат");
+    expect(ruPrintHtml).toContain("Перевести Иванова на должность медсестра.");
     expect(ruPrintHtml).not.toContain("мейіргер");
     const kkPrintHtml = buildPersonnelOrderPrintDocumentHtml(model, "kk");
     expect(kkPrintHtml).toContain("мейіргер");
@@ -139,7 +139,7 @@ describe("localized personnel order editing", () => {
     expect(printHtml).toContain("РУЧНОЙ ТЕКСТ ВЫШЕ ДОЛЖНОСТИ");
   });
 
-  it("renders every termination item in item order and adds one shared accounting point", () => {
+  it("renders every termination item in item order without an automatic accounting point", () => {
     const order = detailWithPositionOverride();
     order.order.order_type_code = "TERMINATION";
     order.items = [1, 2, 3].map((number) => ({
@@ -149,12 +149,12 @@ describe("localized personnel order editing", () => {
       payload: { source_employee_name: `Сотрудник ${number}`, basis_ids: ["application"] },
     }));
     const screen = renderPersonnelOrderDocument(order, "ru");
-    expect(screen?.points).toHaveLength(4);
+    expect(screen?.points).toHaveLength(3);
     expect(screen?.points.map((point) => point.text).join(" ")).toContain("Сотрудник 3");
-    expect(screen?.points[3]?.text).toBe("Бухгалтерии произвести расчёт за неиспользованные дни отпуска увольняемых работников.");
+    expect(screen?.points.map(point=>point.text).join(' ')).not.toContain("Бухгалтерии произвести расчёт");
     const print = buildPersonnelOrderPrintViewModel(order);
-    expect(print.items.map((item) => item.itemNumber)).toEqual([1, 2, 3, 4]);
-    expect(buildPersonnelOrderPrintDocumentHtml(print, "ru")).toContain("увольняемых работников");
+    expect(print.items.map((item) => item.itemNumber)).toEqual([1, 2, 3]);
+    expect(buildPersonnelOrderPrintDocumentHtml(print, "ru")).not.toContain("увольняемых работников");
   });
 
 });

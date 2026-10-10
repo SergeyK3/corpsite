@@ -67,6 +67,7 @@ def _order(conn:Any,order_id:int):
  items=conn.execute(text("SELECT * FROM public.personnel_order_items WHERE order_id=:id AND item_status='ACTIVE' ORDER BY item_number,item_id"),{"id":order_id}).mappings().all()
  if not items: raise TemplateApplicationError("Template application requires at least one ACTIVE item.")
  if len({str(x["item_type_code"]) for x in items})!=1: raise TemplateApplicationError("Template application requires ACTIVE items of one type.")
+ if str(order['order_type_code']) not in {str(items[0]['item_type_code']), 'COMPOSITE'}: raise TemplateApplicationError('The active item type does not match the order type.')
  pinned = order.get("selected_template_version_id")
  if pinned is not None:
   template=conn.execute(text("SELECT * FROM public.personnel_order_template_versions WHERE template_version_id=:id AND item_type_code=:t AND status IN ('PUBLISHED','ARCHIVED')"),{"id":pinned,"t":items[0]["item_type_code"]}).mappings().first()
@@ -74,7 +75,7 @@ def _order(conn:Any,order_id:int):
   template=conn.execute(text("SELECT v.* FROM public.personnel_order_template_versions v JOIN public.personnel_order_templates t ON t.template_id=v.template_id WHERE v.item_type_code=:t AND v.status='PUBLISHED' AND t.is_default"),{"t":items[0]["item_type_code"]}).mappings().first()
  if not template: raise TemplateApplicationError("No PUBLISHED template exists for this item type.")
  return order,list(items),dict(template)
-def _values(conn:Any,item:Mapping[str,Any]):
+def _values(conn:Any,item:Mapping[str,Any],template:Mapping[str,Any]|None=None):
  employee=conn.execute(text("SELECT e.full_name,p.name position_name,ou.name org_unit_name FROM public.employees e LEFT JOIN public.positions p ON p.position_id=e.position_id LEFT JOIN public.org_units ou ON ou.unit_id=e.org_unit_id WHERE e.employee_id=:id"),{"id":item["employee_id"]}).mappings().first()
  payload=item["payload"] or {}; posru=_snapshot(payload,"position_name",str((employee or {}).get("position_name") or "")); unitru=_snapshot(payload,"org_unit_name",str((employee or {}).get("org_unit_name") or "")); poskk=_snapshot(payload,"position_name","","kk"); unitkk=_snapshot(payload,"org_unit_name","","kk"); warnings=[]; missing=[]
  if str(item["item_type_code"]) == "LEAVE.ANNUAL.RECALL":
@@ -114,6 +115,36 @@ def _values(conn:Any,item:Mapping[str,Any]):
   if basis and basis["basis_type"]=="PERSONAL_APPLICATION":
    if basis["document_date"]: values.update({"basis.application_date_ru":" от "+format_leave_date(basis["document_date"],"ru"),"basis.application_date_kk":" "+format_leave_date(basis["document_date"],"kk")+" күнгі"})
    if basis["document_number"]:values["basis.application_number_suffix"]=" № "+str(basis["document_number"])
+ if str(item["item_type_code"]) == "TRANSFER":
+  if "transfer" in payload:
+   from app.services.personnel_order_transfer_contract import transfer_values
+   try: values.update(transfer_values(payload["transfer"]))
+   except ValueError as exc: raise TemplateApplicationError(str(exc)) from exc
+  else:
+   values["rate"] = str(payload.get("to_rate") or "")
+ if str(item["item_type_code"]) == "SUPPLEMENTARY_PAY" and "allowance" in payload:
+  from app.services.personnel_order_supplementary_pay_contract import values as supplementary_values
+  try: values.update(supplementary_values(payload['allowance'],payload.get('allowance_recipient'),item.get('effective_date')))
+  except ValueError as exc: raise TemplateApplicationError(str(exc)) from exc
+ if str(item["item_type_code"]) == "CONCURRENT_DUTY_START" and "replacement" in payload:
+  from app.services.personnel_order_service_area_contract import enabled,values as area_values
+  from app.services.personnel_order_replacement_contract import replacement_values, variant, optional_placement
+  try:
+   if enabled(template or {}):values.update(area_values(payload.get('concurrent'),payload['replacement'],item.get('effective_date'),payload.get('allowance_recipient')))
+   else:values.update(replacement_values(payload.get("concurrent"), payload["replacement"], item.get("effective_date"), variant(template or {}) or None, optional_placement=optional_placement(template or {})))
+  except ValueError as exc: raise TemplateApplicationError(str(exc)) from exc
+ elif str(item["item_type_code"]) == "CONCURRENT_DUTY_START" and "concurrent" in payload:
+  from app.services.personnel_order_concurrent_contract import concurrent_values
+  try: values.update(concurrent_values(payload["concurrent"],item.get("effective_date")))
+  except ValueError as exc: raise TemplateApplicationError(str(exc)) from exc
+ if str(item["item_type_code"]) == "CONCURRENT_DUTY_END" and "concurrent" in payload:
+  from app.services.personnel_order_concurrent_end_contract import cessation_values
+  try: values.update(cessation_values(payload["concurrent"],item.get("effective_date")))
+  except ValueError as exc: raise TemplateApplicationError(str(exc)) from exc
+ if str(item["item_type_code"]) in {"TRANSFER", "CONCURRENT_DUTY_START"}:
+  from app.services.personnel_orders_editorial.generators import format_personnel_order_date_numeric, _format_date_from
+  day = str(item.get("effective_date") or "")
+  values.update({"effective_date.ru":format_personnel_order_date_numeric(day), "effective_date.kk":_format_date_from(day,"kk") if day else ""})
  return values,warnings,missing
 def _render(template:Mapping[str,Any],values:Mapping[str,str], *, draft_preview:bool=False):
  texts={k:template[k] for k in _FIELDS}
@@ -122,19 +153,26 @@ def _render(template:Mapping[str,Any],values:Mapping[str,str], *, draft_preview:
   _validate(texts,str(template["item_type_code"]),require_complete=False)
  else: validate_template_texts(str(template["item_type_code"]),texts)
  missing=set()
+ from app.services.personnel_order_service_area_contract import enabled
+ optional_tokens={'replacement.clause','allowance.term'} if enabled(texts) else set()
  def each(key,value):
   def repl(match):
-   token=match.group(1); value=values.get(f"{token}.{'kk' if key.endswith('_kk') else 'ru'}",values.get(token,"")); missing.add(token) if not value.strip() and not token.startswith("basis.application_") else None; return value
+   token=match.group(1); value=values.get(f"{token}.{'kk' if key.endswith('_kk') else 'ru'}",values.get(token,"")); missing.add(token) if not value.strip() and token not in optional_tokens and not token.startswith("basis.application_") else None; return value
   return _TOKEN.sub(repl,value)
  result={key:each(key,value) for key,value in texts.items()}
- if missing:raise TemplateApplicationError("Required template data is missing: "+", ".join(sorted(missing)))
+ if missing:
+  if template.get("item_type_code") == "TRANSFER":
+   labels={"rate":"ставка после перевода", "basis":"основание перевода", "position.title_ru":"новая должность (RU)", "position.title_kk":"новая должность (KK)", "org_unit.title_ru":"новое подразделение (RU)", "org_unit.title_kk":"новое подразделение (KK)", "employee.full_name":"ФИО сотрудника", "effective_date":"дата перевода"}
+   raise TemplateApplicationError("Заполните обязательные данные шаблона: " + ", ".join(labels.get(field,field) for field in sorted(missing)))
+  raise TemplateApplicationError("Required template data is missing: " + ", ".join(sorted(missing)))
+
  return result
 def _blocks(conn,order_id,item_ids):
  return conn.execute(text("SELECT editorial_block_id block_id,'ORDER' scope,NULL::bigint order_item_id,locale,block_type,generated_text,override_text,revision FROM public.personnel_order_editorial_blocks WHERE order_id=:id UNION ALL SELECT item_editorial_block_id,'ITEM',order_item_id,locale,block_type,generated_text,override_text,revision FROM public.personnel_order_item_editorial_blocks WHERE order_item_id=ANY(:items)"),{"id":order_id,"items":item_ids}).mappings().all()
 def _preview(conn,order_id):
  order,items,template=_order(conn,order_id); item_ids=[int(x["item_id"]) for x in items]; entries=[]
  for item in items:
-  values,warnings,missing_data=_values(conn,item)
+  values,warnings,missing_data=_values(conn,item,template)
   try: rendered=_render(template,values)
   except TemplateApplicationError as exc:
    missing_data.append(str(exc)); rendered={"body_template_ru":"","body_template_kk":"","basis_template_ru":"","basis_template_kk":""}
@@ -166,6 +204,8 @@ def apply_template_application_tx(conn: Any, order_id: int, actor_user_id: int, 
     order, items, template = _order(conn, order_id)
     blocked = [str(entry["item_number"]) for entry in preview["items"] if entry.get("blocked")]
     if blocked:
+        if template["item_type_code"] == "TRANSFER":
+            raise TemplateApplicationError("Не удалось применить шаблон. " + "; ".join(f"Пункт {entry['item_number']}: " + ", ".join(entry["missing_data"]) for entry in preview["items"] if entry.get("blocked")))
         raise TemplateApplicationError("Template application is blocked for item(s): " + ", ".join(blocked))
     if int(order["document_revision"]) != expected_document_revision:
         raise TemplateApplicationError("Order revision conflict.", True)

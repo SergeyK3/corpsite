@@ -39,6 +39,7 @@ export type PersonnelOrderTemplateCatalogItem = {
   notes: string;
   pilot_detail?: PersonnelOrderTemplatePilotDetail | null;
   template_detail?: PersonnelOrderTemplatePilotDetail | null;
+  templates?: Array<Pick<PersonnelIndependentTemplate,"template_id"|"name_ru"|"name_kk"|"is_default"|"template_version_id"|"draft_version_id"|"version_number"|"draft_version_number">> | null;
 };
 
 export function listPersonnelOrderTemplateCatalog() {
@@ -79,7 +80,7 @@ export async function previewSavedPersonnelOrderTemplateDraft(draft: PersonnelOr
   if (result.template_id !== draft.template_id || result.template_version_id !== draft.template_version_id || result.revision !== draft.revision) throw new Error("Версия предварительного просмотра не совпадает с открытым черновиком.");
   return result;
 }
-export type PersonnelIndependentTemplate = { template_id: number; item_type_code: string; name_ru: string; name_kk: string; is_default: boolean; template_version_id: number | null; draft_version_id: number | null; };
+export type PersonnelIndependentTemplate = { template_id: number; item_type_code: string; name_ru: string; name_kk: string; is_default: boolean; template_version_id: number | null; draft_version_id: number | null; version_number?: number | null; draft_version_number?: number | null; };
 export const listPersonnelIndependentTemplates = (type: string) => apiFetchJson<{items: PersonnelIndependentTemplate[]}>(`/admin/personnel-order-templates/${type}/templates`);
 export const listPersonnelTemplateVersions = (type: string, templateId: number) => apiFetchJson<{items: PersonnelOrderTemplateDraft[]}>(`/admin/personnel-order-templates/${type}/versions?template_id=${templateId}`);
 export const copyPersonnelTemplate = (type: string, body: {source_type_code?: string; base_source?: "VERSION" | "INITIAL"; source_version_id?: number; expected_revision?: number; name_ru: string; name_kk: string}) => apiFetchJson<PersonnelOrderTemplateDraft>(`/admin/personnel-order-templates/${type}/copies`, {method: "POST", body});

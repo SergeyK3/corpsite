@@ -111,7 +111,7 @@ from app.services.personnel_order_document_review_service import (
     get_document_review,
     mutate_document_review,
 )
-from app.services.personnel_order_document_header_service import duplicate_preview, patch_document_header
+from app.services.personnel_order_document_header_service import duplicate_preview, patch_document_header, PersonnelOrderDuplicateError
 from app.services.personnel_order_document_item_service import list_document_items, patch_document_item
 from app.services.personnel_order_manual_draft_service import create_manual_draft
 from app.services.personnel_order_template_draft_service import TemplateDraftError, get_published, list_templates
@@ -193,7 +193,9 @@ def get_personnel_order_published_variants(item_type_code: str, _user: Dict[str,
             return {"items":[],**public_capabilities}
         rows = list_templates(item_type_code, published_only=True)
         keys = ("template_id", "template_version_id", "version_number", "name_ru", "name_kk", "title_ru", "title_kk", "is_default")
-        return {"items": [{key: row[key] for key in keys} for row in rows],**public_capabilities}
+        from app.services.personnel_order_replacement_contract import variant, optional_placement
+        from app.services.personnel_order_service_area_contract import enabled
+        return {"items": [{**{key: row[key] for key in keys}, "replacement_mode": variant(row), "replacement_optional_placement": optional_placement(row), "service_area_allowance": enabled(row)} for row in rows],**public_capabilities}
     except TemplateDraftError as exc:
         raise validation_error_to_http422(PersonnelOrderValidationError(str(exc))) from exc
 
@@ -224,6 +226,7 @@ def create_manual_personnel_order_draft_route(payload: PersonnelOrderManualDraft
     except PersonnelOrderValidationError as exc:
         raise validation_error_to_http422(exc)
     except PersonnelOrderConflictError as exc:
+        if isinstance(exc,PersonnelOrderDuplicateError):raise _conflict_http409(exc)
         raise HTTPException(status_code=409, detail={"code": str(exc)})
 
 
@@ -242,6 +245,8 @@ def _order_archived_http(exc: PersonnelOrderArchivedError) -> HTTPException:
 
 
 def _conflict_http409(exc: PersonnelOrderConflictError) -> HTTPException:
+    if isinstance(exc, PersonnelOrderDuplicateError):
+        return HTTPException(status_code=409,detail={'code':'DUPLICATE_ORDER_NUMBER_DATE','message':exc.message,'duplicate':exc.duplicate})
     if isinstance(exc, PersonnelOrderDeletedError):
         return HTTPException(
             status_code=409,
@@ -1059,6 +1064,8 @@ def patch_personnel_order_document_header_route(payload: PersonnelOrderDocumentH
         return call_service(patch_document_header, order_id=order_id, expected_document_revision=payload.expected_document_revision, order_number=payload.order_number, order_date=payload.order_date, source_title=payload.source_title, source_title_locale=payload.source_title_locale, reason_code=payload.reason_code, reason_text=payload.reason_text, actor_user_id=_require_user_id(user))
     except PersonnelOrderDeletedError as exc:
         raise _deleted_order_http(exc)
+    except PersonnelOrderDuplicateError as exc:
+        raise _conflict_http409(exc)
     except PersonnelOrderDocumentReviewConflictError as exc:
         raise HTTPException(status_code=409, detail={"code":str(exc)})
     except ValueError as exc:

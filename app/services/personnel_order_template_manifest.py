@@ -29,6 +29,17 @@ _HISTORICAL_TERMINATION_ALLOWED_VARIABLES = (
     "termination.unused_leave_days", "basis",
 )
 _HISTORICAL_MANIFESTS = {
+    # Frozen v1 predates the approved Russian title correction (2026-10-06).
+    ("LEAVE.UNPAID.GRANT", 1, "52bf1df2e2d79cfc900207022525b890a47ab71b426b6fa9b0b2f51f29159cd5"):
+        ("94aa0e60cc35f4634067addc48467cdaca669bfbc17d9f194e4d4c8107c03fe4", (
+            "employee.full_name", "position.title_ru", "position.title_kk", "org_unit.title_ru",
+            "org_unit.title_kk", "leave.start_ru", "leave.start_kk", "leave.end_ru", "leave.end_kk",
+            "leave.days", "leave.period_text_ru", "leave.period_text_kk", "leave.period_clause_ru",
+            "leave.period_clause_kk", "org_unit.document_genitive_kk", "position.document_possessive_kk",
+            "position.document_nominative_ru", "employee.full_name_dative_ru", "employee.full_name_dative_kk",
+            "employee.full_name_genitive_kk", "basis.application_date_ru", "basis.application_date_kk",
+            "basis.application_number_suffix",
+        )),
     ("TERMINATION", 1, "5dc8c6dda024ec1ae9ffd84a6e73afbc06af49278017f798a5caa6d3c29d2e36"):
         ("1ad82a8101f6a205bb13d7565d77c14d81f33a3824895c5b69d209b84b3a503a", _HISTORICAL_TERMINATION_ALLOWED_VARIABLES),
     ("TERMINATION", 2, "3dffc622255ca91a0301333714f0b6ee3dc48c52c34e78a1e28714622c3b4b1a"):

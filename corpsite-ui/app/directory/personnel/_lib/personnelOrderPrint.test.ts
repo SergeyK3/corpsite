@@ -397,7 +397,7 @@ describe("buildPersonnelOrderPrintViewModel", () => {
             scope: "order",
             locale: "ru",
             block_type: "closing",
-            effective_text: "Контроль за исполнением приказа оставляю за собой.",
+            effective_text: "Ознакомить сотрудника с приказом.",
             review_status: "CURRENT",
             editable: true,
             revision: 1,
@@ -407,7 +407,7 @@ describe("buildPersonnelOrderPrintViewModel", () => {
             scope: "order",
             locale: "kk",
             block_type: "closing",
-            effective_text: "Бұйрықты орындалу бақылауын өзімде қалдырамын.",
+            effective_text: "Қызметкерді бұйрықпен таныстыру.",
             review_status: "CURRENT",
             editable: true,
             revision: 1,
@@ -416,8 +416,8 @@ describe("buildPersonnelOrderPrintViewModel", () => {
         items: [],
       },
     });
-    expect(model.closing?.ru).toContain("Контроль за исполнением");
-    expect(model.closing?.kk).toContain("бақылауын");
+    expect(model.closing?.ru).toContain("Ознакомить сотрудника");
+    expect(model.closing?.kk).toContain("бұйрықпен таныстыру");
   });
 
   it("renders closing in shared HTML and omits empty closing", () => {
@@ -432,7 +432,7 @@ describe("buildPersonnelOrderPrintViewModel", () => {
             scope: "order",
             locale: "ru",
             block_type: "closing",
-            effective_text: "Контроль за исполнением приказа оставляю за собой.",
+            effective_text: "Ознакомить сотрудника с приказом.",
             review_status: "CURRENT",
             editable: true,
             revision: 1,
@@ -443,7 +443,7 @@ describe("buildPersonnelOrderPrintViewModel", () => {
     });
     const html = buildPersonnelOrderPrintDocumentHtml(withClosing, "ru");
     expect(html).toContain('data-testid="personnel-order-print-closing"');
-    expect(html).toContain("Контроль за исполнением приказа оставляю за собой.");
+    expect(html).toContain("Ознакомить сотрудника с приказом.");
     expect(html).toContain('data-testid="personnel-order-print-tail-date"');
     expect(html).toContain("10 июля 2026 года");
     expect(html).toContain('data-testid="personnel-order-print-signature"');
@@ -471,7 +471,7 @@ describe("buildPersonnelOrderPrintViewModel", () => {
             scope: "order",
             locale: "ru",
             block_type: "closing",
-            effective_text: "Контроль за исполнением приказа оставляю за собой.",
+            effective_text: "Ознакомить сотрудника с приказом.",
             review_status: "CURRENT",
             editable: true,
             revision: 1,
@@ -497,7 +497,7 @@ describe("buildPersonnelOrderPrintViewModel", () => {
             scope: "order",
             locale: "ru",
             block_type: "closing",
-            effective_text: "Контроль за исполнением приказа оставляю за собой.",
+            effective_text: "Ознакомить сотрудника с приказом.",
             review_status: "CURRENT",
             editable: true,
             revision: 1,
@@ -627,4 +627,11 @@ describe("personnelOrderPrint item text", () => {
     expect(text).not.toContain("календарных дней");
     expect(text).not.toContain("— календарных");
   });
+});
+
+it("omits saved automatic closing in both languages from the shared print model", () => {
+ const model=buildPersonnelOrderPrintViewModel(sampleDetail(),{editorial:{order_id:42,order_status:"DRAFT",editable:true,order_blocks:[{block_id:50,scope:"order",locale:"ru",block_type:"closing",effective_text:"Контроль за исполнением приказа оставляю за собой.",review_status:"CURRENT",editable:true,revision:1},{block_id:51,scope:"order",locale:"kk",block_type:"closing",effective_text:"Бұйрықты орындалу бақылауын өзімде қалдырамын.",review_status:"CURRENT",editable:true,revision:1}],items:[]}});
+ expect(model.closing).toBeNull();
+ expect(buildPersonnelOrderPrintDocumentHtml(model,"ru")).not.toContain("Контроль за исполнением");
+ expect(buildPersonnelOrderPrintDocumentHtml(model,"kk")).not.toContain("бақылауын өзімде");
 });

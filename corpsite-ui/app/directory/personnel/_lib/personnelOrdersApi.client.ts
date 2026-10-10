@@ -196,7 +196,15 @@ export type PersonnelOrderDocumentReview = {
   warnings: Array<{ code: string; [key: string]: unknown }>;
   allowed_actions: string[];
 };
-export type PersonnelOrderHeaderDuplicatePreview = { blocking: boolean; warnings: string[]; candidates: Array<{ order_id: number; order_number?: string | null; order_date?: string | null; order_type_code: string; status: string }> };
+export type PersonnelOrderHeaderDuplicatePreview = { blocking: boolean; warnings: string[]; candidates: Array<{ order_id: number; order_number?: string | null; order_date?: string | null; order_type_code: string; status: string; is_conflict?: boolean; can_open?: boolean; record_quality?: string }> };
+export class PersonnelOrderDuplicateError extends Error {
+  constructor(public duplicate:PersonnelOrderHeaderDuplicatePreview,message:string){super(message);this.name='PersonnelOrderDuplicateError';}
+}
+export function personnelOrderDuplicateMessage(duplicate:PersonnelOrderHeaderDuplicatePreview,day:string):string {
+  const conflicts=duplicate.candidates.filter(row=>row.is_conflict??row.order_date===day);
+  const details=conflicts.map(row=>`№ ${row.order_number||'—'} от ${row.order_date?.split('-').reverse().join('.')||'—'} (ID ${row.order_id})`).join('; ');
+  return `Уже существует приказ с такими же номером и датой${details?': '+details:''}.`;
+}
 
 export type PersonnelOrderAcknowledgement = {
   acknowledgement_event_id: number;
@@ -390,7 +398,8 @@ function parseErrorBody(status: number, body: string, fallback: string): Error {
         return new Error(parsed.detail.trim());
       }
       if (parsed.detail && typeof parsed.detail === "object") {
-        const detail = parsed.detail as { code?: unknown; message?: unknown };
+        const detail = parsed.detail as { code?: unknown; message?: unknown; duplicate?: PersonnelOrderHeaderDuplicatePreview };
+        if(detail.code==='DUPLICATE_ORDER_NUMBER_DATE'&&detail.duplicate)return new PersonnelOrderDuplicateError(detail.duplicate,typeof detail.message==='string'?detail.message:'Найден приказ с такими же номером и датой.');
         if (typeof detail.code === "string") {
           return new Error(`${detail.code}: ${typeof detail.message === "string" ? detail.message : ""}`.trim());
         }
@@ -860,6 +869,6 @@ export async function restorePersonnelOrder(orderId: number): Promise<PersonnelO
   });
 }
 
-export type PersonnelPublishedTemplateVariant = {template_id: number; template_version_id: number; version_number: number; name_ru: string; name_kk: string; title_ru: string; title_kk: string; is_default: boolean};
+export type PersonnelPublishedTemplateVariant = {replacement_mode?: "RATE" | "PAY" | null; replacement_optional_placement?: boolean; service_area_allowance?:boolean; template_id: number; template_version_id: number; version_number: number; name_ru: string; name_kk: string; title_ru: string; title_kk: string; is_default: boolean};
 export type PersonnelPublishedVariantsResponse = {items: PersonnelPublishedTemplateVariant[]; independent_supported?: boolean; creation_supported?: boolean; creation_reason?: string | null; schema_mode?: "LEGACY" | "INDEPENDENT"};
 export const getPersonnelOrderPublishedVariants = (type: string) => requestJson<PersonnelPublishedVariantsResponse>("GET", `/directory/personnel-orders/templates/${encodeURIComponent(type)}/published-variants`, {fallback: "Не удалось загрузить варианты шаблона."});

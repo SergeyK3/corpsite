@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 def test_catalog_is_registry_backed_and_safe():
     items = list_personnel_order_template_catalog()
     codes = {item["type_code"] for item in items}
-    assert {"HIRE", "TRANSFER", "TERMINATION", "LEAVE.ANNUAL.RECALL", "LEAVE.ANNUAL.GRANT", "LEAVE.UNPAID.GRANT", "LEAVE.CHILDCARE.GRANT", "RETURN_FROM_CHILDCARE_LEAVE", "CONCURRENT_DUTY_START", "CONCURRENT_DUTY_END", "SUPPLEMENTARY_PAY"} <= codes
+    assert {"HIRE", "TRANSFER", "TERMINATION", "LEAVE.ANNUAL.GRANT", "LEAVE.UNPAID.GRANT", "LEAVE.CHILDCARE.GRANT", "RETURN_FROM_CHILDCARE_LEAVE", "CONCURRENT_DUTY_START", "CONCURRENT_DUTY_END", "SUPPLEMENTARY_PAY"} <= codes
     assert "COMPOSITE" not in codes
     pilot = next(item for item in items if item["type_code"] == "RETURN_FROM_CHILDCARE_LEAVE")
     assert pilot["is_pilot"] is True and pilot["support_level"] == "SUPPORTED"

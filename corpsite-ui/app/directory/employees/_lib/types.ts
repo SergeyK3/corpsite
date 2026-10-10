@@ -33,7 +33,10 @@ export type OrgUnitRef = {
 export type EmployeeDTO = {
   id: string | null;
   person_id?: number | null;
-  active_assignment_id?: number | null;
+    active_assignment_id?: number | null;
+    assignments?: Array<{assignment_id:number;position_id:number;org_unit_id:number;rate:string|number;is_primary:boolean;position:{name?:string;name_kk?:string;job_nameru?:string;job_namekk?:string;document_possessive_kk?:string};org_unit:{unit_id?:number;name?:string;name_kk?:string;document_genitive_kk?:string}}>;
+  additional_assignments?: Array<{ assignment_id: number; position_id: number; org_unit_id: number; rate: string | number; is_primary: boolean; position: { name?: string; name_kk?: string; job_nameru?: string; job_namekk?: string }; org_unit: { name?: string; name_kk?: string; document_genitive_kk?: string } }>;
+
   has_current_assignment?: boolean;
   record_kind?: "employee" | "applicant" | string | null;
   fio: string | null;

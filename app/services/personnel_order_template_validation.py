@@ -33,3 +33,12 @@ def validate_template_texts(item_type_code: str, values: Mapping[str, str]) -> N
         absent = [code for code in required if f"{{{{{code}}}}}" not in values[field]]
         if absent:
             raise TemplateValidationError(f"Required variable absent from {field}: {', '.join(absent)}")
+
+    if item_type_code == "SUPPLEMENTARY_PAY":
+        from app.services.personnel_order_supplementary_pay_contract import validate_bodies
+        try: validate_bodies(values)
+        except ValueError as exc: raise TemplateValidationError(str(exc)) from exc
+    if item_type_code == "CONCURRENT_DUTY_START":
+        from app.services.personnel_order_replacement_contract import validate_bodies
+        try: validate_bodies(values)
+        except ValueError as exc: raise TemplateValidationError(str(exc)) from exc

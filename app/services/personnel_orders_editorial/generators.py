@@ -57,15 +57,15 @@ DOCUMENT_TITLES: Dict[str, Dict[str, str]] = {
         "ru": "О переводе",
     },
     ORDER_TYPE_TERMINATION: {
-        "kk": "Жұмыстан босату туралы",
+        "kk": "Еңбек шартын бұзу туралы",
         "ru": "Об увольнении",
     },
     ORDER_TYPE_CONCURRENT_DUTY_START: {
-        "kk": "Қоса атқаруды белгілеу туралы",
-        "ru": "Об установлении совмещения",
+        "kk": "Қоса атқару туралы",
+        "ru": "О совмещении",
     },
     ORDER_TYPE_CONCURRENT_DUTY_END: {
-        "kk": "Қоса атқаруды тоқтату туралы",
+        "kk": "Ставканы алып тастау туралы",
         "ru": "О прекращении совмещения",
     },
     ORDER_TYPE_SUPPLEMENTARY_PAY: {
@@ -77,12 +77,12 @@ DOCUMENT_TITLES: Dict[str, Dict[str, str]] = {
         "ru": "О кадровых изменениях",
     },
     "LEAVE.ANNUAL.GRANT": {
-        "kk": "Жыл сайынғы ақылы еңбек демалысын беру туралы",
-        "ru": "О предоставлении ежегодного оплачиваемого трудового отпуска",
+        "kk": "Еңбек демалысы туралы",
+        "ru": "О трудовом отпуске",
     },
     "LEAVE.UNPAID.GRANT": {
         "kk": "Жалақы сақталмайтын демалыс беру туралы",
-        "ru": "О предоставлении отпуска без сохранения заработной платы",
+        "ru": "Об отпуске без содержания",
     },
     ORDER_TYPE_LEAVE_CHILDCARE_GRANT: {
         "kk": CHILDCARE_TEXTS["title_kk"],
@@ -360,27 +360,10 @@ def generate_order_block(
         )
 
     if normalized_type == ORDER_BLOCK_TYPE_CLOSING:
-        if order_type in {ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE, "LEAVE.UNPAID.GRANT", ORDER_TYPE_LEAVE_CHILDCARE_GRANT}:
-            return _result(
-                generated_text="",
-                generator_key=GENERATOR_KEY_ORDER_CLOSING,
-                fingerprint_payload={
-                    "block_type": ORDER_BLOCK_TYPE_CLOSING,
-                    "locale": lang,
-                    "order_type_code": order_type,
-                },
-            )
-        if lang == "kk":
-            text = "Бұйрықты орындалу бақылауын өзімде қалдырамын."
-        else:
-            text = "Контроль за исполнением приказа оставляю за собой."
         return _result(
-            generated_text=text,
+            generated_text="",
             generator_key=GENERATOR_KEY_ORDER_CLOSING,
-            fingerprint_payload={
-                "block_type": ORDER_BLOCK_TYPE_CLOSING,
-                "locale": lang,
-            },
+            fingerprint_payload={"block_type": ORDER_BLOCK_TYPE_CLOSING, "locale": lang, "automatic_closing": False},
         )
 
     raise ValueError(f"Unsupported order block_type: {block_type}")
@@ -430,6 +413,8 @@ def generate_item_body(locale: str, item_ctx: Mapping[str, Any]) -> Dict[str, st
 
     fio = _dash(employee_name)
     date = _format_date(effective_date, lang)
+    if item_type in {ORDER_TYPE_TRANSFER, ORDER_TYPE_CONCURRENT_DUTY_START}:
+        date = format_personnel_order_date_numeric(effective_date) if lang == "ru" else _format_date_from(effective_date,lang)
 
     if item_type == "LEAVE.ANNUAL.GRANT":
         org = _localized_name(org_unit_name, lang)

@@ -1,3 +1,4 @@
+import { withoutAutomaticOrderClosing } from "./personnelOrderClosingText";
 import type {
   PersonnelOrderDetailResponse,
   PersonnelOrderEditorialBlock,
@@ -78,9 +79,9 @@ export const PERSONNEL_ORDER_PRINT_DOCUMENT_TITLES: Record<string, LocalizedText
   HIRE: localizedText("Жұмысқа қабылдау туралы", "О приёме на работу"),
   RETURN_FROM_CHILDCARE_LEAVE: localizedText("Бала күтіміне байланысты демалыстан жұмысқа шығу туралы", "О выходе на работу из отпуска по уходу за ребёнком"),
   TRANSFER: localizedText("Ауыстыру туралы", "О переводе"),
-  TERMINATION: localizedText("Жұмыстан босату туралы", "Об увольнении"),
-  CONCURRENT_DUTY_START: localizedText("Қоса атқаруды белгілеу туралы", "Об установлении совмещения"),
-  CONCURRENT_DUTY_END: localizedText("Қоса атқаруды тоқтату туралы", "О прекращении совмещения"),
+  TERMINATION: localizedText("Еңбек шартын бұзу туралы", "Об увольнении"),
+  CONCURRENT_DUTY_START: localizedText("Қоса атқару туралы", "О совмещении"),
+  CONCURRENT_DUTY_END: localizedText("Ставканы алып тастау туралы", "О прекращении совмещения"),
   SUPPLEMENTARY_PAY: localizedText("Қосымша ақы туралы", "О дополнительной оплате"),
   COMPOSITE: localizedText("Кадрлық өзгерістер туралы", "О кадровых изменениях"),
 };
@@ -195,9 +196,10 @@ function pickManualOverrideByLocale(
     // The same effective/current block must power both the HR drawer and the
     // official print.  Only orders without a current editorial block fall
     // back to legacy localized text or a deterministic type template.
-    return optionalString(block?.override_text)
+    const value = optionalString(block?.override_text)
       || optionalString(block?.generated_text)
       || optionalString(block?.effective_text);
+    return blockType === "closing" ? withoutAutomaticOrderClosing(value) : value;
   };
   const kk = manual("kk");
   const ru = manual("ru");
@@ -377,21 +379,6 @@ export function buildPersonnelOrderPrintViewModel(
       basis: editorialTexts.basis,
     };
   });
-  if (items.length && items.every((item) => item.itemTypeCode === "TERMINATION")) {
-    const last = items[items.length - 1];
-    items.push({
-      ...last,
-      itemId: -Math.abs(order.order_id),
-      itemNumber: last.itemNumber + 1,
-      employeeId: null,
-      employeeName: null,
-      body: localizedText(
-        "Бухгалтерлік есеп бөлімі жұмыстан босатылатын қызметкерлердің пайдаланылмаған еңбек демалысы күндері үшін есеп айырысу жүргізсін.",
-        "Бухгалтерии произвести расчёт за неиспользованные дни отпуска увольняемых работников.",
-      ),
-      basis: null,
-    });
-  }
 
   const seenEmployees = new Set<string>();
   const acknowledgements: PersonnelOrderPrintViewModel["acknowledgements"] = [];

@@ -17,7 +17,7 @@ it.each(["ru", "kk"] as const)("chooses exact versions in a third level in %s an
   fireEvent.click(screen.getByRole("menuitem", { name: language === "ru" ? second.name_ru : second.name_kk }));
   expect(choose).toHaveBeenLastCalledWith("HIRE", 22);
   open(); fireEvent.change(screen.getByRole("searchbox"), { target: { value: "переводе" } });
-  fireEvent.click(screen.getByRole("menuitem", { name: personnelOrderTypeLabel("TRANSFER", language) }));
+  fireEvent.click(screen.getByRole("menuitem", { name: language === "ru" ? first.name_ru : first.name_kk }));
   expect(choose).toHaveBeenLastCalledWith("TRANSFER", 11);
 });
 
@@ -161,4 +161,18 @@ it("uses the visible touch viewport and keeps the frame fixed during its own scr
   fireEvent.click(screen.getByRole("menuitem", { name: "Приём, увольнение, назначение, перевод" }));
   fireEvent.scroll(popup);
   expect(popup).toHaveStyle({ top: "444px", maxHeight: "392px" });
+});
+
+it.each(["ru", "kk"] as const)("does not repeat the selected TRANSFER name in %s", language => {
+  const variant = {template_id:6,template_version_id:4,version_number:1,name_ru:"О переводе",name_kk:"Ауыстыру туралы",title_ru:"О переводе",title_kk:"Ауыстыру туралы",is_default:true};
+  render(<PersonnelOrderTypeMenu value="TRANSFER" language={language} selectedVersion={4} variants={{TRANSFER:[variant]}} onChange={vi.fn()} />);
+  expect(screen.getByRole("button",{name:"Тип кадрового приказа"}).textContent).toBe(personnelOrderTypeLabel("TRANSFER",language)+"▾");
+});
+
+it("keeps identically named distinct templates selectable by ID", () => {
+  const variant = {template_id:6,template_version_id:4,version_number:1,name_ru:"О переводе",name_kk:"Ауыстыру туралы",title_ru:"О переводе",title_kk:"Ауыстыру туралы",is_default:true};
+  const choose=vi.fn();render(<PersonnelOrderTypeMenu value="TRANSFER" language="ru" selectedVersion={4} variants={{TRANSFER:[variant,{...variant,template_id:9,template_version_id:17}]}} onChange={choose} />);
+  expect(screen.getByRole("button",{name:"Тип кадрового приказа"})).toHaveTextContent("#6");
+  open();fireEvent.change(screen.getByRole("searchbox"),{target:{value:"перевод"}});fireEvent.click(screen.getByRole("menuitem",{name:"О переводе"}));
+  fireEvent.click(screen.getByRole("menuitem",{name:"О переводе · #9, версия 1"}));expect(choose).toHaveBeenCalledWith("TRANSFER",17);
 });

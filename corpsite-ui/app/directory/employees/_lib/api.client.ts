@@ -158,10 +158,10 @@ export async function getEmployees(args: {
 /**
  * Р”РµС‚Р°Р»Рё СЃРѕС‚СЂСѓРґРЅРёРєР°
  */
-export async function getEmployee(employeeId: string): Promise<EmployeeDetails> {
+export async function getEmployee(employeeId: string, includeAssignments = false): Promise<EmployeeDetails> {
   const id = String(employeeId).trim();
   if (!id) throw new Error("Employee id is empty");
-  return apiGetJson<EmployeeDetails>(`/directory/employees/${encodeURIComponent(id)}`);
+  return apiGetJson<EmployeeDetails>(`/directory/employees/${encodeURIComponent(id)}${includeAssignments ? "?include_assignments=true" : ""}`);
 }
 
 /**
