@@ -176,3 +176,13 @@ it("keeps identically named distinct templates selectable by ID", () => {
   open();fireEvent.change(screen.getByRole("searchbox"),{target:{value:"перевод"}});fireEvent.click(screen.getByRole("menuitem",{name:"О переводе"}));
   fireEvent.click(screen.getByRole("menuitem",{name:"О переводе · #9, версия 1"}));expect(choose).toHaveBeenCalledWith("TRANSFER",17);
 });
+
+it.each(["ru", "kk"] as const)("shows the server supplementary-pay template name once in %s", language => {
+  const variant = {template_id:6,template_version_id:11,version_number:1,name_ru:"О дополнительной оплате",name_kk:"Қосымша ақы туралы",title_ru:"О дополнительной оплате",title_kk:"Қосымша ақы туралы",is_default:true};
+  render(<PersonnelOrderTypeMenu value="SUPPLEMENTARY_PAY" language={language} selectedVersion={11} variants={{SUPPLEMENTARY_PAY:[variant]}} onChange={vi.fn()} />);
+  const name = language === "ru" ? variant.name_ru : variant.name_kk;
+  expect(screen.getByRole("button",{name:"Тип кадрового приказа"}).textContent).toBe(name+"▾");
+  open(); fireEvent.change(screen.getByRole("searchbox"),{target:{value:name}});
+  expect(screen.getByRole("menuitem",{name,exact:true})).toBeInTheDocument();
+  expect(screen.queryByText(`${name} · ${name}`,{exact:true})).not.toBeInTheDocument();
+});

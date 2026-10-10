@@ -231,8 +231,8 @@ async function chooseTypeInMenu(type: string) {
   fireEvent.click(screen.getByRole("menuitem", { name: personnelOrderTypeLabel(type, "kk") }));
 }
 
-it.each(['25','50'])('creates simple supplementary pay through template 4 with %s percent and no replacement or rates', async percent=>{
-  const variant={template_id:4,template_version_id:6,version_number:1,name_ru:'О дополнительной оплате',name_kk:'Қосымша ақы туралы',title_ru:'О дополнительной оплате',title_kk:'Қосымша ақы туралы',is_default:true};
+it.each(['25','50'])('creates simple supplementary pay through server template 6/version 11 with %s percent and no replacement or rates', async percent=>{
+  const variant={template_id:6,template_version_id:11,version_number:1,name_ru:'О дополнительной оплате',name_kk:'Қосымша ақы туралы',title_ru:'О дополнительной оплате',title_kk:'Қосымша ақы туралы',is_default:true};
   vi.mocked(getPersonnelOrderPublishedVariants).mockImplementation(async code=>({items:code==='SUPPLEMENTARY_PAY'?[variant]:[],independent_supported:true}));
   setup();
   vi.mocked(getPersonnelOrderPublishedTemplateTitle).mockResolvedValue({...variant,item_type_code:'SUPPLEMENTARY_PAY'});
@@ -263,7 +263,7 @@ it.each(['25','50'])('creates simple supplementary pay through template 4 with %
   expect(submit).toBeEnabled();
   expect(screen.getByLabelText('ФИО в дательном падеже (RU)')).not.toHaveValue('');
   fireEvent.click(submit);
-  await waitFor(()=>expect(createManualPersonnelOrderDraft).toHaveBeenCalledWith(expect.objectContaining({template_version_id:6,item_type_code:'SUPPLEMENTARY_PAY',effective_date:'2026-02-02',item_payload:expect.objectContaining({allowance:expect.objectContaining({percent:Number(percent),basis_type:'RECIPIENT_BASE_SALARY',basis_ru:bases.ru,basis_kk:bases.kk})})})));
+  await waitFor(()=>expect(createManualPersonnelOrderDraft).toHaveBeenCalledWith(expect.objectContaining({template_version_id:11,item_type_code:'SUPPLEMENTARY_PAY',effective_date:'2026-02-02',item_payload:expect.objectContaining({allowance:expect.objectContaining({percent:Number(percent),basis_type:'RECIPIENT_BASE_SALARY',basis_ru:bases.ru,basis_kk:bases.kk})})})));
   const payload=vi.mocked(createManualPersonnelOrderDraft).mock.calls[0][0].item_payload!;
   expect(payload).not.toHaveProperty('replacement');expect(payload).not.toHaveProperty('concurrent');
 });
