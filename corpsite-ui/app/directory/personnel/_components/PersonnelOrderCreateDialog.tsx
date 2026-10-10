@@ -4,6 +4,11 @@ import * as React from "react";
 import { usePersonnelSectionLanguage } from "../_lib/personnelSectionLanguage";
 import { PERSONNEL_ORDER_CREATE_TYPES } from "../_lib/personnelOrderLabels";
 import PersonnelOrderTypeMenu from "./PersonnelOrderTypeMenu";
+import PersonnelOrderReplacementFields, {blankReplacement,replacementBlockers,type ReplacementFields} from "./PersonnelOrderReplacementFields";
+import PersonnelOrderTransferFields, { type TransferFields } from "./PersonnelOrderTransferFields";
+import PersonnelOrderAllowanceRecipient,{blankAllowanceRecipient,recipientBlockers,type AllowanceRecipient} from './PersonnelOrderAllowanceRecipient';
+import {russianEmployeeDativeForOrder} from '../_lib/personnelOrderRussianWording';
+import {savedKazakhEmployeeNameForm} from '../_lib/personnelOrderDocumentForms';
 
 import {
   createManualPersonnelOrderDraft,
@@ -13,6 +18,8 @@ import {
   mapPersonnelOrdersApiError,
   previewPersonnelOrderHeaderDuplicate,
   type PersonnelOrderManualDraftCreateResult,
+  type PersonnelOrderHeaderDuplicatePreview,
+  PersonnelOrderDuplicateError, personnelOrderDuplicateMessage,
 } from "../_lib/personnelOrdersApi.client";
 import { personnelOrderCanonicalTitle } from "../_lib/personnelOrderCanonicalTitles";
 import { resolvePersonnelOrderDocumentForms, resolvePersonnelOrderOrgUnitForms } from "../_lib/personnelOrderDocumentForms";
@@ -198,6 +205,11 @@ export default function PersonnelOrderCreateDialog({
   const [formsExpanded, setFormsExpanded] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [busy, setBusy] = React.useState(false);
+  const [duplicateConflict,setDuplicateConflict]=React.useState<PersonnelOrderHeaderDuplicatePreview|null>(null);
+  const [createdOrder,setCreatedOrder]=React.useState<PersonnelOrderManualDraftCreateResult|null>(null);
+  const submitInFlight=React.useRef(false);
+  const savedOrder=React.useRef<PersonnelOrderManualDraftCreateResult|null>(null);
+  React.useEffect(()=>{if(open){submitInFlight.current=false;savedOrder.current=null;setCreatedOrder(null);setDuplicateConflict(null);}},[open]);
   const searchId = React.useRef(0);
   const employeeSelectionId = React.useRef(0);
   const ruGenitiveEdited = React.useRef(false);
@@ -206,6 +218,16 @@ export default function PersonnelOrderCreateDialog({
   const dialogRef = React.useRef<HTMLElement>(null);
   const restoreFocusRef = React.useRef<HTMLElement | null>(null);
 
+  const cessation = type === "CONCURRENT_DUTY_END";
+  const concurrent = type === "CONCURRENT_DUTY_START" || cessation;
+  const simpleAllowance = type === "SUPPLEMENTARY_PAY";
+  const [simpleAllowanceBasis, setSimpleAllowanceBasis] = React.useState({basis_ru:"Личное заявление",basis_kk:"Жеке өтініш"});
+  const [replacementFields,setReplacementFields] = React.useState<ReplacementFields>(blankReplacement);
+  const [allowanceRecipient,setAllowanceRecipient]=React.useState<AllowanceRecipient>(blankAllowanceRecipient);
+  const [ablativeKk, setAblativeKk] = React.useState("");
+  const transfer = type === "TRANSFER";
+  const [transferFields, setTransferFields] = React.useState<TransferFields>({ position_ru: "", position_kk: "", org_unit_ru: "", org_unit_kk: "", rate: "", basis_ru: "", basis_kk: "" });
+  const transferLabels = { position_ru: "Новая должность (RU)", position_kk: "Новая должность (KK)", org_unit_ru: "Новое подразделение (RU)", org_unit_kk: "Новое подразделение (KK)", rate: "Ставка после перевода", basis_ru: "Основание перевода (RU)", basis_kk: "Основание перевода (KK)" };
   const recall = type === "LEAVE.ANNUAL.RECALL";
   const [recallFields, setRecallFields] = React.useState({recall_position_kk: "", recall_org_unit_kk: "", basis_ru: "", basis_kk: ""});
   const [recallName,setRecallName]=React.useState("");
@@ -233,6 +255,9 @@ export default function PersonnelOrderCreateDialog({
     ? typeVariants.find(variant => variant.template_version_id === selectedVersion)?.template_version_id
       ?? (typeVariants.length === 1 ? typeVariants[0].template_version_id : undefined)
     : undefined;
+  const replacementMode = type === "CONCURRENT_DUTY_START" ? typeVariants.find(v=>v.template_version_id===resolvedVersion)?.replacement_mode : null;
+  const optionalPlacement = replacementMode === "PAY" && typeVariants.find(v=>v.template_version_id===resolvedVersion)?.replacement_optional_placement === true;
+  const serviceArea=optionalPlacement && typeVariants.find(v=>v.template_version_id===resolvedVersion)?.service_area_allowance===true;
   const legacyTemplates = creationCapabilities[type]?.independent_supported === false;
   const versionResolved = !variantsLoading && !variantErrors[type] && Boolean(creationCapabilities[type])
     && (resolvedVersion != null || legacyTemplates);
@@ -292,7 +317,42 @@ export default function PersonnelOrderCreateDialog({
     missing(!certificateDate, "Укажите дату выдачи свидетельства о рождении.", "Туу туралы куәліктің берілген күнін көрсетіңіз.");
     missing(!certificateNumber.trim(), "Введите номер свидетельства о рождении.", "Туу туралы куәлік нөмірін енгізіңіз.");
   }
-  const canSubmit = blockedReasons.length === 0;
+  if (transfer) {
+    Object.entries(transferLabels).forEach(([key]) => {
+      if (!String(transferFields[key as keyof TransferFields] || "").trim()) blockedReasons.push(`Заполните поле «${transferLabels[key as keyof typeof transferLabels]}».`);
+    });
+    if (transferFields.rate && (!Number.isFinite(Number(transferFields.rate)) || Number(transferFields.rate) <= 0)) blockedReasons.push("Ставка после перевода должна быть положительным числом.");
+  }
+  if (concurrent) {
+    const names: Record<string,string> = {...transferLabels, position_ru:"Дополнительная должность (RU)",position_kk:"Дополнительная должность (KK)",org_unit_ru:"Дополнительное подразделение (RU)",org_unit_kk:"Дополнительное подразделение (KK)",rate:"Дополнительная ставка",basis_ru:"Основание совмещения (RU)",basis_kk:"Основание совмещения (KK)",position_genitive_ru:"Дополнительная должность в родительном падеже (RU)",org_unit_genitive_ru:"Дополнительное подразделение в родительном падеже (RU)",total_rate:"Общая ставка"};
+    if (cessation) { delete names.total_rate; names.remaining_rate="Оставшаяся общая ставка"; names.rate="Снимаемая ставка"; names.basis_ru="Основание прекращения совмещения (RU)"; names.basis_kk="Основание прекращения совмещения (KK)"; }
+    if (replacementMode === "PAY") { delete names.rate; delete names.total_rate; }
+    if (optionalPlacement) {
+      for (const key of ["position_ru","position_kk","org_unit_ru","org_unit_kk"]) delete names[key];
+      if (!transferFields.position_ru.trim()) delete names.position_genitive_ru;
+      if (!transferFields.org_unit_ru.trim()) delete names.org_unit_genitive_ru;
+    }
+    if(serviceArea)for(const key of ['position_genitive_ru','org_unit_genitive_ru'])delete names[key];
+    Object.entries(names).forEach(([key,label]) => {if (!String(transferFields[key as keyof TransferFields] || "").trim()) blockedReasons.push(`Заполните поле «${label}».`);});
+    if (!cessation && !kk.employee_full_name_dative_ru.trim()) blockedReasons.push("Заполните ФИО в дательном падеже (RU).");
+    if (!cessation && !kk.employee_full_name_dative_kk.trim()) blockedReasons.push("Заполните ФИО в дательном падеже (KK).");
+    if (replacementMode !== "PAY" && transferFields.rate && (!Number.isFinite(Number(transferFields.rate)) || Number(transferFields.rate) <= 0)) blockedReasons.push("Дополнительная ставка должна быть положительной.");
+    if (!cessation && replacementMode !== "PAY" && transferFields.total_rate && (!Number.isFinite(Number(transferFields.total_rate)) || Number(transferFields.total_rate) <= Number(transferFields.rate))) blockedReasons.push("Общая ставка должна быть больше дополнительной.");
+  }
+  if (cessation) {
+    missing(!kk.employee_full_name_genitive_ru.trim(), "Заполните ФИО в родительном падеже (RU).", "Аты-жөнін RU тілінде ілік септігінде толтырыңыз.");
+    missing(!ablativeKk.trim(), "Заполните ФИО в исходном падеже (KK).", "Аты-жөнін KK тілінде шығыс септігінде толтырыңыз.");
+    if (transferFields.remaining_rate && (!Number.isFinite(Number(transferFields.remaining_rate)) || Number(transferFields.remaining_rate)<0)) blockedReasons.push("Оставшаяся общая ставка должна быть неотрицательной.");
+  }
+  if (replacementMode) blockedReasons.push(...replacementBlockers(replacementFields,replacementMode,effective,optionalPlacement,serviceArea));
+  if(serviceArea || simpleAllowance)blockedReasons.push(...recipientBlockers(allowanceRecipient,employee,!simpleAllowance));
+  if(simpleAllowance) {
+    if(!['25','50'].includes(replacementFields.allowance_percent))blockedReasons.push('Выберите доплату +25% или +50%.');
+    for(const [key,label] of [['basis_ru','Основание (RU)'],['basis_kk','Основание (KK)']] as const)if(!simpleAllowanceBasis[key].trim())blockedReasons.push(`Заполните поле «${label}».`);
+    if(!kk.employee_full_name_dative_ru.trim())blockedReasons.push('Заполните ФИО в дательном падеже (RU).');
+    if(!kk.employee_full_name_dative_kk.trim())blockedReasons.push('Заполните ФИО в дательном падеже (KK).');
+  }
+  const canSubmit = blockedReasons.length === 0 && !createdOrder;
 
   const requestClose = React.useCallback(() => {
     if (!busy) onClose();
@@ -309,7 +369,7 @@ export default function PersonnelOrderCreateDialog({
     }
     setKk(current => ({ ...current, employee_full_name_genitive_ru: "", position_document_possessive_kk: "", position_document_nominative_ru: "", org_unit_document_genitive_kk: "" }));
     const selected = candidate.id
-      ? await getEmployee(String(candidate.id)).catch(() => candidate)
+      ? await (cessation||serviceArea||simpleAllowance ? getEmployee(String(candidate.id), true) : getEmployee(String(candidate.id))).catch(() => candidate)
       : candidate;
     if (requestId !== employeeSelectionId.current) return;
     setEmployee(selected);
@@ -321,6 +381,17 @@ export default function PersonnelOrderCreateDialog({
     setSelectedOrgUnit(hasAssignment ? selected.org_unit : null);
     setPosition(hasAssignment ? selected.position?.job_nameru || selected.position?.name || "" : "");
     const forms = documentForms(selected, hasAssignment ? selected.org_unit : null);
+    if (cessation) {
+      setTransferFields({position_ru:"",position_kk:"",org_unit_ru:"",org_unit_kk:"",rate:"",remaining_rate:"",basis_ru:"",basis_kk:""});
+      forms.employee_full_name_genitive_ru = savedRussianEmployeeNameForm(selected, "genitive");
+      const proposal = calculateKazakhPersonForm(selected, "ablative");
+      setAblativeKk(proposal.needsReview ? "" : proposal.value);
+    }
+    if (concurrent || simpleAllowance) {
+      // An unconfirmed automatic RU declension must not enter this order.
+      forms.employee_full_name_dative_ru = serviceArea||simpleAllowance?russianEmployeeDativeForOrder(selected):savedRussianEmployeeNameForm(selected, "dative");
+      if(serviceArea||simpleAllowance)forms.employee_full_name_dative_kk=savedKazakhEmployeeNameForm(selected,'dative')||calculateKazakhPersonForm(selected,'dative').value;
+    }
     if(recall){
       const fill=recallEmployeePrefill(selected);
       setRecallName(fill.fullName);setPosition(fill.positionRu);setOrg(fill.unitRu);
@@ -339,7 +410,13 @@ export default function PersonnelOrderCreateDialog({
       org_unit_document_genitive_kk: editedPositionForms.current.has("org_unit_document_genitive_kk") ? current.org_unit_document_genitive_kk : forms.org_unit_document_genitive_kk,
     }));
     setFormsExpanded(!Object.entries(forms).every(([key, value]) => (!childcare && key === "employee_full_name_genitive_ru") || value.trim()));
-  }, [childcare,recall]);
+  }, [childcare,recall,concurrent,cessation,serviceArea,simpleAllowance]);
+
+  React.useEffect(() => {
+    if (cessation && employee && employee.additional_assignments === undefined) void choose(employee);
+    // Reload a selected employee when entering cessation; the employee id stays stable.
+  }, [cessation, choose, employee?.id]);
+  React.useEffect(()=>{if((serviceArea||simpleAllowance)&&employee&&employee.assignments===undefined)void choose(employee);},[serviceArea,simpleAllowance,choose,employee?.id]);
 
   React.useEffect(() => {
     if (!open || !type) return;
@@ -496,6 +573,9 @@ export default function PersonnelOrderCreateDialog({
     setStart("");
     setEnd("");
     setEffective("");
+    setReplacementFields(blankReplacement());
+    setAllowanceRecipient(blankAllowanceRecipient());
+    setTransferFields({ position_ru: "", position_kk: "", org_unit_ru: "", org_unit_kk: "", rate: "", basis_ru: "", basis_kk: "" });
     setKk(blankForms());
     setFormsExpanded(Boolean(employee) && ["LEAVE.UNPAID.GRANT", "LEAVE.CHILDCARE.GRANT"].includes(nextType));
     setApplicationDate(""); setApplicationNumber(""); setCertificateDate(""); setCertificateNumber("");
@@ -504,15 +584,17 @@ export default function PersonnelOrderCreateDialog({
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
-    if (!canSubmit || !templateReady) return;
+    if (!canSubmit || !templateReady || submitInFlight.current || savedOrder.current) return;
+    submitInFlight.current=true;
     setError(null);
+    setDuplicateConflict(null);
     setBusy(true);
     try {
       if (!employee?.id) throw Error("Выберите сотрудника из списка.");
       if (unpaid && (!start || !end)) throw Error("Для отпуска укажите дату начала и дату окончания.");
       if (periodLeave && end < start) throw Error("Дата окончания отпуска не может быть раньше даты начала.");
       const duplicate = await previewPersonnelOrderHeaderDuplicate({ order_number: number, order_date: orderDate });
-      if (duplicate.blocking) throw Error("Найден приказ с таким же номером и датой.");
+      if (duplicate.blocking) {setDuplicateConflict(duplicate);setError(personnelOrderDuplicateMessage(duplicate,orderDate));return;}
       const days = periodLeave
         ? Math.floor((Date.parse(`${end}T00:00:00`) - Date.parse(`${start}T00:00:00`)) / 86400000) + 1
         : undefined;
@@ -528,7 +610,7 @@ export default function PersonnelOrderCreateDialog({
         effective_date: periodLeave ? start : effective,
         period_start: periodLeave ? start : null,
         period_end: periodLeave ? end : null,
-        item_payload: recall ? {...recallFields,source_employee_name:recallName} : periodLeave
+        item_payload: simpleAllowance ? {allowance_recipient:allowanceRecipient,allowance:{percent:Number(replacementFields.allowance_percent),basis_type:'RECIPIENT_BASE_SALARY',employee_dative_ru:kk.employee_full_name_dative_ru,employee_dative_kk:kk.employee_full_name_dative_kk,basis_ru:simpleAllowanceBasis.basis_ru,basis_kk:simpleAllowanceBasis.basis_kk}} : replacementMode ? {...(serviceArea?{allowance_recipient:allowanceRecipient}:{}),concurrent:{...transferFields,rate:replacementMode==="RATE"?Number(transferFields.rate):undefined,total_rate:replacementMode==="RATE"?Number(transferFields.total_rate):undefined,employee_dative_ru:kk.employee_full_name_dative_ru,employee_dative_kk:kk.employee_full_name_dative_kk},replacement:{...replacementFields,...(serviceArea?{allowance_basis_type:'RECIPIENT_BASE_SALARY'}:{}),mode:replacementMode}} : cessation ? {concurrent:{...transferFields,rate:Number(transferFields.rate),remaining_rate:Number(transferFields.remaining_rate),employee_genitive_ru:kk.employee_full_name_genitive_ru,employee_ablative_kk:ablativeKk}} : concurrent ? {concurrent:{...transferFields,rate:Number(transferFields.rate),total_rate:Number(transferFields.total_rate),employee_dative_ru:kk.employee_full_name_dative_ru,employee_dative_kk:kk.employee_full_name_dative_kk}} : transfer ? { transfer: { ...transferFields, rate: Number(transferFields.rate) } } : recall ? {...recallFields,source_employee_name:recallName} : periodLeave
           ? {
               ...(childcare ? { leave_start: start, leave_end: end, leave_days: days } : { leave: { period_type: start === end ? "SINGLE_DAY" : "CONTINUOUS_RANGE", start, end, days } }),
               document_forms_kk: {
@@ -550,11 +632,14 @@ export default function PersonnelOrderCreateDialog({
               document_forms_ru: { position_document_nominative_ru: kk.position_document_nominative_ru, employee_full_name_dative_ru: kk.employee_full_name_dative_ru },
             },
       });
-      onCreated(result);
-      onClose();
+      savedOrder.current=result;
+      setCreatedOrder(result);
+      try {onCreated(result);onClose();} catch {setError(`Приказ № ${result.order_number||number} создан (ID ${result.order_id}). Откройте его карточку по ссылке ниже.`);}
     } catch (caught) {
+      if(caught instanceof PersonnelOrderDuplicateError)setDuplicateConflict(caught.duplicate);
       setError(caught instanceof Error ? caught.message : mapPersonnelOrdersApiError(caught, "Не удалось создать приказ."));
     } finally {
+      submitInFlight.current=false;
       setBusy(false);
     }
   }
@@ -575,6 +660,7 @@ export default function PersonnelOrderCreateDialog({
         setRecallName("");setRecallCases({ru:"",kk:""});setRecallFields({recall_position_kk:"",recall_org_unit_kk:"",basis_ru:"",basis_kk:""});recallEdited.current.clear();
         editedPositionForms.current.clear(); ruGenitiveEdited.current = false;
       }}>Сменить сотрудника</button>
+      {!cessation ? <>
       <Field label="Подразделение">
         {recall ? <input aria-label="Подразделение" value={org} onChange={event=>setOrg(event.target.value)} maxLength={300} className={inputClassName}/> : null}
         <select aria-label={recall?"Выбор подразделения":"Подразделение"} value={selectedOrgUnit?.unit_id ?? ""} onChange={(event) => changeOrgUnit(event.target.value)} className={inputClassName}>
@@ -589,6 +675,7 @@ export default function PersonnelOrderCreateDialog({
           {position ? <option value={position}>{position}</option> : null}
         </select>}
       </Field>
+      </> : null}
     </>
   ) : (
     <div className="relative z-20">
@@ -668,7 +755,25 @@ export default function PersonnelOrderCreateDialog({
               </> : null}
               </> : <Field label="Дата действия"><input aria-label="Дата действия" type="date" required value={effective} onChange={(event) => setEffective(event.target.value)} className={inputClassName} /></Field>}
             </> : null}
-              {employee && !recall ? <details open={formsExpanded} onToggle={(event) => setFormsExpanded(event.currentTarget.open)} className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-700" data-testid="personnel-order-text-forms">
+              {employee && cessation ? <section className="space-y-3 sm:col-span-2">
+                {employee.additional_assignments?.length ? <Field label="Прекращаемое дополнительное назначение"><select aria-label="Прекращаемое дополнительное назначение" className={inputClassName} value={transferFields.assignment_id || ""} onChange={e=>{
+                  const assignment=employee.additional_assignments?.find(a=>a.assignment_id===Number(e.target.value) && a.is_primary===false);
+                  setTransferFields(current=>({...current,assignment_id:assignment?.assignment_id,position_id:assignment?.position_id,org_unit_id:assignment?.org_unit_id,
+                    position_ru:assignment?.position?.job_nameru || assignment?.position?.name || "",position_kk:assignment?.position?.job_namekk || assignment?.position?.name_kk || "",
+                    org_unit_ru:assignment?.org_unit?.name || "",org_unit_kk:assignment?.org_unit?.document_genitive_kk || assignment?.org_unit?.name_kk || "",position_genitive_ru:"",org_unit_genitive_ru:"",rate:assignment ? String(assignment.rate) : ""}));
+                }}><option value="">Выберите дополнительное назначение</option>{employee.additional_assignments.filter(a=>a.is_primary===false).map(a=><option key={a.assignment_id} value={a.assignment_id}>{a.position?.job_nameru || a.position?.name} — {a.org_unit?.name} ({a.rate})</option>)}</select></Field> : null}
+                <Field label="ФИО в родительном падеже (RU)"><input aria-label="ФИО в родительном падеже (RU)" className={inputClassName} value={kk.employee_full_name_genitive_ru} onChange={e=>setKk(current=>({...current,employee_full_name_genitive_ru:e.target.value}))}/></Field>
+                <Field label="ФИО в исходном падеже (KK)"><input aria-label="ФИО в исходном падеже (KK)" className={inputClassName} value={ablativeKk} onChange={e=>setAblativeKk(e.target.value)}/></Field>
+              </section> : null}
+              {employee && (serviceArea || simpleAllowance)?<PersonnelOrderAllowanceRecipient employee={employee} value={allowanceRecipient} onChange={setAllowanceRecipient}/>:null}
+              {simpleAllowance ? <section data-testid="simple-allowance-fields" className="space-y-3 sm:col-span-2">
+                <Field label="Доплата"><select aria-label="Доплата" required className={inputClassName} value={replacementFields.allowance_percent} onChange={e=>setReplacementFields(current=>({...current,allowance_percent:e.target.value}))}><option value="">Выберите доплату</option><option value="25">+25%</option><option value="50">+50%</option></select></Field>
+                {(['ru','kk'] as const).map(lang=><Field key={lang} label={`Основание (${lang.toUpperCase()})`}><input aria-label={`Основание (${lang.toUpperCase()})`} className={inputClassName} value={simpleAllowanceBasis[`basis_${lang}`]} onChange={e=>setSimpleAllowanceBasis(current=>({...current,[`basis_${lang}`]:e.target.value}))}/></Field>)}
+              </section> : null}
+              {employee && (transfer || concurrent) ? <PersonnelOrderTransferFields value={transferFields} onChange={setTransferFields} orgUnits={orgUnitOptions} disabled={busy} mode={cessation ? "cessation" : concurrent ? "concurrent" : "transfer"} showRates={replacementMode!=="PAY"} documentFormsKK={Boolean(replacementMode)} autoCaseForms={serviceArea} /> : null}
+              {employee && (concurrent || simpleAllowance) && !cessation ? <section className="space-y-3 sm:col-span-2"><p className="text-xs">Проверьте предложенные формы ФИО в дательном падеже; их можно уточнить вручную.</p>{([['employee_full_name_dative_ru','ФИО в дательном падеже (RU)'],['employee_full_name_dative_kk','ФИО в дательном падеже (KK)']] as const).map(([key,label])=><Field key={key} label={label}><input aria-label={label} value={kk[key]} onChange={e=>setKk(current=>({...current,[key]:e.target.value}))} className={inputClassName}/></Field>)}</section> : null}
+              {employee && replacementMode ? <PersonnelOrderReplacementFields value={replacementFields} onChange={setReplacementFields} orgUnits={orgUnitOptions} mode={replacementMode} start={effective} fixedAllowance={optionalPlacement} serviceArea={serviceArea}/> : null}
+              {employee && !recall && !transfer && !concurrent ? <details open={formsExpanded} onToggle={(event) => setFormsExpanded(event.currentTarget.open)} className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-700" data-testid="personnel-order-text-forms">
                 <summary className="cursor-pointer text-sm font-medium">{formsComplete ? "Формы для текста приказа заполнены автоматически" : "Формы для текста приказа"}</summary>
               {periodLeave && missingFormLabels.length ? <p role="alert" className="mt-2 text-sm text-amber-800">Необходимо заполнить: {missingFormLabels.join(", ")}.</p> : null}
               {!kk.position_document_possessive_kk.trim() ? <p className="text-xs text-amber-700">В справочнике должности нет казахского названия или сохранённой документной формы. Заполните КК-должность вручную.</p> : <p className="text-xs text-zinc-500">Документные формы редактируемые; рассчитанную форму из названия справочника проверьте.</p>}
@@ -701,6 +806,8 @@ export default function PersonnelOrderCreateDialog({
               })}</div>
             </section>:null}
             {error ? <p role="alert" className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-900/70 dark:bg-red-950/40 dark:text-red-200">{error}</p> : null}
+            {duplicateConflict?<div className="space-y-1 text-sm">{duplicateConflict.candidates.filter(row=>(row.is_conflict??row.order_date===orderDate)&&row.can_open).map(row=><a key={row.order_id} className="block text-blue-700 underline" href={`/directory/personnel/orders?order_id=${row.order_id}&tab=data`}>Открыть приказ № {row.order_number} (ID {row.order_id})</a>)}</div>:null}
+            {createdOrder?<a className="text-sm text-blue-700 underline" href={`/directory/personnel/orders?order_id=${createdOrder.order_id}&tab=data`}>Открыть созданный приказ (ID {createdOrder.order_id})</a>:null}
           </div>
           <footer data-testid="personnel-order-create-footer" className="flex shrink-0 flex-col gap-3 border-t border-zinc-200 bg-white px-5 py-4 dark:border-zinc-800 dark:bg-zinc-950">
             {!canSubmit ? <div id="personnel-order-create-blockers" data-testid="personnel-order-create-blockers" role="status" className="max-h-36 overflow-y-auto text-sm text-amber-800 dark:text-amber-200">

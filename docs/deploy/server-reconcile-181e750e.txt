@@ -1,0 +1,264 @@
+Согласованный кандидат: серверные исходники + 181e750e
+====================================================
+
+Локальная ветка: reconcile/server-181e750e.
+Исходный серверный снимок: snapshot/server-source-20261010, f57944849c5d487c55aa57a6bae1b5db1b2a8dcc.
+Серверный HEAD до обновления: 5ecc5d8154f30d5ae0316df558a078d03a46b8e6.
+Снимок/производственный отчёт сохранены в runtime/server-reconcile-evidence-20261010
+в исходном локальном workspace и отдельном архиве с SHA256; они не включены
+в исходники этой ветки. Никакие команды записи/развёртывания ниже сейчас не
+выполнялись. Это порядок для отдельно разрешённого будущего обновления.
+
+Разрешение исходников
+--------------------
+26 текстовых конфликтов и 7 add/add конфликтов проверены по смыслу.
+Новые контракты кадровых приказов, процент 25/50, собственный оклад/получатель,
+срок замещения, основания RU/KK и скрытые падежные формы сохранены из 181e750e.
+Старые серверные реализации этих функций не наложены поверх нового кода.
+Auth/main/tasks/видимость и прежние возможности отзыва, копий и выбора видов
+уже включены в новую базу и сохранены. Серверная проверка LEAVE.ANNUAL.RECALL
+в каталоге оставлена: она усиливает существующий тест.
+
+Сохранены все пять серверных файлов каталога должностей: server policy,
+server-catalog-v1.json, server-link-review-v1.json, import_server_job_catalog.py
+и test_job_catalog_server_policy.py. Импорт каталога для этого обновления не
+нужен и не выполняется. Нельзя вызывать этот importer вместо переноса шаблонов.
+
+Executable bit smoke-скрипта сохранён. Дополнительно исправлен executable bit
+run_regular_tasks_cron.sh: серверный unit запускает его напрямую, но файл имеет
+режим 0664 и service сейчас failed со status=203/EXEC. Данные/логика scheduler
+не менялись, scheduler/smoke не запускались. При будущем возобновлении активного
+таймера scheduler сможет выполнять штатную генерацию задач; это не проверка
+без записи и не должно происходить до окончания обслуживания.
+
+Канонические JSON-манифесты и два shell-entrypoint получают LF через узкие
+правила .gitattributes; строгая проверка манифестов и проверка типов сохранены.
+
+Пункт для явного решения: политика удаления шаблонов
+--------------------------------------------------
+Кандидат сохраняет уже существующее поведение 181e750e:
+обычный диалог подтверждения; default можно удалить/архивировать; шаблон,
+на который ссылается приказ/application, автоматически архивируется, его
+версии, ссылки и тексты приказов сохраняются. Если источник использован только
+для создания независимых копий, при удалении источника отсоединяется их
+copied_from provenance; собственные тексты/версии копий остаются.
+
+Серверный вариант: default защищён от удаления/архивации; требуется вручную
+ввести название; использованный шаблон (включая copy provenance) сначала
+получает TEMPLATE_IN_USE, затем нужно отдельно выбрать архивирование.
+Сервер также ограничивает echo-названия в delete request длиной 200 символов;
+новый код допускает удаление существующего длинного заголовка.
+
+Нужно подтвердить сохранение поведения 181e750e либо вернуть серверную политику
+с согласованными изменениями API/UI и повторными тестами. До такого решения
+ветка является проверяемым кандидатом. Оба варианта сохраняют приказы; нельзя
+под видом разрешения конфликта менять опубликованные тексты исторических версий.
+
+Проверки кандидата
+-----------------
+Backend: 332 passed, 8 skipped, 17 subtests passed; test DB guard привязал все
+engine к отдельной corpsite_test до загрузки приложения. Включены 16 сценариев
+адресного переноса, история/повторный импорт/восстановление, RU/KK, podup001,
+серверная политика каталога, публикация, формы и сохранение оснований.
+Frontend: 24 файла, 366 тестов успешно; штатная npm run build успешно завершена
+с Running TypeScript и генерацией страниц. Общий tsc имеет те же 175 ошибок
+в старых тестовых файлах; новых ошибок приложения нет, Next.js штатно фильтрует
+test/spec диагностику. ignoreBuildErrors и tsconfig исключения не добавлялись.
+Shell-entrypoints проверены bash -n без исполнения.
+Экспорт должен вновь совпадать с согласованными 4/6, 9/33, 10/16, 23/38, 24/36,
+28/44; опубликованы все, кроме DRAFT у №24. Никакие приказы/кадровые данные
+в экспорт не включаются.
+
+Безопасный порядок обновления серверного каталога
+------------------------------------------------
+Не делать git pull/reset/checkout в текущем грязном /opt/projects/corpsite/app.
+Новый код готовится в отдельном чистом release-каталоге. Старый каталог целиком
+сохраняется, включая .git, .env, .venv, node_modules, runtime, backups и все
+неотслеживаемые файлы. После остановки writers путь app переключается на новый
+каталог symlink. Ничего из старого каталога не удалять.
+
+Подготовленный git bundle содержит ветку и её историю без push. SHA и hash
+финального коммита указаны в локальном release.json. Передача ниже — только
+после разрешения на обновление; snapshot/production report не передаются
+как исходники приложения.
+
+PowerShell:
+  scp .\runtime\server-reconciled-181e750e.bundle corpsite:/tmp/
+  scp .\runtime\server-reconciled-181e750e.bundle.sha256 corpsite:/tmp/
+
+Bash на сервере, этапами:
+  set -euo pipefail
+  umask 077
+  BASE=/opt/projects/corpsite
+  APP="$BASE/app"
+  BUNDLE=/tmp/server-reconciled-181e750e.bundle
+  BASE_COMMIT=5ecc5d8154f30d5ae0316df558a078d03a46b8e6
+  RELEASE_REF=refs/heads/reconcile/server-181e750e
+  cd /tmp
+  sha256sum -c server-reconciled-181e750e.bundle.sha256
+  RELEASE=$(git bundle list-heads "$BUNDLE" "$RELEASE_REF" | awk '{print $1}')
+  test -n "$RELEASE"
+  STAMP=$(date -u +%Y%m%dT%H%M%SZ)
+  NEW="$BASE/releases/$RELEASE"
+  OLD="$BASE/server-before-$STAMP"
+  RECOVERY="$BASE/recovery-$STAMP"
+  test -d "$APP" && test ! -L "$APP"
+  test "$(readlink -f "$APP")" = "$APP"
+  test ! -e "$NEW" && test ! -e "$OLD" && test ! -e "$RECOVERY"
+  test "$(git -C "$APP" rev-parse HEAD)" = "$BASE_COMMIT"
+  mkdir -m 700 "$RECOVERY"
+  mkdir -p "$BASE/releases"
+
+Повторно прочитать git status/diff, modes, systemd paths и хранилища. Они должны
+соответствовать сохранённому снимку; при дрейфе остановиться и пересогласовать.
+Сохранить исходники и отдельный производственный отчёт (без секретов в архиве):
+  git -C "$APP" status --porcelain=v1 --untracked-files=all > "$RECOVERY/status.txt"
+  git -C "$APP" diff --binary HEAD > "$RECOVERY/worktree.patch"
+  git -C "$APP" diff --cached --binary > "$RECOVERY/index.patch"
+  tar --exclude=node_modules --exclude=.next --exclude=__pycache__ \
+      --exclude='*.pyc' --exclude='.env*' --exclude='*/.env*' \
+      -czf "$RECOVERY/source-before.tar.gz" -C "$APP" \
+      app alembic corpsite-ui scripts reference-data tests requirements.txt alembic.ini
+  cp -p "$APP/docs/implementation/personnel-orders-reconstruction-pilot-01.md" \
+      "$RECOVERY/production-report.txt"
+  chmod 600 "$RECOVERY/production-report.txt"
+
+Создать новый repository, не меняя старый. Bundle требует BASE_COMMIT;
+подтянуть его объекты из старой локальной .git, затем только из bundle:
+  git init "$NEW"
+  git -C "$NEW" config core.autocrlf false
+  git -C "$NEW" fetch "$APP" "$BASE_COMMIT"
+  git -C "$NEW" bundle verify "$BUNDLE"
+  git -C "$NEW" fetch "$BUNDLE" "$RELEASE_REF"
+  git -C "$NEW" checkout --detach "$RELEASE"
+  git -C "$NEW" merge-base --is-ancestor 181e750e HEAD
+  git -C "$NEW" diff --exit-code
+  test -x "$NEW/scripts/ops/run_regular_tasks_cron.sh"
+  test -x "$NEW/scripts/ops/scheduler_post_deploy_smoke.sh"
+  install -m 600 "$APP/.env" "$NEW/.env"
+  install -m 600 "$APP/corpsite-ui/.env.production" "$NEW/corpsite-ui/.env.production"
+  python3 -m venv "$NEW/.venv"
+  "$NEW/.venv/bin/python" -m pip install -r "$NEW/requirements.txt"
+  "$NEW/.venv/bin/python" -m pip check
+  cd "$NEW/corpsite-ui"
+  npm ci
+  npm run build
+  test -f .next/BUILD_ID
+
+Данные бота DATA_DIR=/var/lib/corpsite, фото /var/lib/corpsite/personnel-photos
+и вложения /var/lib/corpsite/incoming-information/attachments остаются на месте.
+Относительное HR_IMPORT_STORAGE_DIR не задано: runtime/hr-import необходимо
+связать с сохраняемым OLD, иначе новая версия не увидит существующие загрузки.
+Ссылки на будущий OLD сейчас могут быть dangling, до запуска сервисов обязаны
+стать валидными. runtime целиком не заменять: там есть tracked release-артефакты.
+  mkdir -p "$NEW/runtime"
+  test ! -e "$NEW/runtime/hr-import" && test ! -L "$NEW/runtime/hr-import"
+  ln -s "$OLD/runtime/hr-import" "$NEW/runtime/hr-import"
+  for rel in .data logs .local-backups corpsite-bot/.data; do
+      if test -d "$APP/$rel"; then
+          test ! -e "$NEW/$rel" && test ! -L "$NEW/$rel"
+          ln -s "$OLD/$rel" "$NEW/$rel"
+      fi
+  done
+
+Окно обслуживания. Зафиксировать состояния; остановить timer и ВСЕХ writers,
+включая bot и regular-tasks. Healthcheck может перезапустить backend, поэтому
+его timer/service тоже остановить. Не запускать scheduler smoke/cron вручную.
+  for unit in corpsite-backend corpsite-frontend corpsite-bot \
+      corpsite-regular-tasks corpsite-healthcheck \
+      corpsite-regular-tasks.timer corpsite-healthcheck.timer; do
+      systemctl is-active "$unit" > "$RECOVERY/$unit.active" || true
+  done
+  sudo systemctl stop corpsite-healthcheck.timer corpsite-regular-tasks.timer
+  sudo systemctl stop corpsite-healthcheck corpsite-regular-tasks \
+      corpsite-bot corpsite-backend corpsite-frontend
+
+Полная копия БД и проверка перед любым DDL/импортом:
+  cd "$NEW"
+  export PYTHONPATH="$NEW"
+  export PYTHONDONTWRITEBYTECODE=1
+  .venv/bin/python scripts/personnel_stage3_server_release/database_backup_restore.py \
+      backup --repo "$APP" --file "$RECOVERY/before.dump"
+  .venv/bin/python scripts/personnel_stage3_server_release/database_backup_restore.py \
+      verify --repo "$APP" --file "$RECOVERY/before.dump"
+  .venv/bin/python scripts/personnel_template_transfer_snapshot.py > "$RECOVERY/db-before.json"
+  .venv/bin/alembic current
+  .venv/bin/alembic heads
+  # Ожидание hrjobmerge001 и head podup001, конфликтов номера+даты — 0.
+  # При иной ревизии/конфликтах STOP, не stamp и не применять план вслепую.
+  .venv/bin/alembic upgrade podup001
+  .venv/bin/python scripts/transfer_personnel_templates.py plan \
+      --bundle reference-data/personnel-templates/transfer-181e750e.json \
+      --output "$RECOVERY/plan.json"
+  .venv/bin/python -m json.tool "$RECOVERY/plan.json"
+
+План после миграции отдельно просмотреть: ready=true, ambiguities=[], шесть
+CREATE при неизменной БД, пять PUBLISHED и DRAFT для ключа 24. Числовые локальные
+IDs не навязывать. При других действиях/кандидатах остановиться и сопоставить
+конкретные identities по коду, RU/KK названиям и содержимому. Затем разрешённый
+импорт с новым backup/receipt и существующим активным actor login admin:
+  .venv/bin/python scripts/transfer_personnel_templates.py apply \
+      --bundle reference-data/personnel-templates/transfer-181e750e.json \
+      --plan "$RECOVERY/plan.json" --actor-login admin \
+      --backup "$RECOVERY/templates-before.json" --receipt "$RECOVERY/import-receipt.json"
+  .venv/bin/python scripts/transfer_personnel_templates.py plan \
+      --bundle reference-data/personnel-templates/transfer-181e750e.json \
+      --output "$RECOVERY/repeat-plan.json"
+  .venv/bin/python -m json.tool "$RECOVERY/repeat-plan.json"
+  # Ожидание шести NO_CHANGE. При явном mapping брать обновлённый repeat_mapping
+  # из receipt; детали адресного backup/restore — в соседней инструкции переноса.
+
+Переключение каталога только при успешных build/backup/migration/import/checks.
+Оригинальный APP сейчас обычный каталог, а не symlink: сохранить его целиком.
+  NEXT_LINK="$BASE/app.next-$STAMP"
+  test ! -e "$NEXT_LINK" && test ! -L "$NEXT_LINK"
+  ln -s "$NEW" "$NEXT_LINK"
+  mv "$APP" "$OLD"
+  mv -T "$NEXT_LINK" "$APP"
+  test "$(readlink -f "$APP")" = "$NEW"
+  test -d "$APP/runtime/hr-import"
+  test -d /var/lib/corpsite/personnel-photos
+  test -d /var/lib/corpsite/incoming-information/attachments
+  sudo systemctl start corpsite-backend corpsite-frontend corpsite-bot
+  sudo systemctl is-active corpsite-backend corpsite-frontend corpsite-bot
+  curl --fail --silent --show-error http://127.0.0.1:8000/health
+  curl --fail --silent --show-error https://mmc.004.kz/api/health
+
+Если переключение APP не завершилось, сервисы не запускать: восстановить
+путь из OLD или завершить перенос NEXT_LINK после проверки. Старый каталог
+и архивы не удалять. Если runtime-ссылки или health неверны, остановиться.
+После успешных health и проверки форм/шаблонов разрешается вернуть только те
+таймеры, которые были active до обслуживания. Их включение возобновляет writers;
+с этого момента автоматическое восстановление полной DB поверх новых данных
+недопустимо. Не запускать oneshot regular-tasks/healthcheck вручную.
+  for unit in corpsite-regular-tasks.timer corpsite-healthcheck.timer; do
+      if test "$(cat "$RECOVERY/$unit.active")" = active; then
+          sudo systemctl start "$unit"
+      fi
+  done
+  # Не требовать active у regular-tasks.service: это oneshot. Проверять следующий
+  # штатный timer run и отсутствие 203/EXEC; сейчас scheduler не выполнялся.
+
+Восстановление
+--------------
+При ошибке остановить всех writers/timer, сохранить новые диагностические
+данные и receipt. Сначала read-only preview адресного restore шаблонов:
+  cd "$NEW"
+  .venv/bin/python scripts/transfer_personnel_templates.py restore \
+      --backup "$RECOVERY/templates-before.json" --receipt "$RECOVERY/import-receipt.json"
+  # --apply — только после проверки; importer откажет при новых ссылках/дрейфе.
+
+Возврат кода: подготовить отдельную ссылку app.rollback-$STAMP на OLD и
+переключить APP через mv -T при остановленных сервисах. NEW и OLD сохранить,
+ничего не сбрасывать git reset --hard. Внимание: старый backend рассчитан на
+старую уникальность order_number. Нельзя запускать его после появления новых
+одинаковых номеров разных дат без отдельного согласования схемы/данных.
+Полный DB restore — только при отдельном разрешении и отсутствии новых данных,
+которые требуется сохранить. Он заменяет public+staging одной транзакцией;
+не выполнять его поверх новых приказов. Инструкция backup/restore и downgrade
+подробно описана в personnel-template-transfer-181e750e.txt.
+
+Не удалять OLD, RECOVERY, резервную копию DB, git patch, оригинальные каталоги
+и производственный отчёт после успешного переключения: срок хранения решается
+отдельно. Push, импорт, scheduler, переключение каталогов и деплой в текущем
+задании не выполнялись.

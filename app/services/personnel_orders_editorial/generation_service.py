@@ -240,6 +240,8 @@ def generate_editorial(
                 "item_type_code": item["item_type_code"],
                 "recall_payload": item_ctx.get("recall_payload"),
                 "effective_date": item_ctx.get("effective_date"),
+                "childcare_payload": item_ctx.get("childcare_payload"),
+                "org_unit_name": item_ctx.get("org_unit_name"),
                 "basis_type": basis.get("basis_type") if basis else None,
                 "subject_employee_id": subject_id,
                 "subject_employee_name": subject_name,

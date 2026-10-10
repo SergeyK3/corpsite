@@ -980,6 +980,7 @@ def hard_delete_employee_route(
 def get_employee(
     employee_id: str = Path(..., min_length=1),
     user: Dict[str, Any] = Depends(get_current_user),
+    include_assignments: bool = Query(False),
 ) -> Dict[str, Any]:
     try:
         uid = int(user["user_id"])
@@ -994,6 +995,7 @@ def get_employee(
             scope_unit_id=scope_unit_id,
             scope_unit_ids=scope_unit_ids,
             employee_id=employee_id,
+            **({"include_assignments": True} if include_assignments else {}),
         )
 
     except HTTPException:

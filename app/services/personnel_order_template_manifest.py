@@ -250,6 +250,8 @@ def _sync_plan(chain: Sequence[Mapping[str, Any]], row: Mapping[str, Any] | None
     if row is None: return "CREATE", [chain[-1]]
     item_type_code = str(chain[-1]["item_type_code"])
     current_hash = content_sha256(item_type_code, {field: row[field] for field in TEXT_FIELDS})
+    if current_hash == chain[-1]["content_sha256"]:
+        return "NO_OP", []
     if current_hash == chain[0]["base_content_sha256"]: return ("CREATE", [chain[-1]]) if row.get("status") == "PUBLISHED" else ("UPDATE", chain)
     for index, manifest in enumerate(chain):
         if current_hash == manifest["content_sha256"]:
@@ -258,9 +260,13 @@ def _sync_plan(chain: Sequence[Mapping[str, Any]], row: Mapping[str, Any] | None
     return "CONFLICT", []
 
 
-def sync_manifests(*, apply: bool, db_engine: Any = default_engine, root: Path = MANIFEST_ROOT) -> dict[str, str]:
+def sync_manifests(*, apply: bool, db_engine: Any = default_engine, root: Path = MANIFEST_ROOT, item_type_code: str | None = None) -> dict[str, str]:
     """Validate and apply each type's append-only chain in one transaction."""
     chains, results = load_manifest_chains(root), {}
+    if item_type_code is not None:
+        if item_type_code not in chains:
+            raise ManifestError(f"No manifest for {item_type_code}")
+        chains = {item_type_code: chains[item_type_code]}
     if not apply:
         with db_engine.connect() as connection:
             for item_type_code, chain in chains.items():

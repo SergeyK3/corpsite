@@ -9,13 +9,26 @@ vi.mock("@/app/directory/personnel/_lib/personnelSectionLanguage", () => ({ useP
 afterEach(() => { cleanup(); vi.resetAllMocks(); sectionLanguage.language = "ru"; });
 beforeEach(() => { Object.defineProperty(HTMLDialogElement.prototype, "showModal", { configurable: true, value: function () { this.setAttribute("open", ""); } }); vi.mocked(listPersonnelTemplateVersions).mockResolvedValue({items: []}); });
 
+it("opens a different identity from the catalogue while retaining the same order type",async()=>{
+  const item={type_code:"CONCURRENT_DUTY_START",editor_available:true} as PersonnelOrderTemplateCatalogItem;
+  const first={template_id:9,item_type_code:item.type_code,name_ru:"TEST ставка",name_kk:"TEST атауы",is_default:true,template_version_id:33,draft_version_id:null};
+  const second={...first,template_id:24,name_ru:"TEST доплата",is_default:false,template_version_id:null,draft_version_id:36};
+  vi.mocked(listPersonnelIndependentTemplates).mockResolvedValue({items:[first,second]});
+  const editor=vi.fn((_id:number|undefined)=>null);const view=render(<PersonnelTemplateVariants item={item} initialTemplateId={9} renderEditor={editor}/>);
+  await waitFor(()=>expect(listPersonnelTemplateVersions).toHaveBeenCalledWith(item.type_code,9));
+  view.rerender(<PersonnelTemplateVariants item={item} initialTemplateId={24} renderEditor={editor}/>);
+  await waitFor(()=>expect(listPersonnelTemplateVersions).toHaveBeenCalledWith(item.type_code,24));
+  expect(editor.mock.calls.at(-1)?.[0]).toBe(24);
+  expect(screen.getByRole("button",{name:/TEST доплата/})).toHaveAttribute("aria-pressed","true");
+});
+
 it("opens the existing default card when independent schema is not migrated and explains copying availability",async()=>{
   vi.mocked(listPersonnelIndependentTemplates).mockRejectedValue({status:503,details:{detail:{code:"TEMPLATE_SCHEMA_REQUIRED"}}});
   const editor=vi.fn((_id,_changed,actions)=><div>Existing template card{actions}</div>);
   render(<PersonnelTemplateVariants item={{type_code:"LEAVE.UNPAID.GRANT",editor_available:true} as PersonnelOrderTemplateCatalogItem} renderEditor={editor}/>);
   await screen.findByText("Existing template card");
-  expect(editor).toHaveBeenCalledWith(undefined,expect.any(Function),expect.anything(),null,undefined,expect.anything(),undefined);
-  expect(screen.getByRole("button",{name:"Создать на основе…",exact:true})).toBeDisabled();
+  expect(editor).toHaveBeenCalledWith(undefined,expect.any(Function),expect.anything(),null,undefined,expect.anything(),undefined,expect.any(Function));
+  expect(screen.getByRole("button",{name:"Создать на основе…"})).toBeDisabled();
   expect(screen.getByRole("status")).toHaveTextContent("hrrecall001");
   expect(listPersonnelTemplateVersions).not.toHaveBeenCalled();
 });
@@ -36,12 +49,12 @@ it("waits for template membership before requesting versions or opening the edit
   expect(listPersonnelTemplateVersions).not.toHaveBeenCalled(); expect(editor).not.toHaveBeenCalled();
   resolve({items:[{template_id:101,item_type_code:"LEAVE.ANNUAL.RECALL",name_ru:"Отзыв",name_kk:"Шақырту",is_default:false,template_version_id:null,draft_version_id:1327}]});
   await waitFor(() => expect(listPersonnelTemplateVersions).toHaveBeenCalledWith("LEAVE.ANNUAL.RECALL",101));
-  expect(editor).toHaveBeenCalledWith(101,expect.any(Function),expect.anything(),null,undefined,expect.anything(),expect.objectContaining({template_id:101}));
+  expect(editor).toHaveBeenCalledWith(101,expect.any(Function),expect.anything(),null,undefined,expect.anything(),expect.objectContaining({template_id:101}),expect.any(Function));
 });
 
 it("clears a stale template id belonging to a different type before any scoped API read", async () => {
   vi.mocked(listPersonnelIndependentTemplates).mockResolvedValue({items:[{template_id:52,item_type_code:"LEAVE.ANNUAL.GRANT",name_ru:"Трудовой отпуск",name_kk:"Еңбек демалысы",is_default:true,template_version_id:null,draft_version_id:null}]});
-  const selected=vi.fn(); const editor=vi.fn(() => <div>Annual editor</div>);
+  const selected=vi.fn(); const editor=vi.fn((_id: number | undefined) => <div>Annual editor</div>);
   render(<PersonnelTemplateVariants item={{type_code:"LEAVE.ANNUAL.GRANT"} as PersonnelOrderTemplateCatalogItem} initialTemplateId={101} onSelected={selected} renderEditor={editor}/>);
   await waitFor(() => expect(listPersonnelTemplateVersions).toHaveBeenCalledWith("LEAVE.ANNUAL.GRANT",52));
   expect(listPersonnelTemplateVersions).not.toHaveBeenCalledWith("LEAVE.ANNUAL.GRANT",101);
@@ -53,18 +66,18 @@ it("updates the exact copy caption only from the shared section language while k
   const item = { type_code: "HIRE", title_ru: "Русское содержание", title_kk: "Қазақша мазмұн" } as PersonnelOrderTemplateCatalogItem;
   const renderEditor = (_id: number | undefined, _changed: () => void, actions: React.ReactNode, form: React.ReactNode) => <div>{actions}{form}</div>;
   const view = render(<PersonnelTemplateVariants item={item} renderEditor={renderEditor} />);
-  await waitFor(() => expect(screen.getByRole("button", { name: "Создать на основе…", exact: true })).toBeEnabled());
-  fireEvent.click(screen.getByRole("button", { name: "Создать на основе…", exact: true }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "Создать на основе…" })).toBeEnabled());
+  fireEvent.click(screen.getByRole("button", { name: "Создать на основе…" }));
   fireEvent.change(screen.getByLabelText("Название нового шаблона на русском"), { target: { value: "Русский вариант" } });
   fireEvent.change(screen.getByLabelText("Название нового шаблона на казахском"), { target: { value: "Қазақша нұсқа" } });
   sectionLanguage.language = "kk";
   view.rerender(<PersonnelTemplateVariants item={{ ...item, title_ru: "Other content", title_kk: "Other content" }} renderEditor={renderEditor} />);
-  expect(screen.getByRole("button", { name: "Негізінде жасау…", exact: true })).toBeEnabled();
+  expect(screen.getByRole("button", { name: "Негізінде жасау…" })).toBeEnabled();
   expect(screen.getByLabelText("Жаңа үлгінің орысша атауы")).toHaveValue("Русский вариант");
   expect(screen.getByLabelText("Жаңа үлгінің қазақша атауы")).toHaveValue("Қазақша нұсқа");
   sectionLanguage.language = "ru";
   view.rerender(<PersonnelTemplateVariants item={item} renderEditor={renderEditor} />);
-  expect(screen.getByRole("button", { name: "Создать на основе…", exact: true })).toBeEnabled();
+  expect(screen.getByRole("button", { name: "Создать на основе…" })).toBeEnabled();
   expect(copyPersonnelTemplate).not.toHaveBeenCalled();
 });
 it("copies the selected version with separate variant names and selects the independent draft", async () => {

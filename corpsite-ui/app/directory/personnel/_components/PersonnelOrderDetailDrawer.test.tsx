@@ -618,7 +618,7 @@ describe("PersonnelOrderDetailDrawer document tab", () => {
     fireEvent.click(await screen.findByTestId("personnel-order-editorial-closing-toggle"));
     await waitFor(() => expect(patchPersonnelOrderEditorialBlock).toHaveBeenCalledTimes(4));
     fireEvent.click(screen.getByRole("tab", { name: "Документ" }));
-    await waitFor(() => expect(screen.getByTestId("personnel-order-document")).toHaveTextContent("Қосымша өкімдер"));
+    await waitFor(() => expect(screen.getByTestId("personnel-order-document")).not.toHaveTextContent("Қосымша өкімдер"));
     expect(screen.getByTestId("personnel-order-document")).toHaveTextContent("new kk closing");
   });
   it("keeps document blockers in data and uses revision for confirm", async () => {
@@ -882,4 +882,28 @@ describe("PersonnelOrderDetailDrawer document tab", () => {
     expect(screen.getAllByText("К. Замещающий").length).toBeGreaterThan(0);
     expect(screen.queryByText("М. Тулеутаев")).not.toBeInTheDocument();
   });
+});
+
+it("refreshes a stale open document on return to the window without regenerating or mutating the order", async () => {
+ const transferDetail={...detail,order:{...detail.order,order_type_code:"TRANSFER"},items:[{item_id:17,order_id:42,item_number:1,item_type_code:"TRANSFER",item_status:"ACTIVE",employee_id:7,employee_name:"Employee",effective_date:"2026-07-03",payload:{}}]} as PersonnelOrderDetailResponse;
+ const snapshot=(fresh:boolean)=>{
+  const state=templateEditorial("old");
+  state.items[0].blocks=state.items[0].blocks.map(block=>{
+   if(block.block_type!=="body")return block;
+   const text=block.locale==="ru"?`Перевести с ${fresh?"03.07.2026":"2026-07-03"} сотрудника.`:`${fresh?"2026 жылғы 3 шілдеден":"2026-07-03"} бастап қызметкер ауыстырылсын.`;
+   return {...block,generated_text:text,effective_text:text};
+  });return state;
+ };
+ vi.mocked(getPersonnelOrder).mockResolvedValue(transferDetail);vi.mocked(getPersonnelOrderEditorial).mockResolvedValueOnce(snapshot(false)).mockResolvedValue(snapshot(true));
+ render(<PersonnelOrderDetailDrawer orderId={42} open onClose={vi.fn()}/>);
+ await waitFor(()=>expect(screen.getByTestId("personnel-order-document")).toHaveTextContent("2026-07-03 бастап"));
+ fireEvent(window,new Event("focus"));
+ await waitFor(()=>expect(screen.getByTestId("personnel-order-document")).toHaveTextContent("2026 жылғы 3 шілдеден бастап"));
+ fireEvent.click(screen.getByRole("button",{name:"Русский"}));expect(screen.getByTestId("personnel-order-document")).toHaveTextContent("Перевести с 03.07.2026");
+ expect(generatePersonnelOrderEditorial).not.toHaveBeenCalled();expect(applyPersonnelOrderTemplateApplication).not.toHaveBeenCalled();
+});
+it("does not reload the editorial snapshot on focus while editing data",async()=>{
+ vi.mocked(getPersonnelOrder).mockResolvedValue(detail);vi.mocked(getPersonnelOrderEditorial).mockResolvedValue(templateEditorial("old"));
+ render(<PersonnelOrderDetailDrawer orderId={42} open initialTab="data" onClose={vi.fn()}/>);
+ await screen.findByTestId("personnel-order-header-editor-section");const calls=vi.mocked(getPersonnelOrderEditorial).mock.calls.length;fireEvent(window,new Event("focus"));await Promise.resolve();expect(getPersonnelOrderEditorial).toHaveBeenCalledTimes(calls);
 });

@@ -72,9 +72,10 @@ def _assert_type(item_type_code: str) -> None:
 
 
 def _resolve_template(conn: Any, item_type_code: str, template_id: int | None,
-                      *, create: bool = False, lock: bool = False) -> int:
+                      *, create: bool = False, lock: bool = False, include_archived: bool = False) -> int:
     clause = "template_id=:id" if template_id is not None else "is_default"
-    row = conn.execute(text(f"SELECT template_id FROM public.personnel_order_templates WHERE item_type_code=:type AND {clause}" + (" FOR UPDATE" if lock else "")),
+    active = "" if include_archived else " AND (NOT EXISTS(SELECT 1 FROM public.personnel_order_template_versions v WHERE v.template_id=personnel_order_templates.template_id) OR EXISTS(SELECT 1 FROM public.personnel_order_template_versions v WHERE v.template_id=personnel_order_templates.template_id AND v.status IN ('DRAFT','PUBLISHED')))"
+    row = conn.execute(text(f"SELECT template_id FROM public.personnel_order_templates WHERE item_type_code=:type AND {clause}{active}" + (" FOR UPDATE" if lock else "")),
                        {"type": item_type_code, "id": template_id}).first()
     if row:
         return int(row[0])
@@ -96,13 +97,13 @@ def list_templates(item_type_code: str, *, published_only: bool = False) -> list
     require_independent_template_schema()
     with engine.connect() as conn:
         rows = conn.execute(text("""
-          SELECT t.*, p.template_version_id, p.version_number, p.title_ru, p.title_kk,
-                 d.template_version_id draft_version_id
+          SELECT t.*, p.template_version_id, p.version_number, p.title_ru, p.title_kk, p.body_template_ru,p.body_template_kk,
+                 d.template_version_id draft_version_id,d.version_number draft_version_number
           FROM public.personnel_order_templates t
           LEFT JOIN public.personnel_order_template_versions p ON p.template_id=t.template_id AND p.status='PUBLISHED'
           LEFT JOIN public.personnel_order_template_versions d ON d.template_id=t.template_id AND d.status='DRAFT'
           WHERE t.item_type_code=:type AND (:published_only=FALSE OR p.template_version_id IS NOT NULL)
-            AND (t.is_default OR NOT EXISTS(SELECT 1 FROM public.personnel_order_template_versions v WHERE v.template_id=t.template_id)
+            AND (NOT EXISTS(SELECT 1 FROM public.personnel_order_template_versions v WHERE v.template_id=t.template_id)
                  OR EXISTS(SELECT 1 FROM public.personnel_order_template_versions v WHERE v.template_id=t.template_id AND v.status IN ('DRAFT','PUBLISHED')))
           ORDER BY t.is_default DESC,t.template_id
         """), {"type": item_type_code, "published_only": published_only}).mappings().all()
@@ -113,7 +114,7 @@ def list_versions(item_type_code: str, template_id: int) -> list[dict[str, Any]]
     _assert_type(item_type_code)
     require_independent_template_schema()
     with engine.connect() as conn:
-        scope = _resolve_template(conn, item_type_code, template_id)
+        scope = _resolve_template(conn, item_type_code, template_id, include_archived=True)
         rows = conn.execute(text("SELECT * FROM public.personnel_order_template_versions WHERE template_id=:id ORDER BY version_number DESC"), {"id": scope}).mappings().all()
     return [_row(row) for row in rows]
 
@@ -145,6 +146,9 @@ def copy_template(item_type_code: str, source_version_id: int | None, name_ru: s
         # Keep copied tokens verbatim, including incompatible tokens in a draft.
         # Save, preview and publication retain full target-spec validation.
         _validate(values, item_type_code, check_variables=False)
+        # The new identity's names and editable headings must agree. Keep all
+        # surrounding RU/KK texts and the immutable source version untouched.
+        values.update(title_ru=names["ru"], title_kk=names["kk"])
         new_id = conn.execute(text("""
           INSERT INTO public.personnel_order_templates(item_type_code,name_ru,name_kk,created_by_user_id,copied_from_template_version_id)
           VALUES(:type,:ru,:kk,:actor,:source) RETURNING template_id
@@ -161,7 +165,7 @@ def copy_template(item_type_code: str, source_version_id: int | None, name_ru: s
 
 def remove_template(item_type_code: str, template_id: int, name_ru: str, name_kk: str,
                     actor_user_id: int, *, archive: bool = False) -> dict[str, Any]:
-    """Delete only unreferenced independent copies; archive keeps every identity."""
+    """Remove a selected identity; referenced versions remain archived for history."""
     _assert_type(item_type_code)
     require_independent_template_schema()
     try:
@@ -170,24 +174,23 @@ def remove_template(item_type_code: str, template_id: int, name_ru: str, name_kk
                 {"id": template_id, "type": item_type_code}).mappings().first()
             if template is None:
                 raise TemplateDraftError("TEMPLATE_NOT_FOUND", "Шаблон не найден.")
-            if template["is_default"]:
-                raise TemplateDraftError("TEMPLATE_DEFAULT_PROTECTED", "Встроенную основу нельзя удалить или архивировать.")
             if template["name_ru"] != name_ru or template["name_kk"] != name_kk:
                 raise TemplateDraftError("TEMPLATE_NAME_CONFLICT", "Название шаблона изменилось. Обновите список.", conflict=True)
             conn.execute(text("SELECT template_version_id FROM public.personnel_order_template_versions WHERE template_id=:id FOR UPDATE"), {"id": template_id}).all()
-            if archive:
+            used = conn.execute(text("""
+                SELECT EXISTS(SELECT 1 FROM public.personnel_orders o JOIN public.personnel_order_template_versions v ON v.template_version_id=o.selected_template_version_id WHERE v.template_id=:id)
+                OR EXISTS(SELECT 1 FROM public.personnel_order_template_applications a JOIN public.personnel_order_template_versions v ON v.template_version_id=a.template_version_id WHERE v.template_id=:id)
+            """), {"id": template_id}).scalar_one()
+            archived = archive or used
+            if archived:
                 conn.execute(text("UPDATE public.personnel_order_template_versions SET status='ARCHIVED',updated_at=now(),updated_by_user_id=:actor WHERE template_id=:id AND status IN ('DRAFT','PUBLISHED')"), {"id": template_id, "actor": actor_user_id})
+                conn.execute(text("UPDATE public.personnel_order_templates SET is_default=FALSE WHERE template_id=:id"), {"id": template_id})
             else:
-                used = conn.execute(text("""
-                    SELECT EXISTS(SELECT 1 FROM public.personnel_orders o JOIN public.personnel_order_template_versions v ON v.template_version_id=o.selected_template_version_id WHERE v.template_id=:id)
-                    OR EXISTS(SELECT 1 FROM public.personnel_order_template_applications a JOIN public.personnel_order_template_versions v ON v.template_version_id=a.template_version_id WHERE v.template_id=:id)
-                    OR EXISTS(SELECT 1 FROM public.personnel_order_templates t JOIN public.personnel_order_template_versions v ON v.template_version_id=t.copied_from_template_version_id WHERE v.template_id=:id)
-                """), {"id": template_id}).scalar_one()
-                if used:
-                    raise TemplateDraftError("TEMPLATE_IN_USE", "Шаблон использован. Можно архивировать его с сохранением истории.", conflict=True)
+                # Copies own their texts. Detach only their provenance, never their versions.
+                conn.execute(text("UPDATE public.personnel_order_templates SET copied_from_template_version_id=NULL WHERE copied_from_template_version_id IN (SELECT template_version_id FROM public.personnel_order_template_versions WHERE template_id=:id)"), {"id": template_id})
                 conn.execute(text("DELETE FROM public.personnel_order_template_versions WHERE template_id=:id"), {"id": template_id})
                 conn.execute(text("DELETE FROM public.personnel_order_templates WHERE template_id=:id"), {"id": template_id})
-        return {"template_id": template_id, "action": "ARCHIVED" if archive else "DELETED"}
+        return {"template_id": template_id, "action": "ARCHIVED" if archived else "DELETED"}
     except IntegrityError as exc:
         raise TemplateDraftError("TEMPLATE_IN_USE", "Шаблон использован. Можно архивировать его с сохранением истории.", conflict=True) from exc
 
@@ -246,6 +249,14 @@ def _validate(values: Mapping[str, str], item_type_code: str = EDITABLE_TYPE, *,
             raise TemplateDraftError("TEMPLATE_VARIABLE_UNKNOWN", "Неизвестная переменная: " + ", ".join(sorted(unknown)))
     if not check_variables or not require_complete:
         return
+    if item_type_code == "SUPPLEMENTARY_PAY":
+        from app.services.personnel_order_supplementary_pay_contract import validate_bodies
+        try: validate_bodies(values)
+        except ValueError as exc: raise TemplateDraftError("TEMPLATE_VARIABLE_REQUIRED", str(exc)) from exc
+    if require_complete and item_type_code == "CONCURRENT_DUTY_START":
+        from app.services.personnel_order_replacement_contract import validate_bodies
+        try: validate_bodies(values)
+        except ValueError as exc: raise TemplateDraftError("TEMPLATE_VARIABLE_REQUIRED", str(exc)) from exc
     for field, required in spec.required_variables.items():
         absent = [code for code in required if f"{{{{{code}}}}}" not in values[field]]
         if absent:
@@ -333,6 +344,7 @@ def create_draft_from_working_copy(
             VALUES (:template, :type, (SELECT COALESCE(MAX(version_number), 0) + 1 FROM public.personnel_order_template_versions WHERE template_id=:template), 'DRAFT', :title_ru, :title_kk, :preamble_ru, :preamble_kk, :body_template_ru, :body_template_kk, :basis_template_ru, :basis_template_kk, :actor, :actor)
             RETURNING *
         """), {**{field: values[field] for field in TEXT_FIELDS}, "type": item_type_code, "template": scope, "actor": actor_user_id}).mappings().one()
+        conn.execute(text("UPDATE public.personnel_order_templates SET name_ru=COALESCE(NULLIF(:ru,''),name_ru),name_kk=COALESCE(NULLIF(:kk,''),name_kk) WHERE template_id=:id"), {"id": scope, "ru": values["title_ru"].strip(), "kk": values["title_kk"].strip()})
     return _row(row)
 
 
@@ -367,6 +379,7 @@ def save_draft(item_type_code: str, expected_revision: int, values: Mapping[str,
             raise TemplateDraftError("TEMPLATE_REVISION_CONFLICT", "Черновик изменён другим пользователем.", conflict=True)
         if expected_template_version_id is not None and int(current["template_version_id"]) != expected_template_version_id:
             raise TemplateDraftError("TEMPLATE_REVISION_CONFLICT", "Открыта другая версия черновика. Обновите редактор.", conflict=True)
+        conn.execute(text("UPDATE public.personnel_order_templates SET name_ru=COALESCE(NULLIF(:ru,''),name_ru),name_kk=COALESCE(NULLIF(:kk,''),name_kk) WHERE template_id=:id"), {"id": scope, "ru": values["title_ru"].strip(), "kk": values["title_kk"].strip()})
         if all(current[key] == values[key] for key in values): return _row(current)
         row = conn.execute(text("""
             UPDATE public.personnel_order_template_versions SET title_ru=:title_ru, title_kk=:title_kk, preamble_ru=:preamble_ru, preamble_kk=:preamble_kk,
@@ -393,5 +406,21 @@ def preview_draft(item_type_code: str, values: Mapping[str, str]) -> dict[str, A
     }
     for locale, overrides in spec.preview_context.items():
         locale_samples[locale].update(overrides)
-    def render(value: str, locale: str) -> str: return _TOKEN.sub(lambda m: locale_samples[locale][m.group(1)], value)
+    if item_type_code == "CONCURRENT_DUTY_START":
+        from app.services.personnel_order_service_area_contract import enabled as area_enabled,preview_context as area_context
+        from app.services.personnel_order_replacement_contract import variant, preview_context, optional_placement
+        mode = variant(values)
+        if area_enabled(values):
+            for locale, overrides in area_context().items():locale_samples[locale].update(overrides)
+        elif mode:
+            for locale, overrides in preview_context(mode, optional_placement=optional_placement(values)).items(): locale_samples[locale].update(overrides)
+    if item_type_code == "LEAVE.CHILDCARE.GRANT":
+        for samples in locale_samples.values():
+            samples.update({"employee.full_name_genitive_ru": "[[ФИО в родительном падеже]]", "basis.birth_certificate_date_ru": "[[Дата выдачи свидетельства]]", "basis.birth_certificate_date_kk": "[[Куәліктің берілген күні]]", "basis.birth_certificate_number": "[[Номер свидетельства]]"})
+    def render(value: str, locale: str) -> str:
+        result = _TOKEN.sub(lambda m: locale_samples[locale][m.group(1)], value)
+        if item_type_code == "LEAVE.CHILDCARE.GRANT":
+            from app.services.personnel_order_childcare_contract import without_directive
+            result = without_directive(result)
+        return result
     return {"ru": {"title": render(values["title_ru"], "ru"), "preamble": render(values["preamble_ru"], "ru"), "directive": "ПРИКАЗЫВАЮ:", "body": render(values["body_template_ru"], "ru"), "basis": render(values["basis_template_ru"], "ru")}, "kk": {"title": render(values["title_kk"], "kk"), "preamble": render(values["preamble_kk"], "kk"), "directive": "БҰЙЫРАМЫН:", "body": render(values["body_template_kk"], "kk"), "basis": render(values["basis_template_kk"], "kk")}}

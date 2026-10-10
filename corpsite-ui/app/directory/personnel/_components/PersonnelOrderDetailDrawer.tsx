@@ -458,6 +458,33 @@ export default function PersonnelOrderDetailDrawer({
     };
   }, [open, orderId, reload]);
 
+  React.useEffect(() => {
+    if (!open || orderId == null || activeTab !== "document" || correctionsDirty) return;
+    let cancelled = false;
+    let refreshing = false;
+    const refreshDocument = () => {
+      if (refreshing || document.visibilityState === "hidden") return;
+      refreshing = true;
+      // A document can be updated externally while this drawer remains open.
+      // Refresh only its saved editorial snapshot; leave form drafts intact.
+      void getPersonnelOrderEditorial(orderId).then(next => {
+        if (!cancelled && next.order_id === orderId) {
+          setEditorial(next);
+          setTemplatePreviewRefresh(value => value + 1);
+        }
+      }).catch(() => {
+        if (!cancelled) setToast({kind:"error", message:"Не удалось обновить текст приказа. Закройте карточку и откройте её повторно."});
+      }).finally(() => { refreshing = false; });
+    };
+    window.addEventListener("focus", refreshDocument);
+    document.addEventListener("visibilitychange", refreshDocument);
+    return () => {
+      cancelled = true;
+      window.removeEventListener("focus", refreshDocument);
+      document.removeEventListener("visibilitychange", refreshDocument);
+    };
+  }, [open, orderId, activeTab, correctionsDirty]);
+
   const handleChanged = React.useCallback((next: PersonnelOrderDetailResponse) => {
     setHeaderRequisitesDraft(null);
     // The item mutation response is useful for the rest of the drawer, but the

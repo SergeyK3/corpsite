@@ -29,12 +29,12 @@ def test_readable_initial_texts_match_the_ten_type_golden_snapshot() -> None:
         "HIRE": "96444278a247538672dfb544559359d08cc3b54e0de182d2d3fb0617320658fa",
         "TRANSFER": "3a6d711e7484839479a98697da7e91a6a2f27b5fab315ad38c3f295722005995",
         "TERMINATION": "9de2f78c755fe3015150117ced15279c550a77ca767f0937bec3e008cc0d516e",
-        "CONCURRENT_DUTY_START": "9c677af7e12215a6cad5e6b553c17d6d00e05727c6096e4ef6a4c58554b101d8",
-        "CONCURRENT_DUTY_END": "e67abd7c08964bf96f2d77cb166b31dda6b877667a50e7d767ecf4617086f7fa",
+        "CONCURRENT_DUTY_START": "da7d8989a33a95d66725d4a1ac6602796d9fa5a4b77609a67dd77c0dbbd66e2c",
+        "CONCURRENT_DUTY_END": "23bd2e8eef271e6c2da00da1758c5d48591da90d1812c86bb6acf7a67662b829",
         "LEAVE.ANNUAL.GRANT": "cf74a3322817548e5f18b82e98e745137c22291ddb2d8db68cf4590d28e39810",
         "LEAVE.UNPAID.GRANT": "23723590c2419afb132196b65c5d3f2b48cc560c672f66e10f615dd35ea42f71",
-        "LEAVE.CHILDCARE.GRANT": "61a8a0b724dc1be45a05f72eb5d76b2d9f9d6fd558dac9321f352559c7c456ee",
-        "SUPPLEMENTARY_PAY": "bc5b0cfcb36a7bd4606ac327c896268ab020bc959a4ccdeb8ebde5d9a1cbad54",
+        "LEAVE.CHILDCARE.GRANT": "696d0fa0986ec0b25d3aedb43c40dd4638040354b80b4b2f8d0a0d5e3e7e75a4",
+        "SUPPLEMENTARY_PAY": "48d0222fe185ddc1ebbb848a7016bcd6c37c41ae25410ff00352b09f1863891a",
         "RETURN_FROM_CHILDCARE_LEAVE": "bf6c0f6daf69edbf77df33015aedc20d253e15d68c84ad9f6c743edb41c7c3e3",
     }
     expected_fields = {"title_ru", "title_kk", "preamble_ru", "preamble_kk", "body_template_ru", "body_template_kk", "basis_template_ru", "basis_template_kk"}
@@ -88,6 +88,8 @@ class _DraftStore:
         sql = str(statement)
         self.statements.append(sql)
         values = values or {}
+        if sql.lstrip().startswith("UPDATE public.personnel_order_templates "):
+            return _Result(self.row)
         if sql.lstrip().startswith("SELECT"):
             return _Result(self.row)
         if sql.lstrip().startswith("INSERT"):
@@ -176,8 +178,8 @@ def test_unpaid_leave_draft_preview_uses_unquoted_technical_placeholders() -> No
     assert all(value not in preview_text for value in ("1.0", "15 января 2026", "2026 жылғы 15 қаңтар", "««", "»»"))
 
 
-def test_childcare_return_create_load_save_noop_and_conflict_do_not_touch_personnel_data(draft_store: _DraftStore) -> None:
-    item_type = ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE
+@pytest.mark.parametrize("item_type", [ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE, "LEAVE.CHILDCARE.GRANT"])
+def test_childcare_create_load_save_noop_and_conflict_do_not_touch_personnel_data(draft_store: _DraftStore, item_type: str) -> None:
     created = draft_service.create_draft_from_working_copy(item_type, "INITIAL", None, None, _initial_texts(item_type), actor_user_id=77)
     assert created["item_type_code"] == item_type
     assert draft_service.get_draft(item_type)["template_version_id"] == created["template_version_id"]
@@ -350,7 +352,7 @@ def test_draft_create_load_save_noop_and_conflict_are_isolated_to_template_versi
     assert conflict.value.code == "TEMPLATE_REVISION_CONFLICT"
     assert conflict.value.conflict is True
     assert admin_router._template_draft_error(conflict.value).status_code == 409
-    assert all("personnel_order_template_versions" in sql for sql in draft_store.statements)
+    assert all("personnel_order_template_versions" in sql or "UPDATE public.personnel_order_templates " in sql for sql in draft_store.statements)
     assert not any(word in "\n".join(draft_store.statements).lower() for word in ("personnel_orders", "employee_events", "assignments"))
 
 

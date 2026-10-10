@@ -1,0 +1,6 @@
+# Canonical template JSON is compared byte-for-byte by the manifest loader.
+app/resources/personnel_order_templates/**/*.json text eol=lf
+reference-data/personnel-templates/*.json text eol=lf
+# These entrypoints are invoked directly by systemd/deployment on Linux.
+scripts/ops/run_regular_tasks_cron.sh text eol=lf
+scripts/ops/scheduler_post_deploy_smoke.sh text eol=lf

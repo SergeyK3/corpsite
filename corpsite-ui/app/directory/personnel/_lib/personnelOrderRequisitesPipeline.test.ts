@@ -37,7 +37,7 @@ vi.mock("@/app/directory/employees/_lib/api.client", () => ({
 
 import { getPersonnelOrder, getPersonnelOrderEditorial } from "./personnelOrdersApi.client";
 
-const CLOSING_TEXT = "Контроль за исполнением приказа оставляю за собой.";
+const CLOSING_TEXT = "Ознакомить сотрудника с приказом.";
 
 function sampleDetail(
   overrides?: Partial<PersonnelOrderDetailResponse["order"]>,

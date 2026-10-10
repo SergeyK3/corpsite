@@ -359,7 +359,7 @@ describe("PersonnelOrderPrintDocument", () => {
             scope: "order",
             locale: "ru",
             block_type: "closing",
-            effective_text: "Контроль за исполнением приказа оставляю за собой.",
+            effective_text: "Ознакомить сотрудника с приказом.",
             review_status: "CURRENT",
             editable: true,
             revision: 1,
@@ -370,7 +370,7 @@ describe("PersonnelOrderPrintDocument", () => {
     });
     render(<PersonnelOrderPrintDocument model={model} language="ru" />);
     expect(screen.getByTestId("personnel-order-print-closing")).toHaveTextContent(
-      "Контроль за исполнением приказа оставляю за собой.",
+      "Ознакомить сотрудника с приказом.",
     );
     expect(screen.getByTestId("personnel-order-print-tail-date")).toHaveTextContent("10 июля 2026 года");
     expect(screen.getByTestId("personnel-order-print-signature")).toHaveTextContent("Директор");
@@ -433,8 +433,8 @@ describe("PersonnelOrderPrintDocument", () => {
           review_status: "CURRENT", editable: true, revision: 1,
         }, {
           block_id: 82, scope: "order", locale: "ru", block_type: "closing",
-          generated_text: "Контроль за исполнением приказа оставляю за собой.",
-          effective_text: "Контроль за исполнением приказа оставляю за собой.",
+          generated_text: "Ознакомить сотрудника с приказом.",
+          effective_text: "Ознакомить сотрудника с приказом.",
           review_status: "CURRENT", editable: true, revision: 1,
         }],
         items: [{
@@ -464,7 +464,7 @@ describe("PersonnelOrderPrintDocument", () => {
         order_id: 42,
         order_status: "DRAFT",
         editable: true,
-        order_blocks: [{ block_id: 90, scope: "order", locale: "ru", block_type: "closing", generated_text: "Контроль за исполнением приказа оставляю за собой.", effective_text: "Контроль за исполнением приказа оставляю за собой.", review_status: "CURRENT", editable: true, revision: 1 }, { block_id: 91, scope: "order", locale: "kk", block_type: "closing", generated_text: "Бұйрықтың орындалуын бақылауды өзіме қалдырамын.", effective_text: "Бұйрықтың орындалуын бақылауды өзіме қалдырамын.", review_status: "CURRENT", editable: true, revision: 1 }],
+        order_blocks: [{ block_id: 90, scope: "order", locale: "ru", block_type: "closing", generated_text: "Ознакомить сотрудника с приказом.", effective_text: "Ознакомить сотрудника с приказом.", review_status: "CURRENT", editable: true, revision: 1 }, { block_id: 91, scope: "order", locale: "kk", block_type: "closing", generated_text: "Бұйрықтың орындалуын бақылауды өзіме қалдырамын.", effective_text: "Бұйрықтың орындалуын бақылауды өзіме қалдырамын.", review_status: "CURRENT", editable: true, revision: 1 }],
         items: [{ order_item_id: 1, item_number: 1, item_type_code: "RETURN_FROM_CHILDCARE_LEAVE", basis_required: true, blocks: [{ block_id: 92, scope: "item", order_item_id: 1, locale: "ru", block_type: "basis", generated_text: "Основание: личное заявление Тестов Сотрудник.", effective_text: "Основание: личное заявление Тестов Сотрудник.", review_status: "CURRENT", editable: true, revision: 1 }, { block_id: 93, scope: "item", order_item_id: 1, locale: "kk", block_type: "basis", generated_text: "Негіз: Тестов Сотрудниктің жеке өтініші.", effective_text: "Негіз: Тестов Сотрудниктің жеке өтініші.", review_status: "CURRENT", editable: true, revision: 1 }] }],
       },
     });

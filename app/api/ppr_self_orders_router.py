@@ -44,7 +44,7 @@ _SELF_ITEM_TYPE_LABELS = {
         "RETURN_FROM_CHILDCARE_LEAVE": "О выходе на работу из отпуска по уходу за ребёнком",
         "TRANSFER": "О переводе",
         "TERMINATION": "Об увольнении",
-        "CONCURRENT_DUTY_START": "Совмещение (начало)",
+        "CONCURRENT_DUTY_START": "О совмещении",
         "CONCURRENT_DUTY_END": "Совмещение (окончание)",
         "SUPPLEMENTARY_PAY": "О дополнительной оплате",
         "LEAVE.ANNUAL.GRANT": "О предоставлении ежегодного трудового отпуска",

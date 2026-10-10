@@ -1,4 +1,4 @@
-export type KazakhCase = "dative" | "genitive";
+export type KazakhCase = "dative" | "genitive" | "ablative";
 export type CalculatedKazakhForm = { value: string; needsReview: boolean };
 
 const FRONT = "әөүіеёэю";
@@ -17,6 +17,7 @@ function isFront(value: string, force?: boolean) { return force ?? FRONT.include
 function ending(value: string, form: KazakhCase, front: boolean) {
   const last = lastLetter(value);
   const vowelOrSonor = SONOR_OR_VOICED.includes(last) || VOWELS.includes(last);
+  if (form === "ablative") return NASAL.includes(last) ? (front ? "нен" : "нан") : HARD.includes(last) ? (front ? "тен" : "тан") : (front ? "ден" : "дан");
   if (form === "dative") return (vowelOrSonor ? (front ? "ге" : "ға") : (front ? "ке" : "қа"));
   if (VOWELS.includes(last) || NASAL.includes(last)) return front ? "нің" : "ның";
   return (SONOR_OR_VOICED.includes(last) ? (front ? "дің" : "дың") : (front ? "тің" : "тың"));
@@ -28,7 +29,7 @@ export function kazakhInflectWord(value: string, form: KazakhCase): CalculatedKa
   if (!source) return { value: "", needsReview: true };
   const lower = source.toLocaleLowerCase("kk-KZ");
   // Patronymics already carry third-person possession: Сәрсенбайқызына.
-  if (/(ұлы|қызы)$/u.test(lower)) return { value: source + (isFront(source) ? "не" : "на"), needsReview: false };
+  if (form === "dative" && /(ұлы|қызы)$/u.test(lower)) return { value: source + (isFront(source) ? "не" : "на"), needsReview: false };
   const ambiguous = /[иуь]$/u.test(lower) || source.includes("-");
   // §26: -ин is always thin; -ов/-ев use the stem's final syllable.
   let harmonyWord = source;
@@ -37,7 +38,7 @@ export function kazakhInflectWord(value: string, form: KazakhCase): CalculatedKa
   else if (/(ов|ев)$/u.test(lower)) harmonyWord = source.slice(0, -2);
   // Female surnames keep their written -а; this also gives Маженоваға/-ның.
   else if (/ова$/u.test(lower)) forcedFront = false;
-  else if (/ева$/u.test(lower)) forcedFront = true;
+  else if (/ева$/u.test(lower)) forcedFront = false;
   else if (/ина$/u.test(lower)) forcedFront = false;
   const front = isFront(harmonyWord, forcedFront);
   return { value: source + ending(source, form, front), needsReview: ambiguous };
@@ -63,6 +64,7 @@ export function calculateKazakhOrgUnitGenitive(name: unknown): CalculatedKazakhF
   const words = source.split(/\s+/u);
   const last = words.pop() || "";
   const lower = last.toLocaleLowerCase("kk-KZ");
+  if (/(ның|нің|дың|дің|тың|тің)$/u.test(lower)) return {value:source,needsReview:false};
   // Third-person possessive titles take -ның/-нің after their possessive ending.
   if (/сы$/u.test(lower)) words.push(last + "ның");
   else if (/сі$/u.test(lower)) words.push(last + "нің");

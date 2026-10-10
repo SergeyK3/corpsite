@@ -245,7 +245,13 @@ def _build_list_filters(
         params["org_unit_id"] = int(org_unit_id)
 
     if q:
-        where_parts.append("(po.order_number ILIKE :q_pattern OR po.source_title ILIKE :q_pattern)")
+        where_parts.append("""(po.order_number ILIKE :q_pattern OR po.source_title ILIKE :q_pattern
+            OR CAST(po.order_id AS text) ILIKE :q_pattern
+            OR EXISTS (SELECT 1 FROM public.personnel_order_items search_item
+                LEFT JOIN public.employees search_employee ON search_employee.employee_id=search_item.employee_id
+                WHERE search_item.order_id=po.order_id
+                AND (COALESCE(NULLIF(BTRIM(search_item.payload->>'source_employee_name'),''),NULLIF(BTRIM(search_employee.full_name),'')) ILIKE :q_pattern
+                    OR CAST(search_item.employee_id AS text) ILIKE :q_pattern)))""")
         params["q_pattern"] = f"%{str(q).strip()}%"
 
     normalized_record_quality = str(record_quality or "WORKING").strip().upper()

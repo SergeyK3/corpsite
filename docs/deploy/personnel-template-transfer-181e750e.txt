@@ -1,0 +1,242 @@
+Подготовка адресного переноса кадровых шаблонов, 181e750e
+======================================================
+
+Это инструкция для последующего согласованного переноса. В ходе подготовки
+ни одна команда записи/деплоя ниже на сервере не выполнялась.
+Для согласованной ветки reconcile/server-181e750e порядок подготовки нового
+release-каталога и сохранения ВСЕГО старого каталога описан отдельно в
+server-reconcile-181e750e.txt. Он имеет приоритет над прежним способом обновления
+кода. Инструменты переноса и backup теперь включены в эту локальную ветку;
+на сервер они ещё не отправлены. Адресный data-only пакет остаётся отдельным.
+
+Проверенное состояние:
+* SSH corpsite -> mmc.004.kz, Ubuntu, /opt/projects/corpsite/app.
+* Код сервера: 5ecc5d8154f30d5ae0316df558a078d03a46b8e6; 63 изменённых
+  отслеживаемых файла. Из них 22 уже совпадают по тексту с 181e750e, включая
+  auth.py, main.py и tasks_service.py; 26 дают конфликты при трёхсторонней
+  проверке, 14 сливаются текстово, 1 — серверный отчёт реконструкции.
+  Дополнительно 44 неотслеживаемых исходника имеют пути из нового релиза:
+  37 совпадают, 7 отличаются. Пять серверных файлов каталога должностей
+  отсутствуют в git-релизе и должны быть сохранены отдельно. У smoke-скрипта
+  серверный executable bit отличается от git-релиза. Обычный git pull сейчас
+  не выполнять. Нельзя терять эти изменения или сбрасывать их --hard.
+* Backend/frontend активны. БД corpsite, PostgreSQL 16.14; native pg_dump /
+  pg_restore 16.15. Контейнер PostgreSQL: corpsite-pg; схемы public и staging
+  с тремя обязательными staging-таблицами подтверждены.
+* Alembic hrjobmerge001. Старое ограничение uq_personnel_orders_order_number
+  присутствует; uq_personnel_orders_active_number_date отсутствует.
+  Конфликтующих групп активных приказов по новому номеру+дате: 0.
+* Все шесть локальных записей актуальны. В целевой БД НЕТ соответствующих
+  видов SUPPLEMENTARY_PAY, CONCURRENT_DUTY_START, CONCURRENT_DUTY_END.
+  Все шесть действий предварительно CREATE, самостоятельные шаблоны не
+  объединяются. Серверный template_id=4 относится к TERMINATION!
+* Штатная frontend-сборка: npm ci, затем npm run build (= next build).
+  Локальная npm run build на коде 181e750e успешно завершилась, включая
+  Running TypeScript и генерацию страниц. ignoreBuildErrors не включён.
+  Общий npx tsc --noEmit --incremental false всё ещё даёт 175 ошибок в
+  тестовых файлах; Next.js 16.1.1 штатно фильтрует диагностику .test/.spec.
+  Эти ошибки не блокируют production-сборку. Конфигурацию и проверку типов
+  не отключали, тесты из общего tsc не исключали. Подробная проверка Next.js:
+  corpsite-ui/node_modules/next/dist/lib/typescript/runTypeCheck.js:116-123.
+* Проверки: 18 frontend-файлов, 278 тестов — успешно без одновременной сборки;
+  116 backend-проверок переноса/контрактов — успешно в corpsite_test с откатом.
+
+Предварительная таблица:
+Локальный шаблон / версия / ID | Сервер | Действие | Статус
+4  / v1 / 6                   | нет    | CREATE   | PUBLISHED
+9  / v2 / 33                  | нет    | CREATE   | PUBLISHED
+10 / v2 / 16                  | нет    | CREATE   | PUBLISHED
+23 / v3 / 38                  | нет    | CREATE   | PUBLISHED
+24 / v1 / 36                  | нет    | CREATE   | DRAFT
+28 / v4 / 44                  | нет    | CREATE   | PUBLISHED
+
+Каждая новая серверная identity получит собственную v1. Локальные номера
+версий/ID сохранены как происхождение в JSON и плане, не навязываются серверу.
+При обновлении существующей identity используется MAX(version_number)+1.
+
+Экспорт: templates.json, ровно шесть записей, без приказов/людей/назначений/
+оплаты/тестовых данных. Содержит названия RU/KK, код, is_default, восемь
+текстов, based_on_built_in, статус, allowed/required variables, привязки
+токенов к полям и флаги соответствующих контрактов. Исторические локальные
+версии, audit user_id/время и copied_from_template_version_id не переносим:
+это не рабочие настройки; автор публикации выбирается на сервере, а рабочие
+тексты самостоятельны и не зависят от provenance FK.
+
+Сначала (пока без деплоя):
+1. Разобрать незакоммиченные серверные изменения и сохранить их. Подготовить
+   отдельное проверенное согласование с 181e750e или потомком. auth/main/tasks
+   уже совпадают с релизом; решения нужны по кадровым конфликтам, семи
+   отличающимся неотслеживаемым исходникам, пяти серверным файлам каталога,
+   серверному отчёту и executable bit smoke-скрипта. Полная локальная ведомость:
+   runtime/deploy-blockers/server-conflicts.json и server-changes.diff.
+2. После согласования исходников выполнить штатную production-сборку и тесты
+   именно согласованного серверного дерева. Успех локального 181e750e не
+   подтверждает сборку ещё не подготовленного объединения серверных патчей.
+3. Скрипты включены в локальную согласованную ветку и доступны также в пакете.
+   Push/передача на сервер не выполнялись. Команды далее рассчитаны на уже
+   подготовленный и проверенный чистый release-каталог; не на грязный старый APP.
+
+Команды передачи пакета (PowerShell, только после разрешения на перенос):
+  scp .\runtime\personnel-template-transfer-181e750e.tar.gz corpsite:/tmp/
+  scp .\runtime\personnel-template-transfer-181e750e.tar.gz.sha256 corpsite:/tmp/
+
+Серверная сессия bash: выполнить этапами, не запускать вслепую целиком.
+
+  set -euo pipefail
+  umask 077
+  REPO=/opt/projects/corpsite/app
+  PACK=/tmp/personnel-template-transfer-181e750e
+  RECOVERY=/opt/projects/corpsite/template-transfer-backup-$(date -u +%Y%m%dT%H%M%SZ)
+  TARGET=181e750ec9b9f945db4ad28323302edc25045892
+  cd /tmp
+  sha256sum -c personnel-template-transfer-181e750e.tar.gz.sha256
+  test ! -e "$PACK"
+  tar -xzf personnel-template-transfer-181e750e.tar.gz
+  cd "$PACK"
+  sha256sum -c SHA256SUMS
+  mkdir -m 700 "$RECOVERY"
+  cd "$REPO"
+  export PYTHONPATH="$REPO"
+  export PYTHONDONTWRITEBYTECODE=1
+
+Сохранение источников и старого состояния (данные остаются на сервере):
+  git rev-parse HEAD > "$RECOVERY/git-head.txt"
+  git status --porcelain > "$RECOVERY/git-status.txt"
+  git diff --binary HEAD > "$RECOVERY/server-worktree.patch"
+  git diff --cached --binary > "$RECOVERY/server-index.patch"
+  tar --exclude=node_modules --exclude=.next --exclude=__pycache__ \
+      --exclude='*.env' --exclude='*.env.*' --exclude='*.pyc' \
+      -czf "$RECOVERY/server-sources.tar.gz" \
+      app alembic corpsite-ui scripts requirements.txt alembic.ini
+  .venv/bin/python "$PACK/scripts/personnel_template_transfer_snapshot.py" \
+      > "$RECOVERY/server-before.json"
+
+Проверка перед остановкой. На фактически исследованном сервере этот guard
+сейчас остановит процесс — сначала выполнить согласование из пунктов 1-2:
+  test -z "$(git status --porcelain --untracked-files=no)" || { \
+      printf '%s\n' 'STOP: reconcile and preserve server changes first'; exit 1; }
+  git merge-base --is-ancestor "$TARGET" HEAD
+  # Код предварительно получить в отдельный release-каталог через проверенный
+  # bundle по server-reconcile-181e750e.txt. Не git pull в старом APP.
+  .venv/bin/python -m pip install -r requirements.txt
+  cd "$REPO/corpsite-ui"
+  npm ci
+  npm run build
+  cd "$REPO"
+
+Окно обслуживания: остановить backend/frontend и убедиться, что нет других
+импортёров/операторов, пишущих в шаблоны. Существующую БД не менять до проверенной
+полной копии (копия содержит кадровые данные, поэтому не скачивать в экспорт).
+  sudo systemctl stop corpsite-backend corpsite-frontend
+  .venv/bin/python "$PACK/backup/database_backup_restore.py" backup \
+      --repo "$REPO" --file "$RECOVERY/corpsite-before.dump"
+  .venv/bin/python "$PACK/backup/database_backup_restore.py" verify \
+      --repo "$REPO" --file "$RECOVERY/corpsite-before.dump"
+
+Миграция изменённой уникальности номера+даты обязательна для кода 181e750e.
+Она не импортирует шаблоны. Проверить текущую ревизию/группы ещё раз:
+  .venv/bin/python "$PACK/scripts/personnel_template_transfer_snapshot.py" \
+      > "$RECOVERY/server-pre-migration.json"
+  .venv/bin/alembic current
+  .venv/bin/alembic heads
+  # Ожидание до: hrjobmerge001; head нового кода: podup001.
+  # Если ревизия/группы отличаются — STOP, отдельно разобраться, не stamp.
+  .venv/bin/alembic upgrade podup001
+  .venv/bin/alembic current
+
+Новый план после миграции обязателен: старый план специально не применим к
+изменившейся схеме/состоянию. plan выполняется в READ ONLY. JSON и таблицу
+проверить; ready должно быть true, ambiguities пустым. Ожидаем CREATE шесть
+раз, пять PUBLISHED и DRAFT у ключа 24; IDs назначатся на сервере.
+  .venv/bin/python "$PACK/scripts/transfer_personnel_templates.py" plan \
+      --bundle "$PACK/templates.json" --output "$RECOVERY/plan.json"
+  .venv/bin/python -m json.tool "$RECOVERY/plan.json"
+
+Если появились кандидаты: JSON содержит конкретные server IDs, код, оба
+названия, текущие версии и content_sha256. Не сопоставлять по локальным ID.
+Сформировать отдельно проверенный mapping.json, например:
+  {"28":{"server_template_id":123,"candidate_sha256":"HASH OF candidate(...)"}}
+123 — именно проверенный серверный ID, не образец для исполнения. Хеш вычисляет
+scripts.transfer_personnel_templates.candidate(template, versions) и digest(...)
+на свежем snapshot, не хеш только номера ID. Затем plan --mapping mapping.json.
+Два локальных самостоятельных шаблона не могут сопоставляться одному серверному.
+
+Импорт (ТОЛЬКО после просмотра нового плана и разрешения на запись):
+  .venv/bin/python "$PACK/scripts/transfer_personnel_templates.py" apply \
+      --bundle "$PACK/templates.json" --plan "$RECOVERY/plan.json" \
+      --actor-login admin \
+      --backup "$RECOVERY/affected-templates-before.json" \
+      --receipt "$RECOVERY/import-receipt.json"
+
+admin — прочитанный существующий активный серверный логин; его следует
+подтвердить как автора операции. Локальные user_id не используются.
+Затронутые identities/версии сохраняются в backup до любых изменений.
+Для текущего CREATE-плана backup пуст по этим таблицам: старые пять identities
+не затрагиваются, receipt перечислит новые шесть IDs для адресного отката.
+Таблицы шаблонов заблокированы на время одной транзакции. При ошибке — rollback.
+Старые версии не удаляются/не переписываются: нужная активная версия архивируется,
+новая получает следующий номер. Несвязанный черновик не затрагивается при
+публикации новой версии. Ссылки и тексты приказов не изменяются.
+
+Проверка после импорта и повторного запуска без записи:
+  .venv/bin/python "$PACK/scripts/personnel_template_transfer_snapshot.py" \
+      > "$RECOVERY/server-after.json"
+  .venv/bin/python "$PACK/scripts/transfer_personnel_templates.py" plan \
+      --bundle "$PACK/templates.json" --output "$RECOVERY/repeat-plan.json"
+  .venv/bin/python -m json.tool "$RECOVERY/repeat-plan.json"
+Ожидание: шесть NO_CHANGE. При повторном apply сначала нужен новый plan и новые
+имена backup/receipt; новых identities/версий не будет. Старые receipt/backup
+не перезаписывать. Receipt содержит фактически выделенные серверные IDs.
+Если применялось явное mapping, receipt.repeat_mapping содержит обновлённые
+хеши выбранных записей. Сохранить этот объект в отдельный mapping-repeat.json
+и передать plan --mapping "$RECOVERY/mapping-repeat.json"; старые хеши до
+импорта намеренно перестают соответствовать изменившимся версиям.
+
+Backend/frontend запускать только после успешного импорта/проверок и build:
+  sudo systemctl restart corpsite-backend
+  sudo systemctl restart corpsite-frontend
+  sudo systemctl is-active corpsite-backend corpsite-frontend
+  curl --fail --silent --show-error http://127.0.0.1:8000/health
+  curl --fail --silent --show-error https://mmc.004.kz/api/health
+  curl --silent --show-error -o /dev/null -w '%{http_code}\n' \
+      https://mmc.004.kz/directory/personnel/orders
+После авторизации проверить редактор/формы именно по новым IDs из receipt,
+RU/KK и статусы; приказ в production автоматически не создавать.
+Не заменять build простым рестартом. Штатные deploy_backend.sh/deploy_frontend.sh
+тоже существуют, но здесь миграция/build/рестарты разделены вокруг переноса,
+чтобы исключить преждевременный запуск и дополнительные scheduler smoke-записи.
+
+Адресное восстановление шаблонов (maintenance window, до новых использований):
+  sudo systemctl stop corpsite-backend corpsite-frontend
+  .venv/bin/python "$PACK/scripts/transfer_personnel_templates.py" restore \
+      --backup "$RECOVERY/affected-templates-before.json" \
+      --receipt "$RECOVERY/import-receipt.json"
+  # Сначала просмотр без записи. После решения восстановить:
+  .venv/bin/python "$PACK/scripts/transfer_personnel_templates.py" restore --apply \
+      --backup "$RECOVERY/affected-templates-before.json" \
+      --receipt "$RECOVERY/import-receipt.json"
+Восстанавливаются только names/status/updated_at затронутых старых записей и
+удаляются только новые НЕИСПОЛЬЗОВАННЫЕ identities/версии. Проверяются SHA,
+состояние после импорта, ссылки из приказов/applications/provenance. Если новая
+версия уже использована, скрипт откажет: нельзя удалять её либо менять приказ;
+нужен отдельно согласованный исправляющий импорт с новой версией. Счётчики
+sequence назад не переводятся. Откат 181e750e и старых локальных патчей кода
+выполняется отдельно по сохранённым git-head/patch/source архиву, без --hard.
+
+Полный restore базы — только аварийный вариант после отдельного решения,
+при остановленных ВСЕХ writers и отсутствии более поздних данных, которые
+требуется сохранить. Он восстановит и схему, и старое ограничение, и данные:
+  .venv/bin/python "$PACK/backup/database_backup_restore.py" verify \
+      --repo "$REPO" --file "$RECOVERY/corpsite-before.dump"
+  .venv/bin/python "$PACK/backup/database_backup_restore.py" restore \
+      --repo "$REPO" --file "$RECOVERY/corpsite-before.dump" --confirm-restore corpsite
+Это НЕ обычный откат только шаблонов: полная база public+staging заменяется
+одной транзакцией. Нельзя выполнять его поверх новых приказов. Не отключать
+FK/триггеры. alembic downgrade hrjobmerge001 отдельно допустим только после
+проверки, что вновь разрешённые одинаковые номера разных дат не появились;
+сам downgrade podup001 остановится при невозможности старой уникальности.
+
+SHA и сведения о проверках находятся в report.json и SHA256SUMS пакета.
+Остаётся нерешённой подготовка согласованного серверного кодового дерева.
+Общий tsc имеет отдельный долг в тестовых файлах, но штатная сборка успешна.
+Подготовка не выполняет commit/push, запись в серверную БД или деплой.

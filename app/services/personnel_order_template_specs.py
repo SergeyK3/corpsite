@@ -11,6 +11,7 @@ from typing import Any, Mapping
 from app.db.models.personnel_orders import ORDER_TYPE_COMPOSITE, PERSONNEL_ORDER_ITEM_TYPE_CODES
 from app.services.personnel_order_template_catalog_data import CATALOG_PROJECTIONS
 from app.services.personnel_order_template_initial_data import INITIAL_TEXTS_BY_TYPE
+from app.services.personnel_order_childcare_contract import VARIABLES as CHILDCARE_VARIABLES, REQUIRED_VARIABLES as CHILDCARE_REQUIRED_VARIABLES
 
 DraftTexts = Mapping[str, str]
 RequiredVariables = Mapping[str, tuple[str, ...]]
@@ -39,17 +40,25 @@ def _spec(code: str, variables: tuple[str, ...], *, required: RequiredVariables 
     projection = CATALOG_PROJECTIONS[code]
     return PersonnelOrderTemplateSpec(code, projection['support_level'], projection['editor_available'], variables, required, INITIAL_TEXTS_BY_TYPE[code], preview, tuple(projection['required_fields']), projection['is_pilot'], projection)
 
+from app.services.personnel_order_concurrent_end_contract import VARIABLES as CESSATION_VARIABLES, PREVIEW as CESSATION_PREVIEW
+
+from app.services.personnel_order_replacement_contract import VARIABLES as REPLACEMENT_VARIABLES
+from app.services.personnel_order_service_area_contract import VARIABLES as SERVICE_AREA_VARIABLES
+from app.services.personnel_order_supplementary_pay_contract import VARIABLES as SUPPLEMENTARY_VARIABLES, preview_context as supplementary_preview_context
+
+from app.services.personnel_order_concurrent_contract import VARIABLES as CONCURRENT_VARIABLES, PREVIEW as CONCURRENT_PREVIEW
+
 from app.services.personnel_order_recall_contract import VARIABLES as RECALL_VARIABLES, REQUIRED_VARIABLES as RECALL_REQUIRED
 
 PERSONNEL_ORDER_TEMPLATE_SPECS = {
     'LEAVE.ANNUAL.RECALL': _spec('LEAVE.ANNUAL.RECALL', RECALL_VARIABLES, required=RECALL_REQUIRED, preview={'ru': {'effective_date': '[[Дата отзыва]]'}, 'kk': {'effective_date': '[[Шақырту күні]]'}}),
     "HIRE": _spec("HIRE", _COMMON), "TRANSFER": _spec("TRANSFER", _COMMON),
     "TERMINATION": _spec("TERMINATION", ("employee.full_name", "position.title_ru", "position.title_kk", "org_unit.title_ru", "org_unit.title_kk", "effective_date", "effective_date_local", "termination.reason", "termination.unused_leave_days", "basis"), preview={"ru": {"effective_date": "[[Дата увольнения]]", "effective_date_local": "[[Дата увольнения]]"}, "kk": {"effective_date": "[[Жұмыстан босату күні]]", "effective_date_local": "[[Жұмыстан босату күні]]"}}),
-    "CONCURRENT_DUTY_START": _spec("CONCURRENT_DUTY_START", ("employee.full_name", "effective_date", "concurrent.rate", "total.rate", "basis")),
-    "CONCURRENT_DUTY_END": _spec("CONCURRENT_DUTY_END", ("employee.full_name", "effective_date", "concurrent.rate", "remaining.rate", "basis")),
+    "CONCURRENT_DUTY_START": _spec("CONCURRENT_DUTY_START", CONCURRENT_VARIABLES + REPLACEMENT_VARIABLES + SERVICE_AREA_VARIABLES, preview=CONCURRENT_PREVIEW),
+    "CONCURRENT_DUTY_END": _spec("CONCURRENT_DUTY_END", CESSATION_VARIABLES, preview=CESSATION_PREVIEW),
     "LEAVE.ANNUAL.GRANT": _spec("LEAVE.ANNUAL.GRANT", _LEAVE),
-    "LEAVE.CHILDCARE.GRANT": _spec("LEAVE.CHILDCARE.GRANT", _LEAVE[:-2]),
-    "SUPPLEMENTARY_PAY": _spec("SUPPLEMENTARY_PAY", ("employee.full_name",)),
+    "LEAVE.CHILDCARE.GRANT": _spec("LEAVE.CHILDCARE.GRANT", CHILDCARE_VARIABLES, required=CHILDCARE_REQUIRED_VARIABLES),
+    "SUPPLEMENTARY_PAY": _spec("SUPPLEMENTARY_PAY", SUPPLEMENTARY_VARIABLES, preview=supplementary_preview_context()),
     "LEAVE.UNPAID.GRANT": _spec("LEAVE.UNPAID.GRANT", _LEAVE[:-1] + (
         "leave.period_text_ru", "leave.period_text_kk", "leave.period_clause_ru", "leave.period_clause_kk",
         "org_unit.document_genitive_kk", "position.document_possessive_kk", "position.document_nominative_ru",

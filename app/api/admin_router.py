@@ -96,7 +96,7 @@ def _value_error_to_http(exc: ValueError) -> HTTPException:
 def admin_list_personnel_order_templates(
     _admin: Dict[str, Any] = Depends(require_sysadmin_api),
 ) -> Dict[str, Any]:
-    return {"items": list_personnel_order_template_catalog()}
+    return {"items": list_personnel_order_template_catalog(include_saved_names=True)}
 
 
 def _template_draft_error(exc: TemplateDraftError) -> HTTPException:
@@ -194,6 +194,34 @@ def admin_preview_saved_personnel_template(item_type_code: str, expected_revisio
         return {"template_id": draft["template_id"], "template_version_id": draft["template_version_id"], "revision": draft["revision"],
                 "previews": preview_draft(item_type_code, {field: draft[field] for field in ("title_ru", "title_kk", "preamble_ru", "preamble_kk", "body_template_ru", "body_template_kk", "basis_template_ru", "basis_template_kk")})}
     except TemplateDraftError as exc: raise _template_draft_error(exc) from exc
+
+
+from app.api.admin_schemas import PersonnelReplacementPreview
+
+
+@router.post("/personnel-order-templates/{item_type_code}/templates/{template_id}/replacement-preview")
+def admin_preview_replacement(item_type_code: str, template_id: int, body: PersonnelReplacementPreview, _admin: Dict[str, Any] = Depends(require_sysadmin_api)) -> Dict[str, Any]:
+    from app.services.personnel_order_replacement_contract import variant, replacement_values, validate_bodies, optional_placement
+    from app.services.personnel_order_template_application_service import _render
+    try:
+        draft = get_draft(item_type_code, template_id)
+        if draft is None:
+            raise TemplateDraftError("TEMPLATE_DRAFT_NOT_FOUND", "Черновик не найден.")
+        if draft["revision"] != body.expected_revision:
+            raise TemplateDraftError("TEMPLATE_REVISION_CONFLICT", "Черновик изменился. Обновите его перед просмотром.", conflict=True)
+        mode = variant(draft)
+        if item_type_code != "CONCURRENT_DUTY_START" or mode is None:
+            raise ValueError("Выбранный шаблон не содержит данных замещения.")
+        validate_bodies(draft)
+        from app.services.personnel_order_service_area_contract import enabled,values as area_values
+        values = area_values(body.concurrent,body.replacement,body.effective_date,body.allowance_recipient) if enabled(draft) else replacement_values(body.concurrent, body.replacement, body.effective_date, mode, optional_placement=optional_placement(draft))
+        rendered = _render(draft, values, draft_preview=True)
+        previews = {locale: {"title": rendered["title_"+locale], "preamble": rendered["preamble_"+locale], "directive": "ПРИКАЗЫВАЮ:" if locale == "ru" else "БҰЙЫРАМЫН:", "body": rendered["body_template_"+locale], "basis": rendered["basis_template_"+locale]} for locale in ("ru", "kk")}
+        return {"template_id": template_id, "template_version_id": draft["template_version_id"], "revision": draft["revision"], "previews": previews}
+    except TemplateDraftError as exc:
+        raise _template_draft_error(exc) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail={"code": "REPLACEMENT_DATA_REQUIRED", "message": str(exc)}) from exc
 
 
 @router.get("/access/roles", response_model=List[AccessRoleRefResponse])

@@ -3,14 +3,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import TemplatesPageClient from "./TemplatesPageClient";
 import { PersonnelSectionLanguageProvider } from "@/app/directory/personnel/_lib/personnelSectionLanguage";
 import { apiFetchJson } from "@/lib/api";
-import { copyPersonnelTemplate, listPersonnelIndependentTemplates, listPersonnelTemplateVersions } from "../_lib/personnelOrderTemplatesApi.client";
+import { copyPersonnelTemplate, listPersonnelIndependentTemplates, listPersonnelTemplateVersions, removePersonnelTemplate } from "../_lib/personnelOrderTemplatesApi.client";
 import { createPersonnelOrderTemplateDraft, getPersonnelOrderTemplateDraft, getPersonnelOrderTemplateEditorBase, getPersonnelOrderTemplatePublished, listPersonnelOrderTemplateCatalog, publishPersonnelOrderTemplateDraft, savePersonnelOrderTemplateDraft } from "../_lib/personnelOrderTemplatesApi.client";
 
 let currentSearch = new URLSearchParams("section=personnel-orders&type=TERMINATION");
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }), useSearchParams: () => currentSearch, usePathname: () => "/admin/templates" }));
+const routerPush=vi.hoisted(()=>vi.fn());
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: routerPush }), useSearchParams: () => currentSearch, usePathname: () => "/admin/templates" }));
 vi.mock("@/lib/api", async () => ({ ...(await vi.importActual<object>("@/lib/api")), apiFetchJson: vi.fn() }));
 vi.mock("@/app/regular-tasks/_components/RegularTasksAdminClient", () => ({ default: () => null }));
-vi.mock("../_lib/personnelOrderTemplatesApi.client", () => ({ listPersonnelIndependentTemplates: vi.fn().mockResolvedValue({items: []}), listPersonnelTemplateVersions: vi.fn().mockResolvedValue({items: []}), copyPersonnelTemplate: vi.fn(), listPersonnelOrderTemplateCatalog: vi.fn(), getPersonnelOrderTemplateDraft: vi.fn(), getPersonnelOrderTemplatePublished: vi.fn(), getPersonnelOrderTemplateEditorBase: vi.fn(), createPersonnelOrderTemplateDraft: vi.fn(), savePersonnelOrderTemplateDraft: vi.fn(), previewPersonnelOrderTemplateDraft: vi.fn(), publishPersonnelOrderTemplateDraft: vi.fn() }));
+vi.mock("../_lib/personnelOrderTemplatesApi.client", () => ({ listPersonnelIndependentTemplates: vi.fn().mockResolvedValue({items: []}), listPersonnelTemplateVersions: vi.fn().mockResolvedValue({items: []}), copyPersonnelTemplate: vi.fn(), removePersonnelTemplate: vi.fn(), listPersonnelOrderTemplateCatalog: vi.fn(), getPersonnelOrderTemplateDraft: vi.fn(), getPersonnelOrderTemplatePublished: vi.fn(), getPersonnelOrderTemplateEditorBase: vi.fn(), createPersonnelOrderTemplateDraft: vi.fn(), savePersonnelOrderTemplateDraft: vi.fn(), previewPersonnelOrderTemplateDraft: vi.fn(), publishPersonnelOrderTemplateDraft: vi.fn() }));
 
 const texts = { title_ru: "Заголовок RU", title_kk: "Тақырып KK", preamble_ru: "Преамбула RU", preamble_kk: "Преамбула KK", body_template_ru: "{{employee.full_name}}", body_template_kk: "{{employee.full_name}}", basis_template_ru: "Основание", basis_template_kk: "Негіз" };
 const published = { ...texts, template_version_id: 20, item_type_code: "TERMINATION", version_number: 2, revision: 4, status: "PUBLISHED", based_on_built_in: true };
@@ -23,7 +24,97 @@ const open = async (label = "Редактировать шаблон") => { awai
 const changeTitle = (value: string) => fireEvent.change(screen.getByLabelText("Заголовок RU"), { target: { value } });
 
 describe("TemplatesPageClient draft lifecycle", () => {
-  beforeEach(() => { vi.mocked(listPersonnelIndependentTemplates).mockReset().mockResolvedValue({items: []}); vi.mocked(listPersonnelTemplateVersions).mockReset().mockResolvedValue({items: []}); vi.mocked(copyPersonnelTemplate).mockReset();
+  it("lists and searches every independent identity rather than only the type's default name",async()=>{
+    const first={template_id:9,item_type_code:"TERMINATION",name_ru:"TEST обычный",name_kk:"TEST бірінші",is_default:true,template_version_id:20,draft_version_id:null};
+    const second={...first,template_id:24,name_ru:"TEST процентная доплата",name_kk:"TEST қосымша ақы",is_default:false,template_version_id:null,draft_version_id:36};
+    vi.mocked(listPersonnelOrderTemplateCatalog).mockResolvedValue({items:[{...catalog.items[0],templates:[first,second]}]});
+    vi.mocked(apiFetchJson).mockResolvedValue({language:"ru",can_edit:false});
+    render(<PersonnelSectionLanguageProvider><TemplatesPageClient/></PersonnelSectionLanguageProvider>);
+      await waitFor(()=>expect(document.querySelector('[data-catalog-template-id="24"]')).toBeInTheDocument());
+      const list = screen.getByTestId("personnel-order-template-list");
+      expect(document.querySelector('[data-catalog-template-id="9"]')?.parentElement).toBe(list);
+      expect(document.querySelector('[data-catalog-template-id="24"]')?.parentElement).toBe(list);
+    fireEvent.change(screen.getByLabelText("Поиск шаблонов кадровых приказов"),{target:{value:"процентная доплата"}});
+      expect(document.querySelector('[data-catalog-template-id="9"]')).not.toBeInTheDocument();
+    expect(document.querySelector('[data-catalog-template-id="24"]')).toBeInTheDocument();
+    fireEvent.click(document.querySelector<HTMLButtonElement>('[data-catalog-template-id="24"]')!);
+    expect(routerPush.mock.calls.at(-1)?.[0]).toContain("template_id=24");
+    expect(routerPush.mock.calls.at(-1)?.[0]).toContain("type=TERMINATION");
+    expect(publishPersonnelOrderTemplateDraft).not.toHaveBeenCalled();
+  });
+  it("shows the backend revision-conflict message and preserves the edited title", async () => {
+    vi.mocked(getPersonnelOrderTemplateDraft).mockResolvedValue(draft);
+    vi.mocked(savePersonnelOrderTemplateDraft).mockRejectedValue({status:409,message:"HTTP 409",details:{detail:{code:"TEMPLATE_REVISION_CONFLICT",message:"Черновик изменён другим пользователем."}}});
+    setup(); await open("Продолжить редактирование"); changeTitle("TEST новое название");
+    fireEvent.click(screen.getByRole("button",{name:"Сохранить черновик"}));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Черновик изменён другим пользователем.");
+    expect(screen.getByLabelText("Заголовок RU")).toHaveValue("TEST новое название");
+  });
+  it("cancels deletion without writes and discards an unsaved working copy", async () => {
+    vi.mocked(getPersonnelOrderTemplatePublished).mockResolvedValue(null);
+    vi.mocked(getPersonnelOrderTemplateEditorBase).mockResolvedValue(initialBase);
+    setup(); await open(); changeTitle("TEST unsaved");
+    fireEvent.click(screen.getByRole("button",{name:"Удалить шаблон"}));
+    fireEvent.click(screen.getByRole("button",{name:"Бас тарту"}));
+    expect(screen.getByLabelText("Заголовок RU")).toHaveValue("TEST unsaved");
+    expect(removePersonnelTemplate).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button",{name:"Удалить шаблон"}));
+    fireEvent.click(screen.getByRole("button",{name:"Жою"}));
+    await waitFor(()=>expect(screen.queryByTestId("template-draft-editor")).not.toBeInTheDocument());
+    expect(removePersonnelTemplate).not.toHaveBeenCalled();
+    expect(createPersonnelOrderTemplateDraft).not.toHaveBeenCalled();
+  });
+
+  it("allows confirmed deletion of a saved default and closes its editor", async () => {
+    const template={template_id:99,item_type_code:"TERMINATION",name_ru:"TEST RU",name_kk:"TEST KK",is_default:true,template_version_id:20,draft_version_id:null};
+    let removed=false;
+    vi.mocked(listPersonnelIndependentTemplates).mockImplementation(async()=>({items:removed?[]:[template]}));
+    vi.mocked(removePersonnelTemplate).mockImplementation(async()=>{removed=true;return {template_id:99,action:"ARCHIVED"};});
+    setup(); await open();
+    const actions=screen.getByTestId("template-draft-actions");
+    const buttons=Array.from(actions.querySelectorAll("button")).map(b=>b.textContent);
+    expect(buttons.indexOf("Удалить шаблон")).toBe(buttons.indexOf("Сохранить черновик")+1);
+    fireEvent.click(screen.getByRole("button",{name:"Удалить шаблон"}));
+    fireEvent.click(screen.getByRole("button",{name:"Жою"}));
+    await waitFor(()=>expect(removePersonnelTemplate).toHaveBeenCalledWith(template));
+    await waitFor(()=>expect(screen.queryByTestId("template-draft-editor")).not.toBeInTheDocument());
+  });
+  it("deletes a persisted identity without versions through the API and refreshes the catalogue", async () => {
+    const template={template_id:7,item_type_code:"TERMINATION",name_ru:"TEST empty",name_kk:"TEST KK",is_default:true,template_version_id:null,draft_version_id:null};
+    let removed=false;
+    vi.mocked(apiFetchJson).mockResolvedValue({language:"ru",can_edit:false});
+    vi.mocked(listPersonnelIndependentTemplates).mockImplementation(async()=>({items:removed?[]:[template]}));
+    vi.mocked(listPersonnelOrderTemplateCatalog).mockImplementation(async()=>({items:[{...catalog.items[0],templates:removed?[]:[template]}]}));
+    vi.mocked(getPersonnelOrderTemplatePublished).mockResolvedValue(null);
+    vi.mocked(getPersonnelOrderTemplateEditorBase).mockResolvedValue({...initialBase,template_id:7});
+    vi.mocked(removePersonnelTemplate).mockImplementation(async()=>{removed=true;return {template_id:7,action:"DELETED"};});
+    render(<PersonnelSectionLanguageProvider><TemplatesPageClient/></PersonnelSectionLanguageProvider>);
+    await open();
+    expect(screen.getByTestId("template-draft-editor")).toHaveTextContent("Шаблон №7 · Версия не сохранена");
+    expect(document.querySelector('[data-catalog-template-id="7"]')).toHaveTextContent("Шаблон №7 · Версия не сохранена");
+    fireEvent.click(screen.getByRole("button",{name:"Удалить шаблон"}));
+    expect(screen.getByTestId("template-remove-dialog")).toHaveTextContent('„TEST empty“ (ID 7)');
+    fireEvent.click(screen.getByRole("button",{name:"Удалить"}));
+    await waitFor(()=>expect(removePersonnelTemplate).toHaveBeenCalledWith(template));
+    await waitFor(()=>expect(document.querySelector('[data-catalog-template-id="7"]')).not.toBeInTheDocument());
+    expect(screen.queryByTestId("template-draft-editor")).not.toBeInTheDocument();
+  });
+  it.each(["rejected", "wrong identity"])("keeps the editor open when deletion is %s",async mode=>{
+    const template={template_id:7,item_type_code:"TERMINATION",name_ru:"TEST empty",name_kk:"TEST KK",is_default:true,template_version_id:null,draft_version_id:null};
+    vi.mocked(listPersonnelIndependentTemplates).mockResolvedValue({items:[template]});
+    vi.mocked(getPersonnelOrderTemplatePublished).mockResolvedValue(null);
+    vi.mocked(getPersonnelOrderTemplateEditorBase).mockResolvedValue({...initialBase,template_id:7});
+    if(mode==="rejected")vi.mocked(removePersonnelTemplate).mockRejectedValue({status:500});
+    else vi.mocked(removePersonnelTemplate).mockResolvedValue({template_id:8,action:"DELETED"});
+    setup();await open();
+    fireEvent.click(screen.getByRole("button",{name:"Удалить шаблон"}));
+    fireEvent.click(screen.getByRole("button",{name:"Жою"}));
+    await screen.findByRole("alert");
+    expect(screen.getByTestId("template-remove-dialog")).toBeInTheDocument();
+    expect(screen.getByTestId("template-draft-editor")).toBeInTheDocument();
+    expect(screen.getByLabelText("Заголовок RU")).toHaveValue(initialBase.title_ru);
+  });
+  beforeEach(() => { vi.mocked(listPersonnelIndependentTemplates).mockReset().mockResolvedValue({items: []}); vi.mocked(listPersonnelTemplateVersions).mockReset().mockResolvedValue({items: []}); vi.mocked(copyPersonnelTemplate).mockReset(); vi.mocked(removePersonnelTemplate).mockReset().mockResolvedValue({template_id:99,action:"DELETED"});
     Object.defineProperty(HTMLDialogElement.prototype, "showModal", { configurable: true, value: function () { this.setAttribute("open", ""); } });
     currentSearch = new URLSearchParams("section=personnel-orders&type=TERMINATION"); window.localStorage.clear();
     vi.mocked(listPersonnelOrderTemplateCatalog).mockReset().mockResolvedValue(catalog);
@@ -95,7 +186,7 @@ describe("TemplatesPageClient draft lifecycle", () => {
     render(<PersonnelSectionLanguageProvider><TemplatesPageClient /></PersonnelSectionLanguageProvider>);
     const title = language === "ru" ? catalog.items[0].title_ru : catalog.items[0].title_kk;
     await screen.findByRole("heading", { name: title });
-    expect(screen.getByRole("button", { name: language === "ru" ? "Создать на основе…" : "Негізінде жасау…", exact: true })).toBeVisible();
+    expect(screen.getByRole("button", { name: language === "ru" ? "Создать на основе…" : "Негізінде жасау…" })).toBeVisible();
     expect(screen.getByTestId("personnel-order-template-TERMINATION")).toHaveTextContent(title);
     await open();
     expect(screen.getByLabelText("Заголовок RU")).toHaveValue(texts.title_ru);
@@ -119,7 +210,7 @@ describe("TemplatesPageClient draft lifecycle", () => {
   });
 
   it("first changed save sends all text with typed PUBLISHED optimistic base", async () => {
-    setup(); await open(); changeTitle("Новая редакция"); expect(screen.getByRole("button", { name: "Сохранить черновик" })).toBeEnabled(); expect(screen.getByRole("button", { name: "Опубликовать версию" })).toBeDisabled(); fireEvent.click(screen.getByRole("button", { name: "Сохранить черновик" }));
+    setup(); await open(); changeTitle("Новая редакция"); await waitFor(()=>expect(screen.getByRole("button", { name: "Сохранить черновик" })).toBeEnabled()); expect(screen.getByRole("button", { name: "Опубликовать версию" })).toBeDisabled(); fireEvent.click(screen.getByRole("button", { name: "Сохранить черновик" }));
     await waitFor(() => expect(createPersonnelOrderTemplateDraft).toHaveBeenCalledWith("TERMINATION", expect.objectContaining({ ...texts, title_ru: "Новая редакция", base_source: "PUBLISHED", base_published_template_version_id: 20, base_published_revision: 4 })));
     await waitFor(() => expect(screen.getByRole("button", { name: "Опубликовать версию" })).toBeEnabled());
   });
@@ -176,7 +267,7 @@ describe("TemplatesPageClient draft lifecycle", () => {
 
   it("PUBLISHED absent plus DRAFT present opens the existing v1 without create", async () => {
     vi.mocked(getPersonnelOrderTemplatePublished).mockResolvedValue(null); vi.mocked(getPersonnelOrderTemplateDraft).mockResolvedValue({ ...draft, version_number: 1 }); setup(); const editor = await open("Продолжить редактирование");
-    expect(editor).toHaveTextContent("Версия 1 · revision 1 · DRAFT"); expect(createPersonnelOrderTemplateDraft).not.toHaveBeenCalled();
+    expect(editor).toHaveTextContent("v1 · Нұсқа ID 21 · DRAFT · revision 1"); expect(createPersonnelOrderTemplateDraft).not.toHaveBeenCalled();
   });
 
   it("publish re-reads PUBLISHED and null DRAFT and creates no successor", async () => {

@@ -57,8 +57,11 @@ class _RealTransactionEngine:
 
 
 def _pg_insert_template(conn: Any, code: str, version: int, status: str, values: dict[str, str]) -> int:
-    return conn.execute(text("""INSERT INTO personnel_order_template_versions(item_type_code,version_number,status,title_ru,title_kk,preamble_ru,preamble_kk,body_template_ru,body_template_kk,basis_template_ru,basis_template_kk)
-        VALUES(:type,:version,:status,:title_ru,:title_kk,:preamble_ru,:preamble_kk,:body_template_ru,:body_template_kk,:basis_template_ru,:basis_template_kk) RETURNING template_version_id"""), {**values, "type": code, "version": version, "status": status}).scalar_one()
+    from app.services.personnel_order_template_draft_service import _resolve_template
+    template_id=_resolve_template(conn,code,None,create=True)
+    conn.execute(text("UPDATE personnel_order_template_versions SET status='ARCHIVED' WHERE template_id=:id AND status IN ('DRAFT',:status)"),{'id':template_id,'status':status})
+    return conn.execute(text("""INSERT INTO personnel_order_template_versions(template_id,item_type_code,version_number,status,title_ru,title_kk,preamble_ru,preamble_kk,body_template_ru,body_template_kk,basis_template_ru,basis_template_kk)
+        VALUES(:template,:type,:version,:status,:title_ru,:title_kk,:preamble_ru,:preamble_kk,:body_template_ru,:body_template_kk,:basis_template_ru,:basis_template_kk) RETURNING template_version_id"""), {**values, "template":template_id,"type": code, "version": version, "status": status}).scalar_one()
 
 
 def _write(tmp_path: Path, values: dict[str, str]) -> Path:
@@ -81,6 +84,24 @@ def test_canonical_export_is_stable_and_excludes_ids_and_personal_data(tmp_path:
     assert "\\u" not in decoded and tuple(manifest) == MANIFEST_FIELDS
     assert not {"template_version_id", "user_id", "revision", "created_at", "updated_at", "password", "token"} & set(manifest)
     assert "Иванов" not in decoded and "IIN" not in decoded
+
+
+def test_childcare_package_sync_is_type_scoped_and_never_publishes(tmp_path: Path) -> None:
+    childcare = "LEAVE.CHILDCARE.GRANT"
+    manifest = load_manifest(manifest_path(childcare))
+    assert _sync_plan([manifest], {"status": "PUBLISHED", **{f: manifest[f] for f in TEXT_FIELDS}}) == ("NO_OP", [])
+    write_manifest(childcare, {field: manifest[field] for field in TEXT_FIELDS}, tmp_path)
+    _write(tmp_path, _texts())
+    db = _TemplateDb()
+    assert sync_manifests(apply=False, db_engine=db, root=tmp_path, item_type_code=childcare) == {childcare: "CREATE"}
+    assert db.row is None
+    assert sync_manifests(apply=True, db_engine=db, root=tmp_path, item_type_code=childcare) == {childcare: "CREATE"}
+    assert db.row['item_type_code'] == childcare
+    assert all(db.row[field] == manifest[field] for field in TEXT_FIELDS)
+    assert any("'DRAFT'" in sql for sql in db.statements if sql.lstrip().startswith('INSERT'))
+    assert sync_manifests(apply=False, db_engine=db, root=tmp_path, item_type_code=childcare) == {childcare: "NO_OP"}
+    with pytest.raises(ManifestError):
+        sync_manifests(apply=True, db_engine=db, root=tmp_path, item_type_code="NOT_IN_PACKAGE")
 
 
 def test_export_reads_draft_without_writing_database(tmp_path: Path) -> None:

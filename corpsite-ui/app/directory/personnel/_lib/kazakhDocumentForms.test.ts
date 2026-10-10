@@ -2,6 +2,17 @@ import { describe, expect, it } from "vitest";
 import { calculateKazakhOrgUnitGenitive, calculateKazakhPersonForm, kazakhInflectWord } from "./kazakhDocumentForms";
 
 describe("Kazakh document form proposals", () => {
+  it("keeps an already saved genitive without declining it again",()=>{
+    expect(calculateKazakhOrgUnitGenitive('терапия бөлімшесінің').value).toBe('терапия бөлімшесінің');
+  });
+  it('keeps the written final а in feminine ева surnames with back case endings',()=>{
+    expect(calculateKazakhPersonForm({last_name:'Жаркенева',first_name:'Малика',middle_name:'Бауржановна'},'genitive').value).toBe('Малика Бауржановна Жаркеневаның');
+    expect(calculateKazakhPersonForm({last_name:'Жаркенева',first_name:'Малика',middle_name:'Бауржановна'},'dative').value).toBe('Малика Бауржановна Жаркеневаға');
+  });
+  it("forms the ablative after the surname and flags ambiguous spelling", () => {
+    expect(calculateKazakhPersonForm({first_name:"Алибек",middle_name:"Рапхатович",last_name:"Турымов"},"ablative")).toEqual({value:"Алибек Рапхатович Турымовтан",needsReview:false});
+    expect(kazakhInflectWord("Серги", "ablative").needsReview).toBe(true);
+  });
   it("forms the requested employee and unit proposals without changing their source spelling", () => {
     const employee = { first_name: "Альбина", middle_name: "Сериковна", last_name: "Маженова" };
     expect(calculateKazakhPersonForm(employee, "dative").value).toBe("Альбина Сериковна Маженоваға");

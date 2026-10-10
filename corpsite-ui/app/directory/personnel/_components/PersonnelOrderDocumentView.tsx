@@ -26,7 +26,6 @@ const labels = {
     date: "Күні",
     basis: "Негіз",
     noTemplate: "Бұл бұйрық түрі үшін бекітілген шаблон әзірге жоқ.",
-    additional: "Қосымша өкімдер",
   },
   ru: {
     document: "ПРИКАЗ",
@@ -34,7 +33,6 @@ const labels = {
     date: "Дата",
     basis: "Основание",
     noTemplate: "Для этого типа приказа утверждённый шаблон пока отсутствует.",
-    additional: "Дополнительные распоряжения",
   },
 } as const;
 
@@ -123,7 +121,6 @@ export default function PersonnelOrderDocumentView({
 
       {document.additionalInstructions.length ? (
         <section className="space-y-2 text-sm leading-6">
-          <h4 className="font-semibold">{ui.additional}</h4>
           {document.additionalInstructions.map((instruction, index) => <p key={index}>{instruction}</p>)}
         </section>
       ) : null}

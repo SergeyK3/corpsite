@@ -17,10 +17,196 @@ URL = os.environ.get('TEST_DATABASE_URL', '')
 pytestmark = pytest.mark.skipif(not URL or make_url(URL).host not in ('localhost','127.0.0.1') or make_url(URL).database != 'corpsite_test', reason='requires local migrated corpsite_test')
 
 
+@pytest.mark.parametrize('percent',[25,50])
+def test_simple_supplementary_pay_saves_number_and_applies_exact_version(database,percent):
+    from app.services.personnel_order_supplementary_pay_contract import BODY_RU,BODY_KK
+    from app.services.personnel_order_service_area_contract import SAMPLE_RECIPIENT
+    actor=database.execute(text('SELECT user_id FROM users ORDER BY user_id LIMIT 1')).scalar_one()
+    employee=database.execute(text('SELECT employee_id FROM employees ORDER BY employee_id LIMIT 1')).scalar_one()
+    draft=templates.copy_template('SUPPLEMENTARY_PAY',None,'TEST simple pay','TEST simple KK',actor,None,base_source='INITIAL')
+    txt={field:draft[field] for field in templates.TEXT_FIELDS};txt.update(body_template_ru=BODY_RU,body_template_kk=BODY_KK)
+    draft=templates.save_draft('SUPPLEMENTARY_PAY',draft['revision'],txt,actor,draft['template_id'])
+    published=templates.publish_draft('SUPPLEMENTARY_PAY',draft['revision'],actor,draft['template_id'])
+    allowance={'percent':str(percent),'employee_dative_ru':'Касымовой Раушан Тастемировне','employee_dative_kk':'Раушан Тастемировна Касымоваға','basis_ru':'Служебная записка','basis_kk':'Қызметтік хат','rate':1,'basis_type':'FOREIGN_SALARY'}
+    recipient=dict(SAMPLE_RECIPIENT)
+    assignments=database.execute(text("SELECT pa.assignment_id FROM person_assignments pa JOIN employees e ON e.person_id=pa.person_id WHERE e.employee_id=:id AND pa.active_flag AND pa.lifecycle_status='active' AND pa.start_date<=CURRENT_DATE AND (pa.end_date IS NULL OR pa.end_date>=CURRENT_DATE)"),{'id':employee}).scalars().all()
+    if assignments:recipient['assignment_id']=assignments[0]
+    order=manual.create_manual_draft(created_by=actor,template_version_id=published['template_version_id'],order_number='TEST-simple-'+uuid4().hex,order_date=date(2026,10,10),source_title=published['title_ru'],source_title_locale='ru',item_type_code='SUPPLEMENTARY_PAY',employee_id=employee,effective_date=date(2026,2,2),item_payload={'allowance':allowance,'allowance_recipient':recipient})
+    payload=database.execute(text('SELECT payload FROM personnel_order_items WHERE order_id=:id'),{'id':order['order_id']}).scalar_one()
+    assert payload['allowance']['percent']==percent and type(payload['allowance']['percent']) is int
+    assert payload['allowance']['basis_type']=='RECIPIENT_BASE_SALARY'
+    assert not {'rate','total_rate','replacement','concurrent'} & payload.keys()
+    assert 'rate' not in payload['allowance']
+    preview=applications.preview_template_application(order['order_id'])
+    assert preview['template']['template_version_id']==published['template_version_id'] and not preview['items'][0]['blocked']
+    assert f'{percent}% от собственного должностного оклада' in preview['items'][0]['proposed']['body_ru']
+
 class TransactionEngine:
     def __init__(self, conn): self.conn = conn
     def begin(self): return nullcontext(self.conn)
     def connect(self): return nullcontext(self.conn)
+
+
+def test_catalog_keeps_all_independent_identities_inside_the_order_type(database):
+    from app.services.personnel_order_template_catalog_service import list_personnel_order_template_catalog
+    actor=database.execute(text('SELECT user_id FROM users ORDER BY user_id LIMIT 1')).scalar_one()
+    code='CONCURRENT_DUTY_START'
+    first=templates.copy_template(code,None,'TEST simple rate','TEST ставка KK',actor,None,base_source='INITIAL')
+    second=templates.copy_template(code,None,'TEST simple percentage','TEST доплата KK',actor,None,base_source='INITIAL')
+    archived=templates.copy_template(code,None,'TEST archived','TEST архив KK',actor,None,base_source='INITIAL')
+    templates.remove_template(code,archived['template_id'],archived['name_ru'],archived['name_kk'],actor,archive=True)
+    before=[dict(r) for r in database.execute(text('SELECT * FROM personnel_order_template_versions ORDER BY template_version_id')).mappings()]
+    group=next(row for row in list_personnel_order_template_catalog(include_saved_names=True) if row['type_code']==code)
+    ids={row['template_id']:row for row in group['templates']}
+    assert ids[first['template_id']]['name_ru']=='TEST simple rate'
+    assert ids[second['template_id']]['name_ru']=='TEST simple percentage'
+    assert ids[second['template_id']]['draft_version_id']==second['template_version_id']
+    assert ids[second['template_id']]['draft_version_number']==second['version_number']
+    assert archived['template_id'] not in ids
+    assert [dict(r) for r in database.execute(text('SELECT * FROM personnel_order_template_versions ORDER BY template_version_id')).mappings()]==before
+
+
+def test_delete_persisted_identity_without_versions_does_not_recreate_on_reads(database):
+    from app.services.personnel_order_template_catalog_service import list_personnel_order_template_catalog
+    code='LEAVE.ANNUAL.RECALL'
+    actor=database.execute(text('SELECT user_id FROM users ORDER BY user_id LIMIT 1')).scalar_one()
+    empty_id=database.execute(text("INSERT INTO personnel_order_templates(item_type_code,name_ru,name_kk) VALUES(:code,'TEST empty recall','TEST empty KK') RETURNING template_id"),{'code':code}).scalar_one()
+    before={table:[dict(r) for r in database.execute(text(f'SELECT * FROM {table} ORDER BY 1')).mappings()] for table in ('personnel_order_template_versions','personnel_orders','personnel_order_template_applications')}
+    assert templates.get_editor_base(code,empty_id)['source']=='INITIAL'
+    assert templates.remove_template(code,empty_id,'TEST empty recall','TEST empty KK',actor)=={'template_id':empty_id,'action':'DELETED'}
+    for _ in range(2):
+        assert all(t['template_id']!=empty_id for t in templates.list_templates(code))
+        group=next(r for r in list_personnel_order_template_catalog(include_saved_names=True) if r['type_code']==code)
+        assert all(t['template_id']!=empty_id for t in group['templates'])
+        with pytest.raises(templates.TemplateDraftError): templates.get_editor_base(code,empty_id)
+    assert database.execute(text('SELECT 1 FROM personnel_order_templates WHERE template_id=:id'),{'id':empty_id}).first() is None
+    for table,rows in before.items():
+        assert [dict(r) for r in database.execute(text(f'SELECT * FROM {table} ORDER BY 1')).mappings()]==rows
+
+
+@pytest.mark.parametrize('percent,filled',[(25,False),(50,False),(25,True),(50,True)])
+def test_exact_optional_pay_version_creates_without_rates_and_preserves_structure(database,percent,filled):
+    from app.services.personnel_order_replacement_contract import OPTIONAL_PAY_RU,OPTIONAL_PAY_KK,SAMPLE_CONCURRENT,SAMPLE_REPLACEMENT
+    actor=database.execute(text('SELECT user_id FROM users ORDER BY user_id LIMIT 1')).scalar_one()
+    employee=database.execute(text('SELECT employee_id FROM employees ORDER BY employee_id LIMIT 1')).scalar_one()
+    code='CONCURRENT_DUTY_START'
+    draft=templates.copy_template(code,None,'TEST optional pay','TEST optional pay KK',actor,None,base_source='INITIAL')
+    values={field:draft[field] for field in templates.TEXT_FIELDS}
+    values.update(body_template_ru=OPTIONAL_PAY_RU,body_template_kk=OPTIONAL_PAY_KK)
+    draft=templates.save_draft(code,draft['revision'],values,actor,draft['template_id'])
+    published=templates.publish_draft(code,draft['revision'],actor,draft['template_id'])
+    c=dict(SAMPLE_CONCURRENT);c.pop('rate');c.pop('total_rate')
+    if not filled:
+        for key in ('position_ru','position_kk','org_unit_ru','org_unit_kk','position_genitive_ru','org_unit_genitive_ru'):c[key]=''
+    order=manual.create_manual_draft(created_by=actor,template_version_id=published['template_version_id'],order_number='TEST-pay-'+uuid4().hex,order_date=date(2026,10,9),source_title='TEST optional pay',source_title_locale='ru',item_type_code=code,employee_id=employee,effective_date=date(2026,7,3),item_payload={'concurrent':c,'replacement':{**SAMPLE_REPLACEMENT,'allowance_percent':str(percent),'mode':'RATE'}})
+    payload=database.execute(text('SELECT payload FROM personnel_order_items WHERE order_id=:id'),{'id':order['order_id']}).scalar_one()
+    assert payload['replacement']['allowance_percent']==percent and payload['replacement']['mode']=='PAY'
+    assert not {'rate','total_rate'} & payload['concurrent'].keys()
+    preview=applications.preview_template_application(order['order_id'])
+    assert preview['template']['template_version_id']==published['template_version_id'] and not preview['items'][0]['blocked']
+    texts=preview['items'][0]['proposed']
+    assert f'с доплатой в размере {percent}%' in texts['body_ru'] and f'{percent}% мөлшерінде' in texts['body_kk']
+    assert 'ставк' not in texts['body_ru']+texts['body_kk']
+
+
+@pytest.mark.parametrize('percent,term,worker',[(25,'NONE',False),(50,'NONE',True),(25,'DATE',False),(50,'DATE',True),(25,'UNTIL_RETURN',True),(50,'UNTIL_RETURN',True)])
+def test_service_area_order_uses_own_salary_and_selected_assignment(database,percent,term,worker):
+    from app.services.personnel_order_service_area_contract import BODY_RU,BODY_KK,SAMPLE_RECIPIENT
+    from app.services.personnel_order_replacement_contract import SAMPLE_CONCURRENT,SAMPLE_REPLACEMENT
+    actor=database.execute(text('SELECT user_id FROM users ORDER BY user_id LIMIT 1')).scalar_one()
+    employee=database.execute(text('SELECT employee_id FROM employees ORDER BY employee_id LIMIT 1')).scalar_one()
+    assignments=database.execute(text("SELECT pa.assignment_id FROM person_assignments pa JOIN employees e ON e.person_id=pa.person_id WHERE e.employee_id=:id AND pa.active_flag AND pa.lifecycle_status='active' AND pa.start_date<=CURRENT_DATE AND (pa.end_date IS NULL OR pa.end_date>=CURRENT_DATE)"),{'id':employee}).scalars().all()
+    code='CONCURRENT_DUTY_START';draft=templates.copy_template(code,None,'TEST service area','TEST service area KK',actor,None,base_source='INITIAL')
+    txt={field:draft[field] for field in templates.TEXT_FIELDS};txt.update(body_template_ru=BODY_RU,body_template_kk=BODY_KK)
+    draft=templates.save_draft(code,draft['revision'],txt,actor,draft['template_id']);published=templates.publish_draft(code,draft['revision'],actor,draft['template_id'])
+    replacement={**(SAMPLE_REPLACEMENT if worker else {}),'term_type':term,'allowance_percent':percent,'end_date':'2026-06-30'}
+    recipient={**SAMPLE_RECIPIENT,**({'assignment_id':assignments[0]} if assignments else {})}
+    order=manual.create_manual_draft(created_by=actor,template_version_id=published['template_version_id'],order_number='TEST-area-'+uuid4().hex,order_date=date(2026,10,9),source_title='TEST service area',source_title_locale='ru',item_type_code=code,employee_id=employee,effective_date=date(2026,6,15),item_payload={'concurrent':SAMPLE_CONCURRENT,'replacement':replacement,'allowance_recipient':recipient})
+    payload=database.execute(text('SELECT payload FROM personnel_order_items WHERE order_id=:id'),{'id':order['order_id']}).scalar_one()
+    assert payload['replacement']['allowance_basis_type']=='RECIPIENT_BASE_SALARY' and payload['replacement']['allowance_percent']==percent
+    assert 'allowance_basis_ru' not in payload['replacement']
+    assert ('end_date' in payload['replacement'])==(term=='DATE')
+    assert payload['allowance_recipient']==recipient and 'rate' not in payload['concurrent']
+    preview=applications.preview_template_application(order['order_id']);assert not preview['items'][0]['blocked']
+    assert 'от собственного должностного оклада' in preview['items'][0]['proposed']['body_ru']
+
+
+@pytest.mark.parametrize('position,expected',[('Менеджер','менеджеру'),('Неизвестный код','')])
+def test_service_area_missing_client_dative_is_saved_and_renders_without_manual_confirmation(database,position,expected):
+    from app.services.personnel_order_service_area_contract import BODY_RU,BODY_KK,SAMPLE_RECIPIENT
+    from app.services.personnel_order_replacement_contract import SAMPLE_CONCURRENT
+    actor=database.execute(text('SELECT user_id FROM users ORDER BY user_id LIMIT 1')).scalar_one()
+    employee=database.execute(text('SELECT employee_id FROM employees ORDER BY employee_id LIMIT 1')).scalar_one()
+    assignments=database.execute(text("SELECT pa.assignment_id FROM person_assignments pa JOIN employees e ON e.person_id=pa.person_id WHERE e.employee_id=:id AND pa.active_flag AND pa.lifecycle_status='active' AND pa.start_date<=CURRENT_DATE AND (pa.end_date IS NULL OR pa.end_date>=CURRENT_DATE)"),{'id':employee}).scalars().all()
+    code='CONCURRENT_DUTY_START';draft=templates.copy_template(code,None,'TEST automatic recipient','TEST automatic recipient KK',actor,None,base_source='INITIAL')
+    txt={field:draft[field] for field in templates.TEXT_FIELDS};txt.update(body_template_ru=BODY_RU,body_template_kk=BODY_KK)
+    draft=templates.save_draft(code,draft['revision'],txt,actor,draft['template_id']);published=templates.publish_draft(code,draft['revision'],actor,draft['template_id'])
+    recipient={**SAMPLE_RECIPIENT,'position_ru':position,**({'assignment_id':assignments[0]} if assignments else {})};recipient.pop('position_dative_ru')
+    result=manual.create_manual_draft(created_by=actor,template_version_id=published['template_version_id'],order_number='TEST-auto-recipient-'+uuid4().hex,order_date=date(2026,10,9),source_title='TEST automatic recipient',source_title_locale='ru',item_type_code=code,employee_id=employee,effective_date=date(2026,6,15),item_payload={'concurrent':SAMPLE_CONCURRENT,'replacement':{'term_type':'NONE','allowance_percent':25},'allowance_recipient':recipient})
+    payload=database.execute(text('SELECT payload FROM personnel_order_items WHERE order_id=:id'),{'id':result['order_id']}).scalar_one()
+    assert payload['allowance_recipient']['position_dative_ru']==expected
+    preview=applications.preview_template_application(result['order_id']);assert not preview['items'][0]['blocked']
+    rendered=preview['items'][0]['proposed']['body_ru']
+    assert ('менеджеру' in rendered)==bool(expected)
+    if not expected:assert rendered.startswith(SAMPLE_CONCURRENT['employee_dative_ru']+', с ')
+    assert '{{' not in rendered and 'Неизвестный' not in rendered
+
+
+def test_rename_only_selected_template_and_delete_all_versions_preserving_copy(database):
+    actor = database.execute(text('SELECT user_id FROM users ORDER BY user_id LIMIT 1')).scalar_one()
+    code = 'SUPPLEMENTARY_PAY'
+    parent = templates.copy_template(code, None, 'TEST parent', 'TEST parent KK', actor, None, base_source='INITIAL')
+    sibling = templates.copy_template(code, None, 'TEST sibling', 'TEST sibling KK', actor, None, base_source='INITIAL')
+    valid = {field: parent[field] for field in templates.TEXT_FIELDS}
+    valid.update(basis_template_ru='Test evidence', basis_template_kk='Test evidence KK')
+    parent = templates.save_draft(code, parent['revision'], valid, actor, parent['template_id'])
+    v1 = templates.publish_draft(code, parent['revision'], actor, parent['template_id'])
+    old = {field: v1[field] for field in templates.TEXT_FIELDS}
+    changed = {**old, 'title_ru': 'TEST renamed RU', 'title_kk': 'TEST renamed KK'}
+    v2 = templates.create_draft_from_working_copy(code, 'PUBLISHED', v1['template_version_id'], v1['revision'], changed, actor, parent['template_id'])
+    changed['title_ru'] = 'TEST final RU'
+    v2 = templates.save_draft(code, v2['revision'], changed, actor, parent['template_id'])
+    current = next(t for t in templates.list_templates(code, published_only=True) if t['template_id'] == parent['template_id'])
+    assert current['name_ru'] == 'TEST final RU' and current['name_kk'] == 'TEST renamed KK'
+    assert current['title_ru'] == old['title_ru']
+    assert templates.get_published(code, parent['template_id'])['template_version_id'] == v1['template_version_id']
+    assert next(t for t in templates.list_templates(code) if t['template_id'] == sibling['template_id'])['name_ru'] == 'TEST sibling'
+    child = templates.copy_template(code, v1['template_version_id'], 'TEST child', 'TEST child KK', actor, v1['revision'])
+    result = templates.remove_template(code, parent['template_id'], current['name_ru'], current['name_kk'], actor)
+    assert result['action'] == 'DELETED'
+    assert not database.execute(text('SELECT 1 FROM personnel_order_template_versions WHERE template_id=:id'), {'id': parent['template_id']}).first()
+    assert templates.get_draft(code, child['template_id'])['body_template_ru'] == old['body_template_ru']
+    assert database.execute(text('SELECT copied_from_template_version_id FROM personnel_order_templates WHERE template_id=:id'), {'id':child['template_id']}).scalar_one() is None
+
+
+def test_default_flag_does_not_prohibit_deleting_a_test_template(database):
+    actor = database.execute(text('SELECT user_id FROM users ORDER BY user_id LIMIT 1')).scalar_one()
+    code = 'SUPPLEMENTARY_PAY'
+    test = templates.copy_template(code, None, 'TEST default', 'TEST default KK', actor, None, base_source='INITIAL')
+    database.execute(text('UPDATE personnel_order_templates SET is_default=FALSE WHERE item_type_code=:code'), {'code':code})
+    database.execute(text('UPDATE personnel_order_templates SET is_default=TRUE WHERE template_id=:id'), {'id':test['template_id']})
+    assert templates.remove_template(code, test['template_id'], 'TEST default', 'TEST default KK', actor)['action'] == 'DELETED'
+
+
+def test_copy_and_title_only_save_keep_source_and_two_identities(database):
+    actor = database.execute(text('SELECT user_id FROM users ORDER BY user_id LIMIT 1')).scalar_one()
+    code = 'CONCURRENT_DUTY_START'
+    first = templates.copy_template(code, None, 'TEST additional rate', 'TEST ставка KK', actor, None, base_source='INITIAL')
+    second = templates.copy_template(code, first['template_version_id'], 'TEST additional pay', 'TEST доплата KK', actor, first['revision'])
+    assert first['template_id'] != second['template_id']
+    assert second['title_ru'] == second['name_ru'] == 'TEST additional pay'
+    assert second['title_kk'] == second['name_kk'] == 'TEST доплата KK'
+    changed = {field: second[field] for field in templates.TEXT_FIELDS}
+    changed['title_ru'] = 'TEST renamed pay'
+    saved = templates.save_draft(code, second['revision'], changed, actor, second['template_id'], expected_template_version_id=second['template_version_id'])
+    assert saved['status'] == 'DRAFT'
+    assert saved['template_version_id'] == second['template_version_id']
+    assert all(saved[field] == first[field] for field in templates.TEXT_FIELDS if not field.startswith('title_'))
+    unchanged = templates.get_draft(code, first['template_id'])
+    assert all(unchanged[field] == first[field] for field in (*templates.TEXT_FIELDS, 'revision', 'template_version_id', 'status'))
+    names = {t['template_id']: t['name_ru'] for t in templates.list_templates(code)}
+    assert names[first['template_id']] == 'TEST additional rate'
+    assert names[second['template_id']] == 'TEST renamed pay'
 
 
 @pytest.fixture
@@ -57,7 +243,8 @@ def test_independent_copy_publication_and_preserved_default(database):
     before = dict(conn.execute(text('SELECT * FROM personnel_order_template_versions WHERE template_version_id=:id'), {'id':source['template_version_id']}).mappings().one())
     copy = templates.copy_template('HIRE', source['template_version_id'], 'Variant RU', 'Variant KZ', actor, source['revision'])
     assert copy['template_id'] != source['template_id'] and copy['version_number'] == 1 and copy['status'] == 'DRAFT'
-    assert all(copy[field] == source[field] for field in templates.TEXT_FIELDS)
+    assert all(copy[field] == source[field] for field in templates.TEXT_FIELDS if not field.startswith("title_"))
+    assert copy["title_ru"] == "Variant RU" and copy["title_kk"] == "Variant KZ"
     assert templates.get_published('HIRE', copy['template_id']) is None
     assert templates.get_published('HIRE')['template_version_id'] == source['template_version_id']
     changed = {field: copy[field] for field in templates.TEXT_FIELDS}
@@ -85,7 +272,8 @@ def test_copy_builtin_without_saving_or_publishing_source(database):
     before=templates.get_draft(code),templates.get_published(code)
     created=templates.copy_template(code,None,'Builtin copy RU','Builtin copy KZ',actor,None,base_source='INITIAL')
     assert created['status']=='DRAFT' and created['version_number']==1
-    assert all(created[field]==initial[field] for field in templates.TEXT_FIELDS)
+    assert all(created[field]==initial[field] for field in templates.TEXT_FIELDS if not field.startswith("title_"))
+    assert created["title_ru"] == "Builtin copy RU" and created["title_kk"] == "Builtin copy KZ"
     assert templates.get_published(code,created['template_id']) is None
     assert (templates.get_draft(code),templates.get_published(code))==before
     assert any(t['is_default'] and t['template_id']!=created['template_id'] for t in templates.list_templates(code))
@@ -156,7 +344,7 @@ def test_unpaid_to_annual_keeps_text_and_requires_target_variables(database, sto
         base_source='VERSION' if stored else 'INITIAL', source_type_code=source_code)
     assert copy['item_type_code'] == target_code
     assert copy['status'] == 'DRAFT' and copy['version_number'] == 1
-    assert all(copy[field] == initial[field] for field in templates.TEXT_FIELDS)
+    assert all(copy[field] == initial[field] for field in templates.TEXT_FIELDS if not field.startswith("title_"))
     assert templates.get_published(target_code, copy['template_id']) is None
     with pytest.raises(templates.TemplateDraftError, match='Неизвестная переменная'):
         templates.publish_draft(target_code, copy['revision'], actor, copy['template_id'])
@@ -184,10 +372,7 @@ def test_delete_and_archive_independent_templates_keep_references(database):
         VALUES(:number,CURRENT_DATE,'HIRE','DRAFT','PAPER','{}'::jsonb,:actor,:version) RETURNING order_id
     """), {'number':'archive-'+uuid4().hex, 'actor':actor, 'version':parent['template_version_id']}).scalar_one()
     child = templates.copy_template(code, parent['template_version_id'], 'Child', 'Child KZ', actor, parent['revision'])
-    with pytest.raises(templates.TemplateDraftError) as cause:
-        templates.remove_template(code, parent['template_id'], 'Used parent', 'Parent KZ', actor)
-    assert cause.value.code == 'TEMPLATE_IN_USE'
-    result = templates.remove_template(code, parent['template_id'], 'Used parent', 'Parent KZ', actor, archive=True)
+    result = templates.remove_template(code, parent['template_id'], 'Used parent', 'Parent KZ', actor)
     assert result['action'] == 'ARCHIVED'
     archived = templates.list_versions(code, parent['template_id'])[0]
     assert archived['status'] == 'ARCHIVED'
@@ -195,10 +380,7 @@ def test_delete_and_archive_independent_templates_keep_references(database):
     assert not any(t['template_id'] == parent['template_id'] for t in templates.list_templates(code))
     assert database.execute(text('SELECT copied_from_template_version_id FROM personnel_order_templates WHERE template_id=:id'), {'id':child['template_id']}).scalar_one() == parent['template_version_id']
     assert database.execute(text('SELECT selected_template_version_id FROM personnel_orders WHERE order_id=:id'), {'id':order_id}).scalar_one() == parent['template_version_id']
-    default = next(t for t in templates.list_templates(code) if t['is_default'])
-    with pytest.raises(templates.TemplateDraftError) as protected:
-        templates.remove_template(code, default['template_id'], default['name_ru'], default['name_kk'], actor)
-    assert protected.value.code == 'TEMPLATE_DEFAULT_PROTECTED'
+
 
 
 def test_exact_versions_render_different_bilingual_content_and_rollback(database):

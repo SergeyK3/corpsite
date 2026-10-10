@@ -140,3 +140,11 @@ export function formatPersonnelOrderPrintRateLines(
   }
   return [formatPersonnelOrderPrintRate(rate, language)];
 }
+
+/** Start-date substitution in transfer and concurrent-duty body text. */
+export function formatPersonnelOrderActionStartDate(value: string | null | undefined, language: "kk" | "ru"): string {
+  if (language === "kk") return formatPersonnelOrderPrintStartDate(value, language);
+  const parts = parsePersonnelOrderCalendarDate(value);
+  if (!parts) return String(value || "").trim() || "—";
+  return `${String(parts.day).padStart(2,"0")}.${String(parts.month).padStart(2,"0")}.${parts.year}`;
+}

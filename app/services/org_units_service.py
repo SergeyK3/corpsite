@@ -585,6 +585,8 @@ class OrgUnitsService:
                 "unit_id": u.unit_id,
                 "parent_unit_id": u.parent_unit_id,
                 "name": u.name,
+                "name_kk": u.name_kk,
+                "document_genitive_kk": u.document_genitive_kk,
                 "code": u.code,
                 "group_id": u.group_id,
                 "is_active": bool(u.is_active),
@@ -631,6 +633,8 @@ class OrgUnitsService:
             nodes[u.unit_id] = {
                 "id": str(u.unit_id),
                 "title": u.name,
+                "name_kk": u.name_kk,
+                "document_genitive_kk": u.document_genitive_kk,
                 "code": u.code,
                 "type": "unit",
                 "group_id": u.group_id,

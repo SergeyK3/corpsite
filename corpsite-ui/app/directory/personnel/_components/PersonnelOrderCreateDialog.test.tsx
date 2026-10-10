@@ -44,15 +44,15 @@ it("creates a recall with separate bilingual bases and no rate or leave period",
   fireEvent.change(screen.getByLabelText("Номер приказа"), {target:{value:"RECALL-TEST"}});
   fireEvent.change(screen.getByLabelText("Дата приказа"), {target:{value:"2026-10-07"}});
   fireEvent.change(screen.getByLabelText("Дата действия"), {target:{value:"2026-10-12"}});
-  expect(screen.getByRole("button",{name:"Создать приказ",exact:true})).toBeDisabled();
+  expect(screen.getByRole("button",{name:"Создать приказ"})).toBeDisabled();
   fireEvent.change(screen.getByLabelText("Лауазым KZ"), {target:{value:"дәрігер"}});
   fireEvent.change(screen.getByLabelText("Бөлімше KZ"), {target:{value:"Терапия"}});
   fireEvent.change(screen.getByLabelText("Основание RU"), {target:{value:"Служебная записка"}});
   fireEvent.change(screen.getByLabelText("Негіз KZ"), {target:{value:"Қызметтік хат"}});
   vi.mocked(previewPersonnelOrderHeaderDuplicate).mockResolvedValue({blocking:false,warnings:[],candidates:[]});
   vi.mocked(createManualPersonnelOrderDraft).mockResolvedValue({order_id:1} as never);
-  await waitFor(() => expect(screen.getByRole("button",{name:"Создать приказ",exact:true})).toBeEnabled());
-  fireEvent.click(screen.getByRole("button",{name:"Создать приказ",exact:true}));
+  await waitFor(() => expect(screen.getByRole("button",{name:"Создать приказ"})).toBeEnabled());
+  fireEvent.click(screen.getByRole("button",{name:"Создать приказ"}));
   await waitFor(() => expect(createManualPersonnelOrderDraft).toHaveBeenCalledWith(expect.objectContaining({item_type_code:"LEAVE.ANNUAL.RECALL",effective_date:"2026-10-12",period_start:null,period_end:null,item_payload:expect.objectContaining({recall_position_kk:"дәрігер",recall_org_unit_kk:"Терапия",basis_ru:"Служебная записка",basis_kk:"Қызметтік хат"})})));
 });
 import { personnelOrderTypeLabel } from "../_lib/personnelOrderLabels";
@@ -64,7 +64,7 @@ vi.mock("../_lib/personnelOrdersApi.client", async () => ({
   previewPersonnelOrderHeaderDuplicate: vi.fn(),
   createManualPersonnelOrderDraft: vi.fn(),
 }));
-vi.mock("@/app/directory/employees/_lib/api.client", () => ({ getEmployee: vi.fn(), getEmployees: vi.fn() }));
+vi.mock("@/app/directory/employees/_lib/api.client", () => ({ getEmployee: vi.fn(), getEmployees: vi.fn(), getPositions: vi.fn().mockResolvedValue({items:[],total:0}) }));
 vi.mock("@/lib/orgUnitsSelect", () => ({ loadOrgUnitSelectOptions: vi.fn() }));
 
 import {
@@ -125,13 +125,13 @@ it("shows variant load errors and blocks creation instead of silently falling ba
   fireEvent.change(screen.getByLabelText('Дата приказа'),{target:{value:'2026-10-07'}});
   fireEvent.change(screen.getByLabelText('Дата действия'),{target:{value:'2026-10-12'}});
   expect(await screen.findByRole('alert')).toHaveTextContent('Schema unavailable');
-  expect(screen.getByRole('button',{name:'Создать приказ',exact:true})).toBeDisabled();
-  fireEvent.submit(screen.getByRole('button',{name:'Создать приказ',exact:true}).closest('form')!);
+  expect(screen.getByRole('button',{name:'Создать приказ'})).toBeDisabled();
+  fireEvent.submit(screen.getByRole('button',{name:'Создать приказ'}).closest('form')!);
   expect(previewPersonnelOrderHeaderDuplicate).not.toHaveBeenCalled();
   expect(createManualPersonnelOrderDraft).not.toHaveBeenCalled();
   vi.mocked(getPersonnelOrderPublishedVariants).mockResolvedValue({items:[],independent_supported:false});
   fireEvent.click(screen.getByRole('button',{name:'Жүктеуді қайталау'}));
-  await waitFor(()=>expect(screen.getByRole('button',{name:'Создать приказ',exact:true})).toBeEnabled());
+  await waitFor(()=>expect(screen.getByRole('button',{name:'Создать приказ'})).toBeEnabled());
 });
 
 it("allows recall selection but blocks its creation when the actual schema does not allow the code",async()=>{
@@ -139,13 +139,13 @@ it("allows recall selection but blocks its creation when the actual schema does 
   setup();await chooseTypeInMenu('LEAVE.ANNUAL.RECALL');
   await screen.findByTestId('order-type-schema-unavailable');
   expect(screen.getByTestId('order-type-schema-unavailable')).toHaveTextContent('hrrecall001');
-  expect(screen.getByRole('button',{name:'Создать приказ',exact:true})).toBeDisabled();
+  expect(screen.getByRole('button',{name:'Создать приказ'})).toBeDisabled();
   expect(screen.getByRole('button',{name:'Тип кадрового приказа'})).toBeEnabled();
   await chooseTypeInMenu('LEAVE.ANNUAL.GRANT');
   expect(screen.queryByTestId('order-type-schema-unavailable')).not.toBeInTheDocument();
 });
 
-function setup(onClose = vi.fn(), onCreated = vi.fn()) {
+function setup(onClose: () => void = vi.fn(), onCreated: (order: Awaited<ReturnType<typeof createManualPersonnelOrderDraft>>) => void = vi.fn()) {
   vi.mocked(getPersonnelOrderPublishedTemplateTitle).mockImplementation(async (type) =>
     type === "TRANSFER" ? transferTitles : unpaidTitles,
   );
@@ -176,7 +176,7 @@ it("resolves version 13 after early recall selection and waits for that version'
   setup();
   vi.mocked(getPersonnelOrderPublishedTemplateTitle).mockImplementation(()=>new Promise(resolve=>{resolveTitle=resolve;}));
   await chooseTypeInMenu('LEAVE.ANNUAL.RECALL');await fillRecall();
-  const submit=screen.getByRole('button',{name:'Создать приказ',exact:true});
+  const submit=screen.getByRole('button',{name:'Создать приказ'});
   expect(submit).toBeDisabled();fireEvent.submit(submit.closest('form')!);
   expect(getPersonnelOrderPublishedTemplateTitle).not.toHaveBeenCalled();expect(createManualPersonnelOrderDraft).not.toHaveBeenCalled();
   await act(async()=>resolveVariants({items:[recallVariant],independent_supported:true}));
@@ -195,19 +195,19 @@ it("requires an explicit version when multiple variants arrive after early type 
     ? new Promise(resolve=>{resolveVariants=resolve;}) : Promise.resolve({items:[],independent_supported:false}));
   setup();await chooseTypeInMenu('LEAVE.ANNUAL.RECALL');await fillRecall();
   await act(async()=>resolveVariants({items:[recallVariant,{...recallVariant,template_id:9,template_version_id:14,name_kk:'Екінші үлгі'}],independent_supported:true}));
-  expect(screen.getByRole('button',{name:'Создать приказ',exact:true})).toBeDisabled();expect(getPersonnelOrderPublishedTemplateTitle).not.toHaveBeenCalled();
+  expect(screen.getByRole('button',{name:'Создать приказ'})).toBeDisabled();expect(getPersonnelOrderPublishedTemplateTitle).not.toHaveBeenCalled();
   vi.mocked(getPersonnelOrderPublishedTemplateTitle).mockResolvedValue({...recallVariant,item_type_code:'LEAVE.ANNUAL.RECALL'});
   await chooseTypeInMenu('LEAVE.ANNUAL.RECALL');fireEvent.click(document.querySelector('[data-template-version="13"]')!);
   await fillRecall(false);
-  await waitFor(()=>expect(screen.getByRole('button',{name:'Создать приказ',exact:true})).toBeEnabled());
+  await waitFor(()=>expect(screen.getByRole('button',{name:'Создать приказ'})).toBeEnabled());
   expect(getPersonnelOrderPublishedTemplateTitle).toHaveBeenLastCalledWith('LEAVE.ANNUAL.RECALL',13);
 });
 
 it("blocks independent creation if there is no published version",async()=>{
   vi.mocked(getPersonnelOrderPublishedVariants).mockResolvedValue({items:[],independent_supported:true});
   setup();await chooseTypeInMenu('LEAVE.ANNUAL.RECALL');await fillRecall();
-  expect(screen.getByRole('button',{name:'Создать приказ',exact:true})).toBeDisabled();
-  expect(getPersonnelOrderPublishedTemplateTitle).not.toHaveBeenCalled();fireEvent.submit(screen.getByRole('button',{name:'Создать приказ',exact:true}).closest('form')!);
+  expect(screen.getByRole('button',{name:'Создать приказ'})).toBeDisabled();
+  expect(getPersonnelOrderPublishedTemplateTitle).not.toHaveBeenCalled();fireEvent.submit(screen.getByRole('button',{name:'Создать приказ'}).closest('form')!);
   expect(createManualPersonnelOrderDraft).not.toHaveBeenCalled();
 });
 
@@ -215,8 +215,8 @@ it("blocks a title response for the wrong version",async()=>{
   vi.mocked(getPersonnelOrderPublishedVariants).mockImplementation(async code=>({items:code==='LEAVE.ANNUAL.RECALL'?[recallVariant]:[],independent_supported:true}));
   setup();vi.mocked(getPersonnelOrderPublishedTemplateTitle).mockResolvedValue({...recallVariant,template_version_id:14,item_type_code:'LEAVE.ANNUAL.RECALL'});
   await chooseTypeInMenu('LEAVE.ANNUAL.RECALL');await fillRecall();
-  expect(await screen.findByRole('alert')).toHaveTextContent('не соответствует выбранной версии');expect(screen.getByRole('button',{name:'Создать приказ',exact:true})).toBeDisabled();
-  fireEvent.submit(screen.getByRole('button',{name:'Создать приказ',exact:true}).closest('form')!);expect(createManualPersonnelOrderDraft).not.toHaveBeenCalled();
+  expect(await screen.findByRole('alert')).toHaveTextContent('не соответствует выбранной версии');expect(screen.getByRole('button',{name:'Создать приказ'})).toBeDisabled();
+  fireEvent.submit(screen.getByRole('button',{name:'Создать приказ'}).closest('form')!);expect(createManualPersonnelOrderDraft).not.toHaveBeenCalled();
 });
 
 async function selectType(type: "LEAVE.UNPAID.GRANT" | "LEAVE.CHILDCARE.GRANT" | "TRANSFER") {
@@ -228,8 +228,45 @@ async function chooseTypeInMenu(type: string) {
   await waitFor(() => expect(screen.getByRole("button", { name: "Тип кадрового приказа" })).toBeEnabled());
   fireEvent.click(screen.getByRole("button", { name: "Тип кадрового приказа" }));
   fireEvent.change(screen.getByRole("searchbox"), { target: { value: personnelOrderTypeLabel(type, "kk") } });
-  fireEvent.click(screen.getByRole("menuitem", { name: personnelOrderTypeLabel(type, "kk"), exact: true }));
+  fireEvent.click(screen.getByRole("menuitem", { name: personnelOrderTypeLabel(type, "kk") }));
 }
+
+it.each(['25','50'])('creates simple supplementary pay through template 4 with %s percent and no replacement or rates', async percent=>{
+  const variant={template_id:4,template_version_id:6,version_number:1,name_ru:'О дополнительной оплате',name_kk:'Қосымша ақы туралы',title_ru:'О дополнительной оплате',title_kk:'Қосымша ақы туралы',is_default:true};
+  vi.mocked(getPersonnelOrderPublishedVariants).mockImplementation(async code=>({items:code==='SUPPLEMENTARY_PAY'?[variant]:[],independent_supported:true}));
+  setup();
+  vi.mocked(getPersonnelOrderPublishedTemplateTitle).mockResolvedValue({...variant,item_type_code:'SUPPLEMENTARY_PAY'});
+  vi.mocked(getEmployee).mockResolvedValue({...employeeDetail,assignments:[]} as never);
+  await chooseTypeInMenu('SUPPLEMENTARY_PAY');
+  expect(screen.getByLabelText('Основание (RU)')).toHaveValue('Личное заявление');
+  expect(screen.getByLabelText('Основание (KK)')).toHaveValue('Жеке өтініш');
+  expect(screen.getByTestId('personnel-order-create-blockers')).not.toHaveTextContent('Заполните поле «Основание');
+  const bases=percent==='25'?{ru:'Личное заявление',kk:'Жеке өтініш'}:{ru:'Служебная записка',kk:'Қызметтік хат'};
+  if(percent==='50'){
+    fireEvent.change(screen.getByLabelText('Основание (RU)'),{target:{value:bases.ru}});
+    fireEvent.change(screen.getByLabelText('Основание (KK)'),{target:{value:bases.kk}});
+  }
+  await selectEmployee();
+  expect(screen.getByLabelText('Основание (RU)')).toHaveValue(bases.ru);
+  expect(screen.getByLabelText('Основание (KK)')).toHaveValue(bases.kk);
+  const selector=await screen.findByRole('combobox',{name:'Доплата'});
+  expect(Array.from(selector.querySelectorAll('option')).map(o=>o.value)).toEqual(['','25','50']);
+  expect(screen.queryByTestId('replacement-fields')).not.toBeInTheDocument();
+  for(const label of ['Дополнительная ставка','Общая ставка','Замещаемый сотрудник (RU)','База расчёта доплаты (RU)'])expect(screen.queryByLabelText(label)).not.toBeInTheDocument();
+  for(const [label,value] of [['Номер приказа','TEST-simple-pay'],['Дата приказа','2026-10-10'],['Дата действия','2026-02-02']])fireEvent.change(screen.getByLabelText(label),{target:{value}});
+  const submit=screen.getByRole('button',{name:'Создать приказ'});
+  expect(submit).toBeDisabled();
+  fireEvent.change(selector,{target:{value:percent}});
+  vi.mocked(previewPersonnelOrderHeaderDuplicate).mockResolvedValue({blocking:false,warnings:[],candidates:[]});
+  vi.mocked(createManualPersonnelOrderDraft).mockResolvedValue({order_id:1} as never);
+  await waitFor(()=>expect(screen.queryByTestId('personnel-order-create-blockers')?.textContent||'').toBe(''));
+  expect(submit).toBeEnabled();
+  expect(screen.getByLabelText('ФИО в дательном падеже (RU)')).not.toHaveValue('');
+  fireEvent.click(submit);
+  await waitFor(()=>expect(createManualPersonnelOrderDraft).toHaveBeenCalledWith(expect.objectContaining({template_version_id:6,item_type_code:'SUPPLEMENTARY_PAY',effective_date:'2026-02-02',item_payload:expect.objectContaining({allowance:expect.objectContaining({percent:Number(percent),basis_type:'RECIPIENT_BASE_SALARY',basis_ru:bases.ru,basis_kk:bases.kk})})})));
+  const payload=vi.mocked(createManualPersonnelOrderDraft).mock.calls[0][0].item_payload!;
+  expect(payload).not.toHaveProperty('replacement');expect(payload).not.toHaveProperty('concurrent');
+});
 
 async function selectUnpaid() {
   await selectType("LEAVE.UNPAID.GRANT");
@@ -239,7 +276,7 @@ async function selectUnpaid() {
 async function selectEmployee() {
   fireEvent.change(screen.getByLabelText("Сотрудник"), { target: { value: "Иль" } });
   fireEvent.click(await screen.findByRole("option", { name: /^Ильясова Ассель Адиловна/ }));
-  await waitFor(() => expect(screen.getByLabelText("Подразделение")).toBeInTheDocument());
+  await waitFor(() => expect(screen.getByTestId("selected-employee-id")).toHaveValue("383"));
 }
 
 async function fillValidUnpaid() {
@@ -260,6 +297,23 @@ it.each(PERSONNEL_ORDER_CREATE_TYPE_OPTIONS.map(option => option.value))("offers
     expect(screen.getByLabelText("Лауазым KZ")).toHaveValue("Дәрігер");
     fireEvent.change(screen.getByLabelText("Лауазым KZ"),{target:{value:"Ручная форма"}});
     expect(screen.getByLabelText("Лауазым KZ")).toHaveValue("Ручная форма");return;
+  }
+  if (type === "CONCURRENT_DUTY_END") {
+    expect(screen.getByLabelText("Дополнительная должность (RU)")).toHaveValue("");
+    expect(screen.getByLabelText("ФИО в родительном падеже (RU)")).toHaveValue("");
+    expect(screen.getByLabelText("Оставшаяся общая ставка")).toHaveValue(null);
+    return;
+  }
+  if (type === "CONCURRENT_DUTY_START") {
+    expect(screen.getByLabelText("Дополнительная должность (RU)")).toHaveValue("");
+    expect(screen.getByLabelText("ФИО в дательном падеже (RU)")).toHaveValue("");
+    return;
+  }
+  if (type === "TRANSFER") {
+    expect(screen.getByLabelText("Новая должность (RU)")).toHaveValue("");
+    fireEvent.change(screen.getByLabelText("Новая должность (KK)"), { target: { value: "Дәрігер" } });
+    expect(screen.getByLabelText("Новая должность (KK)")).toHaveValue("Дәрігер");
+    return;
   }
   expect(screen.getByLabelText("Должность в тексте приказа (RU)")).toHaveValue("Врач каталога");
   expect(screen.getByLabelText("Должность в тексте приказа (KK)")).toHaveValue("дәрігері каталога");
@@ -456,7 +510,7 @@ it("uses a canonical title when PUBLISHED template is absent", async () => {
   vi.mocked(getPersonnelOrderPublishedTemplateTitle).mockRejectedValueOnce(new Error("not found"));
   await selectType("TRANSFER");
   expect(await screen.findByRole("alert")).toHaveTextContent("not found");
-  expect(screen.getByRole("button",{name:"Создать приказ",exact:true})).toBeDisabled();
+  expect(screen.getByRole("button",{name:"Создать приказ"})).toBeDisabled();
   expect(screen.getByLabelText("Название приказа")).toHaveValue("Ауыстыру туралы");
   expect(createManualPersonnelOrderDraft).not.toHaveBeenCalled();
 });
@@ -673,4 +727,96 @@ it("keeps the schema blocker beside Create even after required recall fields are
   expect(field).toHaveValue("дәрігер");
   expect(screen.getByTestId("personnel-order-create-blockers")).not.toHaveTextContent("Лауазымды KZ тілінде толтырыңыз");
   expect(screen.getByRole("button",{name:"Создать приказ"})).toBeDisabled();
+});
+
+
+it("requires transfer destination, rate and bilingual basis, then opens the created order", async () => {
+  const {onCreated, onClose} = setup();
+  await selectType("TRANSFER"); await selectEmployee();
+  fireEvent.change(screen.getByLabelText("Номер приказа"), {target:{value:"TRANSFER-TEST"}});
+  fireEvent.change(screen.getByLabelText("Дата приказа"), {target:{value:"2026-10-08"}});
+  fireEvent.change(screen.getByLabelText("Дата действия"), {target:{value:"2026-10-09"}});
+  expect(screen.getByRole("button",{name:"Создать приказ"})).toBeDisabled();
+  expect(screen.getByTestId("personnel-order-create-blockers")).toHaveTextContent("Основание перевода (KK)");
+  for (const [label,value] of [["Новая должность (RU)","Врач"],["Новая должность (KK)","Дәрігер"],["Новое подразделение (RU)","Терапия"],["Новое подразделение (KK)","Терапия бөлімшесі"],["Ставка после перевода","0.5"],["Основание перевода (RU)","Заявление"],["Основание перевода (KK)","Өтініш"]]) fireEvent.change(screen.getByLabelText(label),{target:{value}});
+  vi.mocked(previewPersonnelOrderHeaderDuplicate).mockResolvedValue({blocking:false,warnings:[],candidates:[]});
+  const result = {order_id:77} as never; vi.mocked(createManualPersonnelOrderDraft).mockResolvedValue(result);
+  await waitFor(() => expect(screen.getByRole("button",{name:"Создать приказ"})).toBeEnabled());
+  fireEvent.click(screen.getByRole("button",{name:"Создать приказ"}));
+  await waitFor(() => expect(onCreated).toHaveBeenCalledWith(result)); expect(onClose).toHaveBeenCalled();
+  expect(createManualPersonnelOrderDraft).toHaveBeenCalledWith(expect.objectContaining({employee_id:383,item_payload:{transfer:{position_ru:"Врач",position_kk:"Дәрігер",org_unit_ru:"Терапия",org_unit_kk:"Терапия бөлімшесі",rate:0.5,basis_ru:"Заявление",basis_kk:"Өтініш"}}}));
+});
+
+it("submits only explicit additional placement, dative names and concurrent rates", async () => {
+  const {onCreated} = setup();await chooseTypeInMenu("CONCURRENT_DUTY_START");await selectEmployee();
+  for(const [label,value] of [["Номер приказа","CONCURRENT-TEST"],["Дата приказа","2026-05-21"],["Дата действия","2026-05-21"],["Дополнительная должность (RU)","Врач"],["Дополнительная должность (KK)","дәрігер"],["Дополнительное подразделение (RU)","Терапия"],["Дополнительное подразделение (KK)","терапия бөлімшесінің"],["Дополнительная должность в родительном падеже (RU)","врача"],["Дополнительное подразделение в родительном падеже (RU)","отделения терапии"],["ФИО в дательном падеже (RU)","Ильясовой Ассель Адиловне"],["ФИО в дательном падеже (KK)","Ассель Адиловна Ильясоваға"],["Дополнительная ставка","0.5"],["Общая ставка","1.5"],["Основание совмещения (RU)","личное заявление"],["Основание совмещения (KK)","жеке өтініш"]]) fireEvent.change(screen.getByLabelText(label),{target:{value}});
+  vi.mocked(previewPersonnelOrderHeaderDuplicate).mockResolvedValue({blocking:false,warnings:[],candidates:[]});vi.mocked(createManualPersonnelOrderDraft).mockResolvedValue({order_id:78} as never);
+  await waitFor(()=>expect(screen.getByRole("button",{name:"Создать приказ"})).toBeEnabled());fireEvent.click(screen.getByRole("button",{name:"Создать приказ"}));await waitFor(()=>expect(onCreated).toHaveBeenCalled());
+  expect(createManualPersonnelOrderDraft).toHaveBeenCalledWith(expect.objectContaining({item_type_code:"CONCURRENT_DUTY_START",item_payload:{concurrent:expect.objectContaining({position_ru:"Врач",position_kk:"дәрігер",position_genitive_ru:"врача",org_unit_genitive_ru:"отделения терапии",employee_dative_ru:"Ильясовой Ассель Адиловне",rate:0.5,total_rate:1.5})}}));
+});
+
+it('shows the exact conflicting order and links directly without journal filters',async()=>{
+ setup();await chooseTypeInMenu('LEAVE.ANNUAL.RECALL');await fillRecall();
+ vi.mocked(previewPersonnelOrderHeaderDuplicate).mockResolvedValue({blocking:true,warnings:[],candidates:[{order_id:456,order_number:'RECALL-SLOW',order_date:'2026-10-08',status:'SIGNED',order_type_code:'HIRE',is_conflict:true,can_open:true}]});
+ const button=screen.getByRole('button',{name:'Создать приказ'});await waitFor(()=>expect(button).toBeEnabled());fireEvent.click(button);
+ expect(await screen.findByRole('alert')).toHaveTextContent('№ RECALL-SLOW от 08.10.2026 (ID 456)');
+ expect(screen.getByRole('link',{name:/Открыть приказ/})).toHaveAttribute('href','/directory/personnel/orders?order_id=456&tab=data');
+ expect(createManualPersonnelOrderDraft).not.toHaveBeenCalled();
+});
+
+it('does not send two creation requests when the same form is submitted twice',async()=>{
+ setup();await chooseTypeInMenu('LEAVE.ANNUAL.RECALL');await fillRecall();
+ let resolve!: (value:Awaited<ReturnType<typeof previewPersonnelOrderHeaderDuplicate>>)=>void;
+ vi.mocked(previewPersonnelOrderHeaderDuplicate).mockImplementation(()=>new Promise(done=>{resolve=done;}));
+ vi.mocked(createManualPersonnelOrderDraft).mockResolvedValue({order_id:789,order_number:'RECALL-SLOW'} as never);
+ const button=screen.getByRole('button',{name:'Создать приказ'});await waitFor(()=>expect(button).toBeEnabled());
+ fireEvent.submit(button.closest('form')!);fireEvent.submit(button.closest('form')!);expect(previewPersonnelOrderHeaderDuplicate).toHaveBeenCalledTimes(1);
+ await act(async()=>resolve({blocking:false,warnings:[],candidates:[]}));await waitFor(()=>expect(createManualPersonnelOrderDraft).toHaveBeenCalledTimes(1));
+});
+
+it('keeps a successful creation when opening its card fails and prevents a retry',async()=>{
+ setup(vi.fn(),()=>{throw new Error('card failed');});await chooseTypeInMenu('LEAVE.ANNUAL.RECALL');await fillRecall();
+ vi.mocked(previewPersonnelOrderHeaderDuplicate).mockResolvedValue({blocking:false,warnings:[],candidates:[]});
+ vi.mocked(createManualPersonnelOrderDraft).mockResolvedValue({order_id:789,order_number:'RECALL-SLOW'} as never);
+ const button=screen.getByRole('button',{name:'Создать приказ'});await waitFor(()=>expect(button).toBeEnabled());fireEvent.click(button);
+ expect(await screen.findByRole('alert')).toHaveTextContent('создан (ID 789)');expect(screen.getByRole('link',{name:/Открыть созданный приказ/})).toHaveAttribute('href','/directory/personnel/orders?order_id=789&tab=data');
+ fireEvent.submit(button.closest('form')!);expect(createManualPersonnelOrderDraft).toHaveBeenCalledTimes(1);expect(button).toBeDisabled();
+});
+
+it("requires an explicit allowance basis and hides rates for a published replacement PAY variant", async () => {
+  const variant={template_id:24,template_version_id:36,version_number:1,name_ru:"TEST замещение с доплатой",name_kk:"TEST қосымша ақы",title_ru:"TEST замещение с доплатой",title_kk:"TEST қосымша ақы",is_default:false,replacement_mode:"PAY" as const};
+  vi.mocked(getPersonnelOrderPublishedVariants).mockImplementation(async code=>({items:code==="CONCURRENT_DUTY_START"?[variant]:[],independent_supported:true,creation_supported:true}));
+  setup();vi.mocked(getPersonnelOrderPublishedTemplateTitle).mockResolvedValue({...variant,item_type_code:"CONCURRENT_DUTY_START"});
+  await waitFor(()=>expect(screen.getByRole("button",{name:"Тип кадрового приказа"})).toBeEnabled());
+  fireEvent.click(screen.getByRole("button",{name:"Тип кадрового приказа"}));
+  fireEvent.change(screen.getByRole("searchbox"),{target:{value:variant.name_kk}});
+  fireEvent.click(screen.getByRole("menuitem",{name:variant.name_kk}));
+  await selectEmployee();
+  expect(screen.queryByLabelText("Дополнительная ставка",{exact:true})).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Общая ставка",{exact:true})).not.toBeInTheDocument();
+  expect(screen.getByLabelText("База расчёта доплаты (RU)",{exact:true})).toHaveValue("");
+  expect(screen.getByLabelText("База расчёта доплаты (KK)",{exact:true})).toHaveValue("");
+  expect(screen.getByLabelText("Срок замещения",{exact:true})).toHaveValue("");
+  expect(screen.getByRole("button",{name:"Создать приказ"})).toBeDisabled();
+});
+
+it("selects only additional assignments for cessation and submits an explicit remaining total", async () => {
+  const {onCreated}=setup();
+  vi.mocked(getEmployee).mockResolvedValue({...employeeDetail,additional_assignments:[
+    {assignment_id:1,is_primary:true,position_id:7,org_unit_id:2,rate:1,position:{name:"Директор"},org_unit:{name:"Администрация"}},
+    {assignment_id:2,is_primary:false,position_id:6,org_unit_id:59,rate:0.5,position:{name:"Врач",name_kk:"дәрігер"},org_unit:{name:"Терапия",name_kk:"терапия бөлімшесінің"}},
+  ]} as never);
+  await chooseTypeInMenu("CONCURRENT_DUTY_END");await selectEmployee();
+  expect(getEmployee).toHaveBeenCalledWith("383",true);
+  const assignment=screen.getByLabelText("Прекращаемое дополнительное назначение");
+  expect(assignment).toHaveValue("");expect(screen.queryByRole("option",{name:/Директор/})).not.toBeInTheDocument();
+  fireEvent.change(assignment,{target:{value:"2"}});
+  expect(screen.getByLabelText("Дополнительная должность (RU)")).toHaveValue("Врач");
+  expect(screen.getByLabelText("Дополнительная должность (KK)")).toHaveValue("дәрігер");
+  expect(screen.getByLabelText("Снимаемая ставка")).toHaveValue(0.5);
+  expect(screen.getByLabelText("Оставшаяся общая ставка")).toHaveValue(null);
+  for(const[label,value]of [["Номер приказа","END-TEST"],["Дата приказа","2026-07-01"],["Дата действия","2026-07-01"],["Дополнительная должность в родительном падеже (RU)","врача"],["Дополнительное подразделение в родительном падеже (RU)","отделения терапии"],["ФИО в родительном падеже (RU)","Ильясовой Ассель Адиловны"],["ФИО в исходном падеже (KK)","Ассель Адиловна Ильясовадан"],["Оставшаяся общая ставка","0.2"],["Основание прекращения совмещения (RU)","личное заявление"],["Основание прекращения совмещения (KK)","жеке өтініш"]])fireEvent.change(screen.getByLabelText(label),{target:{value}});
+  vi.mocked(previewPersonnelOrderHeaderDuplicate).mockResolvedValue({blocking:false,warnings:[],candidates:[]});vi.mocked(createManualPersonnelOrderDraft).mockResolvedValue({order_id:78} as never);
+  await waitFor(()=>expect(screen.getByRole("button",{name:"Создать приказ"})).toBeEnabled());fireEvent.click(screen.getByRole("button",{name:"Создать приказ"}));await waitFor(()=>expect(onCreated).toHaveBeenCalled());
+  expect(createManualPersonnelOrderDraft).toHaveBeenCalledWith(expect.objectContaining({item_type_code:"CONCURRENT_DUTY_END",item_payload:{concurrent:expect.objectContaining({assignment_id:2,position_id:6,org_unit_id:59,employee_genitive_ru:"Ильясовой Ассель Адиловны",employee_ablative_kk:"Ассель Адиловна Ильясовадан",rate:0.5,remaining_rate:0.2})}}));
 });

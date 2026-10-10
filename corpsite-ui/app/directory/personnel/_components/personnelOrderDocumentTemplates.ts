@@ -1,3 +1,5 @@
+import { withoutAutomaticOrderClosing } from "../_lib/personnelOrderClosingText";
+import { formatPersonnelOrderActionStartDate } from "../_lib/personnelOrderPrintFormat";
 import type {
   PersonnelOrderDetailResponse,
   PersonnelOrderEditorialState,
@@ -302,7 +304,7 @@ export function renderPersonnelOrderDocument(
   const snapshotClosingBlock = editorial?.order_blocks.find(
     (block) => block.block_type === "closing" && block.locale === language,
   );
-  const snapshotClosing = snapshotClosingBlock?.override_text === "" ? null : editorialText(snapshotClosingBlock);
+  const snapshotClosing = snapshotClosingBlock?.override_text === "" ? null : withoutAutomaticOrderClosing(editorialText(snapshotClosingBlock));
   const snapshotPoints = activeItems.map((item) => {
     const group = editorial?.items.find((entry) => entry.order_item_id === item.item_id);
     const body = editorialText(group?.blocks.find((block) => block.block_type === "body" && block.locale === language));
@@ -386,7 +388,7 @@ export function renderPersonnelOrderDocument(
     };
   });
   const closingBlock = editorial?.order_blocks.find((block) => block.block_type === "closing" && block.locale === language);
-  const closing = orderBlockOverride("closing");
+  const closing = withoutAutomaticOrderClosing(orderBlockOverride("closing"));
   const closingIsSuppressed = closingSuppressed(closingBlock);
   const isChildcareReturn = String(detail.order.order_type_code).toUpperCase() === "RETURN_FROM_CHILDCARE_LEAVE";
   return {
@@ -488,7 +490,7 @@ function hireForLanguage(detail: PersonnelOrderDetailResponse, language: Personn
 }
 
 function transferForLanguage(detail: PersonnelOrderDetailResponse, language: PersonnelOrderDocumentLanguage): RenderedOrderDocument {
-  const item = primaryItem(detail, "TRANSFER"); const target = assignmentForItem(item, language); const name = employeeName(item); const when = effectiveDate(item.effective_date, language);
+  const item = primaryItem(detail, "TRANSFER"); const target = assignmentForItem(item, language); const name = employeeName(item); const when = formatPersonnelOrderActionStartDate(item.effective_date, language);
   const russianEmployee = russianOrderEmployee(name, "transfer");
   const russianPoint = russianEmployee
     ? `Перевести ${russianEmployee} с ${when} на должность ${russianOrderTarget(target)} с оплатой ${target.rate} ставки.`
@@ -497,7 +499,7 @@ function transferForLanguage(detail: PersonnelOrderDetailResponse, language: Per
 }
 
 function concurrentDutyForLanguage(detail: PersonnelOrderDetailResponse, language: PersonnelOrderDocumentLanguage): RenderedOrderDocument {
-  const item = primaryItem(detail, "CONCURRENT_DUTY_START"); const target = assignmentForItem(item, language); const name = employeeName(item); const when = effectiveDate(item.effective_date, language);
+  const item = primaryItem(detail, "CONCURRENT_DUTY_START"); const target = assignmentForItem(item, language); const name = employeeName(item); const when = formatPersonnelOrderActionStartDate(item.effective_date, language);
   const russianEmployee = russianOrderEmployee(name, "concurrent");
   const russianPoint = russianEmployee
     ? `Разрешить ${russianEmployee} с ${when} совмещение обязанностей по должности ${russianOrderTarget(target)} с оплатой ${target.rate} ставки.`

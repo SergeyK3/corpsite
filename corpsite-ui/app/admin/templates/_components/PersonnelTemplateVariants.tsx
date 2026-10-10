@@ -2,23 +2,23 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { usePersonnelSectionLanguage } from "@/app/directory/personnel/_lib/personnelSectionLanguage";
 import PersonnelTemplateCopyDialog from "./PersonnelTemplateCopyDialog";
-import PersonnelTemplateRemoveDialog from "./PersonnelTemplateRemoveDialog";
 import PersonnelTemplateTypeDialog from "./PersonnelTemplateTypeDialog";
 import { listPersonnelIndependentTemplates, listPersonnelTemplateVersions,
   type PersonnelIndependentTemplate, type PersonnelOrderTemplateCatalogItem, type PersonnelOrderTemplateDraft } from "../_lib/personnelOrderTemplatesApi.client";
 
-export default function PersonnelTemplateVariants({ item, catalog = [item], initialDraft, initialTemplateId, onSelected, onCreated, renderEditor }: {
+export default function PersonnelTemplateVariants({ item, catalog = [item], initialDraft, initialTemplateId, onSelected, onCreated, onCatalogChanged, renderEditor }: {
   item: PersonnelOrderTemplateCatalogItem; catalog?: PersonnelOrderTemplateCatalogItem[]; initialDraft?: PersonnelOrderTemplateDraft; initialTemplateId?: number;
   onSelected?: (templateId: number | undefined) => void;
   onCreated?: (draft: PersonnelOrderTemplateDraft) => void;
-  renderEditor: (templateId: number | undefined, onChanged: (published?: PersonnelOrderTemplateDraft) => void, copyActions: ReactNode, copyForm: ReactNode, createdDraft?: PersonnelOrderTemplateDraft, editorItem?: PersonnelOrderTemplateCatalogItem, selectedTemplate?: PersonnelIndependentTemplate) => ReactNode;
+  onCatalogChanged?: () => void;
+  renderEditor: (templateId: number | undefined, onChanged: (published?: PersonnelOrderTemplateDraft) => void, copyActions: ReactNode, copyForm: ReactNode, createdDraft?: PersonnelOrderTemplateDraft, editorItem?: PersonnelOrderTemplateCatalogItem, selectedTemplate?: PersonnelIndependentTemplate, onRemoved?: () => void) => ReactNode;
 }) {
   const [editorItem, setEditorItem] = useState(item);
   const { language, ready, error: languageError, reload: reloadLanguage } = usePersonnelSectionLanguage();
   const kk = language === "kk";
   const [templates, setTemplates] = useState<PersonnelIndependentTemplate[]>([]);
   const [selected, setSelected] = useState<number | undefined>(initialDraft?.template_id ?? initialTemplateId);
-  const [removing, setRemoving] = useState(false);
+  const [selectionCleared, setSelectionCleared] = useState(false);
   const [changingType, setChangingType] = useState(false);
   const [versions, setVersions] = useState<PersonnelOrderTemplateDraft[]>([]);
   const [source, setSource] = useState<number>();
@@ -52,6 +52,10 @@ export default function PersonnelTemplateVariants({ item, catalog = [item], init
   const [versionsLoading, setVersionsLoading] = useState(false);
   const [loadedTemplateId, setLoadedTemplateId] = useState<number | null>();
   useEffect(() => {
+    if (initialTemplateId == null || initialTemplateId === selected) return;
+    setSelected(initialTemplateId); setSelectionCleared(false); setCreatedDraft(undefined); setCopying(false);
+  }, [initialTemplateId]);
+  useEffect(() => {
     let cancelled = false;
     // Keep the validated card mounted while refreshing the same type after
     // save/publication, so its success/error state is not discarded.
@@ -64,7 +68,7 @@ export default function PersonnelTemplateVariants({ item, catalog = [item], init
       loadedType.current = editorItem.type_code;
       setTemplatesLoaded(true);
       const valid = result.items.some(t => t.template_id === selected);
-      if (!valid) {
+      if (!valid && !selectionCleared) {
         const fallback = result.items.find(t => t.is_default)?.template_id ?? result.items[0]?.template_id;
         setSelected(fallback);
         if (selected != null) onSelected?.(fallback);
@@ -118,27 +122,27 @@ export default function PersonnelTemplateVariants({ item, catalog = [item], init
     {languageError ? <button type="button" onClick={reloadLanguage} className="rounded border px-3 py-2 text-sm">{kk ? "Тілді қайта жүктеу" : "Повторить загрузку языка"}</button> : null}
     {versions.length ? <label className="text-sm">{kk ? "Бастапқы нұсқа" : "Исходная версия"}<select aria-label={kk ? "Бастапқы нұсқа" : "Исходная версия"} value={source ?? ""}
       onChange={event => setSource(Number(event.target.value))} className="ml-2 rounded border p-2">
-      {versions.map(v => <option key={v.template_version_id} value={v.template_version_id}>v{v.version_number} · {v.status === "DRAFT" ? (kk ? "Жоба" : "Черновик") : v.status === "PUBLISHED" ? (kk ? "Жарияланған" : "Опубликован") : (kk ? "Мұрағат" : "Архив")}</option>)}
+      {versions.map(v => <option key={v.template_version_id} value={v.template_version_id}>v{v.version_number} · {kk ? "Нұсқа ID" : "ID версии"} {v.template_version_id} · {v.status}</option>)}
     </select></label> : <span className="text-sm text-zinc-500">{!templatesLoaded || versionsLoading ? (kk ? "Жүктелуде…" : "Загрузка…") : initialAvailable ? (kk ? "Бастапқы нұсқа: кірістірілген үлгі" : "Исходная основа: встроенный шаблон") : (kk ? "Бастапқы нұсқа қолжетімсіз" : "Исходная версия недоступна")}</span>}
     <button type="button" onClick={() => setRefresh(n => n + 1)} className="rounded border px-3 py-2 text-sm">{kk ? "Жаңарту" : "Обновить версии"}</button>
-    {selectedTemplate && !selectedTemplate.is_default ? <button type="button" onClick={() => setRemoving(true)} className="rounded border border-red-600 px-3 py-2 text-sm text-red-600">{kk ? "Жою" : "Удалить"}</button> : null}
+
     {selectedTemplate && !selectedTemplate.is_default && versionsReady && versions.length === 1 && versions[0].status === "DRAFT" ? <button type="button" onClick={() => setChangingType(true)} className="rounded border px-3 py-2 text-sm">{kk ? "Үлгі түрін өзгерту…" : "Изменить вид шаблона…"}</button> : null}
   </>;
   const copyForm = copying ? <PersonnelTemplateCopyDialog item={editorItem} catalog={catalog} templateId={selected}
     sourceVersion={versions.find(v => v.template_version_id === source)} onClose={() => setCopying(false)}
-    onCreated={(draft, target) => { setEditorItem(target); setCreatedDraft(draft); setSelected(draft.template_id); setRefresh(n => n + 1); setCopying(false); onCreated?.(draft); }} /> : null;
+    onCreated={(draft, target) => { setSelectionCleared(false); setEditorItem(target); setCreatedDraft(draft); setSelected(draft.template_id); setRefresh(n => n + 1); setCopying(false); onCreated?.(draft); }} /> : null;
   return <section className="mt-4 space-y-3" data-testid="personnel-independent-templates">
-    <div role="group" aria-label={kk ? "Үлгі нұсқалары" : "Самостоятельные шаблоны"} className="flex max-h-24 flex-wrap gap-2 overflow-y-auto">
+    <div role="group" aria-label={kk ? "Үлгі нұсқалары" : "Самостоятельные шаблоны"} className="grid gap-2 sm:grid-cols-2">
       {templates.map(t => <button key={t.template_id} type="button" aria-pressed={selected === t.template_id}
-        data-template-id={t.template_id} onClick={() => { setSelected(t.template_id); setCreatedDraft(undefined); setCopying(false); setError(""); onSelected?.(t.template_id); }} className="rounded border px-3 py-2">
-        {kk ? t.name_kk || t.name_ru : t.name_ru || t.name_kk}{t.is_default ? (kk ? " · Әдепкі" : " · По умолчанию") : ""}
+        data-template-id={t.template_id} onClick={() => { setSelectionCleared(false); setSelected(t.template_id); setCreatedDraft(undefined); setCopying(false); setError(""); onSelected?.(t.template_id); }} className="rounded border px-3 py-2">
+        {kk ? t.name_kk || t.name_ru : t.name_ru || t.name_kk}{t.is_default ? (kk ? " · Әдепкі" : " · По умолчанию") : ""}<span className="ml-2 text-xs text-zinc-500">#{t.template_id}</span>
       </button>)}
     </div>
     {errorMessage && !copying && !legacySchema ? <p role="alert">{errorMessage}{loadStatus ? ` (HTTP ${loadStatus})` : ""}</p> : null}
     {publication && publication.template_id === selected ? <p role="status" data-testid="template-publication-success" className="text-sm text-emerald-700">{kk ? `«${selectedTemplate?.name_kk || publication.title_kk}» үлгісінің v${publication.version_number} нұсқасы жарияланды.` : `Версия v${publication.version_number} шаблона «${selectedTemplate?.name_ru || publication.title_ru}» опубликована.`}</p> : null}
     {copyForm}
     {changingType && versions[0] && selectedTemplate ? <PersonnelTemplateTypeDialog draft={{...versions[0], name_ru: selectedTemplate.name_ru, name_kk: selectedTemplate.name_kk}} catalog={catalog} onClose={() => setChangingType(false)} onChanged={draft => { setChangingType(false); setCreatedDraft(draft); setEditorItem(catalog.find(item => item.type_code === draft.item_type_code)!); setRefresh(n => n + 1); onCreated?.(draft); }} /> : null}
-    {removing && selectedTemplate ? <PersonnelTemplateRemoveDialog template={selectedTemplate} onClose={() => setRemoving(false)} onRemoved={() => { setRemoving(false); setSelected(undefined); setCreatedDraft(undefined); setRefresh(n => n + 1); onSelected?.(undefined); }} /> : null}
-    {templatesLoaded && (selected == null || selectedTemplate) ? renderEditor(selected, published => { if (published?.status === "PUBLISHED") { setPublication(published); setCreatedDraft(undefined); } setRefresh(n => n + 1); }, copyActions, null, createdDraft?.template_id === selected ? createdDraft : undefined, editorItem, selectedTemplate) : <div>{copyActions}{!error ? <p role="status">{kk ? "Үлгі жүктелуде…" : "Загрузка шаблона…"}</p> : null}</div>}
+
+    {selectionCleared ? <p role="status">{kk ? "Үлгіні таңдаңыз." : "Выберите шаблон."}</p> : templatesLoaded && (selected == null || selectedTemplate) ? renderEditor(selected, published => { if (published?.status === "PUBLISHED") { setPublication(published); setCreatedDraft(undefined); } setRefresh(n => n + 1); onCatalogChanged?.(); }, copyActions, null, createdDraft?.template_id === selected ? createdDraft : undefined, editorItem, selectedTemplate, () => { setSelectionCleared(true); setSelected(undefined); setCreatedDraft(undefined); setPublication(undefined); setRefresh(n => n + 1); onSelected?.(undefined); onCatalogChanged?.(); }) : <div>{copyActions}{!error ? <p role="status">{kk ? "Үлгі жүктелуде…" : "Загрузка шаблона…"}</p> : null}</div>}
   </section>;
 }

@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "item_type_code": "LEAVE.CHILDCARE.GRANT",
+  "title_ru": "О неоплачиваемом отпуске по уходу за ребенком",
+  "title_kk": "Бала күтіміне байланысты жалақы сақталмайтын демалыс туралы",
+  "preamble_ru": "В соответствии со статьёй 100 Трудового кодекса Республики Казахстан",
+  "preamble_kk": "Қазақстан Республикасы Еңбек Кодексінің 100 - бабына сәйкес",
+  "body_template_ru": "Предоставить {{employee.full_name_dative_ru}} (должность: {{position.document_nominative_ru}}, подразделение: «{{org_unit.title_ru}}») отпуск без сохранения заработной платы по уходу за ребёнком до достижения им возраста трёх лет с {{leave.start_ru}} по {{leave.end_ru}}.",
+  "body_template_kk": "{{org_unit.document_genitive_kk}} {{position.document_possessive_kk}} {{employee.full_name_dative_kk}} {{leave.period_clause_kk}} бала үш жасқа толғанға дейін бала күтіміне байланысты жалақысы сақталмайтын демалыс берілсін.",
+  "basis_template_ru": "Основание: личное заявление {{employee.full_name_genitive_ru}}{{basis.application_date_ru}}{{basis.application_number_suffix}}, свидетельство о рождении от {{basis.birth_certificate_date_ru}} № {{basis.birth_certificate_number}}.",
+  "basis_template_kk": "Негіз: {{employee.full_name_genitive_kk}}{{basis.application_date_kk}}{{basis.application_number_suffix}} жеке өтініші, {{basis.birth_certificate_date_kk}} № {{basis.birth_certificate_number}} туу туралы куәлік.",
+  "allowed_variables": [
+    "employee.full_name_dative_ru",
+    "position.document_nominative_ru",
+    "org_unit.title_ru",
+    "leave.start_ru",
+    "leave.end_ru",
+    "org_unit.document_genitive_kk",
+    "position.document_possessive_kk",
+    "employee.full_name_dative_kk",
+    "leave.period_clause_kk",
+    "employee.full_name_genitive_ru",
+    "basis.application_date_ru",
+    "basis.application_number_suffix",
+    "basis.birth_certificate_date_ru",
+    "basis.birth_certificate_number",
+    "employee.full_name_genitive_kk",
+    "basis.application_date_kk",
+    "basis.birth_certificate_date_kk"
+  ],
+  "required_variables": {
+    "basis_template_kk": [
+      "employee.full_name_genitive_kk",
+      "basis.application_date_kk",
+      "basis.application_number_suffix",
+      "basis.birth_certificate_date_kk",
+      "basis.birth_certificate_number"
+    ],
+    "basis_template_ru": [
+      "employee.full_name_genitive_ru",
+      "basis.application_date_ru",
+      "basis.application_number_suffix",
+      "basis.birth_certificate_date_ru",
+      "basis.birth_certificate_number"
+    ],
+    "body_template_kk": [
+      "org_unit.document_genitive_kk",
+      "position.document_possessive_kk",
+      "employee.full_name_dative_kk",
+      "leave.period_clause_kk"
+    ],
+    "body_template_ru": [
+      "employee.full_name_dative_ru",
+      "position.document_nominative_ru",
+      "org_unit.title_ru",
+      "leave.start_ru",
+      "leave.end_ru"
+    ]
+  },
+  "base_content_sha256": "cbab83165b920da32b3246db2c97d72ded925fc4d9b7f0dcbc6619510808ca0b",
+  "content_sha256": "cbab83165b920da32b3246db2c97d72ded925fc4d9b7f0dcbc6619510808ca0b"
+}

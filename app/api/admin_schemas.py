@@ -7,6 +7,15 @@ from typing import Any, Dict, List, Optional, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
+class PersonnelReplacementPreview(BaseModel):
+    model_config = {"extra": "forbid"}
+    expected_revision: int = Field(..., ge=1)
+    effective_date: str
+    concurrent: Dict[str, Any]
+    replacement: Dict[str, Any]
+    allowance_recipient: Optional[Dict[str, Any]] = None
+
+
 class PersonnelOrderTemplateVariable(BaseModel):
     code: str
     label: str
@@ -30,6 +39,17 @@ class PersonnelOrderTemplatePilotDetail(BaseModel):
     previews: Dict[str, PersonnelOrderTemplatePreview]
 
 
+class PersonnelTemplateCatalogIdentity(BaseModel):
+    template_id: int
+    name_ru: str
+    name_kk: str
+    is_default: bool
+    template_version_id: Optional[int] = None
+    draft_version_id: Optional[int] = None
+    version_number: Optional[int] = None
+    draft_version_number: Optional[int] = None
+
+
 class PersonnelOrderTemplateCatalogItem(BaseModel):
     type_code: str
     title_ru: str
@@ -46,6 +66,7 @@ class PersonnelOrderTemplateCatalogItem(BaseModel):
     notes: str
     pilot_detail: Optional[PersonnelOrderTemplatePilotDetail] = None
     template_detail: Optional[PersonnelOrderTemplatePilotDetail] = None
+    templates: Optional[List[PersonnelTemplateCatalogIdentity]] = None
 
 
 class PersonnelOrderTemplateCatalogResponse(BaseModel):
@@ -116,8 +137,8 @@ class PersonnelOrderTemplatePublish(BaseModel):
 
 class PersonnelOrderTemplateRemove(BaseModel):
     model_config = {"extra": "forbid"}
-    name_ru: str = Field(..., min_length=1, max_length=200)
-    name_kk: str = Field(..., min_length=1, max_length=200)
+    name_ru: str = Field(..., min_length=1)
+    name_kk: str = Field(..., min_length=1)
 
 
 class PersonnelOrderTemplateTypeChange(BaseModel):

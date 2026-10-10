@@ -15,6 +15,19 @@ import {
 } from "./personnelOrderLabels";
 
 describe("personnelOrderPayload", () => {
+  it("round-trips childcare dates, both grounds and saved RU/KK forms independently", () => {
+    const draft = { ...emptyItemPayloadDraft(), leave_start: "2026-08-01", leave_end: "2029-02-13",
+      application_date: "2026-07-28", application_number: "APP-17", birth_certificate_date: "2026-02-13", birth_certificate_number: "9967264",
+      employee_full_name_dative_ru: "Садырбаевой Асем Бауыржановне", employee_full_name_genitive_ru: "Садырбаевой Асем Бауыржановны", position_document_nominative_ru: "медицинская сестра",
+      org_unit_document_genitive_kk: "Тест бөлімшесінің", position_document_possessive_kk: "мейіргері", employee_full_name_dative_kk: "Асем Бауыржановна Садырбаеваға", employee_full_name_genitive_kk: "Асем Бауыржановна Садырбаеваның" };
+    const saved = buildItemPayload("LEAVE.CHILDCARE.GRANT", draft);
+    expect(saved.basis).toEqual({ kind: "PERSONAL_APPLICATION", date: "2026-07-28", number: "APP-17", birth_certificate: { date: "2026-02-13", number: "9967264" } });
+    const reopened = itemPayloadDraftFromRecord(saved);
+    for (const field of ["leave_start", "leave_end", "application_date", "application_number", "birth_certificate_date", "birth_certificate_number", "employee_full_name_dative_ru", "employee_full_name_genitive_ru", "position_document_nominative_ru", "org_unit_document_genitive_kk", "position_document_possessive_kk", "employee_full_name_dative_kk", "employee_full_name_genitive_kk"] as const) expect(reopened[field]).toBe(draft[field]);
+    const changed = buildItemPayload("LEAVE.CHILDCARE.GRANT", { ...reopened, birth_certificate_date: "2027-04-20" });
+    expect(changed.leave_end).toBe("2029-02-13");
+    expect(changed.basis).toMatchObject({ date: "2026-07-28", number: "APP-17", birth_certificate: { date: "2027-04-20" } });
+  });
   it("serializes single-day and continuous unpaid periods in the versioned contract", () => {
     const single = buildItemPayload("LEAVE.UNPAID.GRANT", {
       ...emptyItemPayloadDraft(), leave_start: "2026-07-07", leave_end: "2026-07-07", application_date: "2026-07-01",

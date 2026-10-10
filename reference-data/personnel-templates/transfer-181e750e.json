@@ -1,0 +1,542 @@
+{
+  "format": "personnel-template-transfer-v1",
+  "implementation_commit": "181e750ec9b9f945db4ad28323302edc25045892",
+  "entries": [
+    {
+      "key": "4",
+      "source": {
+        "template_id": 4,
+        "template_version_id": 6,
+        "version_number": 1
+      },
+      "identity": {
+        "item_type_code": "SUPPLEMENTARY_PAY",
+        "name_ru": "О дополнительной оплате",
+        "name_kk": "Қосымша ақы туралы",
+        "is_default": true
+      },
+      "version": {
+        "status": "PUBLISHED",
+        "based_on_built_in": true,
+        "texts": {
+          "title_ru": "О дополнительной оплате",
+          "title_kk": "Қосымша ақы туралы",
+          "preamble_ru": "В соответствии со статьей 111 Трудового кодекса Республики Казахстан",
+          "preamble_kk": "Қазақстан Республикасының Еңбек Кодексінің 111 - бабына сәйкес",
+          "body_template_ru": "{{allowance.recipient}}, с {{effective_date}} установить доплату в размере {{allowance.percent}}% от {{allowance.basis}} в связи с расширением зоны обслуживания.",
+          "body_template_kk": "{{allowance.recipient}} {{effective_date}} бастап қызмет ету аймағының кеңеюіне байланысты {{allowance.basis}} {{allowance.percent}}% көлемінде қосымша ақы төленсін.",
+          "basis_template_ru": "Основание: {{basis}}.",
+          "basis_template_kk": "Негіз: {{basis}}."
+        }
+      },
+      "contract": {
+        "allowed_variables": [
+          "employee.full_name",
+          "employee.full_name_dative_ru",
+          "employee.full_name_dative_kk",
+          "allowance.recipient",
+          "effective_date",
+          "allowance.percent",
+          "allowance.basis",
+          "basis"
+        ],
+        "required_variables": {},
+        "field_bindings": {
+          "title_ru": [],
+          "title_kk": [],
+          "preamble_ru": [],
+          "preamble_kk": [],
+          "body_template_ru": [
+            "allowance.recipient",
+            "effective_date",
+            "allowance.percent",
+            "allowance.basis"
+          ],
+          "body_template_kk": [
+            "allowance.recipient",
+            "effective_date",
+            "allowance.basis",
+            "allowance.percent"
+          ],
+          "basis_template_ru": [
+            "basis"
+          ],
+          "basis_template_kk": [
+            "basis"
+          ]
+        },
+        "capabilities": {
+          "replacement_mode": null,
+          "replacement_optional_placement": false,
+          "service_area_allowance": false,
+          "simple_allowance": true
+        }
+      },
+      "sha256": "59e5429e4e9c69f2ff4190049932b57689bb5a96d1db1a752e737e8d8896b0b6"
+    },
+    {
+      "key": "9",
+      "source": {
+        "template_id": 9,
+        "template_version_id": 33,
+        "version_number": 2
+      },
+      "identity": {
+        "item_type_code": "CONCURRENT_DUTY_START",
+        "name_ru": "О совмещении (простой, как по доп ставке)",
+        "name_kk": "Қоса атқару туралы",
+        "is_default": true
+      },
+      "version": {
+        "status": "PUBLISHED",
+        "based_on_built_in": true,
+        "texts": {
+          "title_ru": "О совмещении (простой, как по доп ставке)",
+          "title_kk": "Қоса атқару туралы",
+          "preamble_ru": "В соответствии со статьей 111 Трудового кодекса Республики Казахстан",
+          "preamble_kk": "Қазақстан Республикасының Еңбек Кодексінің 111 - бабына сәйкес",
+          "body_template_ru": "Разрешить {{employee.full_name_dative_ru}} с {{effective_date}} совмещение должности {{concurrent.position_genitive_ru}} {{concurrent.org_unit_genitive_ru}} на {{concurrent.rate}} ставки. (Всего: {{total.rate}} ставки).",
+          "body_template_kk": "{{employee.full_name_dative_kk}} {{effective_date}} бастап {{concurrent.rate}} ставкада {{concurrent.org_unit_kk}} {{concurrent.position_kk}} қызметін қоса атқаруға рұқсат берілсін. (Барлығы: {{total.rate}} ставка).",
+          "basis_template_ru": "Основание: {{basis}}.",
+          "basis_template_kk": "Негіз: {{basis}}."
+        }
+      },
+      "contract": {
+        "allowed_variables": [
+          "employee.full_name",
+          "employee.full_name_dative_ru",
+          "employee.full_name_dative_kk",
+          "effective_date",
+          "concurrent.rate",
+          "total.rate",
+          "basis",
+          "concurrent.position_genitive_ru",
+          "concurrent.org_unit_genitive_ru",
+          "concurrent.position_kk",
+          "concurrent.org_unit_kk",
+          "replacement.employee_genitive_ru",
+          "replacement.employee_genitive_kk",
+          "replacement.position_genitive_ru",
+          "replacement.org_unit_genitive_ru",
+          "replacement.position_kk",
+          "replacement.org_unit_kk",
+          "replacement.term",
+          "replacement.work",
+          "allowance.percent",
+          "allowance.basis",
+          "allowance.recipient",
+          "allowance.term",
+          "replacement.clause"
+        ],
+        "required_variables": {},
+        "field_bindings": {
+          "title_ru": [],
+          "title_kk": [],
+          "preamble_ru": [],
+          "preamble_kk": [],
+          "body_template_ru": [
+            "employee.full_name_dative_ru",
+            "effective_date",
+            "concurrent.position_genitive_ru",
+            "concurrent.org_unit_genitive_ru",
+            "concurrent.rate",
+            "total.rate"
+          ],
+          "body_template_kk": [
+            "employee.full_name_dative_kk",
+            "effective_date",
+            "concurrent.rate",
+            "concurrent.org_unit_kk",
+            "concurrent.position_kk",
+            "total.rate"
+          ],
+          "basis_template_ru": [
+            "basis"
+          ],
+          "basis_template_kk": [
+            "basis"
+          ]
+        },
+        "capabilities": {
+          "replacement_mode": null,
+          "replacement_optional_placement": false,
+          "service_area_allowance": false,
+          "simple_allowance": false
+        }
+      },
+      "sha256": "ca9e6dca8ba718327bd4cd39c66d3691c9b3fa6874c5ddf82a794a87717e34a8"
+    },
+    {
+      "key": "10",
+      "source": {
+        "template_id": 10,
+        "template_version_id": 16,
+        "version_number": 2
+      },
+      "identity": {
+        "item_type_code": "CONCURRENT_DUTY_END",
+        "name_ru": "О прекращении совмещения",
+        "name_kk": "Ставканы алып тастау туралы",
+        "is_default": true
+      },
+      "version": {
+        "status": "PUBLISHED",
+        "based_on_built_in": true,
+        "texts": {
+          "title_ru": "О прекращении совмещения",
+          "title_kk": "Ставканы алып тастау туралы",
+          "preamble_ru": "В соответствии со статьей 111 Трудового кодекса Республики Казахстан",
+          "preamble_kk": "Қазақстан Республикасының Еңбек Кодексінің 111 - бабына сәйкес",
+          "body_template_ru": "Прекратить с {{effective_date}} совмещение {{employee.full_name_genitive_ru}} должности {{concurrent.position_genitive_ru}} {{concurrent.org_unit_genitive_ru}} в объёме {{concurrent.rate}} ставки. (Всего: {{remaining.rate}} ставки).",
+          "body_template_kk": "{{employee.full_name_ablative_kk}} {{effective_date}} бастап {{concurrent.org_unit_kk}} {{concurrent.position_kk}} қызметінен {{concurrent.rate}} ставкасы алынып тасталсын. (Барлығы: {{remaining.rate}} ставка).",
+          "basis_template_ru": "Основание: {{basis}}.",
+          "basis_template_kk": "Негіз: {{basis}}."
+        }
+      },
+      "contract": {
+        "allowed_variables": [
+          "employee.full_name",
+          "employee.full_name_genitive_ru",
+          "employee.full_name_ablative_kk",
+          "effective_date",
+          "concurrent.rate",
+          "remaining.rate",
+          "basis",
+          "concurrent.position_genitive_ru",
+          "concurrent.org_unit_genitive_ru",
+          "concurrent.position_kk",
+          "concurrent.org_unit_kk"
+        ],
+        "required_variables": {},
+        "field_bindings": {
+          "title_ru": [],
+          "title_kk": [],
+          "preamble_ru": [],
+          "preamble_kk": [],
+          "body_template_ru": [
+            "effective_date",
+            "employee.full_name_genitive_ru",
+            "concurrent.position_genitive_ru",
+            "concurrent.org_unit_genitive_ru",
+            "concurrent.rate",
+            "remaining.rate"
+          ],
+          "body_template_kk": [
+            "employee.full_name_ablative_kk",
+            "effective_date",
+            "concurrent.org_unit_kk",
+            "concurrent.position_kk",
+            "concurrent.rate",
+            "remaining.rate"
+          ],
+          "basis_template_ru": [
+            "basis"
+          ],
+          "basis_template_kk": [
+            "basis"
+          ]
+        },
+        "capabilities": {
+          "replacement_mode": null,
+          "replacement_optional_placement": false,
+          "service_area_allowance": false,
+          "simple_allowance": false
+        }
+      },
+      "sha256": "ec6561c5d7690d2c4dd4112fc4cb7c4331c8ae1e861f1ee2e0246c60aa51e986"
+    },
+    {
+      "key": "23",
+      "source": {
+        "template_id": 23,
+        "template_version_id": 38,
+        "version_number": 3
+      },
+      "identity": {
+        "item_type_code": "CONCURRENT_DUTY_START",
+        "name_ru": "О совмещении (простой, о замещении на время отпуска, как доп ставка)",
+        "name_kk": "Қоса атқару туралы",
+        "is_default": false
+      },
+      "version": {
+        "status": "PUBLISHED",
+        "based_on_built_in": true,
+        "texts": {
+          "title_ru": "О совмещении (О замещении на время отпуска как доп ставка)",
+          "title_kk": "Қоса атқару туралы",
+          "preamble_ru": "В соответствии со статьей 111 Трудового кодекса Республики Казахстан",
+          "preamble_kk": "Қазақстан Республикасының Еңбек Кодексінің 111 - бабына сәйкес",
+          "body_template_ru": "Разрешить {{employee.full_name_dative_ru}} с {{effective_date}} совмещение должности {{concurrent.position_genitive_ru}} {{concurrent.org_unit_genitive_ru}} на {{concurrent.rate}} ставки на время отпуска {{replacement.employee_genitive_ru}}, {{replacement.position_genitive_ru}} {{replacement.org_unit_genitive_ru}}, {{replacement.term}}. (Всего: {{total.rate}} ставки).",
+          "body_template_kk": "{{employee.full_name_dative_kk}} {{effective_date}} бастап {{replacement.org_unit_kk}} {{replacement.position_kk}} {{replacement.employee_genitive_kk}} еңбек демалысы кезеңінде {{replacement.term}} {{concurrent.rate}} ставкада {{concurrent.org_unit_kk}} {{concurrent.position_kk}} қызметін қоса атқаруға рұқсат берілсін. (Барлығы: {{total.rate}} ставка).",
+          "basis_template_ru": "Основание: {{basis}}.",
+          "basis_template_kk": "Негіз: {{basis}}."
+        }
+      },
+      "contract": {
+        "allowed_variables": [
+          "employee.full_name",
+          "employee.full_name_dative_ru",
+          "employee.full_name_dative_kk",
+          "effective_date",
+          "concurrent.rate",
+          "total.rate",
+          "basis",
+          "concurrent.position_genitive_ru",
+          "concurrent.org_unit_genitive_ru",
+          "concurrent.position_kk",
+          "concurrent.org_unit_kk",
+          "replacement.employee_genitive_ru",
+          "replacement.employee_genitive_kk",
+          "replacement.position_genitive_ru",
+          "replacement.org_unit_genitive_ru",
+          "replacement.position_kk",
+          "replacement.org_unit_kk",
+          "replacement.term",
+          "replacement.work",
+          "allowance.percent",
+          "allowance.basis",
+          "allowance.recipient",
+          "allowance.term",
+          "replacement.clause"
+        ],
+        "required_variables": {},
+        "field_bindings": {
+          "title_ru": [],
+          "title_kk": [],
+          "preamble_ru": [],
+          "preamble_kk": [],
+          "body_template_ru": [
+            "employee.full_name_dative_ru",
+            "effective_date",
+            "concurrent.position_genitive_ru",
+            "concurrent.org_unit_genitive_ru",
+            "concurrent.rate",
+            "replacement.employee_genitive_ru",
+            "replacement.position_genitive_ru",
+            "replacement.org_unit_genitive_ru",
+            "replacement.term",
+            "total.rate"
+          ],
+          "body_template_kk": [
+            "employee.full_name_dative_kk",
+            "effective_date",
+            "replacement.org_unit_kk",
+            "replacement.position_kk",
+            "replacement.employee_genitive_kk",
+            "replacement.term",
+            "concurrent.rate",
+            "concurrent.org_unit_kk",
+            "concurrent.position_kk",
+            "total.rate"
+          ],
+          "basis_template_ru": [
+            "basis"
+          ],
+          "basis_template_kk": [
+            "basis"
+          ]
+        },
+        "capabilities": {
+          "replacement_mode": "RATE",
+          "replacement_optional_placement": false,
+          "service_area_allowance": false,
+          "simple_allowance": false
+        }
+      },
+      "sha256": "c4c93d4cadfa745043527d04f1855cd92c58e6958c9ed6619cdb36e3b33db860"
+    },
+    {
+      "key": "24",
+      "source": {
+        "template_id": 24,
+        "template_version_id": 36,
+        "version_number": 1
+      },
+      "identity": {
+        "item_type_code": "CONCURRENT_DUTY_START",
+        "name_ru": "О совмещении (О замещении на время отпуска как доплата)",
+        "name_kk": "Қоса атқару туралы (демалыс кезінде ауыстыру туралы % қосымша төлем ретінде).",
+        "is_default": false
+      },
+      "version": {
+        "status": "DRAFT",
+        "based_on_built_in": false,
+        "texts": {
+          "title_ru": "О совмещении (О замещении на время отпуска как доплата)",
+          "title_kk": "Қоса атқару туралы (демалыс кезінде ауыстыру туралы % қосымша төлем ретінде).",
+          "preamble_ru": "В соответствии со статьей 111 Трудового кодекса Республики Казахстан",
+          "preamble_kk": "Қазақстан Республикасының Еңбек Кодексінің 111 - бабына сәйкес",
+          "body_template_ru": "Разрешить {{employee.full_name_dative_ru}} с {{effective_date}} совмещение должности {{concurrent.position_genitive_ru}} {{concurrent.org_unit_genitive_ru}} на время отпуска {{replacement.employee_genitive_ru}}, {{replacement.position_genitive_ru}} {{replacement.org_unit_genitive_ru}}, {{replacement.term}} с доплатой в размере {{allowance.percent}}% от {{allowance.basis}}.",
+          "body_template_kk": "{{employee.full_name_dative_kk}} {{effective_date}} бастап {{replacement.org_unit_kk}} {{replacement.position_kk}} {{replacement.employee_genitive_kk}} еңбек демалысы кезеңінде {{replacement.term}} {{concurrent.org_unit_kk}} {{concurrent.position_kk}} қызметін қоса атқаруға рұқсат берілсін және {{allowance.basis}} {{allowance.percent}}% мөлшерінде қосымша ақы белгіленсін.",
+          "basis_template_ru": "Основание: {{basis}}.",
+          "basis_template_kk": "Негіз: {{basis}}."
+        }
+      },
+      "contract": {
+        "allowed_variables": [
+          "employee.full_name",
+          "employee.full_name_dative_ru",
+          "employee.full_name_dative_kk",
+          "effective_date",
+          "concurrent.rate",
+          "total.rate",
+          "basis",
+          "concurrent.position_genitive_ru",
+          "concurrent.org_unit_genitive_ru",
+          "concurrent.position_kk",
+          "concurrent.org_unit_kk",
+          "replacement.employee_genitive_ru",
+          "replacement.employee_genitive_kk",
+          "replacement.position_genitive_ru",
+          "replacement.org_unit_genitive_ru",
+          "replacement.position_kk",
+          "replacement.org_unit_kk",
+          "replacement.term",
+          "replacement.work",
+          "allowance.percent",
+          "allowance.basis",
+          "allowance.recipient",
+          "allowance.term",
+          "replacement.clause"
+        ],
+        "required_variables": {},
+        "field_bindings": {
+          "title_ru": [],
+          "title_kk": [],
+          "preamble_ru": [],
+          "preamble_kk": [],
+          "body_template_ru": [
+            "employee.full_name_dative_ru",
+            "effective_date",
+            "concurrent.position_genitive_ru",
+            "concurrent.org_unit_genitive_ru",
+            "replacement.employee_genitive_ru",
+            "replacement.position_genitive_ru",
+            "replacement.org_unit_genitive_ru",
+            "replacement.term",
+            "allowance.percent",
+            "allowance.basis"
+          ],
+          "body_template_kk": [
+            "employee.full_name_dative_kk",
+            "effective_date",
+            "replacement.org_unit_kk",
+            "replacement.position_kk",
+            "replacement.employee_genitive_kk",
+            "replacement.term",
+            "concurrent.org_unit_kk",
+            "concurrent.position_kk",
+            "allowance.basis",
+            "allowance.percent"
+          ],
+          "basis_template_ru": [
+            "basis"
+          ],
+          "basis_template_kk": [
+            "basis"
+          ]
+        },
+        "capabilities": {
+          "replacement_mode": "PAY",
+          "replacement_optional_placement": false,
+          "service_area_allowance": false,
+          "simple_allowance": false
+        }
+      },
+      "sha256": "4391dc942fdb65196d82342255fc383c1fdac55b59f40c5fa969661d3bee566d"
+    },
+    {
+      "key": "28",
+      "source": {
+        "template_id": 28,
+        "template_version_id": 44,
+        "version_number": 4
+      },
+      "identity": {
+        "item_type_code": "CONCURRENT_DUTY_START",
+        "name_ru": "О совмещении (простой, о замещении на время отпуска, как % доплаты)",
+        "name_kk": "Қоса атқару туралы (демалыс кезінде ауыстыру туралы % қосымша төлем ретінде).",
+        "is_default": false
+      },
+      "version": {
+        "status": "PUBLISHED",
+        "based_on_built_in": true,
+        "texts": {
+          "title_ru": "О совмещении (простой, о замещении на время отпуска, как % доплаты)",
+          "title_kk": "Қоса атқару туралы (демалыс кезінде ауыстыру туралы % қосымша төлем ретінде).",
+          "preamble_ru": "В соответствии со статьей 111 Трудового кодекса Республики Казахстан",
+          "preamble_kk": "Қазақстан Республикасының Еңбек Кодексінің 111 - бабына сәйкес",
+          "body_template_ru": "{{allowance.recipient}}, с {{effective_date}}{{allowance.term}} установить доплату в размере {{allowance.percent}}% от {{allowance.basis}} в связи с расширением зоны обслуживания{{replacement.clause}}.",
+          "body_template_kk": "{{allowance.recipient}} {{effective_date}} бастап{{allowance.term}}{{replacement.clause}} қызмет ету аймағының кеңеюіне байланысты {{allowance.basis}} {{allowance.percent}}% көлемінде қосымша ақы төленсін.",
+          "basis_template_ru": "Основание: {{basis}}.",
+          "basis_template_kk": "Негіз: {{basis}}."
+        }
+      },
+      "contract": {
+        "allowed_variables": [
+          "employee.full_name",
+          "employee.full_name_dative_ru",
+          "employee.full_name_dative_kk",
+          "effective_date",
+          "concurrent.rate",
+          "total.rate",
+          "basis",
+          "concurrent.position_genitive_ru",
+          "concurrent.org_unit_genitive_ru",
+          "concurrent.position_kk",
+          "concurrent.org_unit_kk",
+          "replacement.employee_genitive_ru",
+          "replacement.employee_genitive_kk",
+          "replacement.position_genitive_ru",
+          "replacement.org_unit_genitive_ru",
+          "replacement.position_kk",
+          "replacement.org_unit_kk",
+          "replacement.term",
+          "replacement.work",
+          "allowance.percent",
+          "allowance.basis",
+          "allowance.recipient",
+          "allowance.term",
+          "replacement.clause"
+        ],
+        "required_variables": {},
+        "field_bindings": {
+          "title_ru": [],
+          "title_kk": [],
+          "preamble_ru": [],
+          "preamble_kk": [],
+          "body_template_ru": [
+            "allowance.recipient",
+            "effective_date",
+            "allowance.term",
+            "allowance.percent",
+            "allowance.basis",
+            "replacement.clause"
+          ],
+          "body_template_kk": [
+            "allowance.recipient",
+            "effective_date",
+            "allowance.term",
+            "replacement.clause",
+            "allowance.basis",
+            "allowance.percent"
+          ],
+          "basis_template_ru": [
+            "basis"
+          ],
+          "basis_template_kk": [
+            "basis"
+          ]
+        },
+        "capabilities": {
+          "replacement_mode": "PAY",
+          "replacement_optional_placement": true,
+          "service_area_allowance": true,
+          "simple_allowance": false
+        }
+      },
+      "sha256": "e7014ced5ab340da8dd9023a14783cf525874bb7d6fe3dddf62997424e5c9f6b"
+    }
+  ],
+  "sha256": "fac089c7885feb29e2607485f09e220fbc8490fdf49dbf92cb4ff146e9b6abd4"
+}
