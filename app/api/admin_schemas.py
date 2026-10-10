@@ -41,6 +41,7 @@ class PersonnelOrderTemplateCatalogItem(BaseModel):
     is_pilot: bool
     editor_available: bool
     allowed_variables: List[str]
+    required_variables: Dict[str, List[str]] = Field(default_factory=dict)
     required_fields: List[str]
     notes: str
     pilot_detail: Optional[PersonnelOrderTemplatePilotDetail] = None
@@ -65,6 +66,7 @@ class PersonnelOrderTemplateDraftText(BaseModel):
 
 class PersonnelOrderTemplateDraftSave(PersonnelOrderTemplateDraftText):
     expected_revision: int = Field(..., ge=1)
+    expected_template_version_id: Optional[int] = Field(default=None, ge=1)
 
 
 class PersonnelOrderTemplateWorkingCopySave(PersonnelOrderTemplateDraftText):
@@ -84,6 +86,9 @@ class PersonnelOrderTemplateWorkingCopySave(PersonnelOrderTemplateDraftText):
 
 
 class PersonnelOrderTemplateDraftOut(PersonnelOrderTemplateDraftText):
+    name_ru: Optional[str] = None
+    name_kk: Optional[str] = None
+    template_id: Optional[int] = None
     template_version_id: int
     item_type_code: str
     version_number: int
@@ -97,6 +102,7 @@ class PersonnelOrderTemplateDraftOut(PersonnelOrderTemplateDraftText):
 
 
 class PersonnelOrderTemplateEditorBase(PersonnelOrderTemplateDraftText):
+    template_id: Optional[int] = None
     source: Literal["PUBLISHED", "INITIAL"]
     item_type_code: str
     template_version_id: Optional[int] = None
@@ -106,6 +112,37 @@ class PersonnelOrderTemplateEditorBase(PersonnelOrderTemplateDraftText):
 
 class PersonnelOrderTemplatePublish(BaseModel):
     expected_revision: int = Field(..., ge=1)
+
+
+class PersonnelOrderTemplateRemove(BaseModel):
+    model_config = {"extra": "forbid"}
+    name_ru: str = Field(..., min_length=1, max_length=200)
+    name_kk: str = Field(..., min_length=1, max_length=200)
+
+
+class PersonnelOrderTemplateTypeChange(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    target_type_code: str = Field(..., min_length=1, max_length=64)
+    expected_template_version_id: int = Field(..., ge=1)
+    expected_revision: int = Field(..., ge=1)
+
+
+class PersonnelOrderTemplateCopy(BaseModel):
+    source_type_code: Optional[str] = Field(default=None, min_length=1, max_length=64)
+    model_config = {"extra": "forbid"}
+    base_source: Literal["VERSION", "INITIAL"] = "VERSION"
+    source_version_id: Optional[int] = Field(default=None, ge=1)
+    expected_revision: Optional[int] = Field(default=None, ge=1)
+    name_ru: str = Field(..., min_length=1, max_length=200)
+    name_kk: str = Field(..., min_length=1, max_length=200)
+
+    @model_validator(mode="after")
+    def validate_copy_source(self) -> "PersonnelOrderTemplateCopy":
+        if self.base_source == "VERSION" and (self.source_version_id is None or self.expected_revision is None):
+            raise ValueError("VERSION copy requires source_version_id and expected_revision")
+        if self.base_source == "INITIAL" and (self.source_version_id is not None or self.expected_revision is not None):
+            raise ValueError("INITIAL copy must not include stored version metadata")
+        return self
 
 
 class PersonnelOrderTemplateDraftPreview(PersonnelOrderTemplateDraftText):

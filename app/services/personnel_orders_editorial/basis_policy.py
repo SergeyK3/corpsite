@@ -33,6 +33,8 @@ def resolve_basis_required(item_type_code: str) -> tuple[bool, str | None]:
         # The journal title carries no reliable basis.  A reconstruction draft
         # must not invent one from the usual personnel-order default.
         return False, None
+    if normalized == "LEAVE.ANNUAL.RECALL":
+        return True, None
     if normalized == "LEAVE.UNPAID.GRANT":
         # The unpaid-leave generator has a dedicated, normalized personal
         # application basis. Legacy payload data is read only when that row

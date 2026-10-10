@@ -1,0 +1,962 @@
+{
+  "format": "job-positions-server-link-review-v1",
+  "server_positions_file": "corpsite-server-positions.json",
+  "server_positions_sha256": "d4a383133ea2d7b25f113c1c80c375915df0d9167562859b4354438cd39bc89e",
+  "approved_catalog_file": "catalog-v1.json",
+  "approved_catalog_sha256": "bd7e17b7c17586abb857994706eec50bbd944c045eaba74be018850c801b8e6e",
+  "catalog_texts_sha256": "62187b559adbffcbdc016f9e41deeb665e5465d4ee1f29a56ab9eb942429941d",
+  "source": {
+    "file": "positions_catalog_review_v2.xlsx",
+    "sha256": "d48db2569e544f180b3fb1c44529e1853d25e15099998104e5d95e686ca78b54",
+    "sheet": "catl_job",
+    "table": "CatlJobPositionsV2",
+    "range": "A1:E89"
+  },
+  "professions": 88,
+  "original_link_count": 108,
+  "server_position_count": 111,
+  "approved_link_count": 89,
+  "missing_link_count": 19,
+  "withheld_link_count": 0,
+  "policy": "Only reviewed explicit Excel IDs. No fuzzy or exact-name allocation of new IDs. Missing IDs skipped. Historical positions/assignments/texts unchanged.",
+  "approved_links": [
+    {
+      "position_id": 1,
+      "job_code": "ARCHIVIST",
+      "job_nameru": "Архивариус",
+      "excel_range": "catl_job!A2:E2",
+      "server_name": "Архивариус",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 2,
+      "job_code": "AUDITOR",
+      "job_nameru": "Аудитор",
+      "excel_range": "catl_job!A3:E3",
+      "server_name": "Аудитор",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 3,
+      "job_code": "ACCOUNTANT",
+      "job_nameru": "Бухгалтер",
+      "excel_range": "catl_job!A4:E4",
+      "server_name": "Бухгалтер",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 4,
+      "job_code": "ACCOUNTANT_CASHIER",
+      "job_nameru": "Бухгалтер-кассир",
+      "excel_range": "catl_job!A5:E5",
+      "server_name": "Бухгалтер-кассир",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 5,
+      "job_code": "DRIVER",
+      "job_nameru": "Водитель",
+      "excel_range": "catl_job!A6:E6",
+      "server_name": "Водитель",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 6,
+      "job_code": "PHYSICIAN",
+      "job_nameru": "Врач",
+      "excel_range": "catl_job!A7:E7",
+      "server_name": "Врач",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 7,
+      "job_code": "CHIEF_NURSE",
+      "job_nameru": "Главная медсестра",
+      "excel_range": "catl_job!A8:E8",
+      "server_name": "Главная медсестра",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 8,
+      "job_code": "ACC_HEAD",
+      "job_nameru": "Главный бухгалтер",
+      "excel_range": "catl_job!A9:E9",
+      "server_name": "Главный бухгалтер",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 9,
+      "job_code": "YARD_CLEANER",
+      "job_nameru": "Дворник",
+      "excel_range": "catl_job!A10:E10",
+      "server_name": "Дворник",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 10,
+      "job_code": "DISINFECTOR",
+      "job_nameru": "Дезинфектор",
+      "excel_range": "catl_job!A11:E11",
+      "server_name": "Дезинфектор",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 11,
+      "job_code": "DIET_NURSE",
+      "job_nameru": "Диетическая медсестра",
+      "excel_range": "catl_job!A12:E12",
+      "server_name": "Диетсестра",
+      "review_basis": "Сокращённое название диетической медсестры."
+    },
+    {
+      "position_id": 12,
+      "job_code": "LAUNDRY_HEAD",
+      "job_nameru": "Заведующая прачечной",
+      "excel_range": "catl_job!A13:E13",
+      "server_name": "Заведующая прачечной",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 13,
+      "job_code": "WAREHOUSE_HEAD",
+      "job_nameru": "Заведующий складом",
+      "excel_range": "catl_job!A14:E14",
+      "server_name": "Заведующий складом",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 14,
+      "job_code": "DEPUTY_DIRECTOR",
+      "job_nameru": "Заместитель директора",
+      "excel_range": "catl_job!A15:E15",
+      "server_name": "Зам директора",
+      "review_basis": "Сокращение заместителя директора."
+    },
+    {
+      "position_id": 16,
+      "job_code": "ENGINEER",
+      "job_nameru": "Инженер",
+      "excel_range": "catl_job!A16:E16",
+      "server_name": "Инженер",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 17,
+      "job_code": "MEDICAL_PHYSICIST_ENGINEER",
+      "job_nameru": "Инженер — медицинский физик",
+      "excel_range": "catl_job!A17:E17",
+      "server_name": "Инженер-мед.физик",
+      "review_basis": "Сокращённое название инженера — медицинского физика."
+    },
+    {
+      "position_id": 18,
+      "job_code": "CASHIER",
+      "job_nameru": "Кассир",
+      "excel_range": "catl_job!A18:E18",
+      "server_name": "Кассир",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 19,
+      "job_code": "FACILITY_SUPERVISOR",
+      "job_nameru": "Комендант",
+      "excel_range": "catl_job!A19:E19",
+      "server_name": "Комендант",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 20,
+      "job_code": "COURIER",
+      "job_nameru": "Курьер",
+      "excel_range": "catl_job!A20:E20",
+      "server_name": "Курьер",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 21,
+      "job_code": "KITCHEN_WORKER",
+      "job_nameru": "Рабочий кухни",
+      "excel_range": "catl_job!A21:E21",
+      "server_name": "Кухрабочий",
+      "review_basis": "Сокращённое название рабочего кухни."
+    },
+    {
+      "position_id": 22,
+      "job_code": "LAB_ASSISTANT",
+      "job_nameru": "Лаборант",
+      "excel_range": "catl_job!A22:E22",
+      "server_name": "Лаборант",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 23,
+      "job_code": "LIFT_OPERATOR",
+      "job_nameru": "Лифтер",
+      "excel_range": "catl_job!A23:E23",
+      "server_name": "Лифтер",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 25,
+      "job_code": "NURSE",
+      "job_nameru": "Медсестра",
+      "excel_range": "catl_job!A24:E24",
+      "server_name": "Медбрат",
+      "review_basis": "Явное утверждённое объединение Медбрат/Медсестра в NURSE; историческое название не меняется."
+    },
+    {
+      "position_id": 27,
+      "job_code": "NURSE",
+      "job_nameru": "Медсестра",
+      "excel_range": "catl_job!A24:E24",
+      "server_name": "Медсестра",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 26,
+      "job_code": "MEDICAL_REGISTRAR",
+      "job_nameru": "медрегистратор",
+      "excel_range": "catl_job!A25:E25",
+      "server_name": "медрегистратор",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 28,
+      "job_code": "MEDICAL_STATISTICIAN",
+      "job_nameru": "Медицинский статистик",
+      "excel_range": "catl_job!A26:E26",
+      "server_name": "Медстатистик",
+      "review_basis": "Медстатистик соответствует медицинскому статистику; другой отсутствующий ID 717 не переносится на серверный 105."
+    },
+    {
+      "position_id": 29,
+      "job_code": "MANAGER",
+      "job_nameru": "Менеджер",
+      "excel_range": "catl_job!A27:E27",
+      "server_name": "Менеджер",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 30,
+      "job_code": "INSTALLER",
+      "job_nameru": "Монтажник",
+      "excel_range": "catl_job!A28:E28",
+      "server_name": "Монтажник",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 31,
+      "job_code": "DEPARTMENT_CHIEF",
+      "job_nameru": "Начальник отдела",
+      "excel_range": "catl_job!A29:E29",
+      "server_name": "Начальник отдела",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 32,
+      "job_code": "OPERATOR",
+      "job_nameru": "Оператор",
+      "excel_range": "catl_job!A30:E30",
+      "server_name": "Оператор",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 33,
+      "job_code": "TRANSLATOR",
+      "job_nameru": "Переводчик",
+      "excel_range": "catl_job!A31:E31",
+      "server_name": "Переводчик",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 34,
+      "job_code": "CARPENTER",
+      "job_nameru": "Плотник",
+      "excel_range": "catl_job!A32:E32",
+      "server_name": "Плотник",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 35,
+      "job_code": "COOK",
+      "job_nameru": "Повар",
+      "excel_range": "catl_job!A33:E33",
+      "server_name": "Повар",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 36,
+      "job_code": "PROVISOR",
+      "job_nameru": "Провизор",
+      "excel_range": "catl_job!A34:E34",
+      "server_name": "Провизор",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 37,
+      "job_code": "PSYCHOLOGIST",
+      "job_nameru": "Психолог",
+      "excel_range": "catl_job!A35:E35",
+      "server_name": "Психолог",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 38,
+      "job_code": "WORKER",
+      "job_nameru": "Рабочий",
+      "excel_range": "catl_job!A36:E36",
+      "server_name": "Рабочий",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 39,
+      "job_code": "CHEMOTHERAPY_SERVICE_HEAD",
+      "job_nameru": "Руководитель службы химиотерапии",
+      "excel_range": "catl_job!A37:E37",
+      "server_name": "Руков-ль службы химиотерапии",
+      "review_basis": "Сокращённое название руководителя службы химиотерапии."
+    },
+    {
+      "position_id": 40,
+      "job_code": "HOUSEKEEPING_SERVICE_HEAD",
+      "job_nameru": "Руководитель хозяйственной службы",
+      "excel_range": "catl_job!A38:E38",
+      "server_name": "Руководитель хозяйственной службы",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 41,
+      "job_code": "SANITARY_WORKER",
+      "job_nameru": "Санитар",
+      "excel_range": "catl_job!A39:E39",
+      "server_name": "Санитар",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 42,
+      "job_code": "SANITARY_WORKER_FEMALE",
+      "job_nameru": "Санитарка",
+      "excel_range": "catl_job!A40:E40",
+      "server_name": "Санитарка",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 43,
+      "job_code": "SANITARY_BUFFET_WORKER",
+      "job_nameru": "Санитарка-буфетчица",
+      "excel_range": "catl_job!A41:E41",
+      "server_name": "Санитарка-буфетчица",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 44,
+      "job_code": "SISTER_HOUSEKEEPER",
+      "job_nameru": "сестра-хозяйка",
+      "excel_range": "catl_job!A42:E42",
+      "server_name": "сестра-хозяйка",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 45,
+      "job_code": "SYSTEM_ADMINISTRATOR",
+      "job_nameru": "системный администратор",
+      "excel_range": "catl_job!A43:E43",
+      "server_name": "системный администратор",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 46,
+      "job_code": "PLUMBER",
+      "job_nameru": "Слесарь-сантехник",
+      "excel_range": "catl_job!A44:E44",
+      "server_name": "Слесарь-сантехник",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 48,
+      "job_code": "SPECIALIST",
+      "job_nameru": "Специалист",
+      "excel_range": "catl_job!A45:E45",
+      "server_name": "Специалист",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 49,
+      "job_code": "SENIOR_NURSE",
+      "job_nameru": "Старшая медсестра",
+      "excel_range": "catl_job!A46:E46",
+      "server_name": "Старшая медсестра",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 50,
+      "job_code": "SENIOR_LAB_ASSISTANT",
+      "job_nameru": "Старший лаборант",
+      "excel_range": "catl_job!A47:E47",
+      "server_name": "Старший лаборант",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 51,
+      "job_code": "SENIOR_SYSTEM_ADMINISTRATOR",
+      "job_nameru": "Старший системный администратор",
+      "excel_range": "catl_job!A48:E48",
+      "server_name": "Старший системный администратор",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 53,
+      "job_code": "ROOM_CLEANER",
+      "job_nameru": "Уборщик помещений",
+      "excel_range": "catl_job!A49:E49",
+      "server_name": "Уборщик помещений",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 54,
+      "job_code": "PHARMACIST",
+      "job_nameru": "Фармацевт",
+      "excel_range": "catl_job!A50:E50",
+      "server_name": "Фармацевт",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 55,
+      "job_code": "ECONOMIST",
+      "job_nameru": "Экономист",
+      "excel_range": "catl_job!A51:E51",
+      "server_name": "Экономист",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 90,
+      "job_code": "ECONOMIST",
+      "job_nameru": "Экономист",
+      "excel_range": "catl_job!A51:E51",
+      "server_name": "экономист1",
+      "review_basis": "Нумерованный исторический вариант экономиста; явное утверждённое объединение ECONOMIST."
+    },
+    {
+      "position_id": 91,
+      "job_code": "ECONOMIST",
+      "job_nameru": "Экономист",
+      "excel_range": "catl_job!A51:E51",
+      "server_name": "экономист2",
+      "review_basis": "Нумерованный исторический вариант экономиста; явное утверждённое объединение ECONOMIST."
+    },
+    {
+      "position_id": 92,
+      "job_code": "ECONOMIST",
+      "job_nameru": "Экономист",
+      "excel_range": "catl_job!A51:E51",
+      "server_name": "экономист3",
+      "review_basis": "Нумерованный исторический вариант экономиста; явное утверждённое объединение ECONOMIST."
+    },
+    {
+      "position_id": 56,
+      "job_code": "ELECTRICIAN",
+      "job_nameru": "Электрик",
+      "excel_range": "catl_job!A52:E52",
+      "server_name": "Электрик",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 57,
+      "job_code": "ELECTRICAL_FITTER",
+      "job_nameru": "Электромонтер",
+      "excel_range": "catl_job!A53:E53",
+      "server_name": "Электромонтер",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 58,
+      "job_code": "LAWYER",
+      "job_nameru": "Юрист",
+      "excel_range": "catl_job!A54:E54",
+      "server_name": "Юрист",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 59,
+      "job_code": "CHIEF_ECONOMIST",
+      "job_nameru": "Главный экономист",
+      "excel_range": "catl_job!A55:E55",
+      "server_name": "Главный экономист",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 60,
+      "job_code": "PROC_HEAD",
+      "job_nameru": "Руководитель отдела государственных закупок",
+      "excel_range": "catl_job!A56:E56",
+      "server_name": "Руководитель отдела госзакупок",
+      "review_basis": "Сокращение государственных закупок."
+    },
+    {
+      "position_id": 61,
+      "job_code": "PHYSICIAN_STATISTICIAN",
+      "job_nameru": "Врач-статистик",
+      "excel_range": "catl_job!A57:E57",
+      "server_name": "Аналитик ЭРОБ",
+      "review_basis": "Пользователь явно подтвердил медицинскую квалификацию для этой связи Excel."
+    },
+    {
+      "position_id": 62,
+      "job_code": "DIRECTOR",
+      "job_nameru": "Директор",
+      "excel_range": "catl_job!A58:E58",
+      "server_name": "Директор",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 63,
+      "job_code": "PHARMACY_HEAD",
+      "job_nameru": "Заведующий аптекой",
+      "excel_range": "catl_job!A59:E59",
+      "server_name": "Заведующий аптекой",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 64,
+      "job_code": "CLINICAL_DEPARTMENT_HEAD",
+      "job_nameru": "Заведующий клиническим отделением",
+      "excel_range": "catl_job!A60:E60",
+      "server_name": "Заведующий гинекологическим отделением",
+      "review_basis": "Заведующий конкретным клиническим отделением; профессия без названия отделения, подразделение из назначения. Явная связь Excel."
+    },
+    {
+      "position_id": 65,
+      "job_code": "CLINICAL_DEPARTMENT_HEAD",
+      "job_nameru": "Заведующий клиническим отделением",
+      "excel_range": "catl_job!A60:E60",
+      "server_name": "Заведующий диспансерным отделением",
+      "review_basis": "Заведующий конкретным клиническим отделением; профессия без названия отделения, подразделение из назначения. Явная связь Excel."
+    },
+    {
+      "position_id": 66,
+      "job_code": "CLINICAL_DEPARTMENT_HEAD",
+      "job_nameru": "Заведующий клиническим отделением",
+      "excel_range": "catl_job!A60:E60",
+      "server_name": "Заведующий инсультным отделением",
+      "review_basis": "Заведующий конкретным клиническим отделением; профессия без названия отделения, подразделение из назначения. Явная связь Excel."
+    },
+    {
+      "position_id": 67,
+      "job_code": "CLINICAL_DEPARTMENT_HEAD",
+      "job_nameru": "Заведующий клиническим отделением",
+      "excel_range": "catl_job!A60:E60",
+      "server_name": "Заведующий отделением амбулаторной хирургии",
+      "review_basis": "Заведующий конкретным клиническим отделением; профессия без названия отделения, подразделение из назначения. Явная связь Excel."
+    },
+    {
+      "position_id": 68,
+      "job_code": "CLINICAL_DEPARTMENT_HEAD",
+      "job_nameru": "Заведующий клиническим отделением",
+      "excel_range": "catl_job!A60:E60",
+      "server_name": "Заведующий отделением опухолей головы и шеи",
+      "review_basis": "Заведующий конкретным клиническим отделением; профессия без названия отделения, подразделение из назначения. Явная связь Excel."
+    },
+    {
+      "position_id": 69,
+      "job_code": "CLINICAL_DEPARTMENT_HEAD",
+      "job_nameru": "Заведующий клиническим отделением",
+      "excel_range": "catl_job!A60:E60",
+      "server_name": "Заведующий отделением радиологии",
+      "review_basis": "Заведующий конкретным клиническим отделением; профессия без названия отделения, подразделение из назначения. Явная связь Excel."
+    },
+    {
+      "position_id": 70,
+      "job_code": "CLINICAL_DEPARTMENT_HEAD",
+      "job_nameru": "Заведующий клиническим отделением",
+      "excel_range": "catl_job!A60:E60",
+      "server_name": "Заведующий отделением реабилитации",
+      "review_basis": "Заведующий конкретным клиническим отделением; профессия без названия отделения, подразделение из назначения. Явная связь Excel."
+    },
+    {
+      "position_id": 71,
+      "job_code": "CLINICAL_DEPARTMENT_HEAD",
+      "job_nameru": "Заведующий клиническим отделением",
+      "excel_range": "catl_job!A60:E60",
+      "server_name": "Заведующий отделением химиотерапии 1",
+      "review_basis": "Заведующий конкретным клиническим отделением; профессия без названия отделения, подразделение из назначения. Явная связь Excel."
+    },
+    {
+      "position_id": 72,
+      "job_code": "CLINICAL_DEPARTMENT_HEAD",
+      "job_nameru": "Заведующий клиническим отделением",
+      "excel_range": "catl_job!A60:E60",
+      "server_name": "Заведующий отделением химиотерапии 2",
+      "review_basis": "Заведующий конкретным клиническим отделением; профессия без названия отделения, подразделение из назначения. Явная связь Excel."
+    },
+    {
+      "position_id": 73,
+      "job_code": "CLINICAL_DEPARTMENT_HEAD",
+      "job_nameru": "Заведующий клиническим отделением",
+      "excel_range": "catl_job!A60:E60",
+      "server_name": "Заведующий паллиативным отделением",
+      "review_basis": "Заведующий конкретным клиническим отделением; профессия без названия отделения, подразделение из назначения. Явная связь Excel."
+    },
+    {
+      "position_id": 74,
+      "job_code": "CLINICAL_DEPARTMENT_HEAD",
+      "job_nameru": "Заведующий клиническим отделением",
+      "excel_range": "catl_job!A60:E60",
+      "server_name": "Заведующий хирургическим отделением 1",
+      "review_basis": "Заведующий конкретным клиническим отделением; профессия без названия отделения, подразделение из назначения. Явная связь Excel."
+    },
+    {
+      "position_id": 75,
+      "job_code": "CLINICAL_DEPARTMENT_HEAD",
+      "job_nameru": "Заведующий клиническим отделением",
+      "excel_range": "catl_job!A60:E60",
+      "server_name": "Заведующий хирургическим отделением 2",
+      "review_basis": "Заведующий конкретным клиническим отделением; профессия без названия отделения, подразделение из назначения. Явная связь Excel."
+    },
+    {
+      "position_id": 76,
+      "job_code": "ACC_DEPUTY",
+      "job_nameru": "Заместитель главного бухгалтера",
+      "excel_range": "catl_job!A61:E61",
+      "server_name": "зам главного бухгалтера",
+      "review_basis": "Заместитель главного бухгалтера."
+    },
+    {
+      "position_id": 78,
+      "job_code": "DEP_OUTPATIENT_AUDIT",
+      "job_nameru": "Заместитель по диспансеру и внутренней экспертизе",
+      "excel_range": "catl_job!A63:E63",
+      "server_name": "Зам по диспансеру и внутр экспертизе",
+      "review_basis": "Раскрыты сокращения диспансера и внутренней экспертизы."
+    },
+    {
+      "position_id": 79,
+      "job_code": "DEP_MED",
+      "job_nameru": "Заместитель по лечебной работе",
+      "excel_range": "catl_job!A64:E64",
+      "server_name": "Зам по лечебной работе",
+      "review_basis": "Заместитель по лечебной работе."
+    },
+    {
+      "position_id": 80,
+      "job_code": "DEP_STRATEGY",
+      "job_nameru": "Заместитель по стратегии",
+      "excel_range": "catl_job!A65:E65",
+      "server_name": "Зам по стратегии",
+      "review_basis": "Заместитель по стратегии."
+    },
+    {
+      "position_id": 81,
+      "job_code": "STAT_HEAD_DEPUTY",
+      "job_nameru": "Заместитель руководителя отдела статистики",
+      "excel_range": "catl_job!A66:E66",
+      "server_name": "зам рук-ля отдела статистики",
+      "review_basis": "Заместитель руководителя отдела статистики."
+    },
+    {
+      "position_id": 84,
+      "job_code": "HEAD",
+      "job_nameru": "Руководитель",
+      "excel_range": "catl_job!A67:E67",
+      "server_name": "Руководитель",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 85,
+      "job_code": "QM_HEAD",
+      "job_nameru": "Руководитель ОВЭиПД",
+      "excel_range": "catl_job!A68:E68",
+      "server_name": "Руководитель ОВЭиПД",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 86,
+      "job_code": "HR_HEAD",
+      "job_nameru": "Руководитель отдела кадров",
+      "excel_range": "catl_job!A69:E69",
+      "server_name": "Руководитель отдела кадров",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 87,
+      "job_code": "STAT_HEAD",
+      "job_nameru": "Руководитель отдела статистики",
+      "excel_range": "catl_job!A70:E70",
+      "server_name": "Руководитель отдела статистики",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 88,
+      "job_code": "ADMISSION_HEAD",
+      "job_nameru": "Руководитель приемного отделения",
+      "excel_range": "catl_job!A71:E71",
+      "server_name": "Руководитель приемного отделения",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 89,
+      "job_code": "SENIOR_ECONOMIST",
+      "job_nameru": "Старший экономист",
+      "excel_range": "catl_job!A72:E72",
+      "server_name": "Старший экономист",
+      "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 93,
+      "job_code": "EXPERT_PHYSICIAN",
+      "job_nameru": "Врач-эксперт",
+      "excel_range": "catl_job!A82:E82",
+      "server_name": "эксперт ОВЭиПД амбулаторный",
+      "review_basis": "Пользователь явно подтвердил медицинскую квалификацию для этой связи Excel."
+    },
+    {
+      "position_id": 94,
+      "job_code": "EXPERT_PHYSICIAN",
+      "job_nameru": "Врач-эксперт",
+      "excel_range": "catl_job!A82:E82",
+      "server_name": "эксперт ОВЭиПД госпитальный",
+      "review_basis": "Пользователь явно подтвердил медицинскую квалификацию для этой связи Excel."
+    },
+    {
+      "position_id": 95,
+      "job_code": "EXPERT_PHYSICIAN",
+      "job_nameru": "Врач-эксперт",
+      "excel_range": "catl_job!A82:E82",
+      "server_name": "эксперт ОВЭиПД по регистрации жалоб",
+      "review_basis": "Пользователь явно подтвердил медицинскую квалификацию для этой связи Excel."
+    },
+    {
+      "position_id": 96,
+      "job_code": "EXPERT_PHYSICIAN",
+      "job_nameru": "Врач-эксперт",
+      "excel_range": "catl_job!A82:E82",
+      "server_name": "эксперт ОВЭиПД по улаживанию жалоб",
+      "review_basis": "Пользователь явно подтвердил медицинскую квалификацию для этой связи Excel."
+    }
+  ],
+  "skipped_missing_links": [
+    {
+      "position_id": 717,
+      "job_code": "MEDICAL_STATISTICIAN",
+      "job_nameru": "Медицинский статистик",
+      "excel_range": "catl_job!A26:E26",
+      "reason": "ID absent from factual server positions; no substitute ID allocated"
+    },
+    {
+      "position_id": 77,
+      "job_code": "DEP_ADMIN",
+      "job_nameru": "Заместитель по административным вопросам",
+      "excel_range": "catl_job!A62:E62",
+      "reason": "ID absent from factual server positions; no substitute ID allocated"
+    },
+    {
+      "position_id": 340,
+      "job_code": "HR_MANAGER",
+      "job_nameru": "Менеджер по управлению человеческими ресурсами",
+      "excel_range": "catl_job!A73:E73",
+      "reason": "ID absent from factual server positions; no substitute ID allocated"
+    },
+    {
+      "position_id": 341,
+      "job_code": "SECRETARY_REFERENT",
+      "job_nameru": "секретарь-референт",
+      "excel_range": "catl_job!A74:E74",
+      "reason": "ID absent from factual server positions; no substitute ID allocated"
+    },
+    {
+      "position_id": 342,
+      "job_code": "KAZAKH_TRANSLATOR",
+      "job_nameru": "Переводчик казахского языка",
+      "excel_range": "catl_job!A75:E75",
+      "reason": "ID absent from factual server positions; no substitute ID allocated"
+    },
+    {
+      "position_id": 714,
+      "job_code": "DEPARTMENT_HEAD_UNSPECIFIED",
+      "job_nameru": "Заведующий отделением",
+      "excel_range": "catl_job!A76:E76",
+      "reason": "ID absent from factual server positions; no substitute ID allocated"
+    },
+    {
+      "position_id": 715,
+      "job_code": "LAUNDRY_MACHINE_OPERATOR",
+      "job_nameru": "Машинист по стирке белья",
+      "excel_range": "catl_job!A77:E77",
+      "reason": "ID absent from factual server positions; no substitute ID allocated"
+    },
+    {
+      "position_id": 716,
+      "job_code": "SOCIAL_WORKER",
+      "job_nameru": "Социальный работник",
+      "excel_range": "catl_job!A78:E78",
+      "reason": "ID absent from factual server positions; no substitute ID allocated"
+    },
+    {
+      "position_id": 718,
+      "job_code": "TECHNICIAN",
+      "job_nameru": "Техник",
+      "excel_range": "catl_job!A79:E79",
+      "reason": "ID absent from factual server positions; no substitute ID allocated"
+    },
+    {
+      "position_id": 719,
+      "job_code": "OCCUPATIONAL_SAFETY_HEAD",
+      "job_nameru": "Заведующий по охране труда и технике безопасности",
+      "excel_range": "catl_job!A80:E80",
+      "reason": "ID absent from factual server positions; no substitute ID allocated"
+    },
+    {
+      "position_id": 720,
+      "job_code": "PATIENT_TRANSPORT_SANITARY_WORKER",
+      "job_nameru": "Санитар по транспортировке пациентов",
+      "excel_range": "catl_job!A81:E81",
+      "reason": "ID absent from factual server positions; no substitute ID allocated"
+    },
+    {
+      "position_id": 721,
+      "job_code": "EXPERT_PHYSICIAN",
+      "job_nameru": "Врач-эксперт",
+      "excel_range": "catl_job!A82:E82",
+      "reason": "ID absent from factual server positions; no substitute ID allocated"
+    },
+    {
+      "position_id": 722,
+      "job_code": "ADMIN_HOUSEKEEPING_SERVICE_HEAD",
+      "job_nameru": "Руководитель административно-хозяйственной службы",
+      "excel_range": "catl_job!A83:E83",
+      "reason": "ID absent from factual server positions; no substitute ID allocated"
+    },
+    {
+      "position_id": 723,
+      "job_code": "BUFFET_WORKER",
+      "job_nameru": "Буфетчица",
+      "excel_range": "catl_job!A84:E84",
+      "reason": "ID absent from factual server positions; no substitute ID allocated"
+    },
+    {
+      "position_id": 724,
+      "job_code": "ACCOUNTANT_ECONOMIST",
+      "job_nameru": "Бухгалтер-экономист",
+      "excel_range": "catl_job!A85:E85",
+      "reason": "ID absent from factual server positions; no substitute ID allocated"
+    },
+    {
+      "position_id": 725,
+      "job_code": "DEPARTMENT_MANAGER",
+      "job_nameru": "Руководитель отдела",
+      "excel_range": "catl_job!A86:E86",
+      "reason": "ID absent from factual server positions; no substitute ID allocated"
+    },
+    {
+      "position_id": 726,
+      "job_code": "SENIOR_RESIDENT_PHYSICIAN",
+      "job_nameru": "Старший ординатор",
+      "excel_range": "catl_job!A87:E87",
+      "reason": "ID absent from factual server positions; no substitute ID allocated"
+    },
+    {
+      "position_id": 727,
+      "job_code": "COMPLIANCE_OFFICER",
+      "job_nameru": "Комплаенс-офицер",
+      "excel_range": "catl_job!A88:E88",
+      "reason": "ID absent from factual server positions; no substitute ID allocated"
+    },
+    {
+      "position_id": 728,
+      "job_code": "CHIEF_ENGINEER",
+      "job_nameru": "Главный инженер",
+      "excel_range": "catl_job!A89:E89",
+      "reason": "ID absent from factual server positions; no substitute ID allocated"
+    }
+  ],
+  "withheld_links": [],
+  "unmapped_server_positions": [
+    {
+      "position_id": 24,
+      "name": "Машинист по стирке белья"
+    },
+    {
+      "position_id": 47,
+      "name": "Социальный работник"
+    },
+    {
+      "position_id": 52,
+      "name": "Техник"
+    },
+    {
+      "position_id": 82,
+      "name": "медстатистик по вводу в ЭРОБ"
+    },
+    {
+      "position_id": 83,
+      "name": "медстатистик по выводу из ЭРОБ"
+    },
+    {
+      "position_id": 97,
+      "name": "Эксперт по внутреннему обучению и аттестации"
+    },
+    {
+      "position_id": 99,
+      "name": "Заместитель директора по административным вопросам"
+    },
+    {
+      "position_id": 100,
+      "name": "Менеджер УЧР"
+    },
+    {
+      "position_id": 101,
+      "name": "секретарь-референт"
+    },
+    {
+      "position_id": 102,
+      "name": "Переводчик казахского языка"
+    },
+    {
+      "position_id": 104,
+      "name": "Заведующий отделением"
+    },
+    {
+      "position_id": 105,
+      "name": "Медицинский статистик"
+    },
+    {
+      "position_id": 106,
+      "name": "Заведующий ОТ и ТБ"
+    },
+    {
+      "position_id": 107,
+      "name": "Санитар по транспортировке пациентов"
+    },
+    {
+      "position_id": 108,
+      "name": "Врач-эксперт"
+    },
+    {
+      "position_id": 109,
+      "name": "Руководитель административно-хозяйственной службы"
+    },
+    {
+      "position_id": 110,
+      "name": "Буфетчица"
+    },
+    {
+      "position_id": 111,
+      "name": "Бухгалтер-экономист"
+    },
+    {
+      "position_id": 112,
+      "name": "Руководитель отдела"
+    },
+    {
+      "position_id": 113,
+      "name": "Старший ординатор"
+    },
+    {
+      "position_id": 114,
+      "name": "Комплаенс-офицер"
+    },
+    {
+      "position_id": 115,
+      "name": "Главный инженер"
+    }
+  ]
+}

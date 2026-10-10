@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { apiFetchJson } from "@/lib/api";
 
-import { getPersonnelOrderTemplatePublished, previewPersonnelOrderTemplateDraft, savePersonnelOrderTemplateDraft, type PersonnelOrderTemplateDraft, type PersonnelOrderTemplateDraftText } from "./personnelOrderTemplatesApi.client";
+import { getPersonnelOrderTemplatePublished, previewPersonnelOrderTemplateDraft, previewSavedPersonnelOrderTemplateDraft, savePersonnelOrderTemplateDraft, type PersonnelOrderTemplateDraft, type PersonnelOrderTemplateDraftText } from "./personnelOrderTemplatesApi.client";
 
 vi.mock("@/lib/api", () => ({ apiFetchJson: vi.fn() }));
 
@@ -24,6 +24,15 @@ describe("previewPersonnelOrderTemplateDraft", () => {
       { method: "POST", body: draft },
     );
   });
+});
+
+it("requests the exact saved draft identity and rejects a different preview version", async () => {
+  const saved = { ...draft, template_id: 101, template_version_id: 1327, revision: 1, item_type_code: "RETURN_FROM_CHILDCARE_LEAVE" } as PersonnelOrderTemplateDraft;
+  vi.mocked(apiFetchJson).mockResolvedValueOnce({ template_id: 101, template_version_id: 1327, revision: 1, previews: {} });
+  await previewSavedPersonnelOrderTemplateDraft(saved);
+  expect(apiFetchJson).toHaveBeenCalledWith("/admin/personnel-order-templates/RETURN_FROM_CHILDCARE_LEAVE/draft/preview?template_id=101&expected_revision=1");
+  vi.mocked(apiFetchJson).mockResolvedValueOnce({ template_id: 101, template_version_id: 1328, revision: 1, previews: {} });
+  await expect(previewSavedPersonnelOrderTemplateDraft(saved)).rejects.toThrow("Версия предварительного просмотра");
 });
 
 describe("savePersonnelOrderTemplateDraft", () => {

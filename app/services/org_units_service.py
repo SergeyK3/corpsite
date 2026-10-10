@@ -22,6 +22,8 @@ class OrgUnit:
     code: Optional[str]
     group_id: Optional[int]
     is_active: bool
+    name_kk: Optional[str] = None
+    document_genitive_kk: Optional[str] = None
 
 
 class OrgUnitsService:
@@ -460,7 +462,10 @@ class OrgUnitsService:
         sql = text(
             f"""
             {cte_prefix}
-            SELECT ou.unit_id, ou.parent_unit_id, ou.name, ou.code, ou.group_id,
+            SELECT ou.unit_id, ou.parent_unit_id, ou.name,
+                   NULLIF(BTRIM(to_jsonb(ou) ->> 'name_kk'), '') AS name_kk,
+                   NULLIF(BTRIM(to_jsonb(ou) ->> 'document_genitive_kk'), '') AS document_genitive_kk,
+                   ou.code, ou.group_id,
                    COALESCE(ou.is_active, true) AS is_active
             FROM {self._schema}.{self._org_units_table} ou
             WHERE {where_sql}
@@ -482,6 +487,8 @@ class OrgUnitsService:
                     unit_id=int(r["unit_id"]),
                     parent_unit_id=int(r["parent_unit_id"]) if r["parent_unit_id"] is not None else None,
                     name=str(r["name"]) if r["name"] is not None else "",
+                    name_kk=str(r["name_kk"]) if r["name_kk"] is not None else None,
+                    document_genitive_kk=str(r["document_genitive_kk"]) if r["document_genitive_kk"] is not None else None,
                     code=str(r["code"]) if r["code"] is not None else None,
                     group_id=int(r["group_id"]) if r.get("group_id") is not None else None,
                     is_active=bool(r["is_active"]),
@@ -493,7 +500,10 @@ class OrgUnitsService:
         where_active = "" if include_inactive else "AND COALESCE(is_active, true) = true"
         sql = text(
             f"""
-            SELECT unit_id, parent_unit_id, name, code, group_id, COALESCE(is_active, true) AS is_active
+            SELECT unit_id, parent_unit_id, name,
+                   NULLIF(BTRIM(to_jsonb(org_units) ->> 'name_kk'), '') AS name_kk,
+                   NULLIF(BTRIM(to_jsonb(org_units) ->> 'document_genitive_kk'), '') AS document_genitive_kk,
+                   code, group_id, COALESCE(is_active, true) AS is_active
             FROM {self._schema}.{self._org_units_table}
             WHERE unit_id = :unit_id
               {where_active}
@@ -510,6 +520,8 @@ class OrgUnitsService:
             unit_id=int(r["unit_id"]),
             parent_unit_id=int(r["parent_unit_id"]) if r["parent_unit_id"] is not None else None,
             name=str(r["name"]) if r["name"] is not None else "",
+            name_kk=str(r["name_kk"]) if r["name_kk"] is not None else None,
+            document_genitive_kk=str(r["document_genitive_kk"]) if r["document_genitive_kk"] is not None else None,
             code=str(r["code"]) if r["code"] is not None else None,
             group_id=int(r["group_id"]) if r.get("group_id") is not None else None,
             is_active=bool(r["is_active"]),

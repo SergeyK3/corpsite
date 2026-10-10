@@ -682,6 +682,7 @@ export default function PositionsPageClient() {
       <div className="mx-auto w-full max-w-[1440px] px-4 py-3">
         <div className="overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950">
           <div className="border-b border-zinc-200 dark:border-zinc-800 px-4 py-3">
+            <a href="/directory/job-positions" className="text-sm text-blue-600">Справочник RU / KK</a>
             <h1 className="text-xl font-semibold leading-none text-zinc-900 dark:text-zinc-50">
               Должности{filterCaption ? ` (${filterCaption})` : ""}
             </h1>

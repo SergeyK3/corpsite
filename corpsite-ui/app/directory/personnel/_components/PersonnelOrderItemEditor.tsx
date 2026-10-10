@@ -29,8 +29,9 @@ import {
   resolveCurrentPlacementView,
   type CurrentPlacementView,
 } from "../_lib/personnelOrderCurrentPlacement";
-import { resolvePersonnelOrderDocumentForms } from "../_lib/personnelOrderDocumentForms";
+import { resolvePersonnelOrderDocumentForms, resolvePersonnelOrderOrgUnitForms, savedKazakhEmployeeNameForm } from "../_lib/personnelOrderDocumentForms";
 import { calculateKazakhOrgUnitGenitive, calculateKazakhPersonForm, firstNonEmpty } from "../_lib/kazakhDocumentForms";
+import { russianEmployeeGenitiveForOrder, savedRussianEmployeeNameForm } from "../_lib/personnelOrderRussianWording";
 import {
   mapEmployeesResponseToSearchOptions,
   requireEmployeeIdForItemType,
@@ -107,26 +108,8 @@ function sourceEmployeeName(item: PersonnelOrderItem): string {
   return "Не указан";
 }
 
-function explicitEmployeeKkNameForm(
-  employee: unknown,
-  field: "employee_full_name_dative_kk" | "employee_full_name_genitive_kk",
-): string {
-  // Employee names are never inflected in the client.  Accept only an explicit
-  // document form if a directory response starts providing one.
-  if (!employee || typeof employee !== "object") return "";
-  const row = employee as Record<string, unknown>;
-  const forms = row.document_forms_kk;
-  if (forms && typeof forms === "object") {
-    const value = (forms as Record<string, unknown>)[field];
-    if (typeof value === "string" && value.trim()) return value.trim();
-  }
-  const name = row.name;
-  if (name && typeof name === "object") {
-    const alias = field === "employee_full_name_dative_kk" ? "full_name_dative_kk" : "full_name_genitive_kk";
-    const value = (name as Record<string, unknown>)[alias];
-    if (typeof value === "string" && value.trim()) return value.trim();
-  }
-  return "";
+function explicitEmployeeKkNameForm(employee: unknown, field: "employee_full_name_dative_kk" | "employee_full_name_genitive_kk"): string {
+  return savedKazakhEmployeeNameForm(employee, field === "employee_full_name_genitive_kk" ? "genitive" : "dative");
 }
 
 function persistedEffectiveDate(item: PersonnelOrderItem): string {
@@ -337,6 +320,8 @@ export default function PersonnelOrderItemEditor({
   const [employeeSearchError, setEmployeeSearchError] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
   const employeeSelectionRevision = React.useRef(0);
+  const ruGenitiveEdited = React.useRef(false);
+  const editedPositionForms = React.useRef(new Set<string>());
 
   React.useEffect(() => {
     if (hirePersonId == null || !Number.isFinite(hirePersonId) || hirePersonId <= 0) return;
@@ -490,6 +475,7 @@ export default function PersonnelOrderItemEditor({
   }, [hasUnsavedEdit, formSignature]);
 
   function resetForm(typeCode: PersonnelOrderItemFormType = defaultItemType) {
+    ++employeeSelectionRevision.current;
     setEditingItemId(null);
     setEditingItemSavedEmployeeId(null);
     setItemTypeCode(typeCode);
@@ -512,6 +498,8 @@ export default function PersonnelOrderItemEditor({
 
   async function applyEmployeeSelection(option: EmployeeSearchOption) {
     const selectionRevision = ++employeeSelectionRevision.current;
+    ruGenitiveEdited.current = false;
+    editedPositionForms.current.clear();
     setPendingNewEmployee(false);
     setEmployeeId(String(option.employee_id));
     setEmployeeQuery(option.full_name);
@@ -531,8 +519,15 @@ export default function PersonnelOrderItemEditor({
       ...prev,
       org_unit_document_genitive_kk: "",
       position_document_possessive_kk: "",
+      position_document_nominative_ru: "",
+      org_unit_title_ru: "",
+      job_code: "",
+      position_title_ru: "",
+      position_title_kk: "",
+      org_unit_title_kk: "",
       employee_full_name_dative_kk: "",
       employee_full_name_genitive_kk: "",
+      ...(itemTypeCode === "LEAVE.CHILDCARE.GRANT" ? { employee_full_name_dative_ru: "", employee_full_name_genitive_ru: "", position_document_nominative_ru: "" } : {}),
     }));
     setCalculatedKkFields(new Set());
 
@@ -540,9 +535,10 @@ export default function PersonnelOrderItemEditor({
       const details = await getEmployee(String(option.employee_id));
       if (selectionRevision !== employeeSelectionRevision.current) return;
       const selected = employeeDtoToSearchOption(details);
-      const positionForms = resolvePersonnelOrderDocumentForms(details.position);
-      const storedOrgUnitGenitive = String(details.org_unit?.document_genitive_kk || "").trim();
-      const automaticOrgUnitGenitive = calculateKazakhOrgUnitGenitive(details.org_unit?.name_kk);
+      const positionForms = resolvePersonnelOrderDocumentForms(details.position, details);
+      const assignmentUnit = details.has_current_assignment === false ? null : details.org_unit;
+      const storedOrgUnitGenitive = String(assignmentUnit?.document_genitive_kk || "").trim();
+      const automaticOrgUnitGenitive = calculateKazakhOrgUnitGenitive(assignmentUnit?.name_kk);
       const storedDative = explicitEmployeeKkNameForm(details, "employee_full_name_dative_kk");
       const storedGenitive = explicitEmployeeKkNameForm(details, "employee_full_name_genitive_kk");
       const automaticDative = calculateKazakhPersonForm(details, "dative");
@@ -554,10 +550,17 @@ export default function PersonnelOrderItemEditor({
       setCalculatedKkFields(calculated);
       setPayloadDraft((prev) => ({
         ...prev,
-        org_unit_document_genitive_kk: firstNonEmpty(storedOrgUnitGenitive, automaticOrgUnitGenitive.value),
-        position_document_possessive_kk: positionForms.position_document_possessive_kk,
+        org_unit_document_genitive_kk: editedPositionForms.current.has("org_unit_document_genitive_kk") ? prev.org_unit_document_genitive_kk : resolvePersonnelOrderOrgUnitForms(assignmentUnit).org_unit_document_genitive_kk,
+        org_unit_title_ru: resolvePersonnelOrderOrgUnitForms(assignmentUnit).org_unit_title_ru,
+        job_code: details.has_current_assignment === false ? "" : details.position?.job_code || "",
+        position_title_ru: details.has_current_assignment === false ? "" : details.position?.job_nameru || "",
+        position_title_kk: details.has_current_assignment === false ? "" : details.position?.job_namekk || "",
+        org_unit_title_kk: assignmentUnit?.name_kk || "",
+        position_document_nominative_ru: editedPositionForms.current.has("position_document_nominative_ru") ? prev.position_document_nominative_ru : positionForms.position_document_nominative_ru,
+        position_document_possessive_kk: editedPositionForms.current.has("position_document_possessive_kk") ? prev.position_document_possessive_kk : positionForms.position_document_possessive_kk,
         employee_full_name_dative_kk: firstNonEmpty(storedDative, automaticDative.value),
         employee_full_name_genitive_kk: firstNonEmpty(storedGenitive, automaticGenitive.value),
+        ...(itemTypeCode === "LEAVE.CHILDCARE.GRANT" ? { employee_full_name_dative_ru: savedRussianEmployeeNameForm(details, "dative"), employee_full_name_genitive_ru: ruGenitiveEdited.current ? prev.employee_full_name_genitive_ru : russianEmployeeGenitiveForOrder(details), position_document_nominative_ru: editedPositionForms.current.has("position_document_nominative_ru") ? prev.position_document_nominative_ru : positionForms.position_document_nominative_ru } : {}),
       }));
       if (config?.showCurrentPlacement) {
         setCurrentPlacement(await resolveCurrentPlacementView(selected));
@@ -598,6 +601,7 @@ export default function PersonnelOrderItemEditor({
   }
 
   async function startEdit(item: PersonnelOrderItem) {
+    ++employeeSelectionRevision.current;
     const uiType = detectUiItemTypeFromRecord(item);
     const normalizedUiType = normalizeItemFormType(uiType) ?? defaultItemType;
     const draft = itemPayloadDraftFromRecord(item.payload);
@@ -661,6 +665,7 @@ export default function PersonnelOrderItemEditor({
   }
 
   function handleItemTypeChange(nextType: PersonnelOrderItemFormType) {
+    ++employeeSelectionRevision.current;
     setItemTypeCode(nextType);
     setPayloadDraft(emptyItemPayloadDraft());
     setSelectedEmployeeId(null);
@@ -691,6 +696,8 @@ export default function PersonnelOrderItemEditor({
   }
 
   function updatePayloadField<K extends keyof ItemPayloadDraft>(key: K, value: string) {
+    if (key === "position_document_possessive_kk" || key === "position_document_nominative_ru" || key === "org_unit_document_genitive_kk") editedPositionForms.current.add(key);
+    if (key === "employee_full_name_genitive_ru") ruGenitiveEdited.current = true;
     setCalculatedKkFields((previous) => { const next = new Set(previous); next.delete(String(key)); return next; });
     setPayloadDraft((prev) => ({ ...prev, [key]: value }));
     if (key === "termination_reason") setTerminationReasonSuggested(false);
@@ -758,7 +765,7 @@ export default function PersonnelOrderItemEditor({
     setSaving(true);
     try {
       const backendType = resolveBackendItemTypeCode(itemTypeCode);
-      const isLeave = backendType === "LEAVE.ANNUAL.GRANT" || backendType === "LEAVE.UNPAID.GRANT";
+      const isLeave = backendType === "LEAVE.ANNUAL.GRANT" || backendType === "LEAVE.UNPAID.GRANT" || backendType === "LEAVE.CHILDCARE.GRANT";
       const leaveStart = String(payloadDraft.leave_start || "").trim();
       const leaveEnd = String(payloadDraft.leave_end || "").trim();
       if (isLeave && (!leaveStart || !leaveEnd || !payloadDraft.application_date)) {
@@ -781,6 +788,13 @@ export default function PersonnelOrderItemEditor({
       // Updating a form field must not erase imported context, placement,
       // basis ids, or other payload attributes not represented by inputs.
       const payload = { ...savedPayload, ...buildItemPayload(backendType, payloadDraft) };
+      for (const key of ["document_forms_ru", "document_forms_kk"] as const) {
+        const previous = savedPayload[key];
+        const incoming = payload[key];
+        if (previous && typeof previous === "object" && incoming && typeof incoming === "object") {
+          payload[key] = { ...previous, ...incoming };
+        }
+      }
       if (backendType === "LEAVE.UNPAID.GRANT") {
         // An edited legacy item must not carry its old triplet beside the
         // versioned `leave` object: the backend deliberately rejects two
@@ -824,7 +838,9 @@ export default function PersonnelOrderItemEditor({
     if (!registerPendingSave) return;
     registerPendingSave(() => {
       if (itemSaveInFlight.current) return itemSaveInFlight.current;
-      if (editingItemId != null && !hasUnsavedEdit) return Promise.resolve(true);
+      // A successful save clears the ref before React installs the next render's
+      // callback. A generation retry in that interval must not PATCH it again.
+      if (editingItemId != null && (savedFormSignature.current == null || savedFormSignature.current === formSignature)) return Promise.resolve(true);
       // The editor is rendered even before the operator starts a new item.
       // Generating text in that state must not attempt to save an empty
       // item (and, consequently, must not turn a normal generation into a
@@ -833,6 +849,7 @@ export default function PersonnelOrderItemEditor({
       const meaningfulDraftFields: Array<keyof ItemPayloadDraft> = [
         "leave_start", "leave_end", "leave_days", "work_period_start", "work_period_end", "work_period_days",
         "application_date", "application_number", "vacation_benefit_rule", "leave_note",
+        "birth_certificate_date", "birth_certificate_number", "employee_full_name_dative_ru", "employee_full_name_genitive_ru", "position_document_nominative_ru",
         "org_unit_document_genitive_kk", "position_document_possessive_kk",
         "employee_full_name_dative_kk", "employee_full_name_genitive_kk", "person_id", "org_unit_id",
         "position_id", "to_org_unit_id", "to_position_id", "to_rate", "termination_reason",
@@ -1132,8 +1149,9 @@ export default function PersonnelOrderItemEditor({
   }
 
   function renderAdditionalSection() {
-    if (itemTypeCode === "LEAVE.ANNUAL.GRANT" || itemTypeCode === "LEAVE.UNPAID.GRANT") {
+    if (itemTypeCode === "LEAVE.ANNUAL.GRANT" || itemTypeCode === "LEAVE.UNPAID.GRANT" || itemTypeCode === "LEAVE.CHILDCARE.GRANT") {
       const annual = itemTypeCode === "LEAVE.ANNUAL.GRANT";
+      const childcare = itemTypeCode === "LEAVE.CHILDCARE.GRANT";
       const start = String(payloadDraft.leave_start || "");
       const end = String(payloadDraft.leave_end || "");
       const calculatedDays = start && end ? Math.max(0, Math.floor((Date.parse(`${end}T00:00:00`) - Date.parse(`${start}T00:00:00`)) / 86400000) + 1) : "";
@@ -1154,19 +1172,27 @@ export default function PersonnelOrderItemEditor({
           </div>)}
         </div> : null}
         <div className="grid gap-3 sm:grid-cols-2"><FormField label="Дата заявления"><input type="date" data-testid="leave-application-date" required value={payloadDraft.application_date || ""} onChange={(e) => updatePayloadField("application_date", e.target.value)} className={FIELD_INPUT_CLASS} /></FormField><FormField label="Номер заявления"><input value={payloadDraft.application_number || ""} onChange={(e) => updatePayloadField("application_number", e.target.value)} className={FIELD_INPUT_CLASS} /></FormField></div>
+        {childcare ? <section className="grid gap-3 sm:grid-cols-2" data-testid="childcare-birth-certificate">
+          <FormField label="Дата выдачи свидетельства о рождении"><input type="date" required value={payloadDraft.birth_certificate_date || ""} onChange={e => updatePayloadField("birth_certificate_date", e.target.value)} className={FIELD_INPUT_CLASS} /></FormField>
+          <FormField label="Номер свидетельства о рождении"><input required value={payloadDraft.birth_certificate_number || ""} onChange={e => updatePayloadField("birth_certificate_number", e.target.value)} className={FIELD_INPUT_CLASS} /></FormField>
+          <p className="text-xs sm:col-span-2">Дата выдачи свидетельства — не дата рождения ребёнка. Дата окончания отпуска вводится отдельно.</p>
+          <FormField label="RU: ФИО (дательный падеж)"><input required value={payloadDraft.employee_full_name_dative_ru || ""} onChange={e => updatePayloadField("employee_full_name_dative_ru", e.target.value)} className={FIELD_INPUT_CLASS} /></FormField>
+          <FormField label="RU: ФИО (родительный падеж)"><input required value={payloadDraft.employee_full_name_genitive_ru || ""} onChange={e => updatePayloadField("employee_full_name_genitive_ru", e.target.value)} className={FIELD_INPUT_CLASS} /></FormField>
+          <FormField label="RU: должность (документная форма)"><input required value={payloadDraft.position_document_nominative_ru || ""} onChange={e => updatePayloadField("position_document_nominative_ru", e.target.value)} className={FIELD_INPUT_CLASS} /></FormField>
+        </section> : null}
         {!annual ? <section className="grid gap-2 rounded-lg border border-zinc-200 p-3 sm:grid-cols-2 dark:border-zinc-800" data-testid="unpaid-leave-kk-document-forms">
           <FormField label="KK: бөлімше (ілік септік)"><input value={payloadDraft.org_unit_document_genitive_kk || ""} onChange={(e) => updatePayloadField("org_unit_document_genitive_kk", e.target.value)} className={FIELD_INPUT_CLASS} />{calculatedKkFields.has("org_unit_document_genitive_kk") ? <p className="mt-1 text-xs text-blue-700">Рассчитано автоматически. Проверьте.</p> : null}{!payloadDraft.org_unit_document_genitive_kk ? <p className="mt-1 text-xs text-amber-700 dark:text-amber-300" data-testid="personnel-order-org-unit-form-missing">В справочнике нет данных для расчёта формы подразделения. Заполните вручную.</p> : null}</FormField>
-          <FormField label="KK: лауазым (құжат нысаны)"><input value={payloadDraft.position_document_possessive_kk || ""} onChange={(e) => updatePayloadField("position_document_possessive_kk", e.target.value)} className={FIELD_INPUT_CLASS} />{!payloadDraft.position_document_possessive_kk ? <p className="mt-1 text-xs text-amber-700 dark:text-amber-300" data-testid="personnel-order-position-form-missing">Для должности нет документной формы. Заполните вручную.</p> : null}</FormField>
+          <FormField label="KK: лауазым (құжат нысаны)"><input value={payloadDraft.position_document_possessive_kk || ""} onChange={(e) => updatePayloadField("position_document_possessive_kk", e.target.value)} className={FIELD_INPUT_CLASS} />{!payloadDraft.position_document_possessive_kk ? <p className="mt-1 text-xs text-amber-700 dark:text-amber-300" data-testid="personnel-order-position-form-missing">В справочнике должности нет казахского названия или документной формы. Заполните вручную.</p> : null}</FormField>
           <FormField label="KK: Т.А.Ә. (барыс септік)"><input value={payloadDraft.employee_full_name_dative_kk || ""} onChange={(e) => updatePayloadField("employee_full_name_dative_kk", e.target.value)} className={FIELD_INPUT_CLASS} />{calculatedKkFields.has("employee_full_name_dative_kk") ? <p className="mt-1 text-xs text-blue-700">Рассчитано автоматически. Проверьте.</p> : null}{!payloadDraft.employee_full_name_dative_kk ? <p className="mt-1 text-xs text-amber-700 dark:text-amber-300" data-testid="personnel-order-employee-dative-form-missing">Недостаточно данных для расчёта формы ФИО. Заполните вручную.</p> : null}</FormField>
           <FormField label="KK: Т.А.ӘА. (ілік септік)"><input value={payloadDraft.employee_full_name_genitive_kk || ""} onChange={(e) => updatePayloadField("employee_full_name_genitive_kk", e.target.value)} className={FIELD_INPUT_CLASS} />{calculatedKkFields.has("employee_full_name_genitive_kk") ? <p className="mt-1 text-xs text-blue-700">Рассчитано автоматически. Проверьте.</p> : null}{!payloadDraft.employee_full_name_genitive_kk ? <p className="mt-1 text-xs text-amber-700 dark:text-amber-300" data-testid="personnel-order-employee-genitive-form-missing">Недостаточно данных для расчёта формы ФИО. Заполните вручную.</p> : null}</FormField>
         </section> : null}
         {annual ? <><label className="flex gap-2 text-sm"><input type="checkbox" checked={Boolean(payloadDraft.vacation_benefit_applicable)} onChange={(e) => setPayloadDraft((prev) => ({...prev, vacation_benefit_applicable:e.target.checked}))} />Пособие к отпуску</label>{payloadDraft.vacation_benefit_applicable ? <FormField label="Правило пособия"><input value={payloadDraft.vacation_benefit_rule || ""} onChange={(e) => updatePayloadField("vacation_benefit_rule", e.target.value)} className={FIELD_INPUT_CLASS} /></FormField> : null}</> : null}
         <FormField label="Примечание"><textarea value={payloadDraft.leave_note || ""} onChange={(e) => updatePayloadField("leave_note", e.target.value)} className={FIELD_INPUT_CLASS} /></FormField>
-        <div className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800" data-testid="leave-order-preview">
+        {!childcare ? <div className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800" data-testid="leave-order-preview">
           <div className="mb-2 flex gap-2"><button type="button" onClick={() => setLeavePreviewLocale("ru")} className={leavePreviewLocale === "ru" ? "font-semibold" : ""}>Русский</button><span>/</span><button type="button" onClick={() => setLeavePreviewLocale("kk")} className={leavePreviewLocale === "kk" ? "font-semibold" : ""}>Қазақша</button></div>
           <div className="text-sm font-semibold">{leavePreviewLocale === "ru" ? "ПРИКАЗ" : "БҰЙРЫҚ"}</div>
           <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm"><li>{leavePreviewLocale === "ru" ? `${annual ? "Предоставить ежегодный трудовой отпуск" : "Предоставить отпуск без сохранения заработной платы"} ${employeeQuery || "сотруднику"}, ${currentPlacement?.position_name || "должность"} ${currentPlacement?.org_unit_name || "подразделения"}, с ${start || "…"} по ${end || "…"}, ${calculatedDays || "…"} календарных дней.` : annual ? `${employeeQuery || "Қызметкерге"} ${start || "…"} мен ${end || "…"} аралығында ${calculatedDays || "…"} күнтізбелік күнге жылдық ақылы еңбек демалысы берілсін.` : kkUnpaidPreview} {annual ? (payloadDraft.work_periods || []).map((p) => ` ${p.start}–${p.end}: ${p.days} ${leavePreviewLocale === "ru" ? "дн." : "күн."}`).join("") : ""} {payloadDraft.vacation_benefit_applicable ? (leavePreviewLocale === "ru" ? ` Пособие: ${payloadDraft.vacation_benefit_rule || "…"}.` : ` Демалыс жәрдемақысы: ${payloadDraft.vacation_benefit_rule || "…"}.`) : ""} {annual ? (leavePreviewLocale === "ru" ? ` Основание: личное заявление от ${payloadDraft.application_date || "…"}.` : ` Негіз: ${payloadDraft.application_date || "…"} күнгі жеке өтініш.`) : ""}</li></ol>
-        </div>
+        </div> : <p className="text-xs">Текст RU/KK с двумя основаниями формируется из сохранённых реквизитов по шаблону отпуска по уходу за ребёнком.</p>}
       </div>;
     }
     return (
@@ -1429,6 +1455,14 @@ export default function PersonnelOrderItemEditor({
 
           <fieldset disabled={saving} className="space-y-4">
             {sectionOrder.map((section) => renderFormSection(section))}
+            {itemTypeCode !== "LEAVE.CHILDCARE.GRANT" && <section className="grid gap-3 sm:grid-cols-2" data-testid="common-position-document-forms">
+              <FormField label="RU: должность (документная форма)"><input value={payloadDraft.position_document_nominative_ru || ""} onChange={e => updatePayloadField("position_document_nominative_ru", e.target.value)} className={FIELD_INPUT_CLASS} /></FormField>
+              {itemTypeCode !== "LEAVE.UNPAID.GRANT" && <>
+                <FormField label="KK: лауазым (құжат нысаны)"><input value={payloadDraft.position_document_possessive_kk || ""} onChange={e => updatePayloadField("position_document_possessive_kk", e.target.value)} className={FIELD_INPUT_CLASS} /></FormField>
+                <FormField label="KK: подразделение в тексте"><input value={payloadDraft.org_unit_document_genitive_kk || ""} onChange={e => updatePayloadField("org_unit_document_genitive_kk", e.target.value)} className={FIELD_INPUT_CLASS} /></FormField>
+              </>}
+            </section>}
+
           </fieldset>
 
           {error ? (

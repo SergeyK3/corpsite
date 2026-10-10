@@ -20,8 +20,11 @@ def _safe_context(payload: Mapping[str, Any], context: Optional[Mapping[str, Any
     out = dict(payload)
     for key, value in (context or {}).items():
         text_value = str(value or "").strip()
-        if key == "position_name": out["source_position_name"] = text_value
+        if key == "position_name":
+            out["source_position_name"] = text_value
+            out["document_forms_ru"] = {**dict(out.get("document_forms_ru") or {}), "position_document_nominative_ru": text_value}
         elif key == "org_unit_name": out["source_org_unit_name"] = text_value
+        elif key in {"recall_position_kk", "recall_org_unit_kk", "basis_ru", "basis_kk"}: out[key] = text_value
         elif key == "specialty": out["document_specialty"] = text_value or None
         elif key == "rate": out["document_rate"] = text_value or None
     return out
@@ -45,6 +48,9 @@ def list_document_items(*, order_id: int) -> dict[str, Any]:
               COALESCE(NULLIF(BTRIM(poi.payload ->> 'document_specialty'), ''), NULLIF(BTRIM(poi.payload #>> '{unresolved_subject,specialty}'), '')) AS specialty,
               NULLIF(BTRIM(poi.payload ->> 'document_rate'), '') AS rate,
               CASE WHEN poi.payload #>> '{unresolved_subject,needs_employee_link}' = 'true' THEN TRUE ELSE FALSE END AS needs_employee_link,
+              poi.payload ->> 'recall_position_kk' AS recall_position_kk,
+              poi.payload ->> 'recall_org_unit_kk' AS recall_org_unit_kk,
+              poi.payload ->> 'basis_ru' AS basis_ru, poi.payload ->> 'basis_kk' AS basis_kk,
               poi.effective_date
             FROM personnel_order_items poi
             LEFT JOIN employees e ON e.employee_id=poi.employee_id
@@ -80,6 +86,12 @@ def patch_document_item(*, order_id: int, item_id: int, expected_document_revisi
         requested_basis_type = str((document_subject_context or {}).get("basis_type") or "").strip().upper()
         before = {"item_type_code": item["item_type_code"], "employee_id": item["employee_id"], "effective_date": item["effective_date"].isoformat() if item["effective_date"] else None, "document_subject_context": {"position_name": old_payload.get("source_position_name"), "org_unit_name": old_payload.get("source_org_unit_name"), "specialty": old_payload.get("document_specialty"), "rate": old_payload.get("document_rate"), "basis_type": current_basis_type}}
         after = {"item_type_code": item_type_code, "employee_id": employee_id, "effective_date": effective_date.isoformat() if effective_date else None, "document_subject_context": {"position_name": new_payload.get("source_position_name"), "org_unit_name": new_payload.get("source_org_unit_name"), "specialty": new_payload.get("document_specialty"), "rate": new_payload.get("document_rate"), "basis_type": requested_basis_type or current_basis_type}}
+        for field in ("recall_position_kk", "recall_org_unit_kk", "basis_ru", "basis_kk"):
+            before['document_subject_context'][field] = old_payload.get(field)
+            after['document_subject_context'][field] = new_payload.get(field)
+        if item_type_code == "LEAVE.ANNUAL.RECALL":
+            from app.services.personnel_order_recall_contract import values
+            values(new_payload, effective_date)
         if before == after: return {"no_op": True, "resulting_document_revision": int(order["document_revision"]), "audit_event_ids": []}
         c.execute(text("UPDATE personnel_order_items SET item_type_code=:type,employee_id=:employee,effective_date=:date,payload=CAST(:payload AS jsonb) WHERE item_id=:id"), {"type": item_type_code, "employee": employee_id, "date": effective_date, "payload": json.dumps(new_payload, ensure_ascii=False), "id": item_id})
         if requested_basis_type:

@@ -1,6 +1,11 @@
 import type { PersonnelOrderType } from "./personnelOrderLabels";
 
 export type ItemPayloadDraft = {
+  job_code?: string;
+  position_title_ru?: string;
+  position_title_kk?: string;
+  org_unit_title_kk?: string;
+  org_unit_title_ru?: string;
   work_periods?: Array<{ start: string; end: string; days: string }>;
   leave_start?: string;
   leave_end?: string;
@@ -10,6 +15,11 @@ export type ItemPayloadDraft = {
   work_period_days?: string;
   application_date?: string;
   application_number?: string;
+  birth_certificate_date?: string;
+  birth_certificate_number?: string;
+  employee_full_name_dative_ru?: string;
+  employee_full_name_genitive_ru?: string;
+  position_document_nominative_ru?: string;
   vacation_benefit_applicable?: boolean;
   vacation_benefit_rule?: string;
   leave_note?: string;
@@ -45,6 +55,7 @@ export function emptyItemPayloadDraft(): ItemPayloadDraft {
   return {
     leave_start: "", leave_end: "", leave_days: "", work_period_start: "", work_period_end: "", work_period_days: "", work_periods: [{ start: "", end: "", days: "" }],
     application_date: "", application_number: "", vacation_benefit_applicable: false, vacation_benefit_rule: "", leave_note: "",
+    birth_certificate_date: "", birth_certificate_number: "", employee_full_name_dative_ru: "", employee_full_name_genitive_ru: "", position_document_nominative_ru: "",
     org_unit_document_genitive_kk: "", position_document_possessive_kk: "", employee_full_name_dative_kk: "", employee_full_name_genitive_kk: "",
     org_unit_id: "",
     position_id: "",
@@ -73,6 +84,8 @@ export function itemPayloadDraftFromRecord(payload: Record<string, unknown> | nu
     ? source.document_forms_kk as Record<string, unknown> : {};
   const basis = source.basis && typeof source.basis === "object" && !Array.isArray(source.basis)
     ? source.basis as Record<string, unknown> : {};
+  const certificate = basis.birth_certificate && typeof basis.birth_certificate === "object" ? basis.birth_certificate as Record<string, unknown> : {};
+  const ruForms = source.document_forms_ru && typeof source.document_forms_ru === "object" ? source.document_forms_ru as Record<string, unknown> : {};
   const nestedForm = (entity: "org_unit_name" | "position_name" | "employee", keys: string[]): string => {
     const raw = source[entity];
     const value = entity === "employee" && raw && typeof raw === "object" ? (raw as Record<string, unknown>).name : raw;
@@ -97,10 +110,17 @@ export function itemPayloadDraftFromRecord(payload: Record<string, unknown> | nu
     workPeriods.push({ start: String(source.work_period_start || ""), end: String(source.work_period_end || ""), days: String(source.work_period_days || "") });
   }
   return {
+    org_unit_title_ru: asString("source_org_unit_name"),
+    job_code: source.job_code == null ? undefined : String(source.job_code),
+    position_title_ru: source.position_title_ru == null ? undefined : String(source.position_title_ru),
+    position_title_kk: source.position_title_kk == null ? undefined : String(source.position_title_kk),
+    org_unit_title_kk: source.org_unit_title_kk == null ? undefined : String(source.org_unit_title_kk),
     work_periods: workPeriods.length ? workPeriods : [{ start: "", end: "", days: "" }],
     leave_start: asString("leave_start", source.leave && typeof source.leave === "object" ? String((source.leave as Record<string, unknown>).start || "") : ""), leave_end: asString("leave_end", source.leave && typeof source.leave === "object" ? String((source.leave as Record<string, unknown>).end || "") : ""), leave_days: asString("leave_days", source.leave && typeof source.leave === "object" ? String((source.leave as Record<string, unknown>).days || "") : ""),
     work_period_start: asString("work_period_start"), work_period_end: asString("work_period_end"), work_period_days: asString("work_period_days"),
     application_date: asString("basis_date", asString("application_date", typeof basis.date === "string" ? basis.date : "")), application_number: asString("basis_number", asString("application_number", typeof basis.number === "string" ? basis.number : "")),
+    birth_certificate_date: String(certificate.date || ""), birth_certificate_number: String(certificate.number || ""),
+    employee_full_name_dative_ru: String(ruForms.employee_full_name_dative_ru || ""), employee_full_name_genitive_ru: String(ruForms.employee_full_name_genitive_ru || ""), position_document_nominative_ru: String(ruForms.position_document_nominative_ru || ""),
     vacation_benefit_applicable: source.vacation_benefit_applicable === true,
     vacation_benefit_rule: asString("vacation_benefit_rule"), leave_note: asString("note"),
     org_unit_document_genitive_kk: documentForm(["org_unit_document_genitive_kk", "org_unit_genitive", "document_genitive_kk"], "org_unit_name", ["document_genitive_kk", "genitive_kk"]),
@@ -169,8 +189,18 @@ export function buildItemPayload(
 ): Record<string, unknown> {
   const type = String(itemTypeCode || "").trim().toUpperCase() as PersonnelOrderType;
   const payload: Record<string, unknown> = {};
+  if (draft.job_code !== undefined) payload.job_code = draft.job_code || null;
+  for (const key of ["position_title_ru", "position_title_kk", "org_unit_title_kk"] as const) {
+    if (draft[key] !== undefined) payload[key] = draft[key] || null;
+  }
+  const ruForms = { position_document_nominative_ru: draft.position_document_nominative_ru || "" };
+  const kkForms = { position_document_possessive_kk: draft.position_document_possessive_kk || "", org_unit_document_genitive_kk: draft.org_unit_document_genitive_kk || "" };
+  if (Object.values(ruForms).some(Boolean)) payload.document_forms_ru = ruForms;
+  if (Object.values(kkForms).some(Boolean)) payload.document_forms_kk = kkForms;
+  if (draft.org_unit_title_ru?.trim()) payload.source_org_unit_name = draft.org_unit_title_ru.trim();
 
-  if (type === "LEAVE.ANNUAL.GRANT" || type === "LEAVE.UNPAID.GRANT") {
+
+  if (type === "LEAVE.ANNUAL.GRANT" || type === "LEAVE.UNPAID.GRANT" || type === "LEAVE.CHILDCARE.GRANT") {
     const leaveStart = String(draft.leave_start || "").trim();
     const leaveEnd = String(draft.leave_end || "").trim();
     const explicitLeaveDays = optionalNumber(draft.leave_days);
@@ -182,7 +212,7 @@ export function buildItemPayload(
     // `leave_days` can be left over from the previously saved range while the
     // operator changes only the dates.  The unpaid-leave contract owns one
     // coherent range, so its days must always describe those outgoing dates.
-    const leaveDays = type === "LEAVE.UNPAID.GRANT" ? inclusiveRangeDays : explicitLeaveDays ?? inclusiveRangeDays;
+    const leaveDays = type !== "LEAVE.ANNUAL.GRANT" ? inclusiveRangeDays : explicitLeaveDays ?? inclusiveRangeDays;
     if (type === "LEAVE.UNPAID.GRANT") {
       const periodType = leaveStart && leaveStart === leaveEnd ? "SINGLE_DAY" : "CONTINUOUS_RANGE";
       payload.leave = { period_type: periodType, start: leaveStart, end: leaveEnd, days: leaveDays };
@@ -191,10 +221,14 @@ export function buildItemPayload(
       payload.leave_end = leaveEnd;
     }
     // The versioned unpaid contract intentionally has no legacy fields.
-    if (type === "LEAVE.ANNUAL.GRANT" && leaveDays != null) payload.leave_days = leaveDays;
+    if (type !== "LEAVE.UNPAID.GRANT" && leaveDays != null) payload.leave_days = leaveDays;
     payload.basis = { kind: "PERSONAL_APPLICATION", date: String(draft.application_date || "").trim(), number: String(draft.application_number || "").trim() || null };
     if (String(draft.leave_note || "").trim()) payload.note = String(draft.leave_note).trim();
-    if (type === "LEAVE.UNPAID.GRANT") {
+    if (type === "LEAVE.CHILDCARE.GRANT") {
+      payload.basis = { ...(payload.basis as Record<string, unknown>), birth_certificate: { date: draft.birth_certificate_date || "", number: draft.birth_certificate_number || "" } };
+      payload.document_forms_ru = { employee_full_name_dative_ru: draft.employee_full_name_dative_ru || "", employee_full_name_genitive_ru: draft.employee_full_name_genitive_ru || "", position_document_nominative_ru: draft.position_document_nominative_ru || "" };
+    }
+    if (type === "LEAVE.UNPAID.GRANT" || type === "LEAVE.CHILDCARE.GRANT") {
       const document_forms_kk = {
         org_unit_document_genitive_kk: String(draft.org_unit_document_genitive_kk || "").trim(),
         position_document_possessive_kk: String(draft.position_document_possessive_kk || "").trim(),

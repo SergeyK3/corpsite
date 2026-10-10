@@ -130,6 +130,15 @@ def _validate_leave_draft_item(
         return
     if employee_id is None:
         raise PersonnelOrderValidationError("Leave item requires employee_id.")
+    if item_type_code == "LEAVE.ANNUAL.RECALL":
+        from app.services.personnel_order_recall_contract import values
+        try:
+            values(payload, effective_date)
+        except ValueError as exc:
+            raise PersonnelOrderValidationError(str(exc)) from exc
+        if period_start is not None or period_end is not None:
+            raise PersonnelOrderValidationError("Recall requires a recall date, not a leave period.")
+        return
     try:
         if item_type_code == "LEAVE.UNPAID.GRANT":
             from app.services.personnel_order_unpaid_leave_contract import unpaid_leave_period
@@ -773,6 +782,9 @@ def create_personnel_order_item(
 
         if employee_id is not None:
             _ensure_employee_exists(conn, employee_id)
+            from app.services.personnel_order_catalog_context import employee_catalog_context, snapshot_catalog_forms
+            normalized_payload = snapshot_catalog_forms(normalized_payload, employee_catalog_context(conn, employee_id, effective_date))
+            payload_json = json.dumps(normalized_payload, ensure_ascii=False)
         _validate_leave_draft_item(
             item_type_code=normalized_type,
             employee_id=employee_id,

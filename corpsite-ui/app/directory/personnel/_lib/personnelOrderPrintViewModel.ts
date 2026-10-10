@@ -78,9 +78,9 @@ export const PERSONNEL_ORDER_PRINT_DOCUMENT_TITLES: Record<string, LocalizedText
   HIRE: localizedText("Жұмысқа қабылдау туралы", "О приёме на работу"),
   RETURN_FROM_CHILDCARE_LEAVE: localizedText("Бала күтіміне байланысты демалыстан жұмысқа шығу туралы", "О выходе на работу из отпуска по уходу за ребёнком"),
   TRANSFER: localizedText("Ауыстыру туралы", "О переводе"),
-  TERMINATION: localizedText("Жұмыстан босату туралы", "Об увольнении"),
-  CONCURRENT_DUTY_START: localizedText("Қоса атқаруды белгілеу туралы", "Об установлении совмещения"),
-  CONCURRENT_DUTY_END: localizedText("Қоса атқаруды тоқтату туралы", "О прекращении совмещения"),
+  TERMINATION: localizedText("Еңбек шартын бұзу туралы", "Об увольнении"),
+  CONCURRENT_DUTY_START: localizedText("Қоса атқару туралы", "Об установлении совмещения"),
+  CONCURRENT_DUTY_END: localizedText("Ставканы алып тастау туралы", "О прекращении совмещения"),
   SUPPLEMENTARY_PAY: localizedText("Қосымша ақы туралы", "О дополнительной оплате"),
   COMPOSITE: localizedText("Кадрлық өзгерістер туралы", "О кадровых изменениях"),
 };

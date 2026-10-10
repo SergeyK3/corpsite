@@ -44,6 +44,9 @@ describe("personnelOrdersApi.client", () => {
       org_unit_id: 3,
       q: "WPPO",
       include_closed: false,
+      order_id: undefined,
+      record_quality: "WORKING",
+      reconstruction_quality: undefined,
     });
   });
 
@@ -71,6 +74,8 @@ describe("personnelOrdersApi.client", () => {
       order_id: 42,
       q: undefined,
       include_closed: false,
+      record_quality: "WORKING",
+      reconstruction_quality: undefined,
     });
   });
 
@@ -114,6 +119,7 @@ describe("personnelOrdersApi.client", () => {
       {
         order_id: 1,
         order_number: "WPPO-001",
+        source_title: "Об отзыве из отпуска",
         order_date: "2026-07-07",
         order_type_code: "HIRE",
         order_class: "PERSONNEL",
@@ -127,6 +133,7 @@ describe("personnelOrdersApi.client", () => {
     ];
     expect(filterPersonnelOrdersBySearch(items, "wppo")).toHaveLength(1);
     expect(filterPersonnelOrdersBySearch(items, "иван")).toHaveLength(1);
+    expect(filterPersonnelOrdersBySearch(items, "об отзыве из отпуска")).toHaveLength(1);
     expect(filterPersonnelOrdersBySearch(items, "сидор")).toHaveLength(0);
   });
 });

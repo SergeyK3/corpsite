@@ -24,7 +24,7 @@ INITIAL_TEXTS_BY_TYPE: Final[dict[str, InitialTexts]] = {'HIRE': {'title_ru': '�
               'basis_template_ru': 'Основание: {{basis}}.',
               'basis_template_kk': 'Негіз: {{basis}}.'},
  'TERMINATION': {'title_ru': 'Об увольнении',
-                 'title_kk': 'Жұмыстан босату туралы',
+                 'title_kk': 'Еңбек шартын бұзу туралы',
                  'preamble_ru': 'В соответствии с Трудовым кодексом Республики Казахстан',
                  'preamble_kk': 'Қазақстан Республикасының Еңбек кодексіне сәйкес',
                  'body_template_ru': 'Уволить {{employee.full_name}}, {{position.title_ru}} подразделения '
@@ -42,7 +42,7 @@ INITIAL_TEXTS_BY_TYPE: Final[dict[str, InitialTexts]] = {'HIRE': {'title_ru': '�
                  'basis_template_ru': 'Основание: {{basis}}.',
                  'basis_template_kk': 'Негіз: {{basis}}.'},
  'CONCURRENT_DUTY_START': {'title_ru': 'Об установлении совмещения',
-                           'title_kk': 'Қоса атқаруды белгілеу туралы',
+                           'title_kk': 'Қоса атқару туралы',
                            'preamble_ru': 'В соответствии с Трудовым кодексом Республики Казахстан',
                            'preamble_kk': 'Қазақстан Республикасының Еңбек кодексіне сәйкес',
                            'body_template_ru': 'Установить {{employee.full_name}} совмещение в размере '
@@ -54,7 +54,7 @@ INITIAL_TEXTS_BY_TYPE: Final[dict[str, InitialTexts]] = {'HIRE': {'title_ru': '�
                            'basis_template_ru': 'Основание: {{basis}}.',
                            'basis_template_kk': 'Негіз: {{basis}}.'},
  'CONCURRENT_DUTY_END': {'title_ru': 'О прекращении совмещения',
-                         'title_kk': 'Қоса атқаруды тоқтату туралы',
+                         'title_kk': 'Ставканы алып тастау туралы',
                          'preamble_ru': 'В соответствии с Трудовым кодексом Республики Казахстан',
                          'preamble_kk': 'Қазақстан Республикасының Еңбек кодексіне сәйкес',
                          'body_template_ru': 'Прекратить совмещение для {{employee.full_name}} с {{effective_date}}. '
@@ -63,8 +63,8 @@ INITIAL_TEXTS_BY_TYPE: Final[dict[str, InitialTexts]] = {'HIRE': {'title_ru': '�
                                              'тоқтатылсын. Қалған мөлшерлеме: {{remaining.rate}}.',
                          'basis_template_ru': 'Основание: {{basis}}.',
                          'basis_template_kk': 'Негіз: {{basis}}.'},
- 'LEAVE.ANNUAL.GRANT': {'title_ru': 'О предоставлении ежегодного оплачиваемого трудового отпуска',
-                        'title_kk': 'Жыл сайынғы ақылы еңбек демалысын беру туралы',
+ 'LEAVE.ANNUAL.GRANT': {'title_ru': 'О трудовом отпуске',
+                        'title_kk': 'Еңбек демалысы туралы',
                         'preamble_ru': 'В соответствии с Трудовым кодексом Республики Казахстан',
                         'preamble_kk': 'Қазақстан Республикасының Еңбек кодексіне сәйкес',
                         'body_template_ru': 'Предоставить {{employee.full_name}}, {{position.title_ru}} подразделения '
@@ -77,7 +77,7 @@ INITIAL_TEXTS_BY_TYPE: Final[dict[str, InitialTexts]] = {'HIRE': {'title_ru': '�
                                             'ақылы еңбек демалысы берілсін.',
                         'basis_template_ru': 'Основание: {{basis}}.',
                         'basis_template_kk': 'Негіз: {{basis}}.'},
- 'LEAVE.UNPAID.GRANT': {'title_ru': 'О предоставлении отпуска без сохранения заработной платы',
+ 'LEAVE.UNPAID.GRANT': {'title_ru': 'Об отпуске без содержания',
                         'title_kk': 'Жалақы сақталмайтын демалыс беру туралы',
                         'preamble_ru': 'В соответствии с Трудовым кодексом Республики Казахстан',
                         'preamble_kk': 'Қазақстан Республикасының Еңбек кодексіне сәйкес',
@@ -91,10 +91,8 @@ INITIAL_TEXTS_BY_TYPE: Final[dict[str, InitialTexts]] = {'HIRE': {'title_ru': '�
                         'basis_template_ru': 'Основание: Личное '
                                              'заявление{{basis.application_date_ru}}{{basis.application_number_suffix}}.',
                         'basis_template_kk': 'Негіз: {{employee.full_name_genitive_kk}} жеке өтініші.'},
- 'LEAVE.CHILDCARE.GRANT': {'title_ru': 'О предоставлении отпуска без сохранения заработной платы по уходу за ребёнком '
-                                       'до достижения им возраста трёх лет',
-                           'title_kk': 'Бала үш жасқа толғанға дейін оның күтіміне байланысты жалақы сақталмайтын '
-                                       'демалыс беру туралы',
+ 'LEAVE.CHILDCARE.GRANT': {'title_ru': "О неоплачиваемом отпуске по уходу за ребенком",
+                           'title_kk': "Бала күтіміне байланысты жалақы сақталмайтын демалыс туралы",
                            'preamble_ru': 'В соответствии с Трудовым кодексом Республики Казахстан',
                            'preamble_kk': 'Қазақстан Республикасының Еңбек кодексіне сәйкес',
                            'body_template_ru': 'Предоставить {{employee.full_name}}, {{position.title_ru}} '
@@ -128,3 +126,6 @@ INITIAL_TEXTS_BY_TYPE: Final[dict[str, InitialTexts]] = {'HIRE': {'title_ru': '�
                                                      '{{rate}} ставкамен жұмысқа шықсын.',
                                  'basis_template_ru': 'Основание: {{basis}}.',
                                  'basis_template_kk': 'Негіз: {{basis}}.'}}
+
+from app.services.personnel_order_recall_contract import TEXTS as RECALL_TEXTS
+INITIAL_TEXTS_BY_TYPE['LEAVE.ANNUAL.RECALL'] = RECALL_TEXTS

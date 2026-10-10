@@ -1,3 +1,5 @@
+import { personnelOrderCanonicalTitle } from "./personnelOrderCanonicalTitles";
+
 export type PersonnelOrderStatus =
   | "DRAFT"
   | "READY_FOR_SIGNATURE"
@@ -13,6 +15,7 @@ export type PersonnelOrderType =
   | "CONCURRENT_DUTY_START"
   | "CONCURRENT_DUTY_END"
   | "SUPPLEMENTARY_PAY"
+  | "LEAVE.ANNUAL.RECALL"
   | "LEAVE.ANNUAL.GRANT"
   | "LEAVE.UNPAID.GRANT"
   | "LEAVE.CHILDCARE.GRANT"
@@ -35,6 +38,7 @@ export const PERSONNEL_ORDER_TYPES: readonly PersonnelOrderType[] = [
   "CONCURRENT_DUTY_END",
   "SUPPLEMENTARY_PAY",
   "LEAVE.ANNUAL.GRANT",
+  "LEAVE.ANNUAL.RECALL",
   "LEAVE.UNPAID.GRANT",
   "LEAVE.CHILDCARE.GRANT",
   "COMPOSITE",
@@ -56,9 +60,10 @@ export const PERSONNEL_ORDER_TYPE_LABELS: Record<PersonnelOrderType, string> = {
   CONCURRENT_DUTY_START: "Совмещение (начало)",
   CONCURRENT_DUTY_END: "Совмещение (окончание)",
   SUPPLEMENTARY_PAY: "Дополнительная оплата",
+  "LEAVE.ANNUAL.RECALL": "Отзыв из трудового отпуска",
   "LEAVE.ANNUAL.GRANT": "Ежегодный трудовой отпуск",
   "LEAVE.UNPAID.GRANT": "Отпуск без сохранения заработной платы",
-  "LEAVE.CHILDCARE.GRANT": "Отпуск без сохранения заработной платы по уходу за ребёнком",
+  "LEAVE.CHILDCARE.GRANT": "О неоплачиваемом отпуске по уходу за ребенком",
   COMPOSITE: "Составной",
 };
 
@@ -97,8 +102,12 @@ export function personnelOrderStatusLabel(status: string | null | undefined): st
   return normalized || "—";
 }
 
-export function personnelOrderTypeLabel(typeCode: string | null | undefined): string {
+export function personnelOrderTypeLabel(typeCode: string | null | undefined, language?: "ru" | "kk"): string {
   const normalized = String(typeCode || "").trim().toUpperCase();
+  if (language) {
+    const title = personnelOrderCanonicalTitle(normalized, language) || personnelOrderCanonicalTitle(normalized, language === "kk" ? "ru" : "kk");
+    if (title) return title;
+  }
   if ((PERSONNEL_ORDER_TYPES as readonly string[]).includes(normalized)) {
     return PERSONNEL_ORDER_TYPE_LABELS[normalized as PersonnelOrderType];
   }
@@ -155,6 +164,7 @@ export const PERSONNEL_ORDER_CREATE_TYPES = [
   "CONCURRENT_DUTY_END",
   "RETURN_FROM_CHILDCARE_LEAVE",
   "LEAVE.ANNUAL.GRANT",
+  "LEAVE.ANNUAL.RECALL",
   "LEAVE.UNPAID.GRANT",
   "LEAVE.CHILDCARE.GRANT",
   "SUPPLEMENTARY_PAY",

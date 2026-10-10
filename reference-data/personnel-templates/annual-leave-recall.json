@@ -1,0 +1,26 @@
+{
+  "format": "personnel-template-texts-v1",
+  "item_type_code": "LEAVE.ANNUAL.RECALL",
+  "name_ru": "Об отзыве из отпуска",
+  "name_kk": "Еңбек демалысынан шақырту туралы",
+  "texts": {
+    "title_ru": "Об отзыве из отпуска",
+    "title_kk": "Еңбек демалысынан шақырту туралы",
+    "preamble_ru": "В соответствии со ст. 95 Трудового кодекса Республики Казахстан и производственной необходимостью",
+    "preamble_kk": "Қазақстан Республикасы Еңбек кодексінің 95-бабына сәйкес, өндірістік қажеттілікке байланысты",
+    "body_template_ru": "Отозвать из ежегодного оплачиваемого трудового отпуска с {{effective_date}} следующего работника: {{employee.full_name}}, {{position.title_ru}}, подразделение: {{org_unit.title_ru}}.\n\nНеиспользованную часть трудового отпуска предоставить в течение текущего или следующего рабочего года в любое время по соглашению сторон.",
+    "body_template_kk": "{{effective_date}} бастап келесі қызметкер жыл сайынғы ақылы еңбек демалысынан жұмысқа шақыртылсын: {{employee.full_name}}, {{position.title_kk}}, бөлімше: {{org_unit.title_kk}}.\n\nЕңбек демалысының пайдаланылмаған бөлігі тараптардың келісімі бойынша ағымдағы немесе келесі жұмыс жылы ішінде кез келген уақытта берілсін.",
+    "basis_template_ru": "Основание: {{basis}}.",
+    "basis_template_kk": "Негіз: {{basis}}."
+  },
+  "variable_sources": {
+    "position.title_ru": "job_positions_catalog.job_nameru via position_job_catalog",
+    "position.title_kk": "job_positions_catalog.job_namekk via position_job_catalog",
+    "org_unit.title_ru": "org_units.name from the employee assignment",
+    "org_unit.title_kk": "org_units.name_kk from the employee assignment"
+  },
+  "import_policy": {
+    "create_independent_draft": true,
+    "publish": false
+  }
+}

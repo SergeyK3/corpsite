@@ -25,14 +25,15 @@ def _initial_texts(item_type_code: str = EDITABLE_TYPE) -> dict[str, str]:
 
 def test_readable_initial_texts_match_the_ten_type_golden_snapshot() -> None:
     expected_hashes = {
+        "LEAVE.ANNUAL.RECALL": "bbddeb517479b8b78555e58b95b1f083ee9e00e47b759630cf42465ca054bedb",
         "HIRE": "96444278a247538672dfb544559359d08cc3b54e0de182d2d3fb0617320658fa",
         "TRANSFER": "3a6d711e7484839479a98697da7e91a6a2f27b5fab315ad38c3f295722005995",
-        "TERMINATION": "bc34ed5af9bbc3e3e1fd7dd874aeebecc9b2d2b918692526c59abaabfc2c78a2",
-        "CONCURRENT_DUTY_START": "6d3af87099855f0270cc9c015e24fa44dfc98bcd8ea7f7ebccb2848dd77fcdce",
-        "CONCURRENT_DUTY_END": "6f9dc6cd6a6424d061d1d154142e18a4f02bdaaaa581f2d3fb96370bade07fc0",
-        "LEAVE.ANNUAL.GRANT": "9ac3b1e220d4f174350626cb65d97949abcdce9ddadb6ba02c4846242e7bb96d",
-        "LEAVE.UNPAID.GRANT": "df3b6b2c648e392e99cba29ce45ed9f15272f50e253420d4a37f0b62f13a3eed",
-        "LEAVE.CHILDCARE.GRANT": "ae26f701f695f8b5e92f1ff613463656098ad7bad746791ad617978c4df5d088",
+        "TERMINATION": "9de2f78c755fe3015150117ced15279c550a77ca767f0937bec3e008cc0d516e",
+        "CONCURRENT_DUTY_START": "9c677af7e12215a6cad5e6b553c17d6d00e05727c6096e4ef6a4c58554b101d8",
+        "CONCURRENT_DUTY_END": "e67abd7c08964bf96f2d77cb166b31dda6b877667a50e7d767ecf4617086f7fa",
+        "LEAVE.ANNUAL.GRANT": "cf74a3322817548e5f18b82e98e745137c22291ddb2d8db68cf4590d28e39810",
+        "LEAVE.UNPAID.GRANT": "23723590c2419afb132196b65c5d3f2b48cc560c672f66e10f615dd35ea42f71",
+        "LEAVE.CHILDCARE.GRANT": "61a8a0b724dc1be45a05f72eb5d76b2d9f9d6fd558dac9321f352559c7c456ee",
         "SUPPLEMENTARY_PAY": "bc5b0cfcb36a7bd4606ac327c896268ab020bc959a4ccdeb8ebde5d9a1cbad54",
         "RETURN_FROM_CHILDCARE_LEAVE": "bf6c0f6daf69edbf77df33015aedc20d253e15d68c84ad9f6c743edb41c7c3e3",
     }
@@ -94,6 +95,7 @@ class _DraftStore:
             now = datetime.now(timezone.utc)
             self.row = {
                 "template_version_id": 101,
+                "template_id": values["template"],
                 "item_type_code": values["type"],
                 "version_number": 1,
                 "status": "DRAFT",
@@ -119,6 +121,10 @@ class _DraftStore:
 def draft_store(monkeypatch: pytest.MonkeyPatch) -> _DraftStore:
     store = _DraftStore()
     monkeypatch.setattr(draft_service, "engine", store)
+    monkeypatch.setattr(draft_service, "independent_template_schema_available", lambda: True)
+    # These content/revision tests isolate the version store. Identity resolution
+    # and independent publication are covered against real PostgreSQL separately.
+    monkeypatch.setattr(draft_service, "_resolve_template", lambda conn, code, template_id, **kwargs: template_id or 1)
     return store
 
 
@@ -200,6 +206,28 @@ def test_termination_save_uses_safe_required_lookup_and_succeeds(draft_store: _D
 
     assert saved["revision"] == created["revision"] + 1
     assert draft_service.get_draft(item_type)["body_template_ru"] == values["body_template_ru"]
+
+
+def test_incomplete_return_text_can_save_and_preview_without_publication(draft_store: _DraftStore) -> None:
+    code = "RETURN_FROM_CHILDCARE_LEAVE"
+    created = draft_service.create_draft_from_working_copy(code, "INITIAL", None, None, _initial_texts(code), actor_user_id=77)
+    values = _initial_texts(code)
+    values.update(body_template_ru="1. Тестовый текст {{employee.full_name}} с {{effective_date}}.\n\n2. Второй абзац.",
+                  body_template_kk="1. {{employee.full_name}} {{effective_date}} бастап.\n\n2. Екінші абзац.",
+                  basis_template_ru="", basis_template_kk="")
+    with pytest.raises(TemplateDraftError):
+        _validate(values, code)
+    saved = draft_service.save_draft(code, created["revision"], values, actor_user_id=77,
+        expected_template_version_id=created["template_version_id"])
+    assert saved["revision"] == created["revision"] + 1
+    assert draft_service.get_draft(code)["body_template_ru"] == values["body_template_ru"]
+    result = preview_draft(code, values)
+    assert result["ru"]["body"].startswith("1.") and "\n\n2." in result["ru"]["body"]
+    assert result["kk"]["basis"] == ""
+    with pytest.raises(TemplateDraftError):
+        _validate({field: saved[field] for field in draft_service.TEXT_FIELDS}, code)
+    with pytest.raises(TemplateDraftError):
+        draft_service.save_draft(code, saved["revision"], values, actor_user_id=77, expected_template_version_id=saved["template_version_id"] + 1)
 
 
 def test_legacy_termination_without_unused_leave_days_still_previews() -> None:

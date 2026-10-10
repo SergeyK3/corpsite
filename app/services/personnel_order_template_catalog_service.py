@@ -20,5 +20,6 @@ def list_personnel_order_template_catalog() -> list[dict[str, Any]]:
             # The editor contract belongs to the current server-side spec.
             # Catalog detail is explanatory metadata and can be historical.
             "allowed_variables": list(spec.allowed_variables),
+            "required_variables": {field: list(codes) for field, codes in spec.required_variables.items()},
         })
     return rows

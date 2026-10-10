@@ -238,6 +238,8 @@ def generate_editorial(
             subject_name = names.get(int(subject_id)) if subject_id is not None else employee_name
             basis_fact = {
                 "item_type_code": item["item_type_code"],
+                "recall_payload": item_ctx.get("recall_payload"),
+                "effective_date": item_ctx.get("effective_date"),
                 "basis_type": basis.get("basis_type") if basis else None,
                 "subject_employee_id": subject_id,
                 "subject_employee_name": subject_name,

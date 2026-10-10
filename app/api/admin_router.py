@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Annotated, Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
@@ -78,7 +78,11 @@ from app.services.security_audit_service import list_security_events
 from app.services.telegram_health_service import get_telegram_health
 from app.api.admin_org_units_routes import router as admin_org_units_router
 from app.services.personnel_order_template_catalog_service import list_personnel_order_template_catalog
-from app.services.personnel_order_template_draft_service import TemplateDraftError, create_draft_from_working_copy, get_draft, get_published, get_editor_base, preview_draft, save_draft, publish_draft
+from app.services.personnel_order_template_draft_service import TemplateDraftError, copy_template, list_templates, list_versions, create_draft_from_working_copy, get_draft, get_published, get_editor_base, preview_draft, save_draft, publish_draft
+
+from app.api.admin_schemas import PersonnelOrderTemplateCopy, PersonnelOrderTemplateRemove
+from app.services.personnel_order_template_draft_service import remove_template, change_template_type
+from app.api.admin_schemas import PersonnelOrderTemplateTypeChange
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 router.include_router(admin_org_units_router)
@@ -96,48 +100,99 @@ def admin_list_personnel_order_templates(
 
 
 def _template_draft_error(exc: TemplateDraftError) -> HTTPException:
-    return HTTPException(status_code=409 if exc.conflict else 400, detail={"code": exc.code, "message": str(exc)})
+    return HTTPException(status_code=503 if exc.code == "TEMPLATE_SCHEMA_REQUIRED" else 409 if exc.conflict else 400, detail={"code": exc.code, "message": str(exc)})
+
+
+@router.get("/personnel-order-templates/{item_type_code}/templates")
+def admin_list_independent_personnel_templates(item_type_code: str, _admin: Dict[str, Any] = Depends(require_sysadmin_api)) -> Dict[str, Any]:
+    try: return {"items": list_templates(item_type_code)}
+    except TemplateDraftError as exc: raise _template_draft_error(exc) from exc
+
+
+@router.get("/personnel-order-templates/{item_type_code}/versions")
+def admin_list_personnel_template_versions(item_type_code: str, template_id: int = Query(..., ge=1), _admin: Dict[str, Any] = Depends(require_sysadmin_api)) -> Dict[str, Any]:
+    try: return {"items": list_versions(item_type_code, template_id)}
+    except TemplateDraftError as exc: raise _template_draft_error(exc) from exc
+
+
+@router.delete("/personnel-order-templates/{item_type_code}/templates/{template_id}")
+def admin_remove_personnel_template(item_type_code: str, template_id: int, body: PersonnelOrderTemplateRemove, admin: Dict[str, Any] = Depends(require_sysadmin_api)) -> Dict[str, Any]:
+    try: return remove_template(item_type_code, template_id, body.name_ru, body.name_kk, int(admin["user_id"]))
+    except TemplateDraftError as exc: raise _template_draft_error(exc) from exc
+
+
+@router.post("/personnel-order-templates/{item_type_code}/templates/{template_id}/archive")
+def admin_archive_personnel_template(item_type_code: str, template_id: int, body: PersonnelOrderTemplateRemove, admin: Dict[str, Any] = Depends(require_sysadmin_api)) -> Dict[str, Any]:
+    try: return remove_template(item_type_code, template_id, body.name_ru, body.name_kk, int(admin["user_id"]), archive=True)
+    except TemplateDraftError as exc: raise _template_draft_error(exc) from exc
+
+
+@router.post("/personnel-order-templates/{item_type_code}/templates/{template_id}/type", response_model=PersonnelOrderTemplateDraftOut)
+def admin_change_personnel_template_type(item_type_code: str, template_id: int, body: PersonnelOrderTemplateTypeChange, admin: Dict[str, Any] = Depends(require_sysadmin_api)) -> Dict[str, Any]:
+    try:
+        return change_template_type(item_type_code, template_id, body.target_type_code, body.expected_template_version_id, body.expected_revision, int(admin['user_id']))
+    except TemplateDraftError as exc:
+        raise _template_draft_error(exc) from exc
+
+
+@router.post("/personnel-order-templates/{item_type_code}/copies", response_model=PersonnelOrderTemplateDraftOut, status_code=201)
+def admin_copy_personnel_template(item_type_code: str, body: PersonnelOrderTemplateCopy, admin: Dict[str, Any] = Depends(require_sysadmin_api)) -> Dict[str, Any]:
+    try: return copy_template(item_type_code, body.source_version_id, body.name_ru, body.name_kk, int(admin["user_id"]), body.expected_revision, base_source=body.base_source, source_type_code=body.source_type_code)
+    except TemplateDraftError as exc: raise _template_draft_error(exc) from exc
 
 
 @router.get("/personnel-order-templates/{item_type_code}/draft", response_model=Optional[PersonnelOrderTemplateDraftOut])
-def admin_get_personnel_order_template_draft(item_type_code: str, _admin: Dict[str, Any] = Depends(require_sysadmin_api)) -> Optional[Dict[str, Any]]:
-    try: return get_draft(item_type_code)
+def admin_get_personnel_order_template_draft(item_type_code: str, _admin: Dict[str, Any] = Depends(require_sysadmin_api), template_id: Annotated[int | None, Query(ge=1)] = None) -> Optional[Dict[str, Any]]:
+    try: return get_draft(item_type_code, template_id) if template_id is not None else get_draft(item_type_code)
     except TemplateDraftError as exc: raise _template_draft_error(exc) from exc
 
 
 @router.get("/personnel-order-templates/{item_type_code}/published", response_model=Optional[PersonnelOrderTemplateDraftOut])
-def admin_get_personnel_order_template_published(item_type_code: str, _admin: Dict[str, Any] = Depends(require_sysadmin_api)) -> Optional[Dict[str, Any]]:
-    try: return get_published(item_type_code)
+def admin_get_personnel_order_template_published(item_type_code: str, _admin: Dict[str, Any] = Depends(require_sysadmin_api), template_id: Annotated[int | None, Query(ge=1)] = None) -> Optional[Dict[str, Any]]:
+    try: return get_published(item_type_code, template_id) if template_id is not None else get_published(item_type_code)
     except TemplateDraftError as exc: raise _template_draft_error(exc) from exc
 
 
 @router.get("/personnel-order-templates/{item_type_code}/editor-base", response_model=PersonnelOrderTemplateEditorBase)
-def admin_get_personnel_order_template_editor_base(item_type_code: str, _admin: Dict[str, Any] = Depends(require_sysadmin_api)) -> Dict[str, Any]:
-    try: return get_editor_base(item_type_code)
+def admin_get_personnel_order_template_editor_base(item_type_code: str, _admin: Dict[str, Any] = Depends(require_sysadmin_api), template_id: Annotated[int | None, Query(ge=1)] = None) -> Dict[str, Any]:
+    try: return get_editor_base(item_type_code, template_id) if template_id is not None else get_editor_base(item_type_code)
     except TemplateDraftError as exc: raise _template_draft_error(exc) from exc
 
 
 @router.post("/personnel-order-templates/{item_type_code}/draft", response_model=PersonnelOrderTemplateDraftOut)
-def admin_create_personnel_order_template_draft(item_type_code: str, body: PersonnelOrderTemplateWorkingCopySave, admin: Dict[str, Any] = Depends(require_sysadmin_api)) -> Dict[str, Any]:
-    try: return create_draft_from_working_copy(item_type_code, body.base_source, body.base_published_template_version_id, body.base_published_revision, body.model_dump(exclude={"base_source", "base_published_template_version_id", "base_published_revision"}), int(admin["user_id"]))
+def admin_create_personnel_order_template_draft(item_type_code: str, body: PersonnelOrderTemplateWorkingCopySave, admin: Dict[str, Any] = Depends(require_sysadmin_api), template_id: Annotated[int | None, Query(ge=1)] = None) -> Dict[str, Any]:
+    try: return create_draft_from_working_copy(item_type_code, body.base_source, body.base_published_template_version_id, body.base_published_revision, body.model_dump(exclude={"base_source", "base_published_template_version_id", "base_published_revision"}), int(admin["user_id"]), **({"template_id": template_id} if template_id is not None else {}))
     except TemplateDraftError as exc: raise _template_draft_error(exc) from exc
 
 
 @router.put("/personnel-order-templates/{item_type_code}/draft", response_model=PersonnelOrderTemplateDraftOut)
-def admin_save_personnel_order_template_draft(item_type_code: str, body: PersonnelOrderTemplateDraftSave, admin: Dict[str, Any] = Depends(require_sysadmin_api)) -> Dict[str, Any]:
-    try: return save_draft(item_type_code, body.expected_revision, body.model_dump(exclude={"expected_revision"}), int(admin["user_id"]))
+def admin_save_personnel_order_template_draft(item_type_code: str, body: PersonnelOrderTemplateDraftSave, admin: Dict[str, Any] = Depends(require_sysadmin_api), template_id: Annotated[int | None, Query(ge=1)] = None) -> Dict[str, Any]:
+    try: return save_draft(item_type_code, body.expected_revision, body.model_dump(exclude={"expected_revision", "expected_template_version_id"}), int(admin["user_id"]), **({"template_id": template_id} if template_id is not None else {}), **({"expected_template_version_id": body.expected_template_version_id} if body.expected_template_version_id is not None else {}))
     except TemplateDraftError as exc: raise _template_draft_error(exc) from exc
 
 
 @router.post("/personnel-order-templates/{item_type_code}/draft/publish", response_model=PersonnelOrderTemplateDraftOut)
-def admin_publish_personnel_order_template_draft(item_type_code: str, body: PersonnelOrderTemplatePublish, admin: Dict[str, Any] = Depends(require_sysadmin_api)) -> Dict[str, Any]:
-    try: return publish_draft(item_type_code, body.expected_revision, int(admin["user_id"]))
+def admin_publish_personnel_order_template_draft(item_type_code: str, body: PersonnelOrderTemplatePublish, admin: Dict[str, Any] = Depends(require_sysadmin_api), template_id: Annotated[int | None, Query(ge=1)] = None) -> Dict[str, Any]:
+    try: return publish_draft(item_type_code, body.expected_revision, int(admin["user_id"]), **({"template_id": template_id} if template_id is not None else {}))
     except TemplateDraftError as exc: raise _template_draft_error(exc) from exc
 
 
 @router.post("/personnel-order-templates/{item_type_code}/draft/preview")
 def admin_preview_personnel_order_template_draft(item_type_code: str, body: PersonnelOrderTemplateDraftPreview, _admin: Dict[str, Any] = Depends(require_sysadmin_api)) -> Dict[str, Any]:
     try: return {"previews": preview_draft(item_type_code, body.model_dump())}
+    except TemplateDraftError as exc: raise _template_draft_error(exc) from exc
+
+
+@router.get("/personnel-order-templates/{item_type_code}/draft/preview")
+def admin_preview_saved_personnel_template(item_type_code: str, expected_revision: int = Query(..., ge=1), template_id: int = Query(..., ge=1), _admin: Dict[str, Any] = Depends(require_sysadmin_api)) -> Dict[str, Any]:
+    try:
+        draft = get_draft(item_type_code, template_id)
+        if draft is None:
+            raise TemplateDraftError("TEMPLATE_DRAFT_NOT_FOUND", "Черновик не найден.")
+        if draft["revision"] != expected_revision:
+            raise TemplateDraftError("TEMPLATE_REVISION_CONFLICT", "Черновик изменился. Обновите его перед просмотром.", conflict=True)
+        return {"template_id": draft["template_id"], "template_version_id": draft["template_version_id"], "revision": draft["revision"],
+                "previews": preview_draft(item_type_code, {field: draft[field] for field in ("title_ru", "title_kk", "preamble_ru", "preamble_kk", "body_template_ru", "body_template_kk", "basis_template_ru", "basis_template_kk")})}
     except TemplateDraftError as exc: raise _template_draft_error(exc) from exc
 
 

@@ -284,6 +284,7 @@ export type PersonnelOrderCreatePayload = {
 };
 
 export type PersonnelOrderManualDraftCreatePayload = {
+  template_version_id?: number;
   order_number: string;
   order_date: string;
   source_title: string;
@@ -513,10 +514,11 @@ export function filterPersonnelOrdersBySearch(
   if (!q) return items;
   return items.filter((row) => {
     const number = String(row.order_number || "").toLowerCase();
+    const title = String(row.source_title || "").toLowerCase();
     const names = (row.employee_names || []).join(" ").toLowerCase();
     const ids = (row.employee_ids || []).map(String).join(" ");
     const orderId = String(row.order_id);
-    return number.includes(q) || names.includes(q) || ids.includes(q) || orderId.includes(q);
+    return number.includes(q) || title.includes(q) || names.includes(q) || ids.includes(q) || orderId.includes(q);
   });
 }
 
@@ -570,10 +572,10 @@ export type PersonnelOrderDocumentItemPatchResult = {
   audit_event_ids: number[];
 };
 
-export async function patchPersonnelOrderDocumentItem(orderId: number, itemId: number, payload: { expected_document_revision: number; item_type_code: string; employee_id?: number | null; effective_date?: string | null; document_subject_context?: { position_name?: string | null; org_unit_name?: string | null; specialty?: string | null; rate?: string | null; basis_type?: "PERSONAL_APPLICATION" | "OTHER" | null }; reason_code?: string | null; reason_text?: string | null }): Promise<PersonnelOrderDocumentItemPatchResult> {
+export async function patchPersonnelOrderDocumentItem(orderId: number, itemId: number, payload: { expected_document_revision: number; item_type_code: string; employee_id?: number | null; effective_date?: string | null; document_subject_context?: { recall_position_kk?: string | null; recall_org_unit_kk?: string | null; basis_ru?: string | null; basis_kk?: string | null; position_name?: string | null; org_unit_name?: string | null; specialty?: string | null; rate?: string | null; basis_type?: "PERSONAL_APPLICATION" | "OTHER" | null }; reason_code?: string | null; reason_text?: string | null }): Promise<PersonnelOrderDocumentItemPatchResult> {
   return requestJson<PersonnelOrderDocumentItemPatchResult>("PATCH", `/directory/personnel-orders/${orderId}/document-items/${itemId}`, { body: payload, fallback: "Не удалось сохранить пункт." });
 }
-export type PersonnelOrderDocumentItem = { item_id: number; item_number: number; item_type_code: string; employee_id?: number | null; employee_name?: string | null; org_unit_name?: string | null; position_name?: string | null; specialty?: string | null; rate?: string | null; needs_employee_link?: boolean; effective_date?: string | null };
+export type PersonnelOrderDocumentItem = { recall_position_kk?: string | null; recall_org_unit_kk?: string | null; basis_ru?: string | null; basis_kk?: string | null; item_id: number; item_number: number; item_type_code: string; employee_id?: number | null; employee_name?: string | null; org_unit_name?: string | null; position_name?: string | null; specialty?: string | null; rate?: string | null; needs_employee_link?: boolean; effective_date?: string | null };
 export async function listPersonnelOrderDocumentItems(orderId: number): Promise<{ document_revision: number; items: PersonnelOrderDocumentItem[] }> {
   return requestJson("GET", `/directory/personnel-orders/${orderId}/document-items`, { fallback: "Не удалось загрузить пункты приказа." });
 }
@@ -705,8 +707,8 @@ export async function createManualPersonnelOrderDraft(
   });
 }
 
-export async function getPersonnelOrderPublishedTemplateTitle(itemTypeCode: string): Promise<{ item_type_code: string; title_ru: string; title_kk: string }> {
-  return requestJson("GET", `/directory/personnel-orders/templates/${encodeURIComponent(itemTypeCode)}/published-title`, {
+export async function getPersonnelOrderPublishedTemplateTitle(itemTypeCode: string, versionId?: number): Promise<{ template_version_id?: number; item_type_code: string; title_ru: string; title_kk: string }> {
+  return requestJson("GET", `/directory/personnel-orders/templates/${encodeURIComponent(itemTypeCode)}/published-title${versionId == null ? "" : `?template_version_id=${versionId}`}`, {
     fallback: "Опубликованный шаблон не найден.",
   });
 }
@@ -857,3 +859,7 @@ export async function restorePersonnelOrder(orderId: number): Promise<PersonnelO
     fallback: "Не удалось восстановить приказ.",
   });
 }
+
+export type PersonnelPublishedTemplateVariant = {template_id: number; template_version_id: number; version_number: number; name_ru: string; name_kk: string; title_ru: string; title_kk: string; is_default: boolean};
+export type PersonnelPublishedVariantsResponse = {items: PersonnelPublishedTemplateVariant[]; independent_supported?: boolean; creation_supported?: boolean; creation_reason?: string | null; schema_mode?: "LEGACY" | "INDEPENDENT"};
+export const getPersonnelOrderPublishedVariants = (type: string) => requestJson<PersonnelPublishedVariantsResponse>("GET", `/directory/personnel-orders/templates/${encodeURIComponent(type)}/published-variants`, {fallback: "Не удалось загрузить варианты шаблона."});

@@ -314,7 +314,7 @@ describe("item save → editorial generation integration", () => {
     ui.generate();
     await waitFor(() => expect(generatePersonnelOrderEditorial).toHaveBeenCalledTimes(1));
     expect(updatePersonnelOrderItem).toHaveBeenCalledTimes(1);
-    expect(updatePersonnelOrderItem).toHaveBeenCalledBefore(generatePersonnelOrderEditorial);
+    expect(vi.mocked(updatePersonnelOrderItem)).toHaveBeenCalledBefore(vi.mocked(generatePersonnelOrderEditorial));
   });
 
   it("retains input and stops generation if PATCH fails", async () => {
@@ -428,6 +428,111 @@ describe("PersonnelOrderItemEditor draft item deletion", () => {
 });
 
 describe("PersonnelOrderItemEditor unpaid-leave period", () => {
+  it.each(["LEAVE.CHILDCARE.GRANT", "LEAVE.UNPAID.GRANT"])("uses the shared Медсестра forms and protects manual edits with late detail in %s", async (type) => {
+    const nurse = { ...activeEmployee, position: { id: 27, name: "Медсестра", name_kk: "мейіргер" } };
+    vi.mocked(getEmployees).mockResolvedValue({ items: [nurse], total: 1 });
+    vi.mocked(getEmployee).mockResolvedValue(nurse);
+    render(<PersonnelOrderItemEditor orderId={1} items={[]} onChanged={vi.fn()} />);
+    fireEvent.change(screen.getByTestId("personnel-order-item-type-select"), { target: { value: type } });
+    const search = screen.getByTestId("personnel-order-employee-search-input");
+    fireEvent.change(search, { target: { value: "Макибаева" } });
+    fireEvent.click(await screen.findByTestId("personnel-order-employee-option-138"));
+    const kk = screen.getByText("KK: лауазым (құжат нысаны)").parentElement!.querySelector("input")!;
+    const ru = type === "LEAVE.CHILDCARE.GRANT" ? screen.getByText("RU: должность (документная форма)").parentElement!.querySelector("input")! : null;
+    await waitFor(() => expect(kk).toHaveValue("мейіргері"));
+    if (ru) expect(ru).toHaveValue("медсестра");
+    expect(screen.queryByTestId("personnel-order-position-form-missing")).not.toBeInTheDocument();
+    const next = { ...nurse, id: "139", fio: "Тестова Анна Сергеевна", document_forms_kk: { position_document_possessive_kk: "Сохранённая KK" }, document_forms_ru: { position_document_nominative_ru: "Сохранённая RU" } };
+    vi.mocked(getEmployees).mockResolvedValue({ items: [next], total: 1 });
+    let resolveDetail!: (value: typeof next) => void;
+    vi.mocked(getEmployee).mockReturnValue(new Promise(resolve => { resolveDetail = resolve; }));
+    fireEvent.change(search, { target: { value: "Тестова" } });
+    fireEvent.click(await screen.findByTestId("personnel-order-employee-option-139"));
+    expect(kk).toHaveValue("");
+    if (ru) expect(ru).toHaveValue("");
+    fireEvent.change(kk, { target: { value: "Ручная KK" } });
+    const unit = screen.getByText("KK: бөлімше (ілік септік)").parentElement!.querySelector("input")!;
+    fireEvent.change(unit, { target: { value: "Ручное подразделение" } });
+    if (ru) fireEvent.change(ru, { target: { value: "Ручная RU" } });
+    resolveDetail(next);
+    await waitFor(() => expect(screen.getByTestId("personnel-order-current-placement")).toHaveTextContent("Медсестра"));
+    expect(kk).toHaveValue("Ручная KK");
+    expect(unit).toHaveValue("Ручное подразделение");
+    if (ru) expect(ru).toHaveValue("Ручная RU");
+    vi.mocked(getEmployee).mockResolvedValue(next);
+    fireEvent.change(search, { target: { value: "Тестова" } });
+    fireEvent.click(await screen.findByTestId("personnel-order-employee-option-139"));
+    await waitFor(() => expect(kk).toHaveValue("Сохранённая KK"));
+    if (ru) expect(ru).toHaveValue("Сохранённая RU");
+    expect(createPersonnelOrderItem).not.toHaveBeenCalled();
+  });
+
+  it.each(["calculated", "saved", "manual"])("childcare RU genitive uses %s priority after late employee detail", async (mode) => {
+    const selected = { ...activeEmployee, fio: "Тестова Анна Сергеевна" };
+    vi.mocked(getEmployees).mockResolvedValue({ items: [selected], total: 1 });
+    let resolveDetail!: (value: typeof selected) => void;
+    vi.mocked(getEmployee).mockReturnValue(new Promise(resolve => { resolveDetail = resolve; }));
+    render(<PersonnelOrderItemEditor orderId={1} items={[]} onChanged={vi.fn()} />);
+    fireEvent.change(screen.getByTestId("personnel-order-item-type-select"), { target: { value: "LEAVE.CHILDCARE.GRANT" } });
+    fireEvent.change(screen.getByTestId("personnel-order-employee-search-input"), { target: { value: "Тестова" } });
+    fireEvent.click(await screen.findByTestId("personnel-order-employee-option-138"));
+    const field = screen.getByText("RU: ФИО (родительный падеж)").parentElement!.querySelector("input")!;
+    if (mode === "manual") fireEvent.change(field, { target: { value: "Ручная форма" } });
+    resolveDetail({ ...selected, ...(mode === "saved" ? { document_forms_ru: { employee_full_name_genitive_ru: "Сохранённая форма" } } : {}) });
+    await waitFor(() => expect(screen.getByTestId("personnel-order-current-placement")).toBeInTheDocument());
+    expect(field).toHaveValue(mode === "manual" ? "Ручная форма" : mode === "saved" ? "Сохранённая форма" : "Тестовой Анны Сергеевны");
+    fireEvent.change(screen.getByTestId("leave-start"), { target: { value: "2026-08-01" } });
+    expect(field).toHaveValue(mode === "manual" ? "Ручная форма" : mode === "saved" ? "Сохранённая форма" : "Тестовой Анны Сергеевны");
+  });
+
+  it("clears the former employee's RU genitive on a new selection", async () => {
+    const first = { ...activeEmployee, fio: "Тестова Анна Сергеевна" };
+    const second = { ...activeEmployee, id: "139", fio: "Петрова Анна Сергеевна" };
+    vi.mocked(getEmployees).mockResolvedValue({ items: [first, second], total: 2 });
+    vi.mocked(getEmployee).mockResolvedValue(first);
+    render(<PersonnelOrderItemEditor orderId={1} items={[]} onChanged={vi.fn()} />);
+    fireEvent.change(screen.getByTestId("personnel-order-item-type-select"), { target: { value: "LEAVE.CHILDCARE.GRANT" } });
+    const search = screen.getByTestId("personnel-order-employee-search-input");
+    fireEvent.change(search, { target: { value: "Тестова" } });
+    fireEvent.click(await screen.findByTestId("personnel-order-employee-option-138"));
+    const field = screen.getByText("RU: ФИО (родительный падеж)").parentElement!.querySelector("input")!;
+    await waitFor(() => expect(field).toHaveValue("Тестовой Анны Сергеевны"));
+    fireEvent.change(field, { target: { value: "Правка первого сотрудника" } });
+    let resolveDetail!: (value: typeof second) => void;
+    vi.mocked(getEmployee).mockReturnValue(new Promise(resolve => { resolveDetail = resolve; }));
+    fireEvent.change(search, { target: { value: "Петрова" } });
+    fireEvent.click(await screen.findByTestId("personnel-order-employee-option-139"));
+    expect(field).toHaveValue("");
+    resolveDetail(second);
+    await waitFor(() => expect(field).toHaveValue("Петровой Анны Сергеевны"));
+  });
+
+  it("edits and reopens childcare grounds without inferring the leave end from certificate issuance", async () => {
+    const item = { item_id: 54, order_id: 1, item_number: 1, item_type_code: "LEAVE.CHILDCARE.GRANT", item_status: "ACTIVE", employee_id: 138, employee_name: "Employee", effective_date: "2026-08-01", payload: {
+      leave_start: "2026-08-01", leave_end: "2029-02-13", leave_days: 928,
+      basis: { kind: "PERSONAL_APPLICATION", date: "2026-07-28", number: "APP-17", birth_certificate: { date: "2026-02-13", number: "9967264" } },
+      document_forms_kk: { org_unit_document_genitive_kk: "Тест бөлімшесінің", position_document_possessive_kk: "мейіргері", employee_full_name_dative_kk: "Асем Бауыржановна Садырбаеваға", employee_full_name_genitive_kk: "Асем Бауыржановна Садырбаеваның" },
+      document_forms_ru: { employee_full_name_dative_ru: "Садырбаевой Асем Бауыржановне", employee_full_name_genitive_ru: "Садырбаевой Асем Бауыржановны", position_document_nominative_ru: "медицинская сестра" },
+    } } as any;
+    const view = render(<PersonnelOrderItemEditor orderId={1} items={[item]} onChanged={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Редактировать" }));
+    const certificate = screen.getByTestId("childcare-birth-certificate").querySelectorAll("input");
+    expect(certificate[0]).toHaveValue("2026-02-13");
+    expect(certificate[1]).toHaveValue("9967264");
+    fireEvent.change(certificate[0], { target: { value: "2027-04-20" } });
+    fireEvent.change(certificate[1], { target: { value: "NEW-45" } });
+    expect(screen.getByTestId("leave-end")).toHaveValue("2029-02-13");
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить пункт" }));
+    await waitFor(() => expect(updatePersonnelOrderItem).toHaveBeenCalled());
+    const saved = vi.mocked(updatePersonnelOrderItem).mock.calls[0][2].payload;
+    expect(saved).toMatchObject({ leave_end: "2029-02-13", basis: { date: "2026-07-28", number: "APP-17", birth_certificate: { date: "2027-04-20", number: "NEW-45" } }, document_forms_kk: item.payload.document_forms_kk, document_forms_ru: item.payload.document_forms_ru });
+    view.unmount();
+    render(<PersonnelOrderItemEditor orderId={1} items={[{ ...item, payload: saved }]} onChanged={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Редактировать" }));
+    expect(screen.getByDisplayValue("NEW-45")).toBeInTheDocument();
+    expect(screen.getByTestId("leave-application-date")).toHaveValue("2026-07-28");
+    expect(screen.getByDisplayValue("мейіргері")).toBeInTheDocument();
+  });
   it("marks a changed saved KK position and clears the marker after reverting", async () => {
     render(<PersonnelOrderItemEditor orderId={1} items={[{
       item_id: 51, order_id: 1, item_number: 1, item_type_code: "LEAVE.UNPAID.GRANT", item_status: "ACTIVE",
@@ -447,7 +552,7 @@ describe("PersonnelOrderItemEditor unpaid-leave period", () => {
       id: "463",
       fio: "Маженова Альбина Сериковна",
       department: null,
-      position: { id: 6, name: "Врач" },
+      position: { id: 6, name: "Врач", name_kk: "дәрігер" },
       org_unit: {
         unit_id: 55,
         name: "Диспансер",
@@ -949,7 +1054,7 @@ describe("PersonnelOrderItemEditor RATE_CHANGE", () => {
     };
     expect(body.item_type_code).toBe("TRANSFER");
     expect(body.employee_id).toBe(138);
-    expect(body.payload).toEqual({ to_rate: 0.75 });
+    expect(body.payload).toEqual({ to_rate: 0.75, job_code: null, position_title_ru: null, position_title_kk: null, org_unit_title_kk: null, source_org_unit_name: "Отдел кадров", document_forms_ru: { position_document_nominative_ru: "руководитель отдела кадров" } });
   });
 });
 

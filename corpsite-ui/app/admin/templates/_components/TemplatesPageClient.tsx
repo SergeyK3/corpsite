@@ -1,8 +1,11 @@
 "use client";
+import { usePersonnelSectionLanguage, localizedPersonnelTitle } from "@/app/directory/personnel/_lib/personnelSectionLanguage";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
+import PersonnelTemplateVariants from "./PersonnelTemplateVariants";
+import { PERSONNEL_ORDER_GROUPS, PERSONNEL_ORDER_TYPE_GROUP } from "@/app/directory/personnel/_lib/personnelOrderTypeGroups";
 import RegularTasksAdminClient from "@/app/regular-tasks/_components/RegularTasksAdminClient";
 import { blankPersonnelOrderAcknowledgementFooter } from "@/app/directory/personnel/_lib/personnelOrderPrintLocale";
 
@@ -19,16 +22,19 @@ import {
   type PersonnelOrderTemplatePreview,
   type PersonnelOrderTemplateDraft,
   type PersonnelOrderTemplateDraftText,
+  type PersonnelIndependentTemplate,
   createPersonnelOrderTemplateDraft,
   getPersonnelOrderTemplateDraft,
   getPersonnelOrderTemplatePublished,
   getPersonnelOrderTemplateEditorBase,
   previewPersonnelOrderTemplateDraft,
+  previewSavedPersonnelOrderTemplateDraft,
   savePersonnelOrderTemplateDraft,
   publishPersonnelOrderTemplateDraft,
 } from "../_lib/personnelOrderTemplatesApi.client";
 
 const TAB_CLASS = "rounded-xl border px-4 py-2 text-sm font-medium transition";
+function templateArgs(id?: number | null): [] | [number] { return id == null ? [] : [id]; }
 const DRAFT_HEIGHT_STORAGE_PREFIX = "corpsite.personnel-order-template-draft-heights.v1";
 const TEXTAREA_MIN_HEIGHT = 64;
 const TEXTAREA_MAX_HEIGHT = 640;
@@ -80,7 +86,13 @@ function writeDraftHeights(itemTypeCode: string, heights: Partial<Record<DraftHe
 }
 
 function draftErrorMessage(cause: unknown): string {
-  const error = cause as { message?: unknown; details?: { detail?: unknown } };
+  const error = cause as { status?: number; message?: unknown; details?: { detail?: unknown } };
+  const detail=error?.details?.detail;
+  if (detail && typeof detail === "object" && "code" in detail && detail.code === "TEMPLATE_SCHEMA_REQUIRED") {
+    return "Требуется согласованное обновление структуры БД до hrrecall001. БД автоматически не изменяется.";
+  }
+  if (error?.status === 403) return "Недостаточно прав управления кадровыми шаблонами.";
+  if (error?.status && error.status >= 500) return `Ошибка загрузки API (HTTP ${error.status}). Повторите попытку.`;
   const validation = Array.isArray(error?.details?.detail) ? error.details.detail[0] as { loc?: unknown; msg?: unknown } : null;
   if (validation) {
     const location = Array.isArray(validation.loc) ? validation.loc.filter((part) => part !== "body").join(".") : "";
@@ -88,6 +100,13 @@ function draftErrorMessage(cause: unknown): string {
     return location ? `Поле «${location}»: ${message}` : message;
   }
   return typeof error?.message === "string" && error.message.trim() ? error.message : "Не удалось выполнить действие.";
+}
+
+function templateLoadError(cause: unknown): string {
+  const error=cause as {status?: number; details?: {detail?: {code?: string}}};
+  if (error?.details?.detail?.code === "TEMPLATE_SCHEMA_REQUIRED") return draftErrorMessage(cause);
+  if (error?.status === 403) return "Недостаточно прав управления кадровыми шаблонами.";
+  return error?.status ? `Ответ API: HTTP ${error.status}.` : "Проверьте соединение и повторите загрузку.";
 }
 
 function GeneralPersonnelOrderRequirements() {
@@ -192,6 +211,7 @@ function FormalizedTemplateDetail({ detail, showCatalogPreview }: { detail: Pers
 }
 
 type WorkingCopy = PersonnelOrderTemplateDraftText & {
+  template_id?: number;
   kind: "WORKING_COPY";
   item_type_code: string;
   base: Awaited<ReturnType<typeof getPersonnelOrderTemplateEditorBase>>;
@@ -205,15 +225,17 @@ function textMatches(left: PersonnelOrderTemplateDraftText, right: PersonnelOrde
   return DRAFT_HEIGHT_FIELDS.every(({ ru, kk }) => left[ru[0]] === right[ru[0]] && left[kk[0]] === right[kk[0]]);
 }
 
-function DraftEditor({ editor, published, onSaved, onPublished, variables, warning }: { editor: EditorDocument; published: PersonnelOrderTemplateDraft | null; onSaved: (draft: PersonnelOrderTemplateDraft) => void; onPublished: (draft: PersonnelOrderTemplateDraft) => void; variables: string[]; warning?: string }) {
+function DraftEditor({ editor, published, onSaved, onPublished, variables, requiredVariables, warning }: { editor: EditorDocument; published: PersonnelOrderTemplateDraft | null; onSaved: (draft: PersonnelOrderTemplateDraft) => void; onPublished: (draft: PersonnelOrderTemplateDraft) => void; variables: string[]; requiredVariables?: Partial<Record<keyof PersonnelOrderTemplateDraftText, string[]>>; warning?: string }) {
+  const { language: sectionLanguage } = usePersonnelSectionLanguage();
   const initial = editor.kind === "DRAFT" ? editor.draft : editor.workingCopy;
-  const [savedDraft, setSavedDraft] = useState<PersonnelOrderTemplateDraftText & { item_type_code: string }>(initial);
+  const [savedDraft, setSavedDraft] = useState<PersonnelOrderTemplateDraftText & { item_type_code: string; template_id?: number | null }>(initial);
   const [values, setValues] = useState<PersonnelOrderTemplateDraftText>(() => editableDraftText(initial));
   const [preview, setPreview] = useState<Record<"ru" | "kk", PersonnelOrderTemplatePreview> | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
   const [previewing, setPreviewing] = useState(false);
+  const [previewSaved, setPreviewSaved] = useState(false);
   const [reloading, setReloading] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const editorRef = useRef<HTMLElement | null>(null);
@@ -278,7 +300,13 @@ function DraftEditor({ editor, published, onSaved, onPublished, variables, warni
   const isDirty = !textMatches(values, savedDraft);
   const differsFromPublished = serverDraft != null && published != null && !textMatches(serverDraft, published);
   const canSave = !saving && (isInitialWorkingCopy || isDirty);
-  const canPublish = serverDraft != null && !publishing && !isDirty && (published == null || differsFromPublished);
+  const incompatible = Object.entries(values).flatMap(([field, value]) => {
+    const tokens = [...value.matchAll(/\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g)].map(match => match[1]);
+    const unknown = [...new Set(tokens.filter(code => !variables.includes(code)))];
+    const missing = (requiredVariables?.[field as keyof PersonnelOrderTemplateDraftText] ?? []).filter(code => !tokens.includes(code));
+    return unknown.length || missing.length ? [{ field, unknown, missing }] : [];
+  });
+  const canPublish = incompatible.length === 0 && serverDraft != null && !publishing && !isDirty && (published == null || differsFromPublished);
   const showPreview = () => {
     const request = ++previewRequest.current;
     const submittedValues = editableDraftText(values);
@@ -286,7 +314,9 @@ function DraftEditor({ editor, published, onSaved, onPublished, variables, warni
     setNotice("");
     setPreview(null);
     setPreviewing(true);
-    void previewPersonnelOrderTemplateDraft(savedDraft.item_type_code, submittedValues)
+    const useSaved = Boolean(serverDraft?.template_id && !isDirty);
+    setPreviewSaved(useSaved);
+    void (useSaved ? previewSavedPersonnelOrderTemplateDraft(serverDraft!) : previewPersonnelOrderTemplateDraft(savedDraft.item_type_code, submittedValues))
       .then((result) => { if (request === previewRequest.current) setPreview(result.previews); })
       .catch((cause) => {
         if (request !== previewRequest.current) return;
@@ -308,8 +338,8 @@ function DraftEditor({ editor, published, onSaved, onPublished, variables, warni
           base_published_template_version_id: editor.workingCopy.base.template_version_id!,
           base_published_revision: editor.workingCopy.base.revision!,
         }),
-      })
-      : savePersonnelOrderTemplateDraft(savedDraft.item_type_code, { ...submittedValues, expected_revision: serverDraft!.revision });
+      }, ...templateArgs(savedDraft.template_id))
+      : savePersonnelOrderTemplateDraft(savedDraft.item_type_code, { ...submittedValues, expected_revision: serverDraft!.revision, expected_template_version_id: serverDraft!.template_version_id }, ...templateArgs(savedDraft.template_id));
     void persist
       .then((next) => {
         const savedValues = editableDraftText(next);
@@ -317,8 +347,9 @@ function DraftEditor({ editor, published, onSaved, onPublished, variables, warni
         onSaved(next);
         setValues(savedValues);
         setNotice("Черновик сохранён");
+        setPreviewSaved(true);
         const request = ++previewRequest.current;
-        return previewPersonnelOrderTemplateDraft(next.item_type_code, savedValues)
+        return (next.template_id ? previewSavedPersonnelOrderTemplateDraft(next) : previewPersonnelOrderTemplateDraft(next.item_type_code, savedValues))
           .then((result) => { if (request === previewRequest.current) setPreview(result.previews); })
           .catch(() => {
             if (request !== previewRequest.current) return;
@@ -329,7 +360,7 @@ function DraftEditor({ editor, published, onSaved, onPublished, variables, warni
       .catch((cause) => {
         previewRequest.current += 1;
         setPreview(null);
-        setError(draftErrorMessage(cause));
+        setError(`${draftErrorMessage(cause)} ${sectionLanguage === "kk" ? "Өзгерістер сақталмады. Енгізілген мәтін редакторда қалды." : "Изменения не сохранены. Введённый текст остался в редакторе."}`);
       })
       .finally(() => setSaving(false));
   };
@@ -338,7 +369,7 @@ function DraftEditor({ editor, published, onSaved, onPublished, variables, warni
     setReloading(true);
     setError("");
     setNotice("");
-    void getPersonnelOrderTemplateDraft(savedDraft.item_type_code)
+    void getPersonnelOrderTemplateDraft(savedDraft.item_type_code, ...templateArgs(savedDraft.template_id))
       .then((next) => {
         if (!next) throw new Error("Актуальная черновая версия не найдена.");
         const reloadedValues = editableDraftText(next);
@@ -354,17 +385,21 @@ function DraftEditor({ editor, published, onSaved, onPublished, variables, warni
   const publish = () => {
     if (!window.confirm("Опубликовать эту версию шаблона?")) return;
     setPublishing(true); setError("");
-    void publishPersonnelOrderTemplateDraft(savedDraft.item_type_code, serverDraft!.revision)
+    void publishPersonnelOrderTemplateDraft(savedDraft.item_type_code, serverDraft!.revision, ...templateArgs(savedDraft.template_id))
       // Publishing returns an immutable snapshot, never the next editable
       // draft.  Let the parent replace and close the editor atomically.
       .then((next) => { onPublished(next); })
       .catch((cause) => setError(draftErrorMessage(cause))).finally(() => setPublishing(false));
   };
   return (
-    <section ref={editorRef} className="mt-5 rounded-xl border border-blue-200 p-4" data-testid="template-draft-editor">
+    <section ref={editorRef} className="mt-5 rounded-xl border border-blue-200 p-4" data-testid="template-draft-editor" data-template-id={savedDraft.template_id} data-template-version-id={serverDraft?.template_version_id} data-revision={serverDraft?.revision}>
       <h4 className="font-semibold">{isWorkingCopy ? (isInitialWorkingCopy ? "Первая версия шаблона ещё не сохранена" : `Несохранённая рабочая копия опубликованной версии ${editor.workingCopy.base.version_number}`) : "Черновая версия шаблона"}</h4>
       {serverDraft ? <p className="text-sm">Версия {serverDraft.version_number} · revision {serverDraft.revision} · {serverDraft.status}</p> : null}
       <p className="mt-2 text-sm text-amber-700" data-testid="template-editor-application-notice">Эта версия не применяется к кадровым приказам.</p>
+      {incompatible.length ? <div role="alert" data-testid="template-incompatible-variables" className="mt-3 text-sm text-red-700">
+        <p>{sectionLanguage === "kk" ? "Жаңа бұйрық түрінің айнымалыларын жариялау алдында түзетіңіз." : "Исправьте переменные для нового вида приказа до публикации."}</p>
+        {incompatible.map(issue => <p key={issue.field}>{issue.field}: {issue.unknown.length ? `${sectionLanguage === "kk" ? "Үйлесімсіз" : "Несовместимые"}: ${issue.unknown.join(", ")}. ` : ""}{issue.missing.length ? `${sectionLanguage === "kk" ? "Міндетті айнымалылар жоқ" : "Отсутствуют обязательные переменные"}: ${issue.missing.join(", ")}.` : ""}</p>)}
+      </div> : null}
       {warning ? <p className="mt-2 text-sm font-medium text-amber-700" role="note">{warning}</p> : null}
 
       <div className="mt-3 grid grid-cols-1 gap-x-4 gap-y-3 md:grid-cols-2" data-testid="template-draft-fields">
@@ -408,90 +443,115 @@ function DraftEditor({ editor, published, onSaved, onPublished, variables, warni
         {notice ? <p role="status" className="text-sm text-emerald-700">{notice}</p> : null}
       </div>
       {serverDraft && published && !differsFromPublished && !isDirty ? <p className="mt-3 text-sm text-amber-700">Черновик полностью совпадает с опубликованной версией и не может быть опубликован</p> : null}
-      {preview ? <div ref={previewRef} data-testid="template-draft-preview" className="mt-4 grid gap-3 md:grid-cols-2">{(["ru", "kk"] as const).map((locale) => <article key={locale}><b>{locale.toUpperCase()}</b><p>{preview[locale].title}</p><p>{preview[locale].preamble}</p><p className="text-center">{preview[locale].directive}</p><p>{preview[locale].body}</p><p>{preview[locale].basis}</p><PreviewFooter locale={locale} /></article>)}</div> : null}
+      {preview ? <p className="mt-3 text-sm" data-testid="template-preview-origin">{previewSaved
+        ? (sectionLanguage === "kk" ? "Сақталған жобаны алдын ала қарау" : "Просмотр сохранённого черновика")
+        : (sectionLanguage === "kk" ? "Сақталмаған өзгерістерді алдын ала қарау" : "Просмотр несохранённых изменений")}</p> : null}
+      {preview ? <div ref={previewRef} data-testid="template-draft-preview" data-preview-source={previewSaved ? "SAVED_DRAFT" : "EDITOR_VALUES"} data-template-id={previewSaved ? savedDraft.template_id : undefined} data-template-version-id={previewSaved ? serverDraft?.template_version_id : undefined} data-revision={previewSaved ? serverDraft?.revision : undefined} className="mt-4 grid gap-3 md:grid-cols-2">{(["ru", "kk"] as const).map((locale) => <article key={locale}><b>{locale.toUpperCase()}</b><p>{preview[locale].title}</p><p>{preview[locale].preamble}</p><p className="text-center">{preview[locale].directive}</p><p className="whitespace-pre-wrap">{preview[locale].body}</p><p>{preview[locale].basis}</p><PreviewFooter locale={locale} /></article>)}</div> : null}
     </section>
   );
 }
 
-function TemplateDetail({ item }: { item: PersonnelOrderTemplateCatalogItem }) {
+function TemplateDetail({ item, templateId, selectedTemplate, onChanged, copyActions, copyForm, createdDraft }: { item: PersonnelOrderTemplateCatalogItem; templateId?: number; selectedTemplate?: PersonnelIndependentTemplate; onChanged?: (published?: PersonnelOrderTemplateDraft) => void; copyActions?: React.ReactNode; copyForm?: React.ReactNode; createdDraft?: PersonnelOrderTemplateDraft }) {
+  const { language } = usePersonnelSectionLanguage();
   const detail = item.template_detail ?? item.pilot_detail;
   const [editor, setEditor] = useState<EditorDocument | null>(null);
   const [serverDraft, setServerDraft] = useState<PersonnelOrderTemplateDraft | null>(null);
   const [published, setPublished] = useState<PersonnelOrderTemplateDraft | null>(null);
   const [openingEditor, setOpeningEditor] = useState(false);
   const [openError, setOpenError] = useState("");
+  const [loadError, setLoadError] = useState("");
   const openRequest = useRef(0);
   const loadRequest = useRef(0);
+  const createdEditorRef = useRef<HTMLDivElement>(null);
   const draftExists = serverDraft?.status === "DRAFT";
   const reloadState = useCallback(() => {
     const request = ++loadRequest.current;
+    setLoadError("");
     // Both reads are unconditional: a first-version DRAFT has no PUBLISHED
     // predecessor, and neither read is allowed to create a DRAFT.
-    void Promise.all([getPersonnelOrderTemplatePublished(item.type_code), getPersonnelOrderTemplateDraft(item.type_code)])
+    void Promise.all([getPersonnelOrderTemplatePublished(item.type_code, ...templateArgs(templateId)), getPersonnelOrderTemplateDraft(item.type_code, ...templateArgs(templateId))])
       .then(([nextPublished, nextDraft]) => {
         if (request !== loadRequest.current) return;
         setPublished(nextPublished);
         setServerDraft(nextDraft?.status === "DRAFT" ? nextDraft : null);
+        if (templateId != null && selectedTemplate?.is_default === false && nextDraft?.status === "DRAFT") setEditor(current => current ?? { kind: "DRAFT", draft: nextDraft });
       })
-      .catch(() => {
+      .catch(cause => {
         if (request !== loadRequest.current) return;
         setPublished(null);
         setServerDraft(null);
+        setLoadError(`Не удалось загрузить черновик и опубликованную версию. ${templateLoadError(cause)}`);
       });
-  }, [item.type_code]);
+  }, [item.type_code, templateId, selectedTemplate?.is_default]);
   const openEditor = useCallback(() => {
     const request = ++openRequest.current;
     setOpenError("");
     setOpeningEditor(true);
-    void getPersonnelOrderTemplateDraft(item.type_code)
+    void getPersonnelOrderTemplateDraft(item.type_code, ...templateArgs(templateId))
       .then(async (existing): Promise<EditorDocument> => {
         if (existing?.status === "DRAFT") return { kind: "DRAFT", draft: existing };
-        const base = await getPersonnelOrderTemplateEditorBase(item.type_code);
-        return { kind: "WORKING_COPY", workingCopy: { kind: "WORKING_COPY", item_type_code: base.item_type_code, base, ...editableDraftText(base) } };
+        const base = await getPersonnelOrderTemplateEditorBase(item.type_code, ...templateArgs(templateId));
+        return { kind: "WORKING_COPY", workingCopy: { kind: "WORKING_COPY", template_id: templateId, item_type_code: base.item_type_code, base, ...editableDraftText(base) } };
       })
       .then((next) => { if (request === openRequest.current) setEditor(next); })
-      .catch(() => {
+      .catch(cause => {
         if (request === openRequest.current) {
           // Do not expose backend detail here: it can contain implementation
           // diagnostics. The user can safely retry the read-only bootstrap.
-          setOpenError("Не удалось открыть редактор. Повторите попытку.");
+          setOpenError(`Не удалось открыть редактор. Повторите попытку. ${templateLoadError(cause)}`);
         }
       })
       .finally(() => { if (request === openRequest.current) setOpeningEditor(false); });
-  }, [item.type_code]);
+  }, [item.type_code, templateId]);
   useEffect(() => {
-    setEditor(null); setPublished(null); setServerDraft(null); setOpenError("");
+    setEditor(createdDraft ? { kind: "DRAFT", draft: createdDraft } : null); setPublished(null); setServerDraft(createdDraft ?? null); setOpenError("");
     if (item.editor_available) reloadState();
     return () => { loadRequest.current += 1; openRequest.current += 1; };
-  }, [item.type_code, item.editor_available, reloadState]);
+  }, [item.type_code, item.editor_available, reloadState, createdDraft]);
+  useEffect(() => {
+    if (editor) createdEditorRef.current?.scrollIntoView?.({ block: "start" });
+  }, [createdDraft, Boolean(editor)]);
   return (
-    <aside data-testid="personnel-order-template-detail" className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
-      <h3 className="text-lg font-semibold">{item.title_ru}</h3>
-      <p className="mt-1">{item.title_kk}</p>
+    <aside data-testid="personnel-order-template-detail" data-template-id={templateId} className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
+      <h3 className="text-lg font-semibold">{selectedTemplate ? (language === "kk" ? selectedTemplate.name_kk || selectedTemplate.name_ru : selectedTemplate.name_ru || selectedTemplate.name_kk) : localizedPersonnelTitle(item, language)}</h3>
       <p className="mt-2 text-sm">{item.type_code} · {item.support_level}</p>
-      {published ? <section className="mt-4 rounded-lg border border-emerald-200 p-3" data-testid="template-published-read-only"><h4 className="font-semibold">Опубликованная версия шаблона</h4><p className="text-sm">Версия {published.version_number} · {published.status}</p><p className="mt-2 whitespace-pre-wrap text-sm">{published.title_ru}</p>{draftExists ? <p className="mt-2 text-sm text-amber-700">Имеется черновик следующей версии.</p> : null}</section> : null}
+      <div data-testid="personnel-template-actions" className="mt-3 flex flex-wrap items-center gap-2">{item.editor_available && !editor ? <><button aria-label={openingEditor ? "Открытие…" : (draftExists ? "Продолжить редактирование" : "Редактировать шаблон")} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-500 dark:text-zinc-950 dark:hover:bg-blue-400" type="button" onClick={openEditor} disabled={openingEditor}>{openingEditor ? "Открытие…" : (draftExists ? "Продолжить редактирование" : "Редактировать шаблон")}</button>{openingEditor ? <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400" data-testid="template-editor-opening">Открытие редактора…</p> : null}{openError ? <p className="mt-2 text-sm text-red-700" role="alert">{openError}</p> : null}</> : null}{copyActions}</div>
+      {copyForm}
+      {loadError ? <div role="alert" className="mt-3 text-red-700">{loadError}<button type="button" onClick={reloadState} className="ml-2 rounded border px-3 py-2">Повторить загрузку карточки</button></div> : null}
+      {published ? <section className="mt-4 rounded-lg border border-emerald-200 p-3" data-testid="template-published-read-only"><h4 className="font-semibold">Опубликованная версия шаблона</h4><p className="text-sm">Версия {published.version_number} · {published.status}</p><p className="mt-2 whitespace-pre-wrap text-sm">{localizedPersonnelTitle(published, language)}</p>{draftExists ? <p className="mt-2 text-sm text-amber-700">Имеется черновик следующей версии.</p> : null}</section> : null}
       <p className="mt-1 text-sm">{item.uses_specialized_generator ? "Специализированный генератор" : "Общий fallback"}</p>
       {detail ? <FormalizedTemplateDetail detail={detail} showCatalogPreview={!item.editor_available} /> : <>
         <p className="mt-3">Обязательные поля: {item.required_fields.join(", ") || "не формализованы"}</p>
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">{item.notes}</p>
       </>}
-      {item.editor_available && !editor ? <div className="mt-4"><button aria-label={openingEditor ? "Открытие…" : (draftExists ? "Продолжить редактирование" : "Редактировать шаблон")} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-500 dark:text-zinc-950 dark:hover:bg-blue-400" type="button" onClick={openEditor} disabled={openingEditor}>{openingEditor ? "Открытие…" : (draftExists ? "Продолжить редактирование" : "Редактировать шаблон")}</button>{openingEditor ? <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400" data-testid="template-editor-opening">Открытие редактора…</p> : null}{openError ? <p className="mt-2 text-sm text-red-700" role="alert">{openError}</p> : null}</div> : null}
-      {editor ? <DraftEditor editor={editor} published={published} onSaved={(next) => { setEditor({ kind: "DRAFT", draft: next }); setServerDraft(next); }} onPublished={() => { setEditor(null); setServerDraft(null); reloadState(); }} variables={item.allowed_variables} warning={item.support_level === "PARTIAL" ? "Шаблон требует дальнейшей предметной формализации; неподтверждённые реквизиты не добавлены." : undefined} /> : null}
+
+      {editor ? <div ref={createdEditorRef} className="scroll-mt-20">{createdDraft ? <p role="status" className="mt-4 text-sm text-emerald-700" data-testid="template-copy-success">{createdDraft.type_changed ? (language === "kk" ? "Үлгінің түрі өзгертілді. Мәтін сақталды." : "Вид шаблона изменён. Тексты сохранены.") : language === "kk" ? `Бөлек жоба «${selectedTemplate?.name_kk || createdDraft.name_kk || createdDraft.title_kk}» жасалды. Бастапқы үлгі сақталды` : `Создан отдельный черновик «${selectedTemplate?.name_ru || createdDraft.name_ru || createdDraft.title_ru}». Исходный шаблон сохранён`}</p> : null}<DraftEditor editor={editor} published={published} onSaved={(next) => { setEditor({ kind: "DRAFT", draft: next }); setServerDraft(next); onChanged?.(); }} onPublished={next => { setEditor(null); setServerDraft(null); setPublished(next); reloadState(); onChanged?.(next); }} variables={item.allowed_variables} requiredVariables={item.required_variables} warning={item.support_level === "PARTIAL" ? "Шаблон требует дальнейшей предметной формализации; неподтверждённые реквизиты не добавлены." : undefined} /></div> : null}
     </aside>
   );
 }
 
 export default function TemplatesPageClient() {
+  const { language } = usePersonnelSectionLanguage();
   const router = useRouter();
   const searchParams = useSearchParams();
   const activeSection = resolveTemplateSection(searchParams.get("section"));
   const [items, setItems] = useState<PersonnelOrderTemplateCatalogItem[]>([]);
+  const [catalogError, setCatalogError] = useState("");
+  const [catalogRefresh, setCatalogRefresh] = useState(0);
+  const selectedCardRef = useRef<HTMLDivElement>(null);
+  const [group, setGroup] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [level, setLevel] = useState("ALL");
+  const [copiedDraft, setCopiedDraft] = useState<PersonnelOrderTemplateDraft>();
   const [switchingType, setSwitchingType] = useState<string | null>(null);
   const selectedType = searchParams.get("type") || "";
   const displayedType = switchingType ?? selectedType;
-  const selectedItem = items.find((item) => item.type_code === displayedType);
+  const selectedItem = items.find((item) => item.type_code === displayedType && (!group || PERSONNEL_ORDER_TYPE_GROUP[item.type_code as keyof typeof PERSONNEL_ORDER_TYPE_GROUP] === group))
+    ?? items.find((item) => !group || PERSONNEL_ORDER_TYPE_GROUP[item.type_code as keyof typeof PERSONNEL_ORDER_TYPE_GROUP] === group);
+
+  useEffect(() => {
+    if (selectedItem && displayedType) selectedCardRef.current?.scrollIntoView?.({block:"start"});
+  },[selectedItem?.type_code,displayedType]);
 
   useEffect(() => {
     if (switchingType && selectedType === switchingType) setSwitchingType(null);
@@ -499,13 +559,16 @@ export default function TemplatesPageClient() {
 
   useEffect(() => {
     if (activeSection !== TEMPLATE_SECTIONS.personnelOrders) return;
-    void listPersonnelOrderTemplateCatalog().then((data) => setItems(data.items)).catch(() => setItems([]));
-  }, [activeSection]);
+    let active=true; setCatalogError("");
+    void listPersonnelOrderTemplateCatalog().then(data => {if(active) setItems(data.items);}).catch(cause => {if(active) {setItems([]);setCatalogError(`Не удалось загрузить каталог кадровых шаблонов. ${templateLoadError(cause)}`);}});
+    return () => {active=false;};
+  }, [activeSection,catalogRefresh]);
 
   const visibleItems = useMemo(() => items.filter((item) => {
+    if (group && PERSONNEL_ORDER_TYPE_GROUP[item.type_code as keyof typeof PERSONNEL_ORDER_TYPE_GROUP] !== group) return false;
     const haystack = `${item.type_code} ${item.title_ru} ${item.title_kk}`.toLowerCase();
     return (level === "ALL" || item.support_level === level) && haystack.includes(query.toLowerCase());
-  }), [items, level, query]);
+  }), [items, level, query, group]);
 
   function selectSection(section: TemplateSection) {
     if (section === activeSection) return;
@@ -514,10 +577,12 @@ export default function TemplatesPageClient() {
 
   function selectType(type: string) {
     if (type === displayedType) return;
+    setCopiedDraft(undefined);
     setSwitchingType(type);
     const params = new URLSearchParams(searchParams.toString());
     params.set("section", TEMPLATE_SECTIONS.personnelOrders);
     params.set("type", type);
+    params.delete("template_id");
     router.push(`/admin/templates?${params.toString()}`);
   }
 
@@ -534,11 +599,13 @@ export default function TemplatesPageClient() {
       ) : (
         <section className="space-y-3" aria-labelledby="personnel-order-templates-heading" data-testid="personnel-order-templates-catalog">
           <h2 id="personnel-order-templates-heading" className="text-xl font-semibold">Шаблоны кадровых приказов</h2>
-          <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">Встроенные read-only шаблоны, построенные по действующим генераторам. Редактирование и версионирование будут добавлены на следующем этапе.</p>
-          <GeneralPersonnelOrderRequirements />
+          {catalogError ? <div role="alert" className="text-red-700">{catalogError}<button type="button" onClick={()=>setCatalogRefresh(n=>n+1)} className="ml-2 rounded border px-3 py-2">Повторить загрузку каталога</button></div> : null}
+          <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">Откройте выбранный шаблон для редактирования или создайте на его основе независимый черновик с названиями RU/KZ.</p>
           <div className="flex gap-2"><input aria-label="Поиск шаблонов кадровых приказов" value={query} onChange={(e) => setQuery(e.target.value)} className="rounded border px-2 py-1" /><select aria-label="Уровень поддержки" value={level} onChange={(e) => setLevel(e.target.value)} className="rounded border px-2 py-1"><option value="ALL">Все уровни</option><option value="SUPPORTED">SUPPORTED</option><option value="PARTIAL">PARTIAL</option><option value="NOT_IMPLEMENTED">NOT_IMPLEMENTED</option></select></div>
-          <div className="grid gap-2 md:grid-cols-2" data-testid="personnel-order-template-list">{visibleItems.map((item) => <button type="button" key={item.type_code} onClick={() => selectType(item.type_code)} className="rounded border p-3 text-left" data-testid={`personnel-order-template-${item.type_code}`}><div className="font-medium">{item.title_ru}</div><div>{item.title_kk}</div><div className="font-mono text-xs">{item.type_code}</div><div>{item.support_level} · {item.supported_locales.join(", ")} · Встроенный шаблон {item.is_pilot ? "· Пилот" : ""}</div></button>)}</div>
-          {selectedItem ? <TemplateDetail key={selectedItem.type_code} item={selectedItem} /> : null}
+          <div role="group" aria-label={language === "kk" ? "Бұйрық топтары" : "Группы приказов"} className="mb-3 flex flex-wrap gap-2">{PERSONNEL_ORDER_GROUPS.map(entry => <button type="button" key={entry.id} aria-pressed={group === entry.id} onClick={() => { const nextGroup = group === entry.id ? null : entry.id; setGroup(nextGroup); if (nextGroup && selectedItem && PERSONNEL_ORDER_TYPE_GROUP[selectedItem.type_code as keyof typeof PERSONNEL_ORDER_TYPE_GROUP] !== nextGroup) { const nextItem = items.find(item => PERSONNEL_ORDER_TYPE_GROUP[item.type_code as keyof typeof PERSONNEL_ORDER_TYPE_GROUP] === nextGroup); if (nextItem) selectType(nextItem.type_code); } }} className="rounded border px-3 py-2">{entry[language]}</button>)}</div>
+          <div className="grid gap-2 md:grid-cols-2" data-testid="personnel-order-template-list">{visibleItems.map((item) => <button type="button" key={item.type_code} onClick={() => selectType(item.type_code)} className="rounded border p-3 text-left" data-testid={`personnel-order-template-${item.type_code}`}><div className="font-medium">{localizedPersonnelTitle(item, language)}</div><div className="font-mono text-xs">{item.type_code}</div><div>{item.support_level} · {item.supported_locales.join(", ")} · Встроенный шаблон {item.is_pilot ? "· Пилот" : ""}</div></button>)}</div>
+          {selectedItem ? <div ref={selectedCardRef} className="scroll-mt-20" data-testid="selected-personnel-template-card"><PersonnelTemplateVariants key={selectedItem.type_code} item={selectedItem} catalog={items} initialTemplateId={selectedItem.type_code === selectedType ? Number(searchParams.get("template_id")) || undefined : undefined} onSelected={id => { setCopiedDraft(undefined); const params = new URLSearchParams(searchParams.toString()); params.set("type", selectedItem.type_code); if (id) params.set("template_id", String(id)); else params.delete("template_id"); router.push(`/admin/templates?${params.toString()}`); }} initialDraft={copiedDraft?.item_type_code === selectedItem.type_code ? copiedDraft : undefined} onCreated={draft => { setGroup(null); setSwitchingType(draft.item_type_code); setCopiedDraft(draft); const params = new URLSearchParams(searchParams.toString()); params.set("type", draft.item_type_code); params.set("template_id", String(draft.template_id)); router.push(`/admin/templates?${params.toString()}`); }} renderEditor={(templateId, onChanged, copyActions, copyForm, createdDraft, editorItem = selectedItem, selectedTemplate) => <TemplateDetail key={`${editorItem.type_code}:${templateId || "default"}`} item={editorItem} selectedTemplate={selectedTemplate} templateId={templateId} onChanged={onChanged} copyActions={copyActions} copyForm={copyForm} createdDraft={createdDraft} />} /></div> : null}
+          <GeneralPersonnelOrderRequirements />
         </section>
       )}
     </div>

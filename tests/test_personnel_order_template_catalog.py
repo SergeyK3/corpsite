@@ -10,19 +10,20 @@ from fastapi.testclient import TestClient
 def test_catalog_is_registry_backed_and_safe():
     items = list_personnel_order_template_catalog()
     codes = {item["type_code"] for item in items}
-    assert {"HIRE", "TRANSFER", "TERMINATION", "LEAVE.ANNUAL.GRANT", "LEAVE.UNPAID.GRANT", "LEAVE.CHILDCARE.GRANT", "RETURN_FROM_CHILDCARE_LEAVE", "CONCURRENT_DUTY_START", "CONCURRENT_DUTY_END", "SUPPLEMENTARY_PAY"} <= codes
+    assert {"HIRE", "TRANSFER", "TERMINATION", "LEAVE.ANNUAL.RECALL", "LEAVE.ANNUAL.GRANT", "LEAVE.UNPAID.GRANT", "LEAVE.CHILDCARE.GRANT", "RETURN_FROM_CHILDCARE_LEAVE", "CONCURRENT_DUTY_START", "CONCURRENT_DUTY_END", "SUPPLEMENTARY_PAY"} <= codes
     assert "COMPOSITE" not in codes
     pilot = next(item for item in items if item["type_code"] == "RETURN_FROM_CHILDCARE_LEAVE")
     assert pilot["is_pilot"] is True and pilot["support_level"] == "SUPPORTED"
-    assert all(set(item) == {"type_code", "title_ru", "title_kk", "source", "support_level", "supported_locales", "uses_specialized_generator", "is_pilot", "editor_available", "allowed_variables", "required_fields", "notes", "pilot_detail", "template_detail"} for item in items)
+    assert all(set(item) == {"type_code", "title_ru", "title_kk", "source", "support_level", "supported_locales", "uses_specialized_generator", "is_pilot", "editor_available", "allowed_variables", "required_variables", "required_fields", "notes", "pilot_detail", "template_detail"} for item in items)
     assert all(item["allowed_variables"] == list(get_personnel_order_template_spec(item["type_code"]).allowed_variables) for item in items)
+    assert all(item["required_variables"] == {field: list(codes) for field, codes in get_personnel_order_template_spec(item["type_code"]).required_variables.items()} for item in items)
     assert {item["type_code"] for item in items if item["editor_available"]} == codes
 
 
 def test_catalog_projections_match_the_migrated_golden_snapshot_for_all_types():
     assert_personnel_order_template_specs()
     actual = {
-        item["type_code"]: {key: value for key, value in item.items() if key not in {"type_code", "allowed_variables"}}
+        item["type_code"]: {key: value for key, value in item.items() if key not in {"type_code", "allowed_variables", "required_variables"}}
         for item in list_personnel_order_template_catalog()
     }
     assert actual == CATALOG_PROJECTIONS

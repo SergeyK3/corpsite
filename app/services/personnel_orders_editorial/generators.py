@@ -56,15 +56,15 @@ DOCUMENT_TITLES: Dict[str, Dict[str, str]] = {
         "ru": "О переводе",
     },
     ORDER_TYPE_TERMINATION: {
-        "kk": "Жұмыстан босату туралы",
+        "kk": "Еңбек шартын бұзу туралы",
         "ru": "Об увольнении",
     },
     ORDER_TYPE_CONCURRENT_DUTY_START: {
-        "kk": "Қоса атқаруды белгілеу туралы",
+        "kk": "Қоса атқару туралы",
         "ru": "Об установлении совмещения",
     },
     ORDER_TYPE_CONCURRENT_DUTY_END: {
-        "kk": "Қоса атқаруды тоқтату туралы",
+        "kk": "Ставканы алып тастау туралы",
         "ru": "О прекращении совмещения",
     },
     ORDER_TYPE_SUPPLEMENTARY_PAY: {
@@ -76,16 +76,16 @@ DOCUMENT_TITLES: Dict[str, Dict[str, str]] = {
         "ru": "О кадровых изменениях",
     },
     "LEAVE.ANNUAL.GRANT": {
-        "kk": "Жыл сайынғы ақылы еңбек демалысын беру туралы",
-        "ru": "О предоставлении ежегодного оплачиваемого трудового отпуска",
+        "kk": "Еңбек демалысы туралы",
+        "ru": "О трудовом отпуске",
     },
     "LEAVE.UNPAID.GRANT": {
         "kk": "Жалақы сақталмайтын демалыс беру туралы",
-        "ru": "О предоставлении отпуска без сохранения заработной платы",
+        "ru": "Об отпуске без содержания",
     },
     ORDER_TYPE_LEAVE_CHILDCARE_GRANT: {
-        "kk": "Бала үш жасқа толғанға дейін оның күтіміне байланысты жалақы сақталмайтын демалыс беру туралы",
-        "ru": "О предоставлении отпуска без сохранения заработной платы по уходу за ребёнком до достижения им возраста трёх лет",
+        "kk": "Бала күтіміне байланысты жалақы сақталмайтын демалыс туралы",
+        "ru": "О неоплачиваемом отпуске по уходу за ребенком",
     },
 }
 
@@ -297,6 +297,10 @@ def generate_order_block(
     order_type = str(order_ctx.get("order_type_code") or "").strip().upper()
     legal_basis = _clean(order_ctx.get("legal_basis_article"))
 
+    if order_type == "LEAVE.ANNUAL.RECALL":
+        from app.services.personnel_order_recall_contract import TEXTS
+        value = TEXTS[f"{normalized_type}_{lang}"] if normalized_type in {"title", "preamble"} else ""
+        return _result(generated_text=value, generator_key=f"annual_recall.{normalized_type}", fingerprint_payload={"type": order_type, "locale": lang, "text": value})
     if normalized_type == ORDER_BLOCK_TYPE_TITLE:
         titles = DOCUMENT_TITLES.get(order_type) or DOCUMENT_TITLES[ORDER_TYPE_COMPOSITE]
         text = titles.get(lang) or titles["ru"]
@@ -383,10 +387,25 @@ def generate_item_body(locale: str, item_ctx: Mapping[str, Any]) -> Dict[str, st
     """Generate item body text (ported from personnelOrderPrintItemText.ts)."""
     lang = _locale(locale)
     item_type = str(item_ctx.get("item_type_code") or "").strip().upper()
+    if item_type == "LEAVE.ANNUAL.RECALL":
+        from app.services.personnel_order_recall_contract import values, render
+        data = values(item_ctx.get("recall_payload") or {}, item_ctx.get("effective_date"))
+        return _result(generated_text=render(f"body_template_{lang}", data), generator_key=GENERATOR_KEY_ITEM_BODY, fingerprint_payload={"type": item_type, "locale": lang, "values": data})
     employee_name = item_ctx.get("employee_name")
     effective_date = item_ctx.get("effective_date")
     org_unit_name = item_ctx.get("org_unit_name")
+    if _clean(item_ctx.get("org_unit_document_genitive_kk")):
+        org_unit_name = {"ru": _localized_name(org_unit_name, "ru"), "kk": _clean(item_ctx.get("org_unit_document_genitive_kk"))}
     position_name = item_ctx.get("position_name")
+    # Stored document forms are shared by every order type. No live dictionary
+    # lookup occurs here, so editing the catalog cannot rewrite old orders.
+    ru_position = _clean(item_ctx.get("position_document_nominative_ru"))
+    kk_position = _clean(item_ctx.get("position_document_possessive_kk"))
+    if ru_position or kk_position:
+        position_name = {
+            "ru": ru_position or _localized_position(position_name, "ru"),
+            "kk": kk_position or _localized_position(position_name, "kk"),
+        }
     to_org_unit_name = item_ctx.get("to_org_unit_name")
     to_position_name = item_ctx.get("to_position_name")
     rate = item_ctx.get("rate")
@@ -516,7 +535,7 @@ def generate_item_body(locale: str, item_ctx: Mapping[str, Any]) -> Dict[str, st
             date_part = f" {_format_date_from(effective_date, lang)} бастап" if has_effective_date else ""
             text = f"{date_part.strip()} {assignment_part} {fio}ға{rate_part} бала күтіміне байланысты демалыстан жұмысқа шығуға рұқсат берілсін."
         else:
-            ru_position = "врача (ординатора)" if str(position).casefold() == "врач (ординатор)" else position.lower()
+            ru_position = _clean(item_ctx.get("position_document_nominative_ru")) or ("врача (ординатора)" if str(position).casefold() == "врач (ординатор)" else position.lower())
             ru_org = "Инсультного центра" if str(org).casefold() == "инсультный центр" else org
             assignment_part = f" в должности {ru_position} {ru_org}" if has_assignment_context else ""
             rate_part = f" на {rate_value} ставки" if rate_value else ""
@@ -651,6 +670,10 @@ def generate_item_body(locale: str, item_ctx: Mapping[str, Any]) -> Dict[str, st
 def generate_basis_text(locale: str, basis_fact: Mapping[str, Any]) -> Dict[str, str]:
     """Generate basis wording (ported from personnelOrderBasisGenerate.ts)."""
     lang = _locale(locale)
+    if basis_fact.get("item_type_code") == "LEAVE.ANNUAL.RECALL":
+        from app.services.personnel_order_recall_contract import values, render
+        data = values(basis_fact.get("recall_payload") or {}, basis_fact.get("effective_date"))
+        return _result(generated_text=render(f"basis_template_{lang}", data), generator_key=GENERATOR_KEY_ITEM_BASIS, fingerprint_payload={"type": "LEAVE.ANNUAL.RECALL", "locale": lang, "values": data})
     basis_type = str(basis_fact.get("basis_type") or "").strip().upper()
     name = _clean(basis_fact.get("subject_employee_name"))
     genitive_ru = _clean(basis_fact.get("subject_employee_name_genitive_ru")) or name

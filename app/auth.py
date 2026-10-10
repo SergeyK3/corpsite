@@ -357,14 +357,12 @@ def _enrich_user_context(user: Dict[str, Any]) -> Dict[str, Any]:
     can_view_all_tasks = False
     role_id = int(out.get("role_id") or 0)
     if uid > 0 and role_id > 0:
-        with engine.connect() as conn:
-            can_view_all_tasks = bool(
-                can_view_team_tasks(
-                    conn,
-                    current_user_id=uid,
-                    current_role_id=role_id,
-                )
+        can_view_all_tasks = bool(
+            can_view_team_tasks(
+                current_user_id=uid,
+                current_role_id=role_id,
             )
+        )
     out["can_view_all_tasks"] = can_view_all_tasks
 
     return out
