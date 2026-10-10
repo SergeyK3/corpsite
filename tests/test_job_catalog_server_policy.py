@@ -14,14 +14,16 @@ POSITIONS=[{'position_id':row['position_id'],'name':row['server_name']} for row 
 def plan(positions=POSITIONS,links=()):
     return policy.plan_server_catalog(ROWS,REVIEW,positions,links=links,catalog_planner=catalog.plan_catalog)
 
-def test_preserves_all_88_approved_professions_and_explicit_89_ids():
+def test_preserves_all_88_approved_professions_and_explicit_90_ids():
     original=catalog.read_catalog(ROOT/'reference-data/job-positions/catalog-v1.json')
-    assert len(ROWS)==88 and sum(len(r['legacy_position_ids']) for r in ROWS)==89
+    assert len(ROWS)==88 and sum(len(r['legacy_position_ids']) for r in ROWS)==90
     assert [{k:v for k,v in r.items() if k!='legacy_position_ids'} for r in ROWS]==[{k:v for k,v in r.items() if k!='legacy_position_ids'} for r in original]
     assert len(REVIEW['skipped_missing_links'])==19 and REVIEW['withheld_links']==[]
     approved={row['position_id']:row for row in REVIEW['approved_links']}
     assert approved[71]['job_code']=='CLINICAL_DEPARTMENT_HEAD'
     assert approved[61]['job_code']=='PHYSICIAN_STATISTICIAN'
+    assert approved[24]['job_code']=='LAUNDRY_MACHINE_OPERATOR'
+    assert 'assignment_id=84' in approved[24]['review_basis']
     assert all(approved[pid]['job_code']=='EXPERT_PHYSICIAN' for pid in range(93,97))
     assert all('Пользователь явно подтвердил' in approved[pid]['review_basis'] for pid in (61,93,94,95,96))
 
@@ -29,14 +31,15 @@ def test_original_missing_ids_no_longer_block_and_are_reported():
     assert len(POSITIONS)==111
     original= catalog.plan_catalog(catalog.read_catalog(ROOT/'reference-data/job-positions/catalog-v1.json'),POSITIONS)
     assert len(original['missing_ids'])==19 and not original['can_apply']
-    result=plan();assert result['can_apply'] and result['rows']==88 and result['active_link_count']==89
+    result=plan();assert result['can_apply'] and result['rows']==88 and result['active_link_count']==90
     assert result['skipped_missing_ids']==original['missing_ids']
     assert result['planned_changes']['position_updates']==0 and result['planned_changes']['assignment_updates']==0
-    assert len(result['unmapped_existing_ids'])==22
+    assert len(result['unmapped_existing_ids'])==21
+    assert 24 not in result['unmapped_existing_ids']
 
 def test_further_absent_reviewed_id_is_skipped_and_never_inserted():
     result=plan([r for r in POSITIONS if r['position_id']!=71])
-    assert result['can_apply'] and result['rows']==88 and result['active_link_count']==88
+    assert result['can_apply'] and result['rows']==88 and result['active_link_count']==89
     assert 71 in result['skipped_missing_ids'] and result['missing_ids']==[]
     assert all(71 not in row['legacy_position_ids'] for row in result['mappings'])
 
@@ -48,10 +51,10 @@ def test_changed_meaning_at_same_id_blocks_instead_of_name_matching():
 
 def test_equal_name_at_different_id_and_newly_present_unreviewed_id_are_not_mapped():
     result=plan(POSITIONS+[{'position_id':717,'name':'Медицинский статистик'}])
-    assert result['can_apply'] and result['active_link_count']==89
+    assert result['can_apply'] and result['active_link_count']==90
     assert [row['position_id'] for row in result['unreviewed_now_present']]==[717]
     ids={pid for row in result['mappings'] for pid in row['legacy_position_ids']}
-    assert not {24,47,52,99,100,101,102,104,105,106,107,108,109,110,111,112,113,114,115,717}&ids
+    assert not {47,52,99,100,101,102,104,105,106,107,108,109,110,111,112,113,114,115,717}&ids
 
 def test_existing_wrong_or_unreviewed_link_blocks_without_overwriting():
     result=plan(links=[{'position_id':71,'job_code':'ECONOMIST'}]);assert not result['can_apply']
@@ -83,7 +86,7 @@ def test_import_keeps_111_historical_positions_assignments_texts_and_is_idempote
         again=policy.apply_catalog(adapter,ROWS,REVIEW,catalog_module=catalog)
         assert again['planned_changes']['total']==0
         assert conn.execute(text('SELECT count(*) FROM public.job_positions_catalog')).scalar_one()==88
-        assert conn.execute(text('SELECT count(*) FROM public.position_job_catalog')).scalar_one()==89
+        assert conn.execute(text('SELECT count(*) FROM public.position_job_catalog')).scalar_one()==90
         assert conn.execute(text('SELECT * FROM public.positions ORDER BY position_id')).all()==before
         assert conn.execute(text('SELECT position_id FROM public.person_assignments')).scalar_one()==71
         assert conn.execute(text('SELECT saved_text FROM public.personnel_orders')).scalar_one()=='Утверждённый исторический RU/KZ-текст'
@@ -93,6 +96,13 @@ def test_import_keeps_111_historical_positions_assignments_texts_and_is_idempote
         assert conn.execute(text("SELECT job_namekk_doc FROM public.job_positions_catalog WHERE job_code='NURSE'")).scalar_one()=='Ручная форма'
 
 def test_reviewed_ids_cannot_be_extended_by_catalog_alone():
-    changed=json.loads(json.dumps(ROWS));next(row for row in changed if row['job_code']=='LAUNDRY_MACHINE_OPERATOR')['legacy_position_ids']=[24]
+    changed=json.loads(json.dumps(ROWS));next(row for row in changed if row['job_code']=='LAUNDRY_MACHINE_OPERATOR')['legacy_position_ids']=[24,47]
     with pytest.raises(ValueError,match='explicit reviewed IDs'):
         policy.plan_server_catalog(changed,REVIEW,POSITIONS,catalog_planner=catalog.plan_catalog)
+
+
+def test_user_confirmed_server_laundry_link_is_recognized_on_reimport():
+    result = plan(links=[{'position_id':24,'job_code':'LAUNDRY_MACHINE_OPERATOR'}])
+    assert result['can_apply'] and not result['unreviewed_existing_links']
+    row = next(r for r in result['mappings'] if r['job_code']=='LAUNDRY_MACHINE_OPERATOR')
+    assert row['matches']==[{'position_id':24,'existing_name':'Машинист по стирке белья','mapping_action':'keep','status':'found'}]

@@ -15,10 +15,10 @@
   "professions": 88,
   "original_link_count": 108,
   "server_position_count": 111,
-  "approved_link_count": 89,
+  "approved_link_count": 90,
   "missing_link_count": 19,
   "withheld_link_count": 0,
-  "policy": "Only reviewed explicit Excel IDs. No fuzzy or exact-name allocation of new IDs. Missing IDs skipped. Historical positions/assignments/texts unchanged.",
+  "policy": "Only reviewed explicit Excel IDs or separately user-confirmed server assignment IDs. No fuzzy or automatic exact-name allocation. Missing IDs skipped. Historical positions/assignments/texts unchanged.",
   "approved_links": [
     {
       "position_id": 1,
@@ -195,6 +195,13 @@
       "excel_range": "catl_job!A23:E23",
       "server_name": "Лифтер",
       "review_basis": "Явный ID Excel и серверное название обозначают ту же профессию; утверждённое название справочника сохраняется."
+    },
+    {
+      "position_id": 24,
+      "job_code": "LAUNDRY_MACHINE_OPERATOR",
+      "job_nameru": "Машинист по стирке белья",
+      "server_name": "Машинист по стирке белья",
+      "review_basis": "Пользователь явно подтвердил «кір жуу машинисі» для должности получателя. Проверены серверные employee_id=100, person_id=88, assignment_id=84, position_id=24 и существующая запись LAUNDRY_MACHINE_OPERATOR; локальный ID 715 не используется для серверного сопоставления."
     },
     {
       "position_id": 25,
@@ -871,10 +878,6 @@
   "withheld_links": [],
   "unmapped_server_positions": [
     {
-      "position_id": 24,
-      "name": "Машинист по стирке белья"
-    },
-    {
       "position_id": 47,
       "name": "Социальный работник"
     },
@@ -958,5 +961,13 @@
       "position_id": 115,
       "name": "Главный инженер"
     }
-  ]
+  ],
+  "supplemental_review": {
+    "date": "2026-10-10",
+    "approved_link_count": 1,
+    "position_ids": [
+      24
+    ],
+    "source": "User-confirmed laundry machine operator title and verified active server assignment; original Excel IDs and missing-ID history retained."
+  }
 }

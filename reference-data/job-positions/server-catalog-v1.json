@@ -693,7 +693,9 @@
       "job_nameru": "Машинист по стирке белья",
       "job_namekk": "Кір жуу машинисі",
       "job_namekk_doc": "кір жуу машинисі",
-      "legacy_position_ids": []
+      "legacy_position_ids": [
+        24
+      ]
     },
     {
       "job_code": "SOCIAL_WORKER",
