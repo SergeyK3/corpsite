@@ -84,6 +84,22 @@ it.each(["25", "50"])("adds a second employee with numeric %s, then resets and c
   expect(screen.getByLabelText("Основание (KK)")).toHaveValue("Жеке өтініш");
 });
 
+it.each(['25', '50'])('adds without a KK position at %s and keeps optional manual refinements', async percent => {
+  vi.mocked(getEmployee).mockResolvedValue({...employee, position: {id: 24, name: 'Машинист по стирке белья', name_kk: null}});
+  const onChanged = await setup(); await fill(percent);
+  expect(screen.getByLabelText('Должность получателя (KK)')).toHaveValue('');
+  expect(screen.getByLabelText('Должность получателя в дательном падеже (RU)')).toHaveValue('машинисту по стирке белья');
+  expect(screen.queryByTestId('personnel-order-text-forms')).not.toBeInTheDocument();
+  expect(screen.queryByText(/Уточните поле «Должность получателя \(KK\)»/)).not.toBeInTheDocument();
+  if (percent === '50') fireEvent.change(screen.getByLabelText('Должность получателя (KK)'), {target: {value: 'кір жуу машинисі'}});
+  toggle(); toggle();
+  expect(screen.getByLabelText('Должность получателя (KK)')).toHaveValue(percent === '50' ? 'кір жуу машинисі' : '');
+  fireEvent.click(screen.getByRole('button', {name: 'Добавить пункт'}));
+  await waitFor(() => expect(onChanged).toHaveBeenCalledWith(result));
+  expect(createPersonnelOrderItem).toHaveBeenCalledWith(77, expect.objectContaining({template_version_id: 11, payload: expect.objectContaining({allowance_recipient: expect.objectContaining({position_kk: percent === '50' ? 'кір жуу машинисі' : ''})})}));
+  expect(disclosure().open).toBe(false);
+});
+
 it("reopens after an in-flight error and retains fields and the error on subsequent toggles", async () => {
   let reject!: (reason: Error) => void;
   vi.mocked(createPersonnelOrderItem).mockImplementationOnce(() => new Promise((_, fail) => {reject = fail;}));

@@ -236,7 +236,7 @@ it.each(['25','50'])('creates simple supplementary pay through server template 6
   vi.mocked(getPersonnelOrderPublishedVariants).mockImplementation(async code=>({items:code==='SUPPLEMENTARY_PAY'?[variant]:[],independent_supported:true}));
   setup();
   vi.mocked(getPersonnelOrderPublishedTemplateTitle).mockResolvedValue({...variant,item_type_code:'SUPPLEMENTARY_PAY'});
-  vi.mocked(getEmployee).mockResolvedValue({...employeeDetail,assignments:[]} as never);
+  vi.mocked(getEmployee).mockResolvedValue({...employeeDetail,position:{id:24,name:'Машинист по стирке белья',name_kk:null},assignments:[]} as never);
   await chooseTypeInMenu('SUPPLEMENTARY_PAY');
   expect(screen.getByLabelText('Основание (RU)')).toHaveValue('Личное заявление');
   expect(screen.getByLabelText('Основание (KK)')).toHaveValue('Жеке өтініш');
@@ -247,6 +247,10 @@ it.each(['25','50'])('creates simple supplementary pay through server template 6
     fireEvent.change(screen.getByLabelText('Основание (KK)'),{target:{value:bases.kk}});
   }
   await selectEmployee();
+  expect(screen.getByLabelText('Должность получателя (KK)')).toHaveValue('');
+  await waitFor(()=>expect(screen.getByLabelText('Должность получателя в дательном падеже (RU)')).toHaveValue('машинисту по стирке белья'));
+  expect(screen.queryByTestId('personnel-order-text-forms')).not.toBeInTheDocument();
+  expect(screen.queryByText(/Заполните КК-должность вручную/)).not.toBeInTheDocument();
   expect(screen.getByLabelText('Основание (RU)')).toHaveValue(bases.ru);
   expect(screen.getByLabelText('Основание (KK)')).toHaveValue(bases.kk);
   const selector=await screen.findByRole('combobox',{name:'Доплата'});
@@ -265,6 +269,7 @@ it.each(['25','50'])('creates simple supplementary pay through server template 6
   fireEvent.click(submit);
   await waitFor(()=>expect(createManualPersonnelOrderDraft).toHaveBeenCalledWith(expect.objectContaining({template_version_id:11,item_type_code:'SUPPLEMENTARY_PAY',effective_date:'2026-02-02',item_payload:expect.objectContaining({allowance:expect.objectContaining({percent:Number(percent),basis_type:'RECIPIENT_BASE_SALARY',basis_ru:bases.ru,basis_kk:bases.kk})})})));
   const payload=vi.mocked(createManualPersonnelOrderDraft).mock.calls[0][0].item_payload!;
+  expect(payload.allowance_recipient).toEqual(expect.objectContaining({position_kk:''}));
   expect(payload).not.toHaveProperty('replacement');expect(payload).not.toHaveProperty('concurrent');
 });
 
@@ -289,7 +294,7 @@ async function fillValidUnpaid() {
 
 it.each(PERSONNEL_ORDER_CREATE_TYPE_OPTIONS.map(option => option.value))("offers canonical and editable job forms for create %s", async type => {
   setup();
-  vi.mocked(getEmployee).mockResolvedValue({ ...employeeDetail, has_current_assignment: true, position: { ...employee.position, job_code: "PHYSICIAN", job_nameru: "Врач каталога", job_namekk: "Дәрігер", job_namekk_doc: "дәрігері каталога" } });
+  vi.mocked(getEmployee).mockResolvedValue({ ...employeeDetail, assignments: [], has_current_assignment: true, position: { ...employee.position, job_code: "PHYSICIAN", job_nameru: "Врач каталога", job_namekk: "Дәрігер", job_namekk_doc: "дәрігері каталога" } });
   await chooseTypeInMenu(type);
   await selectEmployee();
   if(type === "LEAVE.ANNUAL.RECALL") {
@@ -313,6 +318,14 @@ it.each(PERSONNEL_ORDER_CREATE_TYPE_OPTIONS.map(option => option.value))("offers
     expect(screen.getByLabelText("Новая должность (RU)")).toHaveValue("");
     fireEvent.change(screen.getByLabelText("Новая должность (KK)"), { target: { value: "Дәрігер" } });
     expect(screen.getByLabelText("Новая должность (KK)")).toHaveValue("Дәрігер");
+    return;
+  }
+  if (type === "SUPPLEMENTARY_PAY") {
+    await waitFor(()=>expect(screen.getByLabelText('Должность получателя (RU)')).toHaveValue('Врач каталога'));
+    expect(screen.getByLabelText('Должность получателя (KK)')).toHaveValue('дәрігері каталога');
+    fireEvent.change(screen.getByLabelText('Должность получателя (KK)'), {target: {value: 'Ручная форма'}});
+    expect(screen.getByLabelText('Должность получателя (KK)')).toHaveValue('Ручная форма');
+    expect(screen.queryByTestId('personnel-order-text-forms')).not.toBeInTheDocument();
     return;
   }
   expect(screen.getByLabelText("Должность в тексте приказа (RU)")).toHaveValue("Врач каталога");

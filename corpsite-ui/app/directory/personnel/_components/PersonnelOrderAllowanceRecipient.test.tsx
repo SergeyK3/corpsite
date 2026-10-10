@@ -8,6 +8,8 @@ const employee={id:'1',fio:'Турымов Алибек Рапхатович',la
 afterEach(cleanup);
 it('calculates source cases and keeps saved forms unchanged',()=>{
  expect(russianReferenceCase('Менеджер','dative')).toBe('менеджеру');
+ expect(russianReferenceCase('Машинист по стирке белья','dative')).toBe('машинисту по стирке белья');
+ expect(russianReferenceCase('Машинист по стирке белья','genitive')).toBe('машиниста по стирке белья');
  expect(russianEmployeeDativeForOrder(employee)).toBe('Турымову Алибеку Рапхатовичу');
  expect(russianEmployeeGenitiveForOrder(employee)).toBe('Турымова Алибека Рапхатовича');
  expect(russianEmployeeDativeForOrder({...employee,document_forms_ru:{employee_full_name_dative_ru:'Сохранённому имени'}})).toBe('Сохранённому имени');
@@ -22,6 +24,13 @@ it('calculates source cases and keeps saved forms unchanged',()=>{
 it('does not require a manual dative even when the automatic declension is unavailable',()=>{
  const value={...blankAllowanceRecipient(),assignment_id:749,position_ru:'Неизвестный код',position_kk:'менеджері',org_unit_ru:'Отдел кадров',org_unit_kk:'кадрлар бөлімінің',org_unit_genitive_ru:'отдела кадров'};
  expect(recipientBlockers(value,employee)).toEqual([]);
+});
+
+it('allows a missing KK position only for the simple allowance contract and still checks other required fields',()=>{
+ const value={...blankAllowanceRecipient(),position_ru:'Машинист по стирке белья',org_unit_ru:'Прачечная',org_unit_kk:'кір жуу орнының'};
+ expect(recipientBlockers(value,employee,false,false)).toEqual([]);
+ expect(recipientBlockers(value,employee,false)).toContain('Уточните поле «Должность получателя (KK)».');
+ expect(recipientBlockers({...value,org_unit_kk:''},employee,false,false)).toContain('Уточните поле «Подразделение получателя (KK)».');
 });
 
 it('autofills the manager appointment without editing or confirming the dative',async()=>{

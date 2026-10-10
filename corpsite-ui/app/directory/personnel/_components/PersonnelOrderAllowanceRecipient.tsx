@@ -14,9 +14,10 @@ export function recipientFromAssignment(employee:EmployeeDTO,assignment?:NonNull
   position_kk:firstNonEmpty(position?.document_possessive_kk,('job_namekk_doc' in (position||{})?(position as {job_namekk_doc?:string}).job_namekk_doc:''),calculateKazakhPositionPossessive(position?.job_namekk||position?.name_kk).value),
   org_unit_kk:firstNonEmpty(unit?.document_genitive_kk,calculateKazakhOrgUnitGenitive(unit?.name_kk).value)};
 }
-export function recipientBlockers(value:AllowanceRecipient,employee:EmployeeDTO|null,requireUnitCase=true):string[]{
+export function recipientBlockers(value:AllowanceRecipient,employee:EmployeeDTO|null,requireUnitCase=true,requireKkPosition=true):string[]{
  const labels:Record<string,string>={position_ru:'Должность получателя (RU)',org_unit_ru:'Подразделение получателя (RU)',position_kk:'Должность получателя (KK)',org_unit_kk:'Подразделение получателя (KK)',org_unit_genitive_ru:'Подразделение получателя для текста (RU)'};
  if(!requireUnitCase)delete labels.org_unit_genitive_ru;
+ if(!requireKkPosition)delete labels.position_kk;
  const missing=Object.entries(labels).filter(([key])=>!String(value[key as keyof AllowanceRecipient]||'').trim()).map(([,label])=>`Уточните поле «${label}».`);
  if((employee?.assignments?.length||0)>1&&!value.assignment_id)missing.push('Выберите назначение получателя доплаты.');return missing;
 }

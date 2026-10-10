@@ -67,16 +67,22 @@ def first_blocks(conn, order_id):
 
 
 @pytest.mark.parametrize("first_percent,second_percent", [(25, 50), (50, 25)])
-def test_same_version_new_employee_own_text_and_bases_preserves_first(database, first_percent, second_percent):
+@pytest.mark.parametrize("missing_kk_position", [False, True])
+def test_same_version_new_employee_own_text_and_bases_preserves_first(database, first_percent, second_percent, missing_kk_position):
     from app.services.personnel_order_supplementary_pay_contract import BODY_RU, BODY_KK
     version, actor = publish(database, texts={"body_template_ru": BODY_RU, "body_template_kk": BODY_KK})
-    order_id, employees = create_order(database, version, actor, pay_payload(first_percent))
+    initial_payload = pay_payload(first_percent)
+    second_payload = pay_payload(second_percent, "Сотруднику Второму", "Заявление второго сотрудника")
+    if missing_kk_position:
+        for payload in (initial_payload, second_payload):
+            payload['allowance_recipient'] = {**payload['allowance_recipient'], 'position_kk': ''}
+    order_id, employees = create_order(database, version, actor, initial_payload)
     before = first_blocks(database, order_id)
     # Later publication of another independent template must not replace this binding.
     publish(database, texts={"body_template_ru": BODY_RU, "body_template_kk": BODY_KK})
     context = inherited.get_add_item_context(order_id)
     assert context["template"]["template_version_id"] == version["template_version_id"]
-    detail = commands.create_personnel_order_item(order_id=order_id, item_type_code="SUPPLEMENTARY_PAY", employee_id=employees[1], effective_date=date(2026, 2, 3), payload=pay_payload(second_percent, "Сотруднику Второму", "Заявление второго сотрудника"), actor_user_id=actor, template_version_id=version["template_version_id"])
+    detail = commands.create_personnel_order_item(order_id=order_id, item_type_code="SUPPLEMENTARY_PAY", employee_id=employees[1], effective_date=date(2026, 2, 3), payload=second_payload, actor_user_id=actor, template_version_id=version["template_version_id"])
     assert len(detail["items"]) == 2
     assert first_blocks(database, order_id) == before
     second = detail["items"][1]
@@ -85,6 +91,9 @@ def test_same_version_new_employee_own_text_and_bases_preserves_first(database, 
     blocks = {f"{r['block_type']}_{r['locale']}": r["generated_text"] for r in database.execute(text("SELECT * FROM personnel_order_item_editorial_blocks WHERE order_item_id=:id"), {"id": second["item_id"]}).mappings()}
     assert f"{second_percent}%" in blocks["body_ru"] and f"{second_percent}%" in blocks["body_kk"]
     assert "Сотруднику Второму" in blocks["body_ru"]
+    if missing_kk_position:
+        assert blocks['body_kk'].startswith('Бірінші қызметкерге ')
+        assert 'терапия бөлімшесінің' not in blocks['body_kk']
     assert "Заявление второго сотрудника" in blocks["basis_ru"]
     assert "Жеке өтініш" in blocks["basis_kk"]
     assert inherited.get_add_item_context(order_id)["template"]["template_version_id"] == version["template_version_id"]

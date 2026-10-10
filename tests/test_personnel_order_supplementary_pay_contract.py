@@ -54,3 +54,30 @@ def test_laundry_head_cases_are_automatic_and_unit_is_not_repeated():
     recipient={**SAMPLE_RECIPIENT,'position_ru':'Заведующая прачечной','org_unit_ru':'Прачечная','position_dative_ru':'','org_unit_genitive_ru':''}
     data=values(allowance(),recipient,'2026-02-02')
     assert data['allowance.recipient.ru']=='Касымовой Раушан Тастемировне, заведующей прачечной'
+
+
+@pytest.mark.parametrize('percent', [25, 50])
+def test_missing_kk_position_omits_whole_placement_without_losing_other_data(percent):
+    recipient = {**SAMPLE_RECIPIENT, 'position_kk': '', 'position_ru': 'Машинист по стирке белья',
+                 'position_dative_ru': '', 'org_unit_ru': 'Прачечная', 'org_unit_genitive_ru': ''}
+    data = values(allowance(percent), recipient, '2026-02-02')
+    assert data['allowance.recipient.ru'] == 'Касымовой Раушан Тастемировне, машинисту по стирке белья прачечной'
+    assert data['allowance.recipient.kk'] == allowance()['employee_dative_kk']
+    rendered = _render({'item_type_code': 'SUPPLEMENTARY_PAY', **texts()}, data)
+    assert rendered['body_template_kk'].startswith(allowance()['employee_dative_kk']+' 2026')
+    assert f'{percent}%' in rendered['body_template_kk']
+    assert 'машинист' not in rendered['body_template_kk']
+    assert not any(token in rendered['body_template_kk'] for token in ('{{', 'DOCX', '(должность:'))
+    assert rendered['basis_template_kk'] == 'Негіз: Қызметтік хат.'
+
+
+def test_unknown_ru_form_omits_placement_independently_of_kk_and_preserves_manual_forms():
+    recipient = {**SAMPLE_RECIPIENT, 'position_ru': 'Неизвестный код', 'position_dative_ru': '',
+                 'position_kk': 'кір жуу машинисі'}
+    data = values(allowance(), recipient, '2026-02-02')
+    assert data['allowance.recipient.ru'] == allowance()['employee_dative_ru']
+    assert 'кір жуу машинисі' in data['allowance.recipient.kk']
+    recipient['position_dative_ru'] = 'машинисту по стирке белья'
+    data = values(allowance(), recipient, '2026-02-02')
+    assert 'машинисту по стирке белья' in data['allowance.recipient.ru']
+    assert 'кір жуу машинисі' in data['allowance.recipient.kk']

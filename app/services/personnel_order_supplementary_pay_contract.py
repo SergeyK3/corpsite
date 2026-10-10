@@ -29,7 +29,7 @@ def values(allowance, recipient, effective_date):
     recipient=normalize_recipient(recipient)
     def t(row,key):return str(row.get(key) or '').strip()
     missing=[key for key in ('employee_dative_ru','employee_dative_kk','basis_ru','basis_kk') if not t(allowance,key)]
-    missing += [key for key in ('position_ru','org_unit_ru','position_kk','org_unit_kk') if not t(recipient,key)]
+    missing += [key for key in ('position_ru','org_unit_ru','org_unit_kk') if not t(recipient,key)]
     if missing:raise ValueError('Заполните данные доплаты: '+', '.join(missing)+'.')
     percent=number(allowance.get('percent'),'Доплата')
     if percent not in (25,50):raise ValueError('Выберите доплату +25% или +50%.')
@@ -37,9 +37,11 @@ def values(allowance, recipient, effective_date):
     except ValueError:raise ValueError('Укажите дату начала доплаты.') from None
     unit=t(recipient,'org_unit_genitive_ru') or russian_reference_case(t(recipient,'org_unit_ru'),'genitive') or 'подразделения «'+t(recipient,'org_unit_ru')+'»'
     role=t(recipient,'position_dative_ru')
-    placement=(role if role.endswith(' '+unit) else ' '.join((role,unit))) if role else '(должность: '+t(recipient,'position_ru')+'; подразделение: '+t(recipient,'org_unit_ru')+')'
-    return {'allowance.recipient.ru':t(allowance,'employee_dative_ru')+', '+placement,
-            'allowance.recipient.kk':' '.join((t(recipient,'org_unit_kk'),t(recipient,'position_kk'),t(allowance,'employee_dative_kk'))),
+    placement=(role if role.endswith(' '+unit) else ' '.join((role,unit))) if role else ''
+    # A missing document form omits the entire placement in that language.
+    # Explicit manual forms remain authoritative; never translate or borrow RU for KK.
+    return {'allowance.recipient.ru':t(allowance,'employee_dative_ru')+(', '+placement if placement else ''),
+            'allowance.recipient.kk':' '.join((t(recipient,'org_unit_kk'),t(recipient,'position_kk'),t(allowance,'employee_dative_kk'))) if t(recipient,'position_kk') else t(allowance,'employee_dative_kk'),
             'employee.full_name_dative_ru':t(allowance,'employee_dative_ru'),'employee.full_name_dative_kk':t(allowance,'employee_dative_kk'),
             'effective_date.ru':format_personnel_order_date_numeric(start),'effective_date.kk':_format_date_from(start,'kk'),
             'allowance.percent':decimal_text(percent),'allowance.basis.ru':'собственного должностного оклада','allowance.basis.kk':'лауазымдық айлық ақыдан',
