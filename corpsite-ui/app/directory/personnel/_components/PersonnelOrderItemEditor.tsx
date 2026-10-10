@@ -1,5 +1,6 @@
 "use client";
 
+import PersonnelOrderInheritedItemForm from "./PersonnelOrderInheritedItemForm";
 import * as React from "react";
 
 import { getEmployee, getEmployees } from "@/app/directory/employees/_lib/api.client";
@@ -289,6 +290,7 @@ export default function PersonnelOrderItemEditor({
   const orderTypeHint = orderTypeLabelForItemHint(orderTypeCode);
 
   const [editingItemId, setEditingItemId] = React.useState<number | null>(null);
+  const [addedCount, setAddedCount] = React.useState(0);
   const formDisclosure = React.useRef<HTMLDetailsElement>(null);
   React.useEffect(() => {
     if (formDisclosure.current) formDisclosure.current.open = false;
@@ -853,6 +855,7 @@ export default function PersonnelOrderItemEditor({
   React.useEffect(() => {
     if (!registerPendingSave) return;
     registerPendingSave(() => {
+      if (editingItemId == null) return Promise.resolve(true);
       if (itemSaveInFlight.current) return itemSaveInFlight.current;
       // A successful save clears the ref before React installs the next render's
       // callback. A generation retry in that interval must not PATCH it again.
@@ -1455,18 +1458,26 @@ export default function PersonnelOrderItemEditor({
         </table>
       </div>
 
+      {editingItemId == null && saveNotice ? <p role="status" className="text-sm text-emerald-700">{saveNotice}</p> : null}
       {!disabled ? (
         <details ref={formDisclosure} className="rounded-xl border border-zinc-200 dark:border-zinc-800" data-testid="personnel-order-add-item-disclosure">
           <summary className="cursor-pointer px-4 py-2 text-sm font-semibold text-zinc-900 focus-visible:outline-2 focus-visible:outline-blue-500 dark:text-zinc-100">
             {editingItemId != null ? `Редактирование пункта #${editingItemId}` : "Добавить пункт"}
           </summary>
-        <form
+        {editingItemId == null ? <PersonnelOrderInheritedItemForm key={`${orderId}:${addedCount}`} orderId={orderId} onCancel={() => {if(formDisclosure.current) formDisclosure.current.open=false;}} onAdded={order => {
+          onChanged(order);
+          setAddedCount(count => count + 1);
+          if (formDisclosure.current) {
+            formDisclosure.current.open = false;
+            formDisclosure.current.querySelector("summary")?.focus();
+          }
+        }} /> : <form
           className="space-y-4 border-t border-zinc-200 p-4 dark:border-zinc-800"
           onSubmit={handleSubmit}
         >
           <div>
             <p className="text-xs text-zinc-500">
-              Заполните поля пункта в указанном порядке. Тип пункта не заменяет тип приказа.
+              Уточните данные выбранного пункта.
             </p>
           </div>
 
@@ -1509,7 +1520,7 @@ export default function PersonnelOrderItemEditor({
               </button>
             ) : null}
           </div>
-        </form>
+        </form>}
         </details>
       ) : null}
     </div>

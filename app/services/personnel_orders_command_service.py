@@ -766,6 +766,9 @@ def create_personnel_order_item(
     period_end: Optional[date] = None,
     payload: Optional[Dict[str, Any]] = None,
     item_number: Optional[int] = None,
+    actor_user_id: Optional[int] = None,
+    template_version_id: Optional[int] = None,
+    document_subject_context: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     _require_available()
     normalized_type = _normalize_item_type(item_type_code)
@@ -776,8 +779,20 @@ def create_personnel_order_item(
         scope_tokens = lock_personnel_order_evidence_scopes_tx(conn, order_ids=[order_id])
         order = _fetch_order_row(conn, order_id)
         _ensure_order_editable(order)
-        if str(order.get("order_type_code") or "").upper() in LEAVE_DRAFT_ITEM_TYPE_CODES and normalized_type != str(order["order_type_code"]).upper():
-            raise PersonnelOrderValidationError("Leave order item type must match the order type.")
+        from app.services.personnel_order_add_item_service import resolve_add_item_context, render_added_item
+        from app.services.personnel_order_manual_draft_service import prepare_manual_item_payload
+        context = resolve_add_item_context(conn, order)
+        if normalized_type != context['item_type_code']:
+            raise PersonnelOrderValidationError("Новый пункт должен иметь тот же тип действия, что и текущий приказ.")
+        if template_version_id is not None and template_version_id != context['template']['template_version_id']:
+            raise PersonnelOrderValidationError("Привязка версии шаблона изменилась. Повторно откройте форму добавления.")
+        if employee_id is None or employee_id in context['employee_ids']:
+            raise PersonnelOrderValidationError("Выберите другого сотрудника для нового пункта.")
+        if effective_date is None:
+            raise PersonnelOrderValidationError("Укажите дату начала действия.")
+        _ensure_employee_exists(conn, employee_id)
+        normalized_payload = prepare_manual_item_payload(conn, item_type_code=normalized_type, employee_id=employee_id, effective_date=effective_date, period_start=period_start, period_end=period_end, item_payload=payload, document_subject_context=document_subject_context, template_version_id=context['template']['template_version_id'])
+        payload_json = json.dumps(normalized_payload, ensure_ascii=False)
 
         from app.services.personnel_order_hire_from_person_service import validate_hire_item_identity
 
@@ -788,11 +803,6 @@ def create_personnel_order_item(
             payload=payload or {},
         )
 
-        if employee_id is not None:
-            _ensure_employee_exists(conn, employee_id)
-            from app.services.personnel_order_catalog_context import employee_catalog_context, snapshot_catalog_forms
-            normalized_payload = snapshot_catalog_forms(normalized_payload, employee_catalog_context(conn, employee_id, effective_date))
-            payload_json = json.dumps(normalized_payload, ensure_ascii=False)
         _validate_leave_draft_item(
             item_type_code=normalized_type,
             employee_id=employee_id,
@@ -806,7 +816,7 @@ def create_personnel_order_item(
         if next_number < 1:
             raise PersonnelOrderValidationError("item_number must be positive.")
 
-        conn.execute(
+        new_item_id = conn.execute(
             text(
                 """
                 INSERT INTO public.personnel_order_items (
@@ -831,6 +841,7 @@ def create_personnel_order_item(
                     CAST(:payload AS jsonb),
                     :item_status
                 )
+                RETURNING item_id
                 """
             ),
             {
@@ -844,22 +855,20 @@ def create_personnel_order_item(
                 "payload": payload_json,
                 "item_status": ITEM_STATUS_ACTIVE,
             },
-        )
+        ).scalar_one()
+        render_added_item(conn, order_id=order_id, item_id=int(new_item_id), template=context['template'], actor_user_id=int(actor_user_id or order['created_by']))
 
         conn.execute(
             text(
                 """
                 UPDATE public.personnel_orders
-                SET updated_at = now()
+                SET updated_at = now(), document_revision = document_revision + 1,
+                    selected_template_version_id = COALESCE(selected_template_version_id, :version)
                 WHERE order_id = :order_id
                 """
             ),
-            {"order_id": int(order_id)},
+            {"order_id": int(order_id), "version": context['template']['template_version_id']},
         )
-        try:
-            _mark_editorial_stale(conn, int(order_id))
-        except Exception:
-            pass
         advance_personnel_order_evidence_scopes_tx(conn, tokens=scope_tokens)
 
     return get_personnel_order(int(order_id))

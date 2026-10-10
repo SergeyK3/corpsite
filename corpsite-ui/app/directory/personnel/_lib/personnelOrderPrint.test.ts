@@ -28,6 +28,35 @@ import {
 } from "./personnelOrderPrintViewModel";
 import type { PersonnelOrderDetailResponse } from "./personnelOrdersApi.client";
 
+it.each(["ru", "kk"] as const)("prints saved supplementary-pay points with their own basis exactly once (%s)", language => {
+  const detail = sampleDetail({order_type_code: "SUPPLEMENTARY_PAY", legal_basis_article: null, basis_summary: null});
+  detail.items = [25, 50].map((percent, index) => ({...detail.items[0], item_id: index + 1, item_number: index + 1, item_type_code: "SUPPLEMENTARY_PAY", employee_id: index + 7, payload: {allowance: {percent}}}));
+  const model = buildPersonnelOrderPrintViewModel(detail, {editorial: {
+    order_id: 42, order_status: "DRAFT", editable: true,
+    order_blocks: (["ru", "kk"] as const).flatMap(locale => [
+      {block_id: 100, scope: "order", locale, block_type: "title", generated_text: locale === "ru" ? "Сохранённый заголовок" : "Сақталған атау", effective_text: "", revision: 1, editable: true, review_status: "CURRENT"},
+      {block_id: 101, scope: "order", locale, block_type: "preamble", generated_text: locale === "ru" ? "Сохранённая преамбула" : "Сақталған кіріспе", effective_text: "", revision: 1, editable: true, review_status: "CURRENT"},
+    ]),
+    items: detail.items.map((item, index) => ({order_item_id: item.item_id, item_number: item.item_number, item_type_code: item.item_type_code, basis_required: true,
+      blocks: (["ru", "kk"] as const).flatMap(locale => [
+        {block_id: 200 + index, scope: "item", order_item_id: item.item_id, locale, block_type: "body", generated_text: `Saved ${locale} employee ${index + 1}: ${index ? 50 : 25}%`, effective_text: "", revision: 1, editable: true, review_status: "CURRENT"},
+        {block_id: 300 + index, scope: "item", order_item_id: item.item_id, locale, block_type: "basis", generated_text: locale === "ru" ? `Основание: Заявление ${index + 1}.` : `Негіз: Өтініш ${index + 1}.`, effective_text: "", revision: 1, editable: true, review_status: "CURRENT"},
+      ]),
+    })),
+  }});
+  const html = buildPersonnelOrderPrintDocumentHtml(model, language);
+  expect(html).toContain(language === "ru" ? "Сохранённый заголовок" : "Сақталған атау");
+  expect(html).toContain(language === "ru" ? "Сохранённая преамбула" : "Сақталған кіріспе");
+  expect(html).toContain(`Saved ${language} employee 1: 25%`);
+  expect(html).toContain(`Saved ${language} employee 2: 50%`);
+  expect(html.match(language === "ru" ? /Основание:/g : /Негіз:/g)).toHaveLength(2);
+  expect(html).not.toContain("Основание: Основание:");
+  expect(html).not.toContain("DOCX");
+  expect(html).not.toContain("Стаж работы");
+  expect(html).not.toContain("Жұмыс өтілі");
+  expect(model.basis).toEqual([]);
+});
+
 function sampleDetail(overrides?: Partial<PersonnelOrderDetailResponse["order"]>): PersonnelOrderDetailResponse {
   return {
     order: {

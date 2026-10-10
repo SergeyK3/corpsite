@@ -101,22 +101,16 @@ def _create_draft_with_item(client, headers, *, order_type: str = "HIRE") -> tup
     assert create_resp.status_code == 201, create_resp.text
     order_id = create_resp.json()["order"]["order_id"]
 
-    item_resp = client.post(
-        f"/directory/personnel-orders/{order_id}/items",
-        json={
-            "item_type_code": order_type,
-            "employee_id": employee_id,
-            "effective_date": "2026-07-07",
-            "payload": {
-                "employment_rate": 1.0,
-                "org_unit_name": "Отдел кадров",
-                "position_name": "Специалист",
-            },
-        },
-        headers=headers,
-    )
-    assert item_resp.status_code == 200, item_resp.text
-    item_id = item_resp.json()["items"][0]["item_id"]
+    # This fixture represents a historical unbound PAPER order. Its first
+    # imported item is seeded through the internal import transaction; ordinary
+    # UI additions now require an existing exact template binding.
+    from datetime import date
+    from app.services.personnel_orders_command_service import create_personnel_order_item_tx
+    with engine.begin() as conn:
+        item_id = create_personnel_order_item_tx(conn, order_id=order_id,
+            item_type_code=order_type, employee_id=employee_id,
+            effective_date=date(2026, 7, 7),
+            payload={"employment_rate": 1.0, "org_unit_name": "Отдел кадров", "position_name": "Специалист"})
     return order_id, item_id
 
 

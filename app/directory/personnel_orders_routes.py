@@ -525,6 +525,22 @@ def delete_personnel_order_hr_head_route(
         raise as_http500(exc)
 
 
+@router.get("/personnel-orders/{order_id}/add-item-context")
+def personnel_order_add_item_context_route(order_id: int = Path(..., ge=1), user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    require_personnel_admin_or_403(user)
+    from app.services.personnel_order_add_item_service import get_add_item_context
+    try:
+        return get_add_item_context(order_id)
+    except PersonnelOrderNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except PersonnelOrderArchivedError as exc:
+        raise _order_archived_http(exc)
+    except PersonnelOrderValidationError as exc:
+        raise validation_error_to_http422(exc)
+    except PersonnelOrderConflictError as exc:
+        raise _conflict_http409(exc)
+
+
 @router.post("/personnel-orders/{order_id}/items", response_model=PersonnelOrderDetailResponse)
 def create_personnel_order_item_route(
     payload: PersonnelOrderItemCreateIn,
@@ -544,6 +560,9 @@ def create_personnel_order_item_route(
             period_end=payload.period_end,
             payload=payload.payload,
             item_number=payload.item_number,
+            actor_user_id=_require_user_id(user),
+            template_version_id=payload.template_version_id,
+            document_subject_context=payload.document_subject_context,
         )
     except PersonnelOrderNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc))

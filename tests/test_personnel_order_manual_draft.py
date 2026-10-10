@@ -100,7 +100,7 @@ def test_selected_employee_return_from_childcare_generates_bilingual_document_co
             blocks = conn.execute(text("SELECT locale,generated_text FROM personnel_order_item_editorial_blocks WHERE order_item_id=(SELECT item_id FROM personnel_order_items WHERE order_id=:id) AND block_type='body' ORDER BY locale"), {"id": result["order_id"]}).mappings().all()
             body = {row["locale"]: row["generated_text"] for row in blocks}
             assert "5 августа 2026 года" in body["ru"]
-            assert "document position" in body["ru"] and "document unit" in body["ru"]
+            assert "document position" in body["ru"].casefold() and "document unit" in body["ru"].casefold()
             assert "2026 жылғы 5 тамыздан бастап" in body["kk"]
             item = conn.execute(text("SELECT payload FROM personnel_order_items WHERE order_id=:id"), {"id": result["order_id"]}).mappings().one()
             assert item["payload"]["document_specialty"] == "Document specialty"

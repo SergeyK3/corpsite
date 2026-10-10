@@ -765,7 +765,7 @@ export default function PersonnelOrderDetailDrawer({
               <section>
                 <h3 className="mb-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100">Пункты приказа</h3>
                 <p className="mb-3 text-xs text-zinc-500">
-                  Каждый пункт имеет собственный тип. Тип пункта не дублирует тип приказа в заголовке.
+                  Новые пункты используют тип действия и закреплённую версию шаблона текущего приказа.
                 </p>
                 {!editable && correctionsAvailable ? <div className="mb-3 flex flex-wrap items-center gap-3 rounded border border-amber-200 p-3 text-sm" data-testid="personnel-order-data-correction-notice"><span>Для изменения этого приказа перейдите на вкладку «Корректировки»</span><button type="button" onClick={() => { setCorrectionsOpened(true); setActiveTab("items"); }} className="rounded border border-blue-300 px-3 py-1.5 text-blue-800">Перейти к корректировкам</button></div> : null}
                 <PersonnelOrderItemEditor

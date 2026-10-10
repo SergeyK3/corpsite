@@ -359,7 +359,7 @@ export function buildPersonnelOrderPrintViewModel(
 
   const items: PersonnelOrderPrintItemViewModel[] = activeItems.map((item) => {
     const editorialTexts = itemEditorialTexts(editorial, item.item_id);
-    if (editorialTexts.basis) {
+    if (editorialTexts.basis && item.item_type_code !== "SUPPLEMENTARY_PAY") {
       const already = basis.some(
         (entry) =>
           (entry.kk && entry.kk === editorialTexts.basis?.kk) ||

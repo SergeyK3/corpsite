@@ -210,6 +210,8 @@ class PersonnelOrderUpdateIn(BaseModel):
 
 
 class PersonnelOrderItemCreateIn(BaseModel):
+    template_version_id: Optional[int] = Field(default=None, ge=1)
+    document_subject_context: Optional[Dict[str, Any]] = None
     item_type_code: str = Field(..., min_length=1, max_length=80)
     employee_id: Optional[int] = Field(default=None, ge=1)
     effective_date: Optional[date] = None

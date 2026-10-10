@@ -56,6 +56,126 @@ def _selected_employee_payload(conn: Any, *, employee_id: int, effective_date: d
     }, resolved)
 
 
+def prepare_manual_item_payload(conn: Any, *, item_type_code: str, employee_id: Optional[int], effective_date: date, period_start: Optional[date] = None, period_end: Optional[date] = None, item_payload: Optional[Mapping[str, Any]] = None, unresolved_subject: Optional[Mapping[str, Any]] = None, document_subject_context: Optional[Mapping[str, Any]] = None, template_version_id: int | None = None, capabilities: Optional[Mapping[str, Any]] = None) -> dict[str, Any]:
+    """Use the same typed contract for the first and subsequent employees."""
+    capabilities = capabilities or creation_capabilities(conn, item_type_code)
+    if item_type_code == 'LEAVE.ANNUAL.RECALL':
+        # Recall uses explicit bilingual document placement, not the
+        # possessive forms required by the leave-grant constructors.
+        resolved = _employee_document_context(conn, employee_id=employee_id, effective_date=effective_date,
+            use_catalog=capabilities['job_catalog_supported'])
+        base_payload = snapshot_catalog_forms({
+            'source_employee_name': resolved['full_name'],
+            'source_position_name': (document_subject_context or {}).get('position_name') or resolved.get('position_title_ru') or resolved.get('position_name'),
+            'source_org_unit_name': (document_subject_context or {}).get('org_unit_name') or resolved.get('org_unit_name'),
+            'recall_position_kk': resolved.get('position_title_kk') or '',
+            'recall_org_unit_kk': resolved.get('org_unit_title_kk') or '',
+        }, resolved)
+    else:
+        base_payload = (
+        _unresolved_subject_payload(unresolved_subject)
+        if unresolved_subject is not None
+        else _selected_employee_payload(
+            conn,
+            employee_id=int(employee_id),
+            effective_date=effective_date,
+            context=document_subject_context,
+            use_catalog=capabilities['job_catalog_supported'],
+        )
+        )
+    for key in ("document_forms_ru", "document_forms_kk"):
+        if key in (item_payload or {}):
+            base_payload[key] = {**base_payload.get(key, {}), **dict(item_payload[key])}
+    if item_type_code == "LEAVE.UNPAID.GRANT":
+        from app.services.personnel_order_unpaid_leave_contract import unpaid_leave_period
+
+        supplied = dict(item_payload or {})
+        supplied_leave = supplied.get("leave") if isinstance(supplied.get("leave"), Mapping) else {}
+        period = unpaid_leave_period({"leave": supplied_leave})
+        if period_start != period["start"] or period_end != period["end"] or effective_date != period_start:
+            raise PersonnelOrderValidationError("UNPAID_LEAVE_PERIOD_MISMATCH")
+        base_payload.update(supplied)
+    if item_type_code in {"LEAVE.CHILDCARE.GRANT", "LEAVE.ANNUAL.RECALL"}:
+        from app.services.personnel_orders_command_service import _validate_leave_draft_item
+        base_payload.update(dict(item_payload or {}))
+        _validate_leave_draft_item(item_type_code=item_type_code, employee_id=employee_id, effective_date=effective_date, period_start=period_start, period_end=period_end, payload=base_payload)
+    if item_type_code == "TRANSFER" and (template_version_id is not None or "transfer" in (item_payload or {})):
+        from app.services.personnel_order_transfer_contract import transfer_values
+        supplied = (item_payload or {}).get("transfer", {})
+        try:
+            transfer_values(supplied)
+        except ValueError as exc:
+            raise PersonnelOrderValidationError(str(exc)) from exc
+        base_payload["transfer"] = dict(supplied)
+        base_payload["to_rate"] = supplied["rate"]
+    if item_type_code == "SUPPLEMENTARY_PAY":
+        selected_texts = conn.execute(text("SELECT body_template_ru,body_template_kk FROM personnel_order_template_versions WHERE template_version_id=:id AND item_type_code=:type AND status IN ('PUBLISHED','ARCHIVED')"), {'id':template_version_id,'type':item_type_code}).mappings().first() if template_version_id else None
+        if 'allowance' in (item_payload or {}) or any('allowance.' in value for value in (selected_texts or {}).values()):
+            from app.services.personnel_order_supplementary_pay_contract import values as supplementary_values, BASE_TYPE
+            from app.services.personnel_order_service_area_contract import normalize_recipient
+            allowance = dict((item_payload or {}).get('allowance') or {})
+            recipient = normalize_recipient((item_payload or {}).get('allowance_recipient'))
+            try:
+                assignments=conn.execute(text("SELECT pa.assignment_id FROM person_assignments pa JOIN employees e ON e.person_id=pa.person_id WHERE e.employee_id=:employee AND pa.active_flag IS TRUE AND pa.lifecycle_status='active' AND pa.start_date<=CURRENT_DATE AND (pa.end_date IS NULL OR pa.end_date>=CURRENT_DATE)"),{'employee':employee_id}).scalars().all()
+                if recipient.get('assignment_id') is not None and recipient['assignment_id'] not in assignments: raise ValueError('Выбранное назначение не принадлежит получателю доплаты.')
+                if len(assignments)>1 and recipient.get('assignment_id') is None: raise ValueError('Выберите назначение получателя доплаты.')
+                validated = supplementary_values(allowance,recipient,effective_date)
+            except ValueError as exc:
+                raise PersonnelOrderValidationError(str(exc)) from exc
+            base_payload['allowance'] = {key:allowance[key] for key in ('employee_dative_ru','employee_dative_kk','basis_ru','basis_kk')}
+            base_payload['allowance'].update(percent=int(validated['allowance.percent']),basis_type=BASE_TYPE)
+            from app.services.personnel_order_russian_reference_forms import russian_reference_case
+            recipient['org_unit_genitive_ru'] = recipient.get('org_unit_genitive_ru') or russian_reference_case(recipient.get('org_unit_ru'),'genitive')
+            base_payload['allowance_recipient'] = recipient
+    if item_type_code == "CONCURRENT_DUTY_START" and (template_version_id is not None or "concurrent" in (item_payload or {})):
+        from app.services.personnel_order_concurrent_contract import concurrent_values
+        supplied = (item_payload or {}).get("concurrent", {})
+        from app.services.personnel_order_replacement_contract import variant, replacement_values, optional_placement
+        selected_texts = conn.execute(text("SELECT body_template_ru,body_template_kk FROM personnel_order_template_versions WHERE template_version_id=:id AND item_type_code=:type AND status IN ('PUBLISHED','ARCHIVED')"), {"id":template_version_id,"type":item_type_code}).mappings().first() if template_version_id else None
+        mode = variant(selected_texts or {})
+        from app.services.personnel_order_service_area_contract import enabled as area_enabled,values as area_values,BASE_TYPE,normalize_recipient
+        service_area = area_enabled(selected_texts or {})
+        try:
+            if mode:
+                replacement = dict((item_payload or {}).get("replacement") or {})
+                if service_area:
+                    recipient=normalize_recipient((item_payload or {}).get('allowance_recipient'))
+                    assignments=conn.execute(text("SELECT pa.assignment_id FROM person_assignments pa JOIN employees e ON e.person_id=pa.person_id WHERE e.employee_id=:employee AND pa.active_flag IS TRUE AND pa.lifecycle_status='active' AND pa.start_date<=CURRENT_DATE AND (pa.end_date IS NULL OR pa.end_date>=CURRENT_DATE)"),{'employee':employee_id}).scalars().all()
+                    if recipient.get('assignment_id') is not None and recipient['assignment_id'] not in assignments:raise ValueError('Выбранное назначение не принадлежит получателю доплаты.')
+                    if len(assignments)>1 and recipient.get('assignment_id') is None:raise ValueError('Выберите назначение получателя доплаты.')
+                    validated=area_values(supplied,replacement,effective_date,recipient)
+                    base_payload['allowance_recipient']=recipient
+                    replacement['allowance_basis_type']=BASE_TYPE
+                    for key in ('allowance_basis_ru','allowance_basis_kk','rate','total_rate'):replacement.pop(key,None)
+                    if replacement.get('term_type')!='DATE':replacement.pop('end_date',None)
+                else:
+                    validated = replacement_values(supplied, replacement, effective_date, mode, optional_placement=optional_placement(selected_texts or {}))
+                replacement["mode"] = mode
+                if optional_placement(selected_texts or {}): replacement["allowance_percent"] = int(validated["allowance.percent"])
+                base_payload["replacement"] = replacement
+            else:
+                concurrent_values(supplied, effective_date)
+        except ValueError as exc:
+            raise PersonnelOrderValidationError(str(exc)) from exc
+        base_payload["concurrent"] = dict(supplied)
+        if mode != "PAY":
+            base_payload["concurrent_rate"] = supplied["rate"]
+            base_payload["total_rate"] = supplied["total_rate"]
+        else:
+            for key in ("rate", "total_rate"): base_payload["concurrent"].pop(key,None)
+    if item_type_code == "CONCURRENT_DUTY_END" and (template_version_id is not None or "concurrent" in (item_payload or {})):
+        from app.services.personnel_order_concurrent_end_contract import cessation_values
+        supplied = (item_payload or {}).get("concurrent", {})
+        try:
+            cessation_values(supplied, effective_date)
+        except ValueError as exc:
+            raise PersonnelOrderValidationError(str(exc)) from exc
+        base_payload["concurrent"] = dict(supplied)
+        base_payload["concurrent_rate"] = supplied["rate"]
+        base_payload["remaining_rate"] = supplied["remaining_rate"]
+    return base_payload
+
+
 def create_manual_draft(*, created_by: int, template_version_id: int | None = None, order_number: str, order_date: date, source_title: str, source_title_locale: str, item_type_code: str, employee_id: Optional[int], effective_date: date, period_start: Optional[date] = None, period_end: Optional[date] = None, item_payload: Optional[Mapping[str, Any]] = None, unresolved_subject: Optional[Mapping[str, Any]] = None, document_subject_context: Optional[Mapping[str, Any]] = None) -> dict[str, Any]:
     number = str(order_number or "").strip()
     title = str(source_title or "").strip()
@@ -74,120 +194,7 @@ def create_manual_draft(*, created_by: int, template_version_id: int | None = No
             raise PersonnelOrderValidationError(capabilities['creation_reason'])
         if template_version_id is not None and not capabilities['independent_supported']:
             raise PersonnelOrderValidationError("Независимые варианты шаблонов недоступны в текущей схеме БД. Выберите основной вид приказа; требуется миграция hrtpl001.")
-        if item_type_code == 'LEAVE.ANNUAL.RECALL':
-            # Recall uses explicit bilingual document placement, not the
-            # possessive forms required by the leave-grant constructors.
-            resolved = _employee_document_context(conn, employee_id=employee_id, effective_date=effective_date,
-                use_catalog=capabilities['job_catalog_supported'])
-            base_payload = snapshot_catalog_forms({
-                'source_employee_name': resolved['full_name'],
-                'source_position_name': (document_subject_context or {}).get('position_name') or resolved.get('position_title_ru') or resolved.get('position_name'),
-                'source_org_unit_name': (document_subject_context or {}).get('org_unit_name') or resolved.get('org_unit_name'),
-                'recall_position_kk': resolved.get('position_title_kk') or '',
-                'recall_org_unit_kk': resolved.get('org_unit_title_kk') or '',
-            }, resolved)
-        else:
-            base_payload = (
-            _unresolved_subject_payload(unresolved_subject)
-            if unresolved_subject is not None
-            else _selected_employee_payload(
-                conn,
-                employee_id=int(employee_id),
-                effective_date=effective_date,
-                context=document_subject_context,
-                use_catalog=capabilities['job_catalog_supported'],
-            )
-            )
-        for key in ("document_forms_ru", "document_forms_kk"):
-            if key in (item_payload or {}):
-                base_payload[key] = {**base_payload.get(key, {}), **dict(item_payload[key])}
-        if item_type_code == "LEAVE.UNPAID.GRANT":
-            from app.services.personnel_order_unpaid_leave_contract import unpaid_leave_period
-
-            supplied = dict(item_payload or {})
-            supplied_leave = supplied.get("leave") if isinstance(supplied.get("leave"), Mapping) else {}
-            period = unpaid_leave_period({"leave": supplied_leave})
-            if period_start != period["start"] or period_end != period["end"] or effective_date != period_start:
-                raise PersonnelOrderValidationError("UNPAID_LEAVE_PERIOD_MISMATCH")
-            base_payload.update(supplied)
-        if item_type_code in {"LEAVE.CHILDCARE.GRANT", "LEAVE.ANNUAL.RECALL"}:
-            from app.services.personnel_orders_command_service import _validate_leave_draft_item
-            base_payload.update(dict(item_payload or {}))
-            _validate_leave_draft_item(item_type_code=item_type_code, employee_id=employee_id, effective_date=effective_date, period_start=period_start, period_end=period_end, payload=base_payload)
-        if item_type_code == "TRANSFER" and (template_version_id is not None or "transfer" in (item_payload or {})):
-            from app.services.personnel_order_transfer_contract import transfer_values
-            supplied = (item_payload or {}).get("transfer", {})
-            try:
-                transfer_values(supplied)
-            except ValueError as exc:
-                raise PersonnelOrderValidationError(str(exc)) from exc
-            base_payload["transfer"] = dict(supplied)
-            base_payload["to_rate"] = supplied["rate"]
-        if item_type_code == "SUPPLEMENTARY_PAY":
-            selected_texts = conn.execute(text("SELECT body_template_ru,body_template_kk FROM personnel_order_template_versions WHERE template_version_id=:id AND item_type_code=:type AND status='PUBLISHED'"), {'id':template_version_id,'type':item_type_code}).mappings().first() if template_version_id else None
-            if 'allowance' in (item_payload or {}) or any('allowance.' in value for value in (selected_texts or {}).values()):
-                from app.services.personnel_order_supplementary_pay_contract import values as supplementary_values, BASE_TYPE
-                from app.services.personnel_order_service_area_contract import normalize_recipient
-                allowance = dict((item_payload or {}).get('allowance') or {})
-                recipient = normalize_recipient((item_payload or {}).get('allowance_recipient'))
-                try:
-                    assignments=conn.execute(text("SELECT pa.assignment_id FROM person_assignments pa JOIN employees e ON e.person_id=pa.person_id WHERE e.employee_id=:employee AND pa.active_flag IS TRUE AND pa.lifecycle_status='active' AND pa.start_date<=CURRENT_DATE AND (pa.end_date IS NULL OR pa.end_date>=CURRENT_DATE)"),{'employee':employee_id}).scalars().all()
-                    if recipient.get('assignment_id') is not None and recipient['assignment_id'] not in assignments: raise ValueError('Выбранное назначение не принадлежит получателю доплаты.')
-                    if len(assignments)>1 and recipient.get('assignment_id') is None: raise ValueError('Выберите назначение получателя доплаты.')
-                    validated = supplementary_values(allowance,recipient,effective_date)
-                except ValueError as exc:
-                    raise PersonnelOrderValidationError(str(exc)) from exc
-                base_payload['allowance'] = {key:allowance[key] for key in ('employee_dative_ru','employee_dative_kk','basis_ru','basis_kk')}
-                base_payload['allowance'].update(percent=int(validated['allowance.percent']),basis_type=BASE_TYPE)
-                from app.services.personnel_order_russian_reference_forms import russian_reference_case
-                recipient['org_unit_genitive_ru'] = recipient.get('org_unit_genitive_ru') or russian_reference_case(recipient.get('org_unit_ru'),'genitive')
-                base_payload['allowance_recipient'] = recipient
-        if item_type_code == "CONCURRENT_DUTY_START" and (template_version_id is not None or "concurrent" in (item_payload or {})):
-            from app.services.personnel_order_concurrent_contract import concurrent_values
-            supplied = (item_payload or {}).get("concurrent", {})
-            from app.services.personnel_order_replacement_contract import variant, replacement_values, optional_placement
-            selected_texts = conn.execute(text("SELECT body_template_ru,body_template_kk FROM personnel_order_template_versions WHERE template_version_id=:id AND item_type_code=:type AND status='PUBLISHED'"), {"id":template_version_id,"type":item_type_code}).mappings().first() if template_version_id else None
-            mode = variant(selected_texts or {})
-            from app.services.personnel_order_service_area_contract import enabled as area_enabled,values as area_values,BASE_TYPE,normalize_recipient
-            service_area = area_enabled(selected_texts or {})
-            try:
-                if mode:
-                    replacement = dict((item_payload or {}).get("replacement") or {})
-                    if service_area:
-                        recipient=normalize_recipient((item_payload or {}).get('allowance_recipient'))
-                        assignments=conn.execute(text("SELECT pa.assignment_id FROM person_assignments pa JOIN employees e ON e.person_id=pa.person_id WHERE e.employee_id=:employee AND pa.active_flag IS TRUE AND pa.lifecycle_status='active' AND pa.start_date<=CURRENT_DATE AND (pa.end_date IS NULL OR pa.end_date>=CURRENT_DATE)"),{'employee':employee_id}).scalars().all()
-                        if recipient.get('assignment_id') is not None and recipient['assignment_id'] not in assignments:raise ValueError('Выбранное назначение не принадлежит получателю доплаты.')
-                        if len(assignments)>1 and recipient.get('assignment_id') is None:raise ValueError('Выберите назначение получателя доплаты.')
-                        validated=area_values(supplied,replacement,effective_date,recipient)
-                        base_payload['allowance_recipient']=recipient
-                        replacement['allowance_basis_type']=BASE_TYPE
-                        for key in ('allowance_basis_ru','allowance_basis_kk','rate','total_rate'):replacement.pop(key,None)
-                        if replacement.get('term_type')!='DATE':replacement.pop('end_date',None)
-                    else:
-                        validated = replacement_values(supplied, replacement, effective_date, mode, optional_placement=optional_placement(selected_texts or {}))
-                    replacement["mode"] = mode
-                    if optional_placement(selected_texts or {}): replacement["allowance_percent"] = int(validated["allowance.percent"])
-                    base_payload["replacement"] = replacement
-                else:
-                    concurrent_values(supplied, effective_date)
-            except ValueError as exc:
-                raise PersonnelOrderValidationError(str(exc)) from exc
-            base_payload["concurrent"] = dict(supplied)
-            if mode != "PAY":
-                base_payload["concurrent_rate"] = supplied["rate"]
-                base_payload["total_rate"] = supplied["total_rate"]
-            else:
-                for key in ("rate", "total_rate"): base_payload["concurrent"].pop(key,None)
-        if item_type_code == "CONCURRENT_DUTY_END" and (template_version_id is not None or "concurrent" in (item_payload or {})):
-            from app.services.personnel_order_concurrent_end_contract import cessation_values
-            supplied = (item_payload or {}).get("concurrent", {})
-            try:
-                cessation_values(supplied, effective_date)
-            except ValueError as exc:
-                raise PersonnelOrderValidationError(str(exc)) from exc
-            base_payload["concurrent"] = dict(supplied)
-            base_payload["concurrent_rate"] = supplied["rate"]
-            base_payload["remaining_rate"] = supplied["remaining_rate"]
+        base_payload = prepare_manual_item_payload(conn, item_type_code=item_type_code, employee_id=employee_id, effective_date=effective_date, period_start=period_start, period_end=period_end, item_payload=item_payload, unresolved_subject=unresolved_subject, document_subject_context=document_subject_context, template_version_id=template_version_id, capabilities=capabilities)
         # Recheck inside the write transaction; browser preview is never authoritative.
         duplicate = duplicate_preview(order_number=number, order_date=order_date,conn=conn)
         if duplicate["blocking"]:

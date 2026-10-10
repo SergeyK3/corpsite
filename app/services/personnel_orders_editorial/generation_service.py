@@ -112,12 +112,22 @@ def generate_editorial(
             ensure_draft_writable(order)
 
         items = load_items(active_conn, order_id)
+        from app.services.personnel_order_add_item_service import bound_template_generation
+        from app.services.personnel_orders_editorial.generators import _result
+        bound = bound_template_generation(active_conn, order_id, items)
+
+        def template_result(value: str, key: str) -> Dict[str, str]:
+            return _result(generated_text=value, generator_key="bound_template." + key,
+                fingerprint_payload={"template_version_id": bound["template_version_id"], "text": value})
+
         employee_ids = [
             int(i["employee_id"]) for i in items if i.get("employee_id") is not None
         ]
         bases: Dict[int, Dict[str, Any]] = {}
         unpaid_item_ids: list[int] = []
         for item in items:
+            if bound and int(item["item_id"]) not in bound["items"]:
+                continue
             if scope and scope.get("item_id") is not None and int(scope["item_id"]) != int(item["item_id"]):
                 continue
             item_type_code = str(item["item_type_code"]).strip().upper()
@@ -161,7 +171,10 @@ def generate_editorial(
                     continue
 
                 try:
-                    generated = generate_order_block(block_type, locale, order_ctx)
+                    if bound and block_type in (ORDER_BLOCK_TYPE_TITLE, ORDER_BLOCK_TYPE_PREAMBLE):
+                        generated = template_result(bound["order"][f"{block_type}_{locale}"], f"order.{block_type}.{locale}")
+                    else:
+                        generated = generate_order_block(block_type, locale, order_ctx)
                     legacy_field = None
                     if block_type in (ORDER_BLOCK_TYPE_TITLE, ORDER_BLOCK_TYPE_PREAMBLE):
                         legacy_field = (legacy.get(locale) or {}).get(block_type)
@@ -223,6 +236,8 @@ def generate_editorial(
 
         for item in items:
             item_id = int(item["item_id"])
+            if bound and item_id not in bound["items"]:
+                continue
             basis_required, unsupported = resolve_basis_required(str(item["item_type_code"]))
             force_review = unsupported is not None
             employee_name = names.get(int(item["employee_id"])) if item.get("employee_id") else None
@@ -277,7 +292,9 @@ def generate_editorial(
                         continue
 
                     try:
-                        if block_type == ITEM_BLOCK_TYPE_BODY:
+                        if bound and block_type in (ITEM_BLOCK_TYPE_BODY, ITEM_BLOCK_TYPE_BASIS):
+                            generated = template_result(bound["items"][item_id][f"{block_type}_template_{locale}"], f"item.{item_id}.{block_type}.{locale}")
+                        elif block_type == ITEM_BLOCK_TYPE_BODY:
                             generated = generate_item_body(locale, item_ctx)
                         else:
                             if str(item["item_type_code"]).strip().upper() == ORDER_TYPE_SUPPLEMENTARY_PAY:

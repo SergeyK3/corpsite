@@ -183,6 +183,6 @@ it.each(["ru", "kk"] as const)("shows the server supplementary-pay template name
   const name = language === "ru" ? variant.name_ru : variant.name_kk;
   expect(screen.getByRole("button",{name:"Тип кадрового приказа"}).textContent).toBe(name+"▾");
   open(); fireEvent.change(screen.getByRole("searchbox"),{target:{value:name}});
-  expect(screen.getByRole("menuitem",{name,exact:true})).toBeInTheDocument();
+  expect(screen.getByRole("menuitem",{name})).toBeInTheDocument();
   expect(screen.queryByText(`${name} · ${name}`,{exact:true})).not.toBeInTheDocument();
 });

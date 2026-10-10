@@ -104,7 +104,7 @@ function renderItem(
         ...(manual("kk") ? [manual("kk")!] : renderPersonnelOrderPrintItemText(item.context, "kk")),
         ...(manual("ru") ? [manual("ru")!] : renderPersonnelOrderPrintItemText(item.context, "ru")),
       ];
-  const tenure = item.itemTypeCode === "RETURN_FROM_CHILDCARE_LEAVE"
+  const tenure = ["RETURN_FROM_CHILDCARE_LEAVE", "SUPPLEMENTARY_PAY"].includes(item.itemTypeCode)
     ? []
     : language === "kk"
       ? ["Жұмыс өтілі әлі анықталмаған."]
@@ -114,10 +114,18 @@ function renderItem(
   const body = [...lines, ...tenure]
     .map((line) => `<p class="m-0">${escapePersonnelOrderPrintHtml(line)}</p>`)
     .join("");
+  const itemBasis = item.itemTypeCode === "SUPPLEMENTARY_PAY" && item.basis
+    ? (language === "kk-ru" ? ["kk", "ru"] as const : [language]).map(locale => {
+        const text = normalizePersonnelOrderBasisText(String(item.basis?.[locale] || ""), locale);
+        if (!text) return "";
+        const label = locale === "kk" ? "Негіз" : "Основание";
+        return `<p class="mt-2" data-testid="personnel-order-print-item-basis">${escapePersonnelOrderPrintHtml(label)}: ${escapePersonnelOrderPrintHtml(text)}.</p>`;
+      }).join("")
+    : "";
   return `<li class="personnel-order-print-item" data-testid="personnel-order-print-item-${item.itemId}">
   <div class="personnel-order-print-item-grid">
     <div class="personnel-order-print-item-num">${item.itemNumber}.</div>
-    <div class="personnel-order-print-item-body">${body}</div>
+    <div class="personnel-order-print-item-body">${body}${itemBasis}</div>
   </div>
 </li>`;
 }
