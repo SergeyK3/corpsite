@@ -145,6 +145,37 @@ async function chooseNewItemType(code: string) {
   fireEvent.click(document.querySelector(`[data-type-code="${code}"]`)!);
 }
 
+it("adds work with allowance and total workload without inventing a rate or requiring replacement", async () => {
+  const work = {...template, template_version_id: 123, replacement_mode: "WORK_ALLOWANCE" as const};
+  vi.mocked(getPersonnelOrderAddItemContext).mockResolvedValue({available: true, item_type_code: "CONCURRENT_DUTY_START", template: work, employee_ids: [383], default_employee_id: 383});
+  vi.mocked(getPersonnelOrderPublishedVariants).mockImplementation(async code => ({items: code === "CONCURRENT_DUTY_START" ? [work] : [], independent_supported: true, creation_supported: true}));
+  render(<PersonnelOrderItemEditor orderId={77} orderTypeCode="CONCURRENT_DUTY_START" items={[]} onChanged={vi.fn()} />);
+  toggle();
+  await screen.findByLabelText("Процент доплаты");
+  await waitFor(() => expect(screen.getByTestId("selected-employee-id")).toHaveValue("383"));
+  expect(screen.queryByLabelText("Замещаемый сотрудник (RU)")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Срок замещения")).not.toBeInTheDocument();
+  expect(screen.getByLabelText("Дополнительная ставка")).not.toBeRequired();
+  const fields = {
+    "Дата действия": "2026-02-02", "Дополнительная должность (RU)": "Врач-реабилитолог", "Дополнительная должность (KK)": "реабилитолог дәрігері",
+    "Дополнительное подразделение (RU)": "Инсультный центр", "Дополнительное подразделение (KK)": "инсульт орталығының",
+    "Дополнительная должность в родительном падеже (RU)": "врача-реабилитолога", "Дополнительное подразделение в родительном падеже (RU)": "инсультного центра",
+    "ФИО в дательном падеже (RU)": "Тестовому Сотруднику", "ФИО в дательном падеже (KK)": "Сынақ Қызметкеріне",
+    "Основание совмещения (RU)": "служебная записка", "Основание совмещения (KK)": "қызметтік хат",
+    "Процент доплаты": "25", "База расчёта доплаты (RU)": "должностного оклада", "База расчёта доплаты (KK)": "лауазымдық айлық ақыдан", "Общая ставка": "1.25",
+  };
+  for(const [label,value] of Object.entries(fields))fireEvent.change(screen.getByLabelText(label), {target:{value}});
+  expect(screen.getByLabelText("Дополнительная ставка")).toHaveValue(null);
+  await waitFor(() => expect(screen.getByRole("button", {name:"Добавить пункт"})).toBeEnabled());
+  fireEvent.click(screen.getByRole("button", {name:"Добавить пункт"}));
+  await waitFor(() => expect(createPersonnelOrderItem).toHaveBeenCalled());
+  const sent=vi.mocked(createPersonnelOrderItem).mock.calls[0][1];
+  expect(sent).toMatchObject({item_type_code:"CONCURRENT_DUTY_START",template_version_id:123,effective_date:"2026-02-02",payload:{concurrent:{total_rate:1.25},replacement:{mode:"WORK_ALLOWANCE",allowance_percent:"25",allowance_basis_kk:"лауазымдық айлық ақыдан"}}});
+  expect((sent.payload?.concurrent as Record<string,unknown>).rate).toBeUndefined();
+  expect(sent.payload?.replacement).not.toHaveProperty("employee_id");
+  expect(sent.payload?.replacement).not.toHaveProperty("term_type");
+});
+
 it("prefills the first employee and sends the selected new type and published version", async () => {
   const transfer = {...template, template_id: 10, template_version_id: 46, name_ru: "О переводе", name_kk: "Ауыстыру туралы"};
   vi.mocked(getPersonnelOrderAddItemContext).mockResolvedValue({available: true, item_type_code: "TRANSFER", template: transfer, employee_ids: [383], default_employee_id: 383});

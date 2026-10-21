@@ -123,7 +123,11 @@ def _values(conn:Any,item:Mapping[str,Any],template:Mapping[str,Any]|None=None):
   from app.services.personnel_order_supplementary_pay_contract import values as supplementary_values
   try: values.update(supplementary_values(payload['allowance'],payload.get('allowance_recipient'),item.get('effective_date')))
   except ValueError as exc: raise TemplateApplicationError(str(exc)) from exc
- if str(item["item_type_code"]) == "CONCURRENT_DUTY_START" and "replacement" in payload:
+ from app.services.personnel_order_work_allowance_contract import enabled as work_allowance_enabled, values as work_allowance_values
+ if str(item["item_type_code"]) == "CONCURRENT_DUTY_START" and work_allowance_enabled(template or {}):
+  try: values.update(work_allowance_values(payload.get("concurrent"), payload.get("replacement"), item.get("effective_date")))
+  except ValueError as exc: raise TemplateApplicationError(str(exc)) from exc
+ elif str(item["item_type_code"]) == "CONCURRENT_DUTY_START" and "replacement" in payload:
   from app.services.personnel_order_service_area_contract import enabled,values as area_values
   from app.services.personnel_order_replacement_contract import replacement_values, variant, optional_placement
   try:
@@ -152,6 +156,8 @@ def _render(template:Mapping[str,Any],values:Mapping[str,str], *, draft_preview:
  missing=set()
  from app.services.personnel_order_service_area_contract import enabled
  optional_tokens={'replacement.clause','allowance.term'} if enabled(texts) else set()
+ from app.services.personnel_order_work_allowance_contract import enabled as work_enabled
+ if work_enabled(texts): optional_tokens.add('concurrent.rate')
  def each(key,value):
   def repl(match):
    token=match.group(1); value=values.get(f"{token}.{'kk' if key.endswith('_kk') else 'ru'}",values.get(token,"")); missing.add(token) if not value.strip() and token not in optional_tokens and not token.startswith("basis.application_") else None; return value

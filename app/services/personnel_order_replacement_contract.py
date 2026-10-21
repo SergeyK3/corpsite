@@ -27,11 +27,15 @@ def optional_placement(texts):
 
 
 def variant(texts):
+    from app.services.personnel_order_work_allowance_contract import enabled, MODE
+    if enabled(texts): return MODE
     body = " ".join(str(texts.get(k) or "") for k in ("body_template_ru", "body_template_kk"))
     return ("PAY" if re.search(r"\{\{\s*allowance\.percent\s*\}\}", body) else "RATE") if re.search(r"\{\{\s*replacement\.", body) else None
 
 
 def validate_bodies(texts):
+    from app.services.personnel_order_work_allowance_contract import enabled as work_enabled, validate_bodies as validate_work
+    if work_enabled(texts): return validate_work(texts)
     from app.services.personnel_order_service_area_contract import enabled,validate_bodies as validate_area
     if enabled(texts):return validate_area(texts)
     mode = variant(texts)
@@ -137,5 +141,7 @@ SAMPLE_REPLACEMENT = dict(employee_name_ru="Иванов Иван Иванови
 
 
 def preview_context(mode, *, optional_placement=False):
+    from app.services.personnel_order_work_allowance_contract import MODE, preview_context as work_context
+    if mode == MODE: return work_context()
     data = replacement_values(SAMPLE_CONCURRENT, SAMPLE_REPLACEMENT, "2026-07-03", mode, optional_placement=optional_placement)
     return {locale: {key: data.get(key + "." + locale, data.get(key, "")) for key in (*VARIABLES, "employee.full_name_dative_ru", "employee.full_name_dative_kk", "effective_date", "concurrent.rate", "total.rate", "basis", "concurrent.position_genitive_ru", "concurrent.org_unit_genitive_ru", "concurrent.position_kk", "concurrent.org_unit_kk")} for locale in ("ru", "kk")}

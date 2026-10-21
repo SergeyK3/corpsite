@@ -10,7 +10,7 @@ import {savedKazakhEmployeeNameForm} from "../_lib/personnelOrderDocumentForms";
 import PersonnelOrderTransferFields, {type TransferFields} from "./PersonnelOrderTransferFields";
 import {recipientFromAssignment} from "./PersonnelOrderAllowanceRecipient";
 
-export type ReplacementMode = "RATE" | "PAY";
+export type ReplacementMode = "RATE" | "PAY" | "WORK_ALLOWANCE";
 export type ReplacementFields = TransferFields & {
   employee_id?: number; employee_name_ru: string; employee_name_kk: string;
   employee_genitive_ru: string; employee_genitive_kk: string;
@@ -33,6 +33,12 @@ export function ReplacementEmployeeSearch({label,value,onEdit,onSelect,includeAs
     {error?<p role="status" className="text-xs text-amber-700">{error}</p>:null}</div>;
 }
 export function replacementBlockers(value:ReplacementFields,mode:ReplacementMode,start:string,fixedAllowance=false,serviceArea=false):string[] {
+  if(mode === "WORK_ALLOWANCE") {
+    const missing = (['allowance_percent','allowance_basis_ru','allowance_basis_kk'] as const).filter(key=>!value[key].trim()).map(key=>`Заполните поле «${key === 'allowance_percent' ? 'Процент доплаты' : key === 'allowance_basis_ru' ? 'База расчёта доплаты (RU)' : 'База расчёта доплаты (KK)'}».`);
+    const percent=Number(value.allowance_percent.replace(',', '.'));
+    if(value.allowance_percent && (!Number.isFinite(percent)||percent<=0||percent>100))missing.push('Процент доплаты должен быть больше 0 и не больше 100.');
+    return missing;
+  }
   const labels:Record<string,string>={employee_name_ru:"Замещаемый сотрудник (RU)",employee_name_kk:"Замещаемый сотрудник (KK)",employee_genitive_ru:"ФИО замещаемого в родительном падеже (RU)",employee_genitive_kk:"ФИО замещаемого в родительном падеже (KK)",position_ru:"Замещаемая должность (RU)",position_kk:"Замещаемая должность (KK)",org_unit_ru:"Замещаемое подразделение (RU)",org_unit_kk:"Замещаемое подразделение (KK)",position_genitive_ru:"Замещаемая должность в родительном падеже (RU)",org_unit_genitive_ru:"Замещаемое подразделение в родительном падеже (RU)",term_type:"Срок замещения"};
   if(value.term_type==="DATE")labels.end_date="Дата окончания замещения";
   if(mode==="PAY")Object.assign(labels,{allowance_percent:"Процент доплаты",allowance_basis_ru:"База расчёта доплаты (RU)",allowance_basis_kk:"База расчёта доплаты (KK)"});
@@ -68,6 +74,13 @@ export default function PersonnelOrderReplacementFields({value,onChange,mode,sta
       return next;
     });
   };
+  if(mode === "WORK_ALLOWANCE") return <section data-testid="work-allowance-fields" className="space-y-3 sm:col-span-2">
+    <h3 className="font-medium">Дополнительная работа с доплатой</h3>
+    <ReplacementInput label="Процент доплаты" value={value.allowance_percent} onChange={text=>update('allowance_percent',text)} type="number" />
+    <ReplacementInput label="База расчёта доплаты (RU)" value={value.allowance_basis_ru} onChange={text=>update('allowance_basis_ru',text)} />
+    <ReplacementInput label="База расчёта доплаты (KK)" value={value.allowance_basis_kk} onChange={text=>update('allowance_basis_kk',text)} />
+    <p className="text-xs">Сохраните формулировку источника. Не уточняйте владельца оклада без подтверждения. Дополнительная ставка необязательна и не рассчитывается автоматически.</p>
+  </section>;
   return <section data-testid="replacement-fields" className="space-y-3 sm:col-span-2">
     <h3 className="font-medium">{serviceArea?'Доплата за расширение зоны обслуживания':'Замещение на время отпуска'}</h3>
     <ReplacementEmployeeSearch includeAssignments={serviceArea} label="Замещаемый сотрудник (RU)" value={value.employee_name_ru} onEdit={text=>{setSelectedEmployee(null);onChange(current=>({...current,employee_id:undefined,assignment_id:undefined,employee_name_ru:text}));}} onSelect={employee=>{

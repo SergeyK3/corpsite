@@ -89,6 +89,16 @@ function optionalReason(value: string | null | undefined): string | null {
 }
 
 function renderConcurrentStart(ctx: PersonnelOrderPrintItemContext, lang: "kk" | "ru"): string {
+  const allowance = ctx.payload.replacement as Record<string, unknown> | undefined;
+  const work = ctx.payload.concurrent as Record<string, unknown> | undefined;
+  if(allowance?.mode === "WORK_ALLOWANCE" && work) {
+    const date = formatPersonnelOrderActionStartDate(ctx.effectiveDate, lang);
+    const percent = String(allowance.allowance_percent ?? "—").replace('.', ',');
+    const total = formatPersonnelOrderPrintRateValue(work.total_rate as number | string | null);
+    const base = dash(String(allowance[`allowance_basis_${lang}`] || ""));
+    if(lang === "kk") return `${dash(String(work.employee_dative_kk || ""))} ${date} бастап ${dash(String(work.org_unit_kk || ""))} ${dash(String(work.position_kk || ""))} қызметін қоса атқаруға рұқсат берілсін және ${base} ${percent} % қосымша ақы төленсін. (Барлығы: ${total} ставка).`;
+    return `Разрешить ${dash(String(work.employee_dative_ru || ""))} с ${date} выполнять по совместительству обязанности ${dash(String(work.position_genitive_ru || ""))} ${dash(String(work.org_unit_genitive_ru || ""))} с доплатой ${percent}% от ${base}. (Общая занятость: ${total} ставки).`;
+  }
   const fio = dash(ctx.employeeName);
   const concurrentValue = formatPersonnelOrderPrintRateValue(ctx.concurrentRate);
   const total =

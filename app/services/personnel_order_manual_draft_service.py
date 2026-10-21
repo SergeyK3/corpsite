@@ -138,7 +138,11 @@ def prepare_manual_item_payload(conn: Any, *, item_type_code: str, employee_id: 
         try:
             if mode:
                 replacement = dict((item_payload or {}).get("replacement") or {})
-                if service_area:
+                if mode == "WORK_ALLOWANCE":
+                    from app.services.personnel_order_work_allowance_contract import values as work_values
+                    work_values(supplied, replacement, effective_date)
+                    replacement = {key: replacement[key] for key in ('allowance_percent', 'allowance_basis_ru', 'allowance_basis_kk')}
+                elif service_area:
                     recipient=normalize_recipient((item_payload or {}).get('allowance_recipient'))
                     assignments=conn.execute(text("SELECT pa.assignment_id FROM person_assignments pa JOIN employees e ON e.person_id=pa.person_id WHERE e.employee_id=:employee AND pa.active_flag IS TRUE AND pa.lifecycle_status='active' AND pa.start_date<=CURRENT_DATE AND (pa.end_date IS NULL OR pa.end_date>=CURRENT_DATE)"),{'employee':employee_id}).scalars().all()
                     if recipient.get('assignment_id') is not None and recipient['assignment_id'] not in assignments:raise ValueError('Выбранное назначение не принадлежит получателю доплаты.')
@@ -158,7 +162,14 @@ def prepare_manual_item_payload(conn: Any, *, item_type_code: str, employee_id: 
         except ValueError as exc:
             raise PersonnelOrderValidationError(str(exc)) from exc
         base_payload["concurrent"] = dict(supplied)
-        if mode != "PAY":
+        if mode == "WORK_ALLOWANCE":
+            base_payload["total_rate"] = supplied["total_rate"]
+            if str(supplied.get("rate") if supplied.get("rate") is not None else "").strip():
+                base_payload["concurrent_rate"] = supplied["rate"]
+            else:
+                base_payload["concurrent"].pop("rate", None)
+                base_payload.pop("concurrent_rate", None)
+        elif mode != "PAY":
             base_payload["concurrent_rate"] = supplied["rate"]
             base_payload["total_rate"] = supplied["total_rate"]
         else:
