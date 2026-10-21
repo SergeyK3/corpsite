@@ -33,6 +33,7 @@ function ItemComparison({ item }: { item: TemplateApplicationItem }) {
     : item.current[`${locale}:${block}`]?.override_text ?? item.current[`${locale}:${block}`]?.generated_text ?? "—";
   return <section className="space-y-2 border-t border-zinc-200 pt-3 dark:border-zinc-800" data-testid={`template-application-item-${item.item_number}`}>
     <h4 className="text-sm font-semibold">Пункт {item.item_number}</h4>
+    {item.template ? <p className="text-sm text-zinc-500">{item.template.item_type_code} · версия {item.template.version_number} · ID {item.template.template_version_id}</p> : null}
     {item.warnings.map((warning) => <p key={warning.code} role="alert" className="text-sm text-amber-700">{warning.message}</p>)}
     {(["body", "basis"] as const).map((block) => <div key={block} className="grid gap-2 md:grid-cols-4" data-testid={`template-application-item-${item.item_number}-${block}`}>
       {(["ru", "kk"] as const).flatMap((locale) => [<div key={`${locale}-new`} className="rounded border border-emerald-300 bg-emerald-50 p-2 text-sm dark:bg-emerald-950/30">{locale.toUpperCase()} · по шаблону<br />{text(locale, block, true)}</div>, <div key={`${locale}-old`} className="rounded border border-amber-300 bg-amber-50 p-2 text-sm dark:bg-amber-950/30">{locale.toUpperCase()} · было<br />{text(locale, block, false)}</div>])}
@@ -111,7 +112,7 @@ export default function PersonnelOrderTemplateApplication({ orderId, refreshKey 
     {loading ? <p className="mt-2 text-sm text-zinc-500">Проверка доступности шаблона…</p> : null}
     {problem ? <p role="alert" className={problem.kind === "unexpected" ? "mt-2 text-sm text-red-700" : "mt-2 text-sm text-amber-700"}>{problem.message}</p> : null}
     {preview ? <>
-      <p className="mt-2 text-sm" data-testid="template-application-template-meta">Тип: {preview.template.item_type_code} · PUBLISHED · версия {preview.template.version_number}</p>
+      <p className="mt-2 text-sm" data-testid="template-application-template-meta">Шаблон первого пункта: {preview.template.item_type_code} · версия {preview.template.version_number}. Заголовок и преамбула общие для приказа.</p>
       {preview.has_overrides ? <div className="mt-2 text-sm text-amber-700" role="alert"><p>Ручные изменения будут заменены только после подтверждения.</p><ul data-testid="template-application-override-blocks">{preview.override_blocks.map((block) => <li key={`${block.scope}-${block.block_id}`}>{block.scope} · {block.block_type} · {block.language}</li>)}</ul><label className="mt-2 flex gap-2"><input type="checkbox" checked={replaceOverrides} onChange={(e) => setReplaceOverrides(e.target.checked)} disabled={busy} /> Подтверждаю замену ручных правок</label></div> : null}
       {preview.has_prior_application ? <div className="mt-2 text-sm text-amber-700" role="alert"><p>Шаблон уже применялся: версия {preview.last_application?.template_version_number ?? "—"} · {preview.last_application?.applied_at ?? "—"}.</p><label className="mt-2 flex gap-2"><input type="checkbox" checked={confirmReapply} onChange={(e) => setConfirmReapply(e.target.checked)} disabled={busy} /> Подтверждаю повторное применение</label></div> : null}
       <div className="mt-3 space-y-3" data-testid="template-application-diff">

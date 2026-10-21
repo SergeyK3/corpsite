@@ -40,7 +40,7 @@ describe("PersonnelOrderTemplateApplication", () => {
     expect(await screen.findByTestId("template-application-diff")).toHaveTextContent("proposed ru body_template");
     expect(screen.getByTestId("template-application-ru-basis-proposed")).toHaveTextContent("Личное заявление");
     expect(screen.getByTestId("template-application-kk-basis-proposed")).toHaveTextContent("Жеке өтініш");
-    expect(screen.getByTestId("template-application-template-meta")).toHaveTextContent("TERMINATION · PUBLISHED · версия 3");
+    expect(screen.getByTestId("template-application-template-meta")).toHaveTextContent("Шаблон первого пункта: TERMINATION · версия 3");
     for (const block of ["title", "preamble", "body", "basis"]) {
       const grid = screen.getByTestId(`template-application-grid-${block}`);
       expect(grid).toHaveClass("grid-cols-1", "md:grid-cols-4");

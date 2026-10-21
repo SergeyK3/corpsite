@@ -4,6 +4,7 @@ import {afterEach, beforeEach, expect, it, vi} from "vitest";
 import PersonnelOrderItemEditor from "./PersonnelOrderItemEditor";
 import {createPersonnelOrderItem, getPersonnelOrderAddItemContext, getPersonnelOrderPublishedVariants, getPersonnelOrderPublishedTemplateTitle, type PersonnelOrderDetailResponse} from "../_lib/personnelOrdersApi.client";
 import {getEmployee, getEmployees} from "@/app/directory/employees/_lib/api.client";
+import {personnelOrderTypeLabel} from "../_lib/personnelOrderLabels";
 
 vi.mock("../_lib/personnelOrdersApi.client", async () => ({
   ...(await vi.importActual<object>("../_lib/personnelOrdersApi.client")),
@@ -24,6 +25,7 @@ const result: PersonnelOrderDetailResponse = {order: {order_id: 77, order_type_c
 
 beforeEach(() => {
   vi.mocked(getPersonnelOrderAddItemContext).mockResolvedValue({available: true, item_type_code: "SUPPLEMENTARY_PAY", template, employee_ids: [1]});
+  vi.mocked(getPersonnelOrderPublishedVariants).mockImplementation(async code => ({items: code === "SUPPLEMENTARY_PAY" ? [template] : [], independent_supported: true, creation_supported: true}));
   vi.mocked(getEmployees).mockResolvedValue({items: [employee], total: 1});
   vi.mocked(getEmployee).mockResolvedValue(employee);
   vi.mocked(createPersonnelOrderItem).mockResolvedValue(result);
@@ -49,10 +51,10 @@ async function fill(percent: string) {
   await waitFor(() => expect(screen.getByRole("button", {name: "Добавить пункт"})).toBeEnabled());
 }
 
-it("inherits the exact contract without a type menu or publication lookup, and retains input across keyboard-compatible disclosure toggles", async () => {
+it("offers published types and retains input across keyboard-compatible disclosure toggles", async () => {
   await setup();
   expect(screen.queryByLabelText("Тип пункта")).not.toBeInTheDocument();
-  expect(screen.queryByLabelText("Тип кадрового приказа")).not.toBeInTheDocument();
+  expect(screen.getByRole("button", {name: "Тип кадрового приказа"})).toBeInTheDocument();
   expect(screen.queryByLabelText("Номер приказа")).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Ставка после перевода")).not.toBeInTheDocument();
   expect(screen.queryByLabelText("Замещаемый сотрудник")).not.toBeInTheDocument();
@@ -67,7 +69,7 @@ it("inherits the exact contract without a type menu or publication lookup, and r
   toggle(); expect(screen.getByLabelText("Сотрудник")).toBe(input);
   expect(input).toHaveValue("Введённый сотрудник");
   expect(screen.getByLabelText("Основание (RU)")).toHaveValue("Мой текст");
-  expect(getPersonnelOrderPublishedVariants).not.toHaveBeenCalled();
+  expect(getPersonnelOrderPublishedVariants).toHaveBeenCalled();
   expect(getPersonnelOrderPublishedTemplateTitle).not.toHaveBeenCalled();
 });
 
@@ -125,6 +127,7 @@ it.each(["Отсутствует привязка", "Противоречивы�
 
 it.each(["RATE", "PAY"] as const)("uses the pinned concurrent %s variant instead of another same-code publication", async mode => {
   vi.mocked(getPersonnelOrderAddItemContext).mockResolvedValue({available: true, employee_ids: [1], item_type_code: "CONCURRENT_DUTY_START", template: {...template, template_id: mode === "RATE" ? 23 : 28, template_version_id: mode === "RATE" ? 38 : 44, replacement_mode: mode, replacement_optional_placement: mode === "PAY", service_area_allowance: mode === "PAY"}});
+  vi.mocked(getPersonnelOrderPublishedVariants).mockImplementation(async code => ({items: code === "CONCURRENT_DUTY_START" ? [{...template, template_id: mode === "RATE" ? 23 : 28, template_version_id: mode === "RATE" ? 38 : 44, replacement_mode: mode, replacement_optional_placement: mode === "PAY", service_area_allowance: mode === "PAY"}] : [], independent_supported: true}));
   render(<PersonnelOrderItemEditor orderId={77} items={[]} onChanged={vi.fn()} />); toggle();
   await screen.findByLabelText("Сотрудник");
   fireEvent.change(screen.getByLabelText("Сотрудник"), {target: {value: "Касымова"}});
@@ -133,5 +136,43 @@ it.each(["RATE", "PAY"] as const)("uses the pinned concurrent %s variant instead
   else await screen.findByLabelText("Доплата");
   expect(Boolean(screen.queryByLabelText("Дополнительная ставка"))).toBe(mode === "RATE");
   expect(Boolean(screen.queryByLabelText("Доплата"))).toBe(mode === "PAY");
-  expect(getPersonnelOrderPublishedVariants).not.toHaveBeenCalled();
+  expect(getPersonnelOrderPublishedVariants).toHaveBeenCalled();
+});
+
+async function chooseNewItemType(code: string) {
+  fireEvent.click(screen.getByRole("button", {name: "Тип кадрового приказа"}));
+  fireEvent.change(screen.getByRole("searchbox"), {target: {value: personnelOrderTypeLabel(code, "kk")}});
+  fireEvent.click(document.querySelector(`[data-type-code="${code}"]`)!);
+}
+
+it("prefills the first employee and sends the selected new type and published version", async () => {
+  const transfer = {...template, template_id: 10, template_version_id: 46, name_ru: "О переводе", name_kk: "Ауыстыру туралы"};
+  vi.mocked(getPersonnelOrderAddItemContext).mockResolvedValue({available: true, item_type_code: "TRANSFER", template: transfer, employee_ids: [383], default_employee_id: 383});
+  vi.mocked(getPersonnelOrderPublishedVariants).mockImplementation(async code => ({items: code === "TRANSFER" ? [transfer] : code === "SUPPLEMENTARY_PAY" ? [template, {...template, template_id: 7, template_version_id: 12, name_kk: "Екінші үлгі"}] : [], independent_supported: true}));
+  const onChanged = vi.fn();
+  render(<PersonnelOrderItemEditor orderId={77} orderTypeCode="TRANSFER" items={[]} onChanged={onChanged} />);
+  toggle();
+  await screen.findByLabelText(/Ставка после перевода/);
+  await waitFor(() => expect(screen.getByTestId("selected-employee-id")).toHaveValue("383"));
+  await chooseNewItemType("SUPPLEMENTARY_PAY");
+  fireEvent.click(document.querySelector('[data-template-version="12"]')!);
+  await screen.findByLabelText("Доплата");
+  await waitFor(() => expect(screen.getByLabelText("Должность получателя (RU)")).toHaveValue(employee.position.name));
+  expect(screen.queryByLabelText("Ставка после перевода")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Замещаемый сотрудник")).not.toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("Дата действия"), {target: {value: "2026-10-21"}});
+  fireEvent.change(screen.getByLabelText("Доплата"), {target: {value: "25"}});
+  await waitFor(() => expect(screen.getByRole("button", {name: "Добавить пункт"})).toBeEnabled());
+  fireEvent.click(screen.getByRole("button", {name: "Добавить пункт"}));
+  await waitFor(() => expect(createPersonnelOrderItem).toHaveBeenCalledWith(77, expect.objectContaining({employee_id: 383, item_type_code: "SUPPLEMENTARY_PAY", template_version_id: 12, payload: expect.objectContaining({allowance: expect.objectContaining({percent: 25})})})));
+  expect(onChanged).toHaveBeenCalledWith(result);
+});
+
+it("blocks adding a type without a published version", async () => {
+  await setup();
+  await chooseNewItemType("TRANSFER");
+  expect(screen.getByRole("button", {name: "Тип кадрового приказа"})).toHaveAttribute("value", "TRANSFER");
+  expect(screen.getByRole("button", {name: "Добавить пункт"})).toBeDisabled();
+  fireEvent.submit(screen.getByRole("button", {name: "Добавить пункт"}).closest("form")!);
+  expect(createPersonnelOrderItem).not.toHaveBeenCalled();
 });

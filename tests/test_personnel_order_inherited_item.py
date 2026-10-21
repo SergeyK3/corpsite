@@ -100,14 +100,13 @@ def test_same_version_new_employee_own_text_and_bases_preserves_first(database, 
     assert set(database.execute(text("SELECT template_version_id FROM personnel_order_template_applications WHERE order_id=:id"), {"id": order_id}).scalars()) == {version["template_version_id"]}
 
 
-@pytest.mark.parametrize("problem", ["other_type", "same_employee", "wrong_version", "invalid_percent", "missing_basis"])
+@pytest.mark.parametrize("problem", ["other_type", "wrong_version", "invalid_percent", "missing_basis"])
 def test_invalid_addition_is_atomic(database, problem):
     from app.services.personnel_order_supplementary_pay_contract import BODY_RU, BODY_KK
     version, actor = publish(database, texts={"body_template_ru": BODY_RU, "body_template_kk": BODY_KK})
     order_id, employees = create_order(database, version, actor, pay_payload())
     args = dict(order_id=order_id, item_type_code="SUPPLEMENTARY_PAY", employee_id=employees[1], effective_date=date(2026, 2, 2), payload=pay_payload(), actor_user_id=actor, template_version_id=version["template_version_id"])
     if problem == "other_type": args["item_type_code"] = "TRANSFER"
-    if problem == "same_employee": args["employee_id"] = employees[0]
     if problem == "wrong_version": args["template_version_id"] += 100000
     if problem == "invalid_percent": args["payload"]["allowance"]["percent"] = 30
     if problem == "missing_basis": args["payload"]["allowance"]["basis_kk"] = ""
@@ -177,7 +176,7 @@ def test_historical_mixed_order_is_blocked_without_converting_its_items(database
     database.execute(text("INSERT INTO personnel_order_items(order_id,item_number,item_type_code,item_status,employee_id,effective_date,payload) VALUES(:order,2,'TRANSFER','ACTIVE',:employee,'2026-02-02','{}'::jsonb)"), {"order": order_id, "employee": employees[1]})
     before = [dict(row) for row in database.execute(text("SELECT * FROM personnel_order_items WHERE order_id=:id ORDER BY item_number"), {"id": order_id}).mappings()]
     context = inherited.get_add_item_context(order_id)
-    assert not context["available"] and "разные типы" in context["reason"]
+    assert not context["available"] and "отсутствует привязка" in context["reason"]
     with pytest.raises(PersonnelOrderValidationError):
         commands.create_personnel_order_item(order_id=order_id, item_type_code="SUPPLEMENTARY_PAY", employee_id=employees[1], effective_date=date(2026, 2, 3), payload=pay_payload(50), actor_user_id=actor)
     assert [dict(row) for row in database.execute(text("SELECT * FROM personnel_order_items WHERE order_id=:id ORDER BY item_number"), {"id": order_id}).mappings()] == before

@@ -19,31 +19,16 @@ def resolve_add_item_context(conn: Any, order: Any) -> dict[str, Any]:
     items = conn.execute(text("SELECT * FROM personnel_order_items WHERE order_id=:id AND item_status='ACTIVE' ORDER BY item_number,item_id"), {"id": order["order_id"]}).mappings().all()
     if not items:
         raise PersonnelOrderValidationError("Добавление недоступно: в приказе нет действующего первого пункта с привязкой к шаблону.")
-    code = str(items[0]["item_type_code"])
-    if any(str(item["item_type_code"]) != code for item in items) or str(order["order_type_code"]) not in {code, "COMPOSITE"}:
-        raise PersonnelOrderValidationError("Добавление недоступно: исторический приказ содержит разные типы действий. Его пункты сохранены без изменений.")
-    applications = conn.execute(text("SELECT * FROM personnel_order_template_applications WHERE order_id=:id ORDER BY applied_at DESC,template_application_id DESC"), {"id": order["order_id"]}).mappings().all()
-    bindings = {}
-    for application in applications:
-        covered = {application["order_item_id"]}
-        snapshot = application["rendered_snapshot"] or {}
-        covered.update(entry.get("order_item_id") for entry in snapshot.get("items", []) if isinstance(entry, dict))
-        for item in items:
-            if item["item_status"] != "ACTIVE":
-                continue
-            if item["item_id"] in covered:
-                bindings.setdefault(item["item_id"], application["template_version_id"])
-    pinned = order.get("selected_template_version_id")
-    first_binding = bindings.get(items[0]["item_id"])
-    version_id = pinned if pinned is not None else first_binding
-    if version_id is None:
-        raise PersonnelOrderValidationError("Добавление недоступно: в приказе и применении первого пункта отсутствует привязка к конкретной версии шаблона.")
-    if any(value != version_id for value in bindings.values()):
-        raise PersonnelOrderValidationError(f"Добавление недоступно: привязки шаблона противоречат друг другу (приказ: {pinned}, применения пунктов: {bindings}).")
-    template = conn.execute(text("SELECT v.*,t.name_ru,t.name_kk,t.is_default FROM personnel_order_template_versions v JOIN personnel_order_templates t USING(template_id) WHERE v.template_version_id=:id AND v.item_type_code=:code AND v.status IN ('PUBLISHED','ARCHIVED') FOR SHARE OF v,t"), {"id": version_id, "code": code}).mappings().first()
-    if template is None:
-        raise PersonnelOrderValidationError(f"Добавление недоступно: закреплённая версия {version_id} отсутствует, имеет другой тип или недоступный статус.")
-    return {"item_type_code": code, "template": dict(template), "employee_ids": [item["employee_id"] for item in items if item["employee_id"] is not None]}
+    from app.services.personnel_order_item_templates import resolve_item_templates
+    try:
+        templates = resolve_item_templates(conn, order, list(items))
+    except TemplateApplicationError as exc:
+        raise PersonnelOrderValidationError(str(exc)) from exc
+    first = items[0]
+    return {"item_type_code": first["item_type_code"], "template": templates[int(first["item_id"])], "templates": templates,
+            "employee_ids": [item["employee_id"] for item in items if item["employee_id"] is not None],
+            "default_employee_id": first["employee_id"]}
+
 
 
 def get_add_item_context(order_id: int) -> dict[str, Any]:
@@ -60,7 +45,7 @@ def get_add_item_context(order_id: int) -> dict[str, Any]:
             return {"available": False, "reason": str(exc)}
         template = context["template"]
         keys = ("template_id", "template_version_id", "version_number", "name_ru", "name_kk", "title_ru", "title_kk", "is_default")
-        return {"available": True, "item_type_code": context["item_type_code"], "employee_ids": context["employee_ids"], "template": {**{key: template[key] for key in keys}, "replacement_mode": variant(template), "replacement_optional_placement": optional_placement(template), "service_area_allowance": enabled(template)}}
+        return {"available": True, "item_type_code": context["item_type_code"], "employee_ids": context["employee_ids"], "default_employee_id": context["default_employee_id"], "template": {**{key: template[key] for key in keys}, "replacement_mode": variant(template), "replacement_optional_placement": optional_placement(template), "service_area_allowance": enabled(template)}}
 
 
 def bound_template_generation(conn: Any, order_id: int, items: list[Any]) -> dict[str, Any] | None:
@@ -70,18 +55,26 @@ def bound_template_generation(conn: Any, order_id: int, items: list[Any]) -> dic
     has_application = has_history and conn.execute(text("SELECT EXISTS(SELECT 1 FROM personnel_order_template_applications WHERE order_id=:id)"), {"id": order_id}).scalar_one()
     if order.get("selected_template_version_id") is None and not has_application:
         return None  # Historical unbound documents keep their existing generator.
-    context = resolve_add_item_context(conn, order)
-    template = context["template"]
+    from app.services.personnel_order_item_templates import resolve_item_templates, common_order_text
+    active_items = [item for item in items if item["item_status"] == "ACTIVE"]
+    if not active_items:
+        raise PersonnelOrderValidationError("Нет действующих пунктов для формирования текста.")
     rendered_items = {}
     try:
-        for item in items:
-            if item["item_status"] != "ACTIVE":
-                continue
+        templates = resolve_item_templates(conn, order, active_items)
+        combined = len({t["template_version_id"] for t in templates.values()}) > 1 or order["order_type_code"] == "COMPOSITE"
+        for item in active_items:
+            template = templates[int(item["item_id"])]
             values, _, _ = _values(conn, item, template)
-            rendered_items[int(item["item_id"])] = _render(template, values)
+            rendered_items[int(item["item_id"])] = _render(template, values, item_only=combined)
     except ValueError as exc:
         raise PersonnelOrderValidationError(str(exc)) from exc
-    return {"template_version_id": template["template_version_id"], "order": next(iter(rendered_items.values())), "items": rendered_items}
+    first_template = templates[int(active_items[0]["item_id"])]
+    order_text = next(iter(rendered_items.values()))
+    if combined:
+        order_text = common_order_text(conn, order_id, order_text)
+    return {"template_version_id": first_template["template_version_id"], "template_versions": {key: value["template_version_id"] for key, value in templates.items()}, "order": order_text, "items": rendered_items}
+
 
 
 def render_added_item(conn: Any, *, order_id: int, item_id: int, template: dict[str, Any], actor_user_id: int) -> None:
@@ -90,7 +83,7 @@ def render_added_item(conn: Any, *, order_id: int, item_id: int, template: dict[
     item = conn.execute(text("SELECT * FROM personnel_order_items WHERE item_id=:id"), {"id": item_id}).mappings().one()
     try:
         values, _, _ = _values(conn, item, template)
-        rendered = _render(template, values)
+        rendered = _render(template, values, item_only=True)
     except TemplateApplicationError as exc:
         raise PersonnelOrderValidationError(str(exc)) from exc
     for locale in ("ru", "kk"):

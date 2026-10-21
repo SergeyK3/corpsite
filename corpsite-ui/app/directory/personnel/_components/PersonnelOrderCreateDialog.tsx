@@ -169,16 +169,8 @@ export default function PersonnelOrderCreateDialog({
   const [creationCapabilities,setCreationCapabilities]=React.useState<Record<string,{independent_supported?:boolean;creation_supported?:boolean;creation_reason?:string|null}>>({});
   React.useEffect(() => {
     if (!open) return;
-    if (itemContext) {
-      setType(itemContext.itemTypeCode);
-      setSelectedVersion(itemContext.template.template_version_id);
-      setVariants({[itemContext.itemTypeCode]: [itemContext.template]});
-      setCreationCapabilities({[itemContext.itemTypeCode]: {independent_supported: true, creation_supported: true}});
-      setVariantsLoading(false);
-      return;
-    }
     let cancelled = false;
-    setVariantsLoading(true); setVariantErrors({}); setSelectedVersion(undefined);
+    setVariantsLoading(true); setVariantErrors({}); setSelectedVersion(itemContext?.template.template_version_id);
     setVariants({});setCreationCapabilities({});
     Promise.allSettled(PERSONNEL_ORDER_CREATE_TYPES.map(async code => [code,await getPersonnelOrderPublishedVariants(code)] as const))
       .then(results => {
@@ -270,7 +262,7 @@ export default function PersonnelOrderCreateDialog({
   const replacementMode = type === "CONCURRENT_DUTY_START" ? typeVariants.find(v=>v.template_version_id===resolvedVersion)?.replacement_mode : null;
   const optionalPlacement = replacementMode === "PAY" && typeVariants.find(v=>v.template_version_id===resolvedVersion)?.replacement_optional_placement === true;
   const serviceArea=optionalPlacement && typeVariants.find(v=>v.template_version_id===resolvedVersion)?.service_area_allowance===true;
-  const legacyTemplates = creationCapabilities[type]?.independent_supported === false;
+  const legacyTemplates = !itemContext && creationCapabilities[type]?.independent_supported === false;
   const versionResolved = !variantsLoading && !variantErrors[type] && Boolean(creationCapabilities[type])
     && (resolvedVersion != null || legacyTemplates);
   const templateKey = `${type}:${resolvedVersion ?? "legacy"}`;
@@ -295,7 +287,7 @@ export default function PersonnelOrderCreateDialog({
   missing(!itemContext && !orderDate, "Укажите дату приказа.", "Бұйрық күнін көрсетіңіз.");
   missing(!resolvedTitle, "Название приказа не загружено.", "Бұйрық атауы жүктелмеді.");
   missing(!employee?.id, "Выберите сотрудника из списка кандидатов.", "Қызметкерді үміткерлер тізімінен таңдаңыз.");
-  missing(Boolean(itemContext && employee?.id && itemContext.employeeIds.includes(Number(employee.id))), "Выберите другого сотрудника для нового пункта.", "Жаңа тармақ үшін басқа қызметкерді таңдаңыз.");
+
   if (periodLeave) {
     missing(!start, "Укажите дату начала отпуска.", "Демалыстың басталу күнін көрсетіңіз.");
     missing(!end, "Укажите дату окончания отпуска.", "Демалыстың аяқталу күнін көрсетіңіз.");
@@ -462,7 +454,9 @@ export default function PersonnelOrderCreateDialog({
     setPublishedTitleError(null);
     setTitle("");
     if (itemContext) {
-      const titles = {kk: itemContext.template.title_kk, ru: itemContext.template.title_ru};
+      const selected = (variants[type] || []).find(variant => variant.template_version_id === resolvedVersion);
+      if (!selected) return;
+      const titles = {kk: selected.title_kk, ru: selected.title_ru};
       setPublished(titles); setPublishedFor(templateKey); setTitle(titles[locale]);
       return;
     }
@@ -489,7 +483,7 @@ export default function PersonnelOrderCreateDialog({
         setTitle(personnelOrderCanonicalTitle(type, locale));
         setPublishedTitleError(`Не удалось загрузить опубликованный шаблон: ${mapPersonnelOrdersApiError(caught, "Опубликованный шаблон не найден.")}`);
       });
-  }, [locale, open, type, resolvedVersion, versionResolved, templateKey, itemContext]);
+  }, [locale, open, type, resolvedVersion, versionResolved, templateKey, itemContext, variants]);
 
   React.useEffect(() => {
     setTitle(published?.[locale].trim() || personnelOrderCanonicalTitle(type, locale));
@@ -527,10 +521,19 @@ export default function PersonnelOrderCreateDialog({
       .catch(() => {if(id===searchId.current){setEmployeeSearchFinished(true);setEmployeeSearchError("search");}});
   }, [employee, initialOrgUnitId, open, query, type,selectingEmployee]);
 
+  const currentEmployee = React.useRef(employee);
+  React.useEffect(() => { currentEmployee.current = employee; }, [employee]);
   React.useEffect(() => {
-    if (!open || !type || !initialEmployeeId) return;
-    void getEmployee(String(initialEmployeeId)).then(choose).catch(() => undefined);
-  }, [choose, initialEmployeeId, open, type]);
+    if (!open || !type) return;
+    const employeeId = itemContext ? currentEmployee.current?.id ?? initialEmployeeId : initialEmployeeId;
+    if (!employeeId) return;
+    let cancelled = false;
+    const selectionId = employeeSelectionId.current;
+    void getEmployee(String(employeeId)).then(candidate => {
+      if (!cancelled && selectionId === employeeSelectionId.current) void choose(candidate);
+    }).catch(() => undefined);
+    return () => { cancelled = true; };
+  }, [choose, initialEmployeeId, open, type, itemContext]);
 
   React.useEffect(() => {
     if (!open) return;
@@ -655,8 +658,8 @@ export default function PersonnelOrderCreateDialog({
       };
       if (itemContext) {
         const result = await createPersonnelOrderItem(itemContext.orderId, {
-          template_version_id: itemContext.template.template_version_id,
-          item_type_code: itemContext.itemTypeCode,
+          template_version_id: resolvedVersion,
+          item_type_code: type,
           employee_id: request.employee_id,
           effective_date: request.effective_date,
           period_start: request.period_start, period_end: request.period_end,
@@ -765,7 +768,8 @@ export default function PersonnelOrderCreateDialog({
           if (event.key === "Enter" && event.target instanceof HTMLInputElement && event.target.type !== "submit") event.preventDefault();
         }}>
           <div data-testid="personnel-order-create-body" className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-5 py-4">
-            {!itemContext ? <PersonnelOrderTypeMenu value={type} language={sectionLanguage} onChange={changeType} variants={variants} selectedVersion={resolvedVersion} disabled={busy} /> : <p className="text-sm text-zinc-500">{itemContext.template.name_ru} · v{itemContext.template.version_number}</p>}
+            {itemContext ? <p className="text-sm font-medium">Тип пункта и шаблон</p> : null}
+            <PersonnelOrderTypeMenu value={type} language={sectionLanguage} onChange={changeType} variants={variants} selectedVersion={resolvedVersion} disabled={busy} />
             {variantsLoading ? <p role="status">{sectionLanguage==='kk'?'Үлгі нұсқалары жүктелуде; бұйрық түрін таңдауға болады.':'Загружаются варианты шаблонов; вид приказа уже можно выбрать.'}</p> : null}
             {type && variantErrors[type] ? <p role="alert">{sectionLanguage==='kk'?'Үлгі нұсқаларын жүктеу қатесі: ':'Не удалось загрузить варианты шаблона: '}{variantErrors[type]}</p> : null}
             {type && (variantErrors[type] || publishedTitleError) ? <button type="button" disabled={busy || variantsLoading} onClick={() => setVariantLoadAttempt(attempt => attempt + 1)} className="text-sm text-blue-700">{sectionLanguage === 'kk' ? 'Жүктеуді қайталау' : 'Повторить загрузку шаблонов'}</button> : null}

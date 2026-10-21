@@ -28,5 +28,5 @@ export default function PersonnelOrderInheritedItemForm({orderId, onAdded, onCan
   if (error) return <div className="p-4"><p role="alert">{error}</p><button type="button" onClick={() => setAttempt(value => value + 1)}>Повторить загрузку</button></div>;
   if (!context) return <p role="status" className="p-4">Загрузка закреплённого шаблона…</p>;
   if (!itemContext) return <p role="alert" className="p-4">{context.reason || "Добавление недоступно: версия шаблона не определена."}</p>;
-  return <PersonnelOrderCreateDialog open itemContext={itemContext} onClose={onCancel} onCreated={() => undefined} onItemAdded={onAdded} />;
+  return <PersonnelOrderCreateDialog open initialEmployeeId={context.default_employee_id ?? null} itemContext={itemContext} onClose={onCancel} onCreated={() => undefined} onItemAdded={onAdded} />;
 }

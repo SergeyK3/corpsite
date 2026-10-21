@@ -116,9 +116,9 @@ def generate_editorial(
         from app.services.personnel_orders_editorial.generators import _result
         bound = bound_template_generation(active_conn, order_id, items)
 
-        def template_result(value: str, key: str) -> Dict[str, str]:
+        def template_result(value: str, key: str, item_id: Optional[int] = None) -> Dict[str, str]:
             return _result(generated_text=value, generator_key="bound_template." + key,
-                fingerprint_payload={"template_version_id": bound["template_version_id"], "text": value})
+                fingerprint_payload={"template_version_id": bound["template_versions"].get(item_id, bound["template_version_id"]), "text": value})
 
         employee_ids = [
             int(i["employee_id"]) for i in items if i.get("employee_id") is not None
@@ -293,7 +293,7 @@ def generate_editorial(
 
                     try:
                         if bound and block_type in (ITEM_BLOCK_TYPE_BODY, ITEM_BLOCK_TYPE_BASIS):
-                            generated = template_result(bound["items"][item_id][f"{block_type}_template_{locale}"], f"item.{item_id}.{block_type}.{locale}")
+                            generated = template_result(bound["items"][item_id][f"{block_type}_template_{locale}"], f"item.{item_id}.{block_type}.{locale}", item_id)
                         elif block_type == ITEM_BLOCK_TYPE_BODY:
                             generated = generate_item_body(locale, item_ctx)
                         else:

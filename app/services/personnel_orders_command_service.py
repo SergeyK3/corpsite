@@ -782,16 +782,22 @@ def create_personnel_order_item(
         from app.services.personnel_order_add_item_service import resolve_add_item_context, render_added_item
         from app.services.personnel_order_manual_draft_service import prepare_manual_item_payload
         context = resolve_add_item_context(conn, order)
-        if normalized_type != context['item_type_code']:
-            raise PersonnelOrderValidationError("Новый пункт должен иметь тот же тип действия, что и текущий приказ.")
-        if template_version_id is not None and template_version_id != context['template']['template_version_id']:
-            raise PersonnelOrderValidationError("Привязка версии шаблона изменилась. Повторно откройте форму добавления.")
-        if employee_id is None or employee_id in context['employee_ids']:
-            raise PersonnelOrderValidationError("Выберите другого сотрудника для нового пункта.")
+        if template_version_id is None:
+            # Old clients inherit the exact first-item version for the same type.
+            if normalized_type != context['item_type_code']:
+                raise PersonnelOrderValidationError("Выберите опубликованную версию шаблона для нового типа пункта.")
+            template = context['template']
+        else:
+            template = conn.execute(text("SELECT * FROM personnel_order_template_versions WHERE template_version_id=:id AND item_type_code=:code AND status='PUBLISHED' FOR SHARE"), {"id": template_version_id, "code": normalized_type}).mappings().first()
+            if template is None:
+                raise PersonnelOrderValidationError("Выбранная опубликованная версия шаблона недоступна или не соответствует типу пункта.")
+            template = dict(template)
+        if employee_id is None:
+            raise PersonnelOrderValidationError("Выберите сотрудника для нового пункта.")
         if effective_date is None:
             raise PersonnelOrderValidationError("Укажите дату начала действия.")
         _ensure_employee_exists(conn, employee_id)
-        normalized_payload = prepare_manual_item_payload(conn, item_type_code=normalized_type, employee_id=employee_id, effective_date=effective_date, period_start=period_start, period_end=period_end, item_payload=payload, document_subject_context=document_subject_context, template_version_id=context['template']['template_version_id'])
+        normalized_payload = prepare_manual_item_payload(conn, item_type_code=normalized_type, employee_id=employee_id, effective_date=effective_date, period_start=period_start, period_end=period_end, item_payload=payload, document_subject_context=document_subject_context, template_version_id=template['template_version_id'])
         payload_json = json.dumps(normalized_payload, ensure_ascii=False)
 
         from app.services.personnel_order_hire_from_person_service import validate_hire_item_identity
@@ -856,18 +862,19 @@ def create_personnel_order_item(
                 "item_status": ITEM_STATUS_ACTIVE,
             },
         ).scalar_one()
-        render_added_item(conn, order_id=order_id, item_id=int(new_item_id), template=context['template'], actor_user_id=int(actor_user_id or order['created_by']))
+        resolved_type = _resolve_header_type_from_items(conn, order_id, str(order['order_type_code']))
+        render_added_item(conn, order_id=order_id, item_id=int(new_item_id), template=template, actor_user_id=int(actor_user_id or order['created_by']))
 
         conn.execute(
             text(
                 """
                 UPDATE public.personnel_orders
-                SET updated_at = now(), document_revision = document_revision + 1,
+                SET updated_at = now(), document_revision = document_revision + 1, order_type_code = :type,
                     selected_template_version_id = COALESCE(selected_template_version_id, :version)
                 WHERE order_id = :order_id
                 """
             ),
-            {"order_id": int(order_id), "version": context['template']['template_version_id']},
+            {"order_id": int(order_id), "version": context['template']['template_version_id'], "type": resolved_type},
         )
         advance_personnel_order_evidence_scopes_tx(conn, tokens=scope_tokens)
 

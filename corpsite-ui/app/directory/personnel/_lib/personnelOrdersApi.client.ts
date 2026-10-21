@@ -703,7 +703,7 @@ export type PersonnelOrderTemplateApplicationPreview = {
   proposed?: Record<string, string>;
   order_current?: Record<string, PersonnelOrderTemplateApplicationCurrentBlock>;
   order_proposed?: Record<string, string>;
-  items?: Array<{ order_item_id: number; item_number: number; current: Record<string, PersonnelOrderTemplateApplicationCurrentBlock>; proposed: Record<string, string>; warnings: Array<{ code: string; message: string }>; missing_data: string[] }>;
+  items?: Array<{ order_item_id: number; item_number: number; template?: { template_version_id: number; version_number: number; item_type_code: string }; current: Record<string, PersonnelOrderTemplateApplicationCurrentBlock>; proposed: Record<string, string>; warnings: Array<{ code: string; message: string }>; missing_data: string[] }>;
   order_revision: number;
 };
 export const previewPersonnelOrderTemplateApplication = (orderId: number) => requestJson<PersonnelOrderTemplateApplicationPreview>("GET", `/directory/personnel-orders/${orderId}/template-application/preview`, { fallback: "Не удалось подготовить сравнение шаблона." });
@@ -880,6 +880,7 @@ export type PersonnelOrderAddItemContext = {
   reason?: string;
   item_type_code?: string;
   employee_ids?: number[];
+  default_employee_id?: number | null;
   template?: PersonnelPublishedTemplateVariant;
 };
 
