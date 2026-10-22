@@ -518,6 +518,8 @@ def generate_item_body(locale: str, item_ctx: Mapping[str, Any]) -> Dict[str, st
             date_part = f" с {date}" if has_effective_date else ""
             text = f"Разрешить сотруднику {fio} приступить к работе в связи с выходом из отпуска по уходу за ребёнком{assignment_part}{rate_part}{date_part}."
     elif item_type == ORDER_TYPE_TRANSFER:
+        if lang == "ru":
+            fio = _clean(item_ctx.get("employee_full_name_accusative_ru")) or "[ФИО в винительном падеже (RU): заполните вручную]"
         org = _localized_name(to_org_unit_name or org_unit_name, lang)
         position = _localized_position(to_position_name or position_name, lang)
         rate_value = (
@@ -619,6 +621,8 @@ def generate_item_body(locale: str, item_ctx: Mapping[str, Any]) -> Dict[str, st
             "locale": lang,
             "item_type_code": item_type or None,
             "employee_name": _clean(employee_name) or None,
+            **({"employee_full_name_accusative_ru": _clean(item_ctx.get("employee_full_name_accusative_ru"))}
+               if item_type == ORDER_TYPE_TRANSFER and lang == "ru" else {}),
             "effective_date": _clean(effective_date) or None,
             "org_unit_name": org_unit_name if org_unit_name not in (None, "") else None,
             "position_name": position_name if position_name not in (None, "") else None,

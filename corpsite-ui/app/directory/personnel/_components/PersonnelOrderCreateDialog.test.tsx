@@ -311,7 +311,7 @@ it.each(PERSONNEL_ORDER_CREATE_TYPE_OPTIONS.map(option => option.value))("offers
   }
   if (type === "CONCURRENT_DUTY_START") {
     expect(screen.getByLabelText("Дополнительная должность (RU)")).toHaveValue("");
-    expect(screen.getByLabelText("ФИО в дательном падеже (RU)")).toHaveValue("");
+    expect(screen.getByLabelText("ФИО в дательном падеже (RU)")).not.toHaveValue("");
     return;
   }
   if (type === "TRANSFER") {
@@ -746,6 +746,8 @@ it("keeps the schema blocker beside Create even after required recall fields are
 it("requires transfer destination, rate and bilingual basis, then opens the created order", async () => {
   const {onCreated, onClose} = setup();
   await selectType("TRANSFER"); await selectEmployee();
+  expect(screen.getByRole("alert")).toHaveTextContent("Нет подтверждённого ФИО в винительном падеже");
+  fireEvent.change(screen.getByLabelText("ФИО в винительном падеже (RU)"), {target:{value:"Ильясову Ассель Адиловну"}});
   fireEvent.change(screen.getByLabelText("Номер приказа"), {target:{value:"TRANSFER-TEST"}});
   fireEvent.change(screen.getByLabelText("Дата приказа"), {target:{value:"2026-10-08"}});
   fireEvent.change(screen.getByLabelText("Дата действия"), {target:{value:"2026-10-09"}});
@@ -757,7 +759,7 @@ it("requires transfer destination, rate and bilingual basis, then opens the crea
   await waitFor(() => expect(screen.getByRole("button",{name:"Создать приказ"})).toBeEnabled());
   fireEvent.click(screen.getByRole("button",{name:"Создать приказ"}));
   await waitFor(() => expect(onCreated).toHaveBeenCalledWith(result)); expect(onClose).toHaveBeenCalled();
-  expect(createManualPersonnelOrderDraft).toHaveBeenCalledWith(expect.objectContaining({employee_id:383,item_payload:{transfer:{position_ru:"Врач",position_kk:"Дәрігер",org_unit_ru:"Терапия",org_unit_kk:"Терапия бөлімшесі",rate:0.5,basis_ru:"Заявление",basis_kk:"Өтініш"}}}));
+  expect(createManualPersonnelOrderDraft).toHaveBeenCalledWith(expect.objectContaining({employee_id:383,item_payload:{transfer:{position_ru:"Врач",position_kk:"Дәрігер",org_unit_ru:"Терапия",org_unit_kk:"Терапия бөлімшесі",rate:0.5,basis_ru:"Заявление",basis_kk:"Өтініш"},document_forms_ru:{employee_full_name_accusative_ru:"Ильясову Ассель Адиловну"}}}));
 });
 
 it("submits only explicit additional placement, dative names and concurrent rates", async () => {
@@ -766,6 +768,35 @@ it("submits only explicit additional placement, dative names and concurrent rate
   vi.mocked(previewPersonnelOrderHeaderDuplicate).mockResolvedValue({blocking:false,warnings:[],candidates:[]});vi.mocked(createManualPersonnelOrderDraft).mockResolvedValue({order_id:78} as never);
   await waitFor(()=>expect(screen.getByRole("button",{name:"Создать приказ"})).toBeEnabled());fireEvent.click(screen.getByRole("button",{name:"Создать приказ"}));await waitFor(()=>expect(onCreated).toHaveBeenCalled());
   expect(createManualPersonnelOrderDraft).toHaveBeenCalledWith(expect.objectContaining({item_type_code:"CONCURRENT_DUTY_START",item_payload:{concurrent:expect.objectContaining({position_ru:"Врач",position_kk:"дәрігер",position_genitive_ru:"врача",org_unit_genitive_ru:"отделения терапии",employee_dative_ru:"Ильясовой Ассель Адиловне",rate:0.5,total_rate:1.5})}}));
+});
+
+it("prefills saved KK dative in the add form and keeps an explicit correction after choosing another employee", async () => {
+ setup();
+ const first={...employeeDetail,fio:"Тестова Первая Сотрудница",document_forms_kk:{employee_full_name_dative_kk:"Первая подтверждённая форма"}};
+ vi.mocked(getEmployee).mockResolvedValue(first);
+ await chooseTypeInMenu("CONCURRENT_DUTY_START");await selectEmployee();
+ const kk=screen.getByLabelText("ФИО в дательном падеже (KK)");
+ expect(kk).toHaveValue("Первая подтверждённая форма");
+ fireEvent.change(kk,{target:{value:"Ручная правка КК"}});
+ const second={...first,id:"139",fio:"Тестов Второй Сотрудник",document_forms_kk:{employee_full_name_dative_kk:"Вторая подтверждённая форма"}};
+ vi.mocked(getEmployees).mockResolvedValue({items:[second],total:1});vi.mocked(getEmployee).mockResolvedValue(second);
+ fireEvent.click(screen.getByRole("button",{name:"Сменить сотрудника"}));
+ fireEvent.change(screen.getByLabelText("Сотрудник"),{target:{value:"Второй"}});
+ fireEvent.click(await screen.findByRole("option",{name:/Тестов Второй Сотрудник/}));
+ await waitFor(()=>expect(screen.getByTestId("selected-employee-id")).toHaveValue("139"));
+ expect(screen.getByLabelText("ФИО в дательном падеже (KK)")).toHaveValue("Ручная правка КК");
+ fireEvent.change(screen.getByLabelText("ФИО в дательном падеже (KK)"),{target:{value:""}});
+ expect(screen.getByText("Заполните ФИО в дательном падеже (KK).")).toBeInTheDocument();
+ expect(screen.getByRole("button",{name:"Создать приказ"})).toBeDisabled();
+});
+
+it("does not guess KK dative from a display FIO and retains the blocking warning", async () => {
+ setup();
+ await chooseTypeInMenu("CONCURRENT_DUTY_START");await selectEmployee();
+ expect(screen.getByLabelText("ФИО в дательном падеже (KK)")).toHaveValue("");
+ expect(screen.getByText("Заполните ФИО в дательном падеже (KK).")).toBeInTheDocument();
+ expect(screen.getByRole("button",{name:"Создать приказ"})).toBeDisabled();
+ expect(createManualPersonnelOrderDraft).not.toHaveBeenCalled();
 });
 
 it('shows the exact conflicting order and links directly without journal filters',async()=>{

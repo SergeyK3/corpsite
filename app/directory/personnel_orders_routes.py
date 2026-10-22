@@ -602,6 +602,8 @@ def update_personnel_order_item_route(
             period_end=payload.period_end,
             payload=payload.payload,
             item_number=payload.item_number,
+            template_version_id=payload.template_version_id,
+            actor_user_id=_require_user_id(user),
         )
     except PersonnelOrderNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc))

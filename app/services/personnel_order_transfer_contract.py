@@ -19,8 +19,11 @@ def transfer_values(data):
         raise ValueError("Ставка после перевода должна быть положительным числом.") from None
     if not rate.is_finite() or rate <= 0:
         raise ValueError("Ставка после перевода должна быть положительным числом.")
+    rate_text = format(rate.normalize(), "f")
+    rate_ru = rate_text.replace(".", ",") if "." in rate_text else rate_text + ",0"
     return {
         "position.title_ru": str(data["position_ru"]).strip(), "position.title_kk": str(data["position_kk"]).strip(),
         "org_unit.title_ru": str(data["org_unit_ru"]).strip(), "org_unit.title_kk": str(data["org_unit_kk"]).strip(),
-        "rate": format(rate.normalize(), "f"), "basis.ru": str(data["basis_ru"]).strip(), "basis.kk": str(data["basis_kk"]).strip(),
+        "rate": rate_text, "rate.ru": rate_ru,
+        "basis.ru": str(data["basis_ru"]).strip(), "basis.kk": str(data["basis_kk"]).strip(),
     }

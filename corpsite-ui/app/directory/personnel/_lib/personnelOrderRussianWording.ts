@@ -41,7 +41,7 @@ function text(value: unknown): string {
 }
 
 /** The existing document_forms_ru contract wins over any calculated suggestion. */
-export function savedRussianEmployeeNameForm(employee: unknown, form: "dative" | "genitive"): string {
+export function savedRussianEmployeeNameForm(employee: unknown, form: "dative" | "genitive" | "accusative"): string {
   if (!employee || typeof employee !== "object") return "";
   const row = employee as Record<string, unknown>;
   const key = `employee_full_name_${form}_ru`;

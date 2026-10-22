@@ -222,6 +222,7 @@ class PersonnelOrderItemCreateIn(BaseModel):
 
 
 class PersonnelOrderItemUpdateIn(BaseModel):
+    template_version_id: Optional[int] = Field(default=None, ge=1)
     model_config = {"extra": "forbid"}
 
     item_type_code: Optional[str] = Field(default=None, min_length=1, max_length=80)

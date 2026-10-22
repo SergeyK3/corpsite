@@ -26,6 +26,7 @@ vi.mock("@/lib/orgScope", async (importOriginal) => {
 vi.mock("@/app/directory/employees/_lib/api.client", () => ({
   getEmployees: vi.fn(async () => ({ items: [], total: 0 })),
   getEmployee: vi.fn(),
+  getPositions: vi.fn(async () => ({items: [{position_id: 501, name: "Врач-терапевт", name_kk: "Терапевт дәрігер", document_possessive_kk: "Терапевт дәрігері"}], total: 1})),
 }));
 
 const CLINICAL_GROUP_ID = 1;
@@ -35,7 +36,7 @@ const ADMIN_GROUP_ID = 3;
 const orgUnitCatalog = [
   { unit_id: 42, name: "Стационар 1", group_id: CLINICAL_GROUP_ID },
   { unit_id: 43, name: "Стационар 2", group_id: CLINICAL_GROUP_ID },
-  { unit_id: 44, name: "Амбулатория", group_id: CLINICAL_GROUP_ID },
+  { unit_id: 44, name: "Амбулатория", name_kk: "Емхана", document_genitive_kk: "Емхананың", group_id: CLINICAL_GROUP_ID },
   { unit_id: 73, name: "Отдел кадров", group_id: ADMIN_GROUP_ID },
   { unit_id: 56, name: "Лаборатория", group_id: 2 },
 ];
@@ -73,6 +74,13 @@ async function selectOrgGroup(groupId: string) {
   fireEvent.change(groupSelect, { target: { value: groupId } });
 }
 
+function openSavedItem() {
+  // Adding now uses the inherited template form. Exercise the existing item
+  // editor here, which owns the cascade and dictionary hydration callbacks.
+  render(<PersonnelOrderItemEditor orderId={1} orderTypeCode="HIRE" items={[{item_id: 1, order_id: 1, item_number: 1, item_type_code: "HIRE", item_status: "ACTIVE", payload: {}}]} onChanged={vi.fn()}/>);
+  fireEvent.click(screen.getByRole("button", {name: "Редактировать"}));
+}
+
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
@@ -89,7 +97,7 @@ beforeEach(() => {
 
 describe("PersonnelOrderItemEditor cascade integration", () => {
   it("shows clinical subdivisions after group selection and excludes HR department", async () => {
-    render(<PersonnelOrderItemEditor orderId={1} orderTypeCode="HIRE" items={[]} onChanged={vi.fn()} />);
+    openSavedItem();
 
     await selectOrgGroup(String(CLINICAL_GROUP_ID));
 
@@ -106,7 +114,7 @@ describe("PersonnelOrderItemEditor cascade integration", () => {
   });
 
   it("loads positions after subdivision selection and allows choosing position", async () => {
-    render(<PersonnelOrderItemEditor orderId={1} orderTypeCode="HIRE" items={[]} onChanged={vi.fn()} />);
+    openSavedItem();
 
     await selectOrgGroup(String(CLINICAL_GROUP_ID));
 
@@ -128,10 +136,16 @@ describe("PersonnelOrderItemEditor cascade integration", () => {
     expect(await screen.findByRole("option", { name: "Врач-терапевт" })).toBeInTheDocument();
     fireEvent.change(positionSelect, { target: { value: "501" } });
     expect(positionSelect).toHaveValue("501");
+    await waitFor(() => {
+      const fields = screen.getByTestId("common-position-document-forms").querySelectorAll("input");
+      expect(fields[0]).toHaveValue("врач-терапевт");
+      expect(fields[1]).toHaveValue("Терапевт дәрігері");
+      expect(fields[2]).toHaveValue("Емхананың");
+    });
   });
 
   it("clears subdivision and position when group changes", async () => {
-    render(<PersonnelOrderItemEditor orderId={1} orderTypeCode="HIRE" items={[]} onChanged={vi.fn()} />);
+    openSavedItem();
 
     await selectOrgGroup(String(CLINICAL_GROUP_ID));
 
@@ -155,7 +169,7 @@ describe("PersonnelOrderItemEditor cascade integration", () => {
   });
 
   it("clears position when subdivision changes", async () => {
-    render(<PersonnelOrderItemEditor orderId={1} orderTypeCode="HIRE" items={[]} onChanged={vi.fn()} />);
+    openSavedItem();
 
     await selectOrgGroup(String(CLINICAL_GROUP_ID));
 
@@ -177,7 +191,7 @@ describe("PersonnelOrderItemEditor cascade integration", () => {
   });
 
   it("does not leave subdivision select empty when clinical group has units", async () => {
-    render(<PersonnelOrderItemEditor orderId={1} orderTypeCode="HIRE" items={[]} onChanged={vi.fn()} />);
+    openSavedItem();
 
     await selectOrgGroup(String(CLINICAL_GROUP_ID));
 

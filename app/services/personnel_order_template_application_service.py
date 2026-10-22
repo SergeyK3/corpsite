@@ -5,6 +5,7 @@ from typing import Any, Mapping
 from sqlalchemy import text
 from app.db.engine import engine
 from app.services.personnel_order_template_validation import validate_template_texts
+from app.services.personnel_order_rate_format import format_template_rate
 from app.services.personnel_orders_editorial.service import get_editorial_state
 from app.services.personnel_orders_editorial.position_dictionary import document_nominative_personnel_order_position, localized_personnel_order_position
 from app.services.personnel_order_termination_reason import termination_reason_text
@@ -113,6 +114,8 @@ def _values(conn:Any,item:Mapping[str,Any],template:Mapping[str,Any]|None=None):
    if basis["document_date"]: values.update({"basis.application_date_ru":" от "+format_leave_date(basis["document_date"],"ru"),"basis.application_date_kk":" "+format_leave_date(basis["document_date"],"kk")+" күнгі"})
    if basis["document_number"]:values["basis.application_number_suffix"]=" № "+str(basis["document_number"])
  if str(item["item_type_code"]) == "TRANSFER":
+  from app.services.personnel_order_transfer_name import confirmed_transfer_accusative
+  values["employee.full_name_accusative_ru"] = confirmed_transfer_accusative(payload)
   if "transfer" in payload:
    from app.services.personnel_order_transfer_contract import transfer_values
    try: values.update(transfer_values(payload["transfer"]))
@@ -146,6 +149,12 @@ def _values(conn:Any,item:Mapping[str,Any],template:Mapping[str,Any]|None=None):
   from app.services.personnel_orders_editorial.generators import format_personnel_order_date_numeric, _format_date_from
   day = str(item.get("effective_date") or "")
   values.update({"effective_date.ru":format_personnel_order_date_numeric(day), "effective_date.kk":_format_date_from(day,"kk") if day else ""})
+ if str(item["item_type_code"]) == "TRANSFER":
+  from app.services.personnel_order_russian_reference_forms import russian_order_unit_name
+  from app.services.personnel_orders_editorial.generators import _format_rate_value
+  values["org_unit.title_ru"] = russian_order_unit_name(values["org_unit.title_ru"])
+  if values.get("rate"):
+   values["rate.ru"] = _format_rate_value(values["rate"])
  return values,warnings,missing
 def _render(template:Mapping[str,Any],values:Mapping[str,str], *, draft_preview:bool=False, item_only:bool=False):
  texts={k:template[k] for k in _FIELDS}
@@ -159,13 +168,27 @@ def _render(template:Mapping[str,Any],values:Mapping[str,str], *, draft_preview:
  from app.services.personnel_order_work_allowance_contract import enabled as work_enabled
  if work_enabled(texts): optional_tokens.add('concurrent.rate')
  def each(key,value):
+  source_text = value
   def repl(match):
-   token=match.group(1); value=values.get(f"{token}.{'kk' if key.endswith('_kk') else 'ru'}",values.get(token,"")); missing.add(token) if not value.strip() and token not in optional_tokens and not token.startswith("basis.application_") else None; return value
+   token=match.group(1)
+   # Historical transfer templates used the canonical or dative token after
+   # «Перевести». Resolve only that grammatical position; KK and titles keep
+   # their original name. Never derive an accusative from a saved dative.
+   if (template.get('item_type_code') == 'TRANSFER' and key == 'body_template_ru'
+       and re.search(r'Перевести\s*$', source_text[:match.start()], re.IGNORECASE)
+       and token in {'employee.full_name', 'employee.full_name_dative_ru', 'employee.full_name_accusative_ru'}):
+    token = 'employee.full_name_accusative_ru'
+   value=values.get(f"{token}.{'kk' if key.endswith('_kk') else 'ru'}",values.get(token,""))
+   value=format_template_rate(str(template['item_type_code']),token,value)
+   missing.add(token) if not value.strip() and token not in optional_tokens and not token.startswith("basis.application_") else None
+   return value
   return _TOKEN.sub(repl,value)
  result={key:(value if item_only and key.startswith(("title_", "preamble_")) else each(key,value)) for key,value in texts.items()}
  if missing:
   if template.get("item_type_code") == "TRANSFER":
    labels={"rate":"ставка после перевода", "basis":"основание перевода", "position.title_ru":"новая должность (RU)", "position.title_kk":"новая должность (KK)", "org_unit.title_ru":"новое подразделение (RU)", "org_unit.title_kk":"новое подразделение (KK)", "employee.full_name":"ФИО сотрудника", "effective_date":"дата перевода"}
+   labels['employee.full_name_dative_ru']='ФИО в дательном падеже (RU)'
+   labels['employee.full_name_accusative_ru']='подтверждённое ФИО в винительном падеже (RU); заполните вручную'
    raise TemplateApplicationError("Заполните обязательные данные шаблона: " + ", ".join(labels.get(field,field) for field in sorted(missing)))
   raise TemplateApplicationError("Required template data is missing: " + ", ".join(sorted(missing)))
 

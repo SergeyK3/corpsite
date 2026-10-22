@@ -240,7 +240,7 @@ export const PERSONNEL_ORDER_ITEM_FORM_TYPE_OPTIONS: ReadonlyArray<{
   { value: "RATE_CHANGE", label: "Изменение ставки" },
   {
     value: "CONCURRENT_DUTY_START",
-    label: PERSONNEL_ORDER_TYPE_LABELS.CONCURRENT_DUTY_START,
+    label: "Совмещение",
   },
   {
     value: "CONCURRENT_DUTY_END",
@@ -289,6 +289,14 @@ export function detectUiItemTypeFromRecord(item: PersonnelOrderItem): string {
   const backendType = String(item.item_type_code || "").trim().toUpperCase();
   if (backendType === "TRANSFER") {
     const payload = item.payload || {};
+    const transfer = payload.transfer;
+    if (transfer && typeof transfer === "object" && !Array.isArray(transfer)) {
+      const placement = transfer as Record<string, unknown>;
+      if (["org_unit_id", "position_id", "org_unit_ru", "org_unit_kk", "position_ru", "position_kk"]
+        .some(key => placement[key] != null && String(placement[key]).trim() !== "")) {
+        return "TRANSFER";
+      }
+    }
     const hasOrg = payload.to_org_unit_id != null && payload.to_org_unit_id !== "";
     const hasPos = payload.to_position_id != null && payload.to_position_id !== "";
     const hasRate =
@@ -342,7 +350,7 @@ export function itemFormTypeOptionsForOrder(
   const primary = normalizeItemFormType(normalized);
   if (!primary) return PERSONNEL_ORDER_ITEM_FORM_TYPE_OPTIONS;
   const extras: PersonnelOrderItemFormType[] =
-    primary === "TRANSFER" ? ["RATE_CHANGE"] : [];
+    primary === "TRANSFER" ? ["RATE_CHANGE", "CONCURRENT_DUTY_START"] : [];
   const values = new Set<PersonnelOrderItemFormType>([primary, ...extras]);
   return PERSONNEL_ORDER_ITEM_FORM_TYPE_OPTIONS.filter((row) => values.has(row.value));
 }

@@ -20,13 +20,17 @@ HEADS = {
 }
 
 
+def russian_order_unit_name(source):
+    """Russian document wording, matching the standard order generator."""
+    value = str(source or '').strip().lower()
+    return 'приемное отделение' if value == 'приемное' else value
+
+
 def russian_reference_case(source, form):
     import re
-    value = str(source or '').strip().lower()
+    value = russian_order_unit_name(source)
     if not value:
         return ''
-    if value == 'приемное':
-        value = 'приемное отделение'
     found = False
     result = []
     for word in value.split():

@@ -400,6 +400,7 @@ def preview_draft(item_type_code: str, values: Mapping[str, str]) -> dict[str, A
         "rate": "[[Ставка]]",
         "termination.reason": "[[Причина увольнения]]", "termination.unused_leave_days": "[[Количество дней неиспользованного отпуска]]", "effective_date_local": "[[Дата увольнения]]", "concurrent.rate": "[[Ставка совмещения]]", "total.rate": "[[Итоговая ставка]]", "remaining.rate": "[[Остающаяся ставка]]",
     }
+    samples['employee.full_name_accusative_ru'] = '[[Подтверждённое ФИО в винительном падеже]]'
     locale_samples = {
         "ru": {**samples, "effective_date": "[[Дата выхода]]", "effective_date_local": "[[Дата выхода]]", "basis": "[[Основание]]"},
         "kk": {**samples, "employee.full_name": "[[Қызметкердің аты-жөні]]", "position.title_ru": "[[Лауазым]]", "position.title_kk": "[[Лауазым]]", "org_unit.title_ru": "[[Бөлімше]]", "org_unit.title_kk": "[[Бөлімше]]", "leave.days": "[[Күн саны]]", "basis.application_date_kk": " [[Өтініш күні]]", "basis.application_number_suffix": " № [[Өтініш нөмірі]]", "effective_date": "[[Жұмысқа шығу күні]]", "effective_date_local": "[[Жұмыстан босату күні]]", "rate": "[[Мөлшерлеме]]", "basis": "[[Негіз]]", "termination.reason": "[[Жұмыстан босату себебі]]", "termination.unused_leave_days": "[[Пайдаланылмаған демалыс күндерінің саны]]", "concurrent.rate": "[[Қоса атқару мөлшерлемесі]]", "total.rate": "[[Жалпы мөлшерлеме]]", "remaining.rate": "[[Қалған мөлшерлеме]]"},
@@ -418,7 +419,8 @@ def preview_draft(item_type_code: str, values: Mapping[str, str]) -> dict[str, A
         for samples in locale_samples.values():
             samples.update({"employee.full_name_genitive_ru": "[[ФИО в родительном падеже]]", "basis.birth_certificate_date_ru": "[[Дата выдачи свидетельства]]", "basis.birth_certificate_date_kk": "[[Куәліктің берілген күні]]", "basis.birth_certificate_number": "[[Номер свидетельства]]"})
     def render(value: str, locale: str) -> str:
-        result = _TOKEN.sub(lambda m: locale_samples[locale][m.group(1)], value)
+        from app.services.personnel_order_rate_format import format_template_rate
+        result = _TOKEN.sub(lambda m: format_template_rate(item_type_code,m.group(1),locale_samples[locale][m.group(1)]), value)
         if item_type_code == "LEAVE.CHILDCARE.GRANT":
             from app.services.personnel_order_childcare_contract import without_directive
             result = without_directive(result)

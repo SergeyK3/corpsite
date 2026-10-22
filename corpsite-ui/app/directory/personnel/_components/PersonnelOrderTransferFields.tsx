@@ -5,6 +5,7 @@ import { getPositions } from "@/app/directory/employees/_lib/api.client";
 import { apiFetchJson } from "@/lib/api";
 import type { OrgUnitSelectOption } from "@/lib/orgUnitsSelect";
 import {russianReferenceCase} from '../_lib/personnelOrderRussianWording';
+import {refreshAutomaticForm} from '../_lib/personnelOrderConcurrentForms';
 import {calculateKazakhOrgUnitGenitive,calculateKazakhPositionPossessive} from '../_lib/kazakhDocumentForms';
 import { generatePersonnelOrderBasisText } from "../_lib/personnelOrderBasisGenerate";
 import { normalizePersonnelOrderBasisText } from "../_lib/personnelOrderBasisText";
@@ -61,8 +62,8 @@ function SearchField({ label, value, options, locale, onEdit, onSelect, disabled
   </div>;
 }
 
-export default function PersonnelOrderTransferFields({ value, onChange, orgUnits, disabled = false, mode = "transfer", showRates = true, rateOptional = false, showBasis = true, placementLabel, documentFormsKK = false, autoCaseForms=false, onManualEdit }: {
-  value: TransferFields; onChange: React.Dispatch<React.SetStateAction<TransferFields>>; orgUnits: OrgUnitSelectOption[]; disabled?: boolean; mode?: "transfer" | "concurrent" | "cessation"; showRates?: boolean; rateOptional?: boolean; showBasis?: boolean; placementLabel?: string; documentFormsKK?: boolean; autoCaseForms?:boolean; onManualEdit?:(key:keyof TransferFields)=>void;
+export default function PersonnelOrderTransferFields({ value, onChange, orgUnits, disabled = false, mode = "transfer", showRates = true, rateOptional = false, showBasis = true, placementLabel, documentFormsKK = false, autoCaseForms=false, autoGenitiveForms=false, onManualEdit }: {
+  value: TransferFields; onChange: React.Dispatch<React.SetStateAction<TransferFields>>; orgUnits: OrgUnitSelectOption[]; disabled?: boolean; mode?: "transfer" | "concurrent" | "cessation"; showRates?: boolean; rateOptional?: boolean; showBasis?: boolean; placementLabel?: string; documentFormsKK?: boolean; autoCaseForms?:boolean; autoGenitiveForms?: boolean; onManualEdit?:(key:keyof TransferFields)=>void;
 }) {
   const cessation = mode === "cessation";
   const concurrent = mode === "concurrent" || cessation;
@@ -72,15 +73,15 @@ export default function PersonnelOrderTransferFields({ value, onChange, orgUnits
   const editedForms=React.useRef(new Set<string>());
   const previousForms=React.useRef<Record<string,string>>({});
   React.useEffect(()=>{
-    if(!autoCaseForms)return;
+    if(!autoCaseForms && !autoGenitiveForms)return;
     const generated={position_genitive_ru:russianReferenceCase(value.position_ru,'genitive'),org_unit_genitive_ru:russianReferenceCase(value.org_unit_ru,'genitive')};
     const previous=previousForms.current;previousForms.current=generated;
     onChange(current=>{
       const changes:Partial<TransferFields>={};
-      for(const key of ['position_genitive_ru','org_unit_genitive_ru'] as const)if(!editedForms.current.has(key)&&(!current[key]||current[key]===previous[key]))changes[key]=generated[key];
+      for(const key of ['position_genitive_ru','org_unit_genitive_ru'] as const)changes[key]=refreshAutomaticForm(current[key] || "",previous[key],generated[key],editedForms.current.has(key));
       return Object.keys(changes).some(key=>current[key as keyof TransferFields]!==changes[key as keyof TransferFields])?{...current,...changes}:current;
     });
-  },[value.position_ru,value.org_unit_ru,autoCaseForms]);
+  },[value.position_ru,value.org_unit_ru,autoCaseForms,autoGenitiveForms]);
   React.useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -118,7 +119,7 @@ export default function PersonnelOrderTransferFields({ value, onChange, orgUnits
     onChange(current => {
       const same = String(current[idKey] ?? "") === option.id;
       const formKey=kind === "position" ? "position_genitive_ru" : "org_unit_genitive_ru";
-      return { ...current, ...(concurrent && !same && kind !== "basis" && (!autoCaseForms||!editedForms.current.has(formKey)) ? {[formKey]:autoCaseForms?russianReferenceCase(option.ru,'genitive'):""} : {}), [idKey]: kind === "basis" ? option.id : Number(option.id),
+      return { ...current, ...(concurrent && !same && kind !== "basis" && !autoCaseForms && !autoGenitiveForms && !editedForms.current.has(formKey) ? {[formKey]:""} : {}), [idKey]: kind === "basis" ? option.id : Number(option.id),
         [`${kind}_ru`]: same && locale !== "ru" && current[`${kind}_ru`].trim() ? current[`${kind}_ru`] : (same && locale === "ru" && !option.ru ? previousText : option.ru),
         [`${kind}_kk`]: same && locale !== "kk" && current[`${kind}_kk`].trim() ? current[`${kind}_kk`] : (same && locale === "kk" && !option.kk ? previousText : option.kk) };
     });
@@ -136,9 +137,10 @@ export default function PersonnelOrderTransferFields({ value, onChange, orgUnits
     {concurrent ? <>
       <p className="text-xs">{placementLabel ? "Уточните должность и подразделение замещаемого сотрудника в родительном падеже." : autoCaseForms ? "Дополнительная должность и подразделение необязательны. В распорядительном тексте используются данные назначения получателя." : "Уточните русские названия в родительном падеже для текста приказа. Основная должность в этот текст не подставляется."}</p>
       {([['position_genitive_ru',`${placementLabel || 'Дополнительная'} должность в родительном падеже (RU)`],['org_unit_genitive_ru',`${placementLabel ? placementLabel.replace(/ая$/, 'ое') : 'Дополнительное'} подразделение в родительном падеже (RU)`]] as const).map(([key,label]) => <label key={key} className="block text-sm font-medium">{label}<input aria-label={label} value={value[key] || ""} disabled={disabled} onChange={e => {editedForms.current.add(key);onManualEdit?.(key);onChange(current=>({...current,[key]:e.target.value}));}} className={inputClass}/></label>)}
+      {autoGenitiveForms && !rateOptional && (!value.position_genitive_ru || !value.org_unit_genitive_ru) ? <p role="alert" className="text-xs text-amber-700">Нет надёжной формы в родительном падеже для дополнительной должности или подразделения (RU). Заполните недостающее поле вручную.</p> : null}
     </> : null}
-    {showRates ? <label className="block text-sm font-medium">{cessation ? "Снимаемая ставка" : concurrent ? "Дополнительная ставка" : "Ставка после перевода"}<input aria-label={cessation ? "Снимаемая ставка" : concurrent ? "Дополнительная ставка" : "Ставка после перевода"} required={!rateOptional} type="number" step="any" value={value.rate} disabled={disabled} onChange={e => onChange(current => ({...current, rate:e.target.value}))} className={inputClass} /></label> : null}
-    {concurrent && showRates ? <label className="block text-sm font-medium">{cessation ? "Оставшаяся общая ставка" : "Общая ставка"}<input aria-label={cessation ? "Оставшаяся общая ставка" : "Общая ставка"} required type="number" step="any" value={(cessation ? value.remaining_rate : value.total_rate) || ""} disabled={disabled} onChange={e=>onChange(current=>({...current,[cessation ? "remaining_rate" : "total_rate"]:e.target.value}))} className={inputClass}/></label> : null}
+    {showRates ? <label className="block text-sm font-medium">{cessation ? "Снимаемая ставка" : concurrent ? "Дополнительная ставка" : "Ставка после перевода"}<input aria-label={cessation ? "Снимаемая ставка" : concurrent ? "Дополнительная ставка" : "Ставка после перевода"} required={!rateOptional} type={mode === "concurrent" && !rateOptional ? "text" : "number"} step="any" inputMode="decimal" value={value.rate} disabled={disabled} onChange={e => onChange(current => ({...current, rate:e.target.value}))} className={inputClass} /></label> : null}
+    {concurrent && showRates ? <label className="block text-sm font-medium">{cessation ? "Оставшаяся общая ставка" : "Общая ставка"}<input aria-label={cessation ? "Оставшаяся общая ставка" : "Общая ставка"} required type={cessation || rateOptional ? "number" : "text"} step="any" inputMode="decimal" value={(cessation ? value.remaining_rate : value.total_rate) || ""} disabled={disabled} onChange={e=>onChange(current=>({...current,[cessation ? "remaining_rate" : "total_rate"]:e.target.value}))} className={inputClass}/></label> : null}
     {showBasis ? <><p className="text-xs">Выбор формулировки основания не прикрепляет документ. Основания можно уточнить вручную.</p>
     {(["ru", "kk"] as const).map(locale => <SearchField key={locale} label={`${cessation ? "Основание прекращения совмещения" : concurrent ? "Основание совмещения" : "Основание перевода"} (${locale.toUpperCase()})`} value={value[`basis_${locale}`]} locale={locale} options={basisOptions} disabled={disabled} onEdit={text => onChange(current => ({ ...current, [`basis_${locale}`]: text }))} onSelect={(option, previousText) => choose("basis", option, locale, previousText)} />)}
     </> : null}

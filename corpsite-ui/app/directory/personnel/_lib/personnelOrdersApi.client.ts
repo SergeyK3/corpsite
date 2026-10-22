@@ -363,6 +363,7 @@ export type PersonnelOrderItemCreatePayload = {
 };
 
 export type PersonnelOrderItemUpdatePayload = {
+  template_version_id?: number;
   item_type_code?: string;
   employee_id?: number | null;
   effective_date?: string | null;

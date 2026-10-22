@@ -9,7 +9,7 @@ import {
 import type { LocalizedText } from "./personnelOrderPrintLocalized";
 import { resolveLocalizedText } from "./personnelOrderPrintLocalized";
 import { resolvePersonnelOrderPositionText } from "./personnelOrderPositionDictionary";
-import { russianEmployeeForOrder, russianOrderAssignment } from "./personnelOrderRussianWording";
+import { russianEmployeeForOrder, russianOrderAssignment, savedRussianEmployeeNameForm } from "./personnelOrderRussianWording";
 
 export type PersonnelOrderPrintItemContext = {
   itemNumber: number;
@@ -65,7 +65,8 @@ function renderTransfer(ctx: PersonnelOrderPrintItemContext, lang: "kk" | "ru"):
   const employee = russianEmployeeForOrder(fio);
   if (employee) {
     const ratePart = rateValue ? ` с оплатой ${rateValue} ставки` : "";
-    return `Перевести сотрудника ${employee} с ${date} на должность ${russianOrderAssignment(position, org)}${ratePart}.`;
+    const accusative = savedRussianEmployeeNameForm(ctx.payload, "accusative") || "[ФИО в винительном падеже (RU): заполните вручную]";
+    return `Перевести сотрудника ${accusative} с ${date} на должность ${russianOrderAssignment(position, org)}${ratePart}.`;
   }
   const ratePart = rateValue ? ` со ставкой ${rateValue}` : "";
   return `Перевести ${fio} в подразделение «${org}» на должность «${position}»${ratePart} с ${date}.`;

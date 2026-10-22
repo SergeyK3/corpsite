@@ -52,7 +52,7 @@ from app.services.personnel_order_recall_contract import VARIABLES as RECALL_VAR
 
 PERSONNEL_ORDER_TEMPLATE_SPECS = {
     'LEAVE.ANNUAL.RECALL': _spec('LEAVE.ANNUAL.RECALL', RECALL_VARIABLES, required=RECALL_REQUIRED, preview={'ru': {'effective_date': '[[Дата отзыва]]'}, 'kk': {'effective_date': '[[Шақырту күні]]'}}),
-    "HIRE": _spec("HIRE", _COMMON), "TRANSFER": _spec("TRANSFER", _COMMON),
+    "HIRE": _spec("HIRE", _COMMON), "TRANSFER": _spec("TRANSFER", _COMMON + ("employee.full_name_dative_ru", "employee.full_name_accusative_ru")),
     "TERMINATION": _spec("TERMINATION", ("employee.full_name", "position.title_ru", "position.title_kk", "org_unit.title_ru", "org_unit.title_kk", "effective_date", "effective_date_local", "termination.reason", "termination.unused_leave_days", "basis"), preview={"ru": {"effective_date": "[[Дата увольнения]]", "effective_date_local": "[[Дата увольнения]]"}, "kk": {"effective_date": "[[Жұмыстан босату күні]]", "effective_date_local": "[[Жұмыстан босату күні]]"}}),
     "CONCURRENT_DUTY_START": _spec("CONCURRENT_DUTY_START", CONCURRENT_VARIABLES + REPLACEMENT_VARIABLES + SERVICE_AREA_VARIABLES, preview=CONCURRENT_PREVIEW),
     "CONCURRENT_DUTY_END": _spec("CONCURRENT_DUTY_END", CESSATION_VARIABLES, preview=CESSATION_PREVIEW),

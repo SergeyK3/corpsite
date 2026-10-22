@@ -1,9 +1,12 @@
 "use client";
 
+import PersonnelOrderTransferFields, {type TransferFields} from "./PersonnelOrderTransferFields";
+import PersonnelOrderReplacementFields, {blankReplacement, type ReplacementFields} from "./PersonnelOrderReplacementFields";
 import PersonnelOrderInheritedItemForm from "./PersonnelOrderInheritedItemForm";
 import * as React from "react";
+import {concurrentEmployeeDatives, refreshAutomaticForm} from "../_lib/personnelOrderConcurrentForms";
 
-import { getEmployee, getEmployees } from "@/app/directory/employees/_lib/api.client";
+import { getEmployee, getEmployees, getPositions } from "@/app/directory/employees/_lib/api.client";
 import OrgScopeFilter from "@/components/OrgScopeFilter";
 import OrgUnitScopeFilter from "@/components/OrgUnitScopeFilter";
 import {
@@ -17,6 +20,8 @@ import { HR_DOSSIER_TITLE } from "@/lib/personnelCardTerminology";
 import { resolveEmployeeOrgScopePrefill } from "@/lib/userCreateOrgScope";
 
 import {
+  getPersonnelOrderPublishedVariants,
+  type PersonnelPublishedTemplateVariant,
   createPersonnelOrderItem,
   deletePersonnelOrderItem,
   mapPersonnelOrdersApiError,
@@ -328,7 +333,28 @@ export default function PersonnelOrderItemEditor({
   React.useEffect(() => {
     if (error && formDisclosure.current) formDisclosure.current.open = true;
   }, [error]);
+  const [rateTemplates, setRateTemplates] = React.useState<PersonnelPublishedTemplateVariant[]>([]);
+  const [rateTemplateError, setRateTemplateError] = React.useState("");
+  React.useEffect(() => {
+    if (itemTypeCode !== "CONCURRENT_DUTY_START" || editingItemId == null) return;
+    let cancelled = false;
+    setRateTemplateError("");
+    getPersonnelOrderPublishedVariants("CONCURRENT_DUTY_START").then(result => {
+      if (!cancelled) setRateTemplates(result.items.filter(row => !row.replacement_mode || row.replacement_mode === "RATE"));
+    }).catch(error => {if (!cancelled) setRateTemplateError(mapPersonnelOrdersApiError(error, "Не удалось загрузить шаблоны совмещения."));});
+    return () => {cancelled = true;};
+  }, [itemTypeCode, editingItemId]);
   const employeeSelectionRevision = React.useRef(0);
+  const automaticEmployeeForms = React.useRef<Record<string, string>>({});
+  const manualEmployeeForms = React.useRef(new Set<string>());
+  function fillConcurrentEmployeeForms(employee: unknown) {
+    const next = concurrentEmployeeDatives(employee);
+    const previous = automaticEmployeeForms.current;
+    automaticEmployeeForms.current = next;
+    setPayloadDraft(current => ({...current, ...Object.fromEntries(Object.entries(next).map(([key,value]) =>
+      [key, refreshAutomaticForm(String(current[key as keyof ItemPayloadDraft] || ""), previous[key], value, manualEmployeeForms.current.has(key))],
+    ))}));
+  }
   const ruGenitiveEdited = React.useRef(false);
   const editedPositionForms = React.useRef(new Set<string>());
 
@@ -534,7 +560,7 @@ export default function PersonnelOrderItemEditor({
       position_title_ru: "",
       position_title_kk: "",
       org_unit_title_kk: "",
-      employee_full_name_dative_kk: "",
+      employee_full_name_dative_kk: itemTypeCode === "CONCURRENT_DUTY_START" ? prev.employee_full_name_dative_kk : "",
       employee_full_name_genitive_kk: "",
       ...(itemTypeCode === "LEAVE.CHILDCARE.GRANT" ? { employee_full_name_dative_ru: "", employee_full_name_genitive_ru: "", position_document_nominative_ru: "" } : {}),
     }));
@@ -567,17 +593,24 @@ export default function PersonnelOrderItemEditor({
         org_unit_title_kk: assignmentUnit?.name_kk || "",
         position_document_nominative_ru: editedPositionForms.current.has("position_document_nominative_ru") ? prev.position_document_nominative_ru : positionForms.position_document_nominative_ru,
         position_document_possessive_kk: editedPositionForms.current.has("position_document_possessive_kk") ? prev.position_document_possessive_kk : positionForms.position_document_possessive_kk,
-        employee_full_name_dative_kk: firstNonEmpty(storedDative, automaticDative.value),
+        employee_full_name_dative_kk: itemTypeCode === "CONCURRENT_DUTY_START" ? prev.employee_full_name_dative_kk : firstNonEmpty(storedDative, automaticDative.value),
         employee_full_name_genitive_kk: firstNonEmpty(storedGenitive, automaticGenitive.value),
         ...(itemTypeCode === "LEAVE.CHILDCARE.GRANT" ? { employee_full_name_dative_ru: savedRussianEmployeeNameForm(details, "dative"), employee_full_name_genitive_ru: ruGenitiveEdited.current ? prev.employee_full_name_genitive_ru : russianEmployeeGenitiveForOrder(details), position_document_nominative_ru: editedPositionForms.current.has("position_document_nominative_ru") ? prev.position_document_nominative_ru : positionForms.position_document_nominative_ru } : {}),
       }));
+      if (itemTypeCode === "CONCURRENT_DUTY_START") fillConcurrentEmployeeForms(details);
+      if (itemTypeCode === "TRANSFER") setPayloadDraft(prev => ({...prev, employee_full_name_accusative_ru: savedRussianEmployeeNameForm(details, "accusative")}));
       if (config?.showCurrentPlacement) {
-        setCurrentPlacement(await resolveCurrentPlacementView(selected));
+        setCurrentPlacement(await resolveCurrentPlacementView(selected).catch(() => null));
       } else {
         setCurrentPlacement(null);
       }
     } catch {
       if (selectionRevision !== employeeSelectionRevision.current) return;
+      if (itemTypeCode === "CONCURRENT_DUTY_START") {
+        fillConcurrentEmployeeForms(null);
+        setCurrentPlacement(null);
+        return;
+      }
       // The picker already has an explicit selected employee.  A transient
       // detail request failure must not leave calculable name forms empty.
       const automaticDative = calculateKazakhPersonForm({ fio: option.full_name }, "dative");
@@ -595,22 +628,39 @@ export default function PersonnelOrderItemEditor({
     }
   }
 
-  async function loadCurrentPlacementByEmployeeId(id: number, fallbackName?: string | null) {
+  async function loadCurrentPlacementByEmployeeId(id: number, fallbackName?: string | null, formType = itemTypeCode) {
+    const revision = employeeSelectionRevision.current;
     try {
       const details = await getEmployee(String(id));
+      if (revision !== employeeSelectionRevision.current) return;
+      if (formType === "CONCURRENT_DUTY_START") fillConcurrentEmployeeForms(details);
+      if (formType === "TRANSFER") setPayloadDraft(prev => ({...prev, employee_full_name_accusative_ru: manualEmployeeForms.current.has("employee_full_name_accusative_ru") ? prev.employee_full_name_accusative_ru : prev.employee_full_name_accusative_ru || savedRussianEmployeeNameForm(details, "accusative")}));
       const option = employeeDtoToSearchOption(details);
       if (!option.full_name && fallbackName) {
         option.full_name = fallbackName;
       }
       const placement = await resolveCurrentPlacementView(option);
+      if (revision !== employeeSelectionRevision.current) return;
       setCurrentPlacement(placement);
+      // Historical rate-only items have no unit in their payload. Resolve the
+      // text form from their employee's dictionary record when reopening.
+      if (formType === "RATE_CHANGE") {
+        const unitForms = resolvePersonnelOrderOrgUnitForms(details.org_unit);
+        setPayloadDraft(previous => ({...previous,
+          org_unit_document_genitive_kk: previous.org_unit_document_genitive_kk || unitForms.org_unit_document_genitive_kk,
+          org_unit_title_ru: previous.org_unit_title_ru || unitForms.org_unit_title_ru,
+          org_unit_title_kk: previous.org_unit_title_kk || details.org_unit?.name_kk || "",
+        }));
+      }
     } catch {
-      setCurrentPlacement(null);
+      if (revision === employeeSelectionRevision.current) setCurrentPlacement(null);
     }
   }
 
   async function startEdit(item: PersonnelOrderItem) {
     ++employeeSelectionRevision.current;
+    automaticEmployeeForms.current = {};
+    manualEmployeeForms.current.clear();
     const uiType = detectUiItemTypeFromRecord(item);
     const normalizedUiType = normalizeItemFormType(uiType) ?? defaultItemType;
     const draft = itemPayloadDraftFromRecord(item.payload);
@@ -652,7 +702,7 @@ export default function PersonnelOrderItemEditor({
 
     const config = getItemFormRegistry(normalizedUiType);
     if (item.employee_id && config?.showCurrentPlacement) {
-      void loadCurrentPlacementByEmployeeId(item.employee_id, item.employee_name);
+      void loadCurrentPlacementByEmployeeId(item.employee_id, item.employee_name, normalizedUiType);
     }
 
     const unitId = selectedOrgUnitIdFromDraft(draft, normalizedUiType);
@@ -676,8 +726,13 @@ export default function PersonnelOrderItemEditor({
 
   function handleItemTypeChange(nextType: PersonnelOrderItemFormType) {
     ++employeeSelectionRevision.current;
+    automaticEmployeeForms.current = {};
+    manualEmployeeForms.current.clear();
     setItemTypeCode(nextType);
-    setPayloadDraft(emptyItemPayloadDraft());
+    setPayloadDraft(previous => nextType === "CONCURRENT_DUTY_START" ? {...emptyItemPayloadDraft(),
+      employee_full_name_dative_ru: previous.employee_full_name_dative_ru,
+      employee_full_name_dative_kk: previous.employee_full_name_dative_kk,
+    } : emptyItemPayloadDraft());
     setSelectedEmployeeId(null);
     setTerminationReasonSuggested(false);
     setEditingBasis(false);
@@ -706,6 +761,7 @@ export default function PersonnelOrderItemEditor({
   }
 
   function updatePayloadField<K extends keyof ItemPayloadDraft>(key: K, value: string) {
+    if (key === "employee_full_name_dative_ru" || key === "employee_full_name_dative_kk" || key === "employee_full_name_accusative_ru") manualEmployeeForms.current.add(key);
     if (key === "position_document_possessive_kk" || key === "position_document_nominative_ru" || key === "org_unit_document_genitive_kk") editedPositionForms.current.add(key);
     if (key === "employee_full_name_genitive_ru") ruGenitiveEdited.current = true;
     setCalculatedKkFields((previous) => { const next = new Set(previous); next.delete(String(key)); return next; });
@@ -723,12 +779,36 @@ export default function PersonnelOrderItemEditor({
     setPayloadDraft((prev) => clearOrgDependentFields(prev, "HIRE"));
   }
 
-  function handleOrgUnitChange(nextUnitId: number | null) {
-    setPayloadDraft((prev) => setOrgUnitAndClearPosition(prev, itemTypeCode, nextUnitId));
+  function handleOrgUnitChange(nextUnitId: number | null, placementType = itemTypeCode) {
+    const unit = orgUnitCatalogOptions.find(row => row.unit_id === nextUnitId);
+    setPayloadDraft(prev => ({...setOrgUnitAndClearPosition(prev, placementType, nextUnitId),
+      ...resolvePersonnelOrderOrgUnitForms(unit), org_unit_title_kk: unit?.name_kk || "",
+      position_title_ru: "", position_title_kk: "", position_document_nominative_ru: "", position_document_possessive_kk: "",
+    }));
   }
 
-  function handlePositionChange(nextPositionId: string) {
-    setPayloadDraft((prev) => setPositionId(prev, itemTypeCode, nextPositionId));
+  function handlePositionChange(nextPositionId: string, placementType = itemTypeCode) {
+    setPayloadDraft(prev => ({...setPositionId(prev, placementType, nextPositionId), position_title_ru: "", position_title_kk: "", position_document_nominative_ru: "", position_document_possessive_kk: ""}));
+    const selectionType = placementType;
+    const revision = employeeSelectionRevision.current;
+    void (async () => {
+      let offset = 0;
+      while (true) {
+        const response = await getPositions({limit: 1000, offset});
+        if (revision !== employeeSelectionRevision.current) return;
+        const position = response.items.find((row: {position_id: number; name: string; name_kk?: string}) => String(row.position_id) === nextPositionId);
+        if (!position) {
+          offset += response.items.length;
+          if (!response.items.length || offset >= (response.total ?? offset)) return;
+          continue;
+        }
+        setPayloadDraft(prev => selectedPositionIdFromDraft(prev, selectionType) !== nextPositionId ? prev : {...prev,
+          position_title_ru: position.name || "", position_title_kk: position.name_kk || "",
+          ...resolvePersonnelOrderDocumentForms(position),
+        });
+        return;
+      }
+    })().catch(() => {if (revision === employeeSelectionRevision.current) setError("Не удалось загрузить названия должности из справочника. Повторите выбор.");});
   }
 
   function handleSubmit(e: React.FormEvent): Promise<boolean> {
@@ -818,7 +898,21 @@ export default function PersonnelOrderItemEditor({
         payload.org_unit_name = currentPlacement.org_unit_name || null;
         payload.position_name = currentPlacement.position_name || null;
       }
+      if (backendType === "CONCURRENT_DUTY_START") {
+        if (savedItem?.item_type_code !== backendType && !payloadDraft.concurrent_template_version_id) {
+          throw new Error("Выберите опубликованный шаблон совмещения по ставке.");
+        }
+        delete payload.transfer;
+        delete payload.to_rate;
+        delete payload.to_org_unit_id;
+        delete payload.to_position_id;
+        if (payloadDraft.concurrent) {
+          delete payload.concurrent_rate; delete payload.total_rate;
+          if (!payloadDraft.replacement) delete payload.replacement;
+        }
+      }
       const body = {
+        ...(backendType === "CONCURRENT_DUTY_START" && payloadDraft.concurrent_template_version_id ? {template_version_id: payloadDraft.concurrent_template_version_id} : {}),
         item_type_code: backendType,
         employee_id: resolvedEmployeeId,
         effective_date: isLeave ? leaveStart : effectiveDate || null,
@@ -866,6 +960,7 @@ export default function PersonnelOrderItemEditor({
       // validation error). Only a changed existing item or a nonempty new
       // item needs the same submit path as the form.
       const meaningfulDraftFields: Array<keyof ItemPayloadDraft> = [
+        "employee_full_name_accusative_ru",
         "leave_start", "leave_end", "leave_days", "work_period_start", "work_period_end", "work_period_days",
         "application_date", "application_number", "vacation_benefit_rule", "leave_note",
         "birth_certificate_date", "birth_certificate_number", "employee_full_name_dative_ru", "employee_full_name_genitive_ru", "position_document_nominative_ru",
@@ -941,7 +1036,7 @@ export default function PersonnelOrderItemEditor({
               unitsError={orgUnitsError}
               onChange={(unitId) => {
                 if (formConfig?.showHirePlacement) {
-                  setPayloadDraft((prev) => setOrgUnitAndClearPosition(prev, "HIRE", unitId));
+                  handleOrgUnitChange(unitId, "HIRE");
                 } else {
                   handleOrgUnitChange(unitId);
                 }
@@ -953,7 +1048,7 @@ export default function PersonnelOrderItemEditor({
                 value={selectedPositionIdFromDraft(payloadDraft, cascadeType)}
                 onChange={(e) => {
                   if (formConfig?.showHirePlacement) {
-                    setPayloadDraft((prev) => setPositionId(prev, "HIRE", e.target.value));
+                    handlePositionChange(e.target.value, "HIRE");
                   } else {
                     handlePositionChange(e.target.value);
                   }
@@ -1168,6 +1263,32 @@ export default function PersonnelOrderItemEditor({
   }
 
   function renderAdditionalSection() {
+    if (formConfig?.showConcurrentDutyStartFields) {
+      const value: TransferFields = {position_ru:"",position_kk:"",org_unit_ru:"",org_unit_kk:"",basis_ru:"",basis_kk:"",rate:payloadDraft.concurrent_rate || "",total_rate:payloadDraft.total_rate || "",...payloadDraft.concurrent};
+      const setConcurrent: React.Dispatch<React.SetStateAction<TransferFields>> = change => setPayloadDraft(previous => {
+        const current = {...value,...previous.concurrent};
+        return {...previous, concurrent: typeof change === "function" ? change(current) : change};
+      });
+      return <section className="space-y-3" data-testid="concurrent-item-editor">
+        <FormField label="Шаблон совмещения по ставке">
+          <select aria-label="Шаблон совмещения по ставке" value={payloadDraft.concurrent_template_version_id || ""} onChange={event => {
+            const version = Number(event.target.value) || undefined;
+            const template = rateTemplates.find(row => row.template_version_id === version);
+            setPayloadDraft(previous => ({...previous, concurrent: previous.concurrent || value, concurrent_template_version_id: version,
+              replacement: template?.replacement_mode === "RATE" ? {...blankReplacement(),...previous.replacement,mode:"RATE"} as ReplacementFields : undefined}));
+          }} className={FIELD_INPUT_CLASS}>
+            <option value="">Закреплённый шаблон (без замены)</option>
+            {rateTemplates.map(row => <option key={row.template_version_id} value={row.template_version_id}>{row.name_ru} — {row.replacement_mode === "RATE" ? "RATE, замещение" : "доля ставки"} (версия {row.template_version_id})</option>)}
+          </select>
+          {rateTemplateError ? <p role="alert">{rateTemplateError}</p> : !rateTemplates.length ? <p role="status">Опубликованные шаблоны по ставке не загружены или отсутствуют.</p> : null}
+        </FormField>
+        <PersonnelOrderTransferFields value={value} onChange={setConcurrent} orgUnits={orgUnitCatalogOptions} mode="concurrent" autoGenitiveForms />
+        {!payloadDraft.employee_full_name_dative_kk?.trim() ? <p role="alert" className="text-xs text-amber-700">Нет сохранённой формы ФИО (KK) или надёжных данных для штатного склонения. Заполните ФИО в дательном падеже (KK) вручную.</p> : null}
+        {([['employee_full_name_dative_ru','ФИО в дательном падеже (RU)'],['employee_full_name_dative_kk','ФИО в дательном падеже (KK)']] as const).map(([key,label]) => <FormField key={key} label={label}><input aria-label={label} value={payloadDraft[key] || ""} onChange={event => updatePayloadField(key,event.target.value)} className={FIELD_INPUT_CLASS}/></FormField>)}
+        {payloadDraft.replacement ? <PersonnelOrderReplacementFields value={{...blankReplacement(),...payloadDraft.replacement}} onChange={change => setPayloadDraft(previous => {const current={...blankReplacement(),...previous.replacement};return {...previous,replacement: typeof change === "function" ? change(current) : change};})} orgUnits={orgUnitCatalogOptions} mode="RATE" start={effectiveDate}/> : null}
+      </section>;
+    }
+
     if (itemTypeCode === "LEAVE.ANNUAL.GRANT" || itemTypeCode === "LEAVE.UNPAID.GRANT" || itemTypeCode === "LEAVE.CHILDCARE.GRANT") {
       const annual = itemTypeCode === "LEAVE.ANNUAL.GRANT";
       const childcare = itemTypeCode === "LEAVE.CHILDCARE.GRANT";
@@ -1216,6 +1337,7 @@ export default function PersonnelOrderItemEditor({
     }
     return (
       <div className="grid gap-3 sm:grid-cols-2">
+        {itemTypeCode === "TRANSFER" ? <FormField label="ФИО в винительном падеже (RU)"><input aria-label="ФИО в винительном падеже (RU)" value={payloadDraft.employee_full_name_accusative_ru || ""} onChange={e => updatePayloadField("employee_full_name_accusative_ru", e.target.value)} className={FIELD_INPUT_CLASS}/>{!payloadDraft.employee_full_name_accusative_ru?.trim() ? <p role="alert">Нет подтверждённого ФИО в винительном падеже (RU). Заполните вручную.</p> : null}</FormField> : null}
         {formConfig?.showTargetRate && formConfig.showTargetPlacement ? (
           <FormField label="Новая ставка">
             <input
@@ -1262,25 +1384,6 @@ export default function PersonnelOrderItemEditor({
               </select>
               {terminationReasonSuggested ? <p className={FIELD_HINT_CLASS} data-testid="personnel-order-termination-reason-suggestion">Определено по основанию: личное заявление работника</p> : null}
           </FormField>
-        ) : null}
-
-        {formConfig?.showConcurrentDutyStartFields ? (
-          <>
-            <FormField label="Ставка совмещения">
-              <input
-                value={payloadDraft.concurrent_rate || ""}
-                onChange={(e) => updatePayloadField("concurrent_rate", e.target.value)}
-                className={FIELD_INPUT_CLASS}
-              />
-            </FormField>
-            <FormField label="Итоговая ставка">
-              <input
-                value={payloadDraft.total_rate || ""}
-                onChange={(e) => updatePayloadField("total_rate", e.target.value)}
-                className={FIELD_INPUT_CLASS}
-              />
-            </FormField>
-          </>
         ) : null}
 
         {formConfig?.showConcurrentDutyEndFields ? (
@@ -1483,11 +1586,11 @@ export default function PersonnelOrderItemEditor({
 
           <fieldset disabled={saving} className="space-y-4">
             {sectionOrder.map((section) => renderFormSection(section))}
-            {itemTypeCode !== "LEAVE.CHILDCARE.GRANT" && <section className="grid gap-3 sm:grid-cols-2" data-testid="common-position-document-forms">
+            {itemTypeCode !== "LEAVE.CHILDCARE.GRANT" && itemTypeCode !== "CONCURRENT_DUTY_START" && <section className="grid gap-3 sm:grid-cols-2" data-testid="common-position-document-forms">
               <FormField label="RU: должность (документная форма)"><input value={payloadDraft.position_document_nominative_ru || ""} onChange={e => updatePayloadField("position_document_nominative_ru", e.target.value)} className={FIELD_INPUT_CLASS} /></FormField>
               {itemTypeCode !== "LEAVE.UNPAID.GRANT" && <>
                 <FormField label="KK: лауазым (құжат нысаны)"><input value={payloadDraft.position_document_possessive_kk || ""} onChange={e => updatePayloadField("position_document_possessive_kk", e.target.value)} className={FIELD_INPUT_CLASS} /></FormField>
-                <FormField label="KK: подразделение в тексте"><input value={payloadDraft.org_unit_document_genitive_kk || ""} onChange={e => updatePayloadField("org_unit_document_genitive_kk", e.target.value)} className={FIELD_INPUT_CLASS} /></FormField>
+                <FormField label="KK: подразделение в тексте"><input aria-label="KK: подразделение в тексте" value={payloadDraft.org_unit_document_genitive_kk || ""} onChange={e => updatePayloadField("org_unit_document_genitive_kk", e.target.value)} className={FIELD_INPUT_CLASS} /></FormField>
               </>}
             </section>}
 

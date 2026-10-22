@@ -15,6 +15,16 @@ import {
 } from "./personnelOrderLabels";
 
 describe("personnelOrderPayload", () => {
+  it("reopens explicit concurrent placement and preserves its names independently of the main assignment", () => {
+    const source = {concurrent: {position_id: 77, org_unit_id: 43, position_ru: "Врач", position_kk: "Дәрігер", org_unit_ru: "Терапия", org_unit_kk: "Терапия бөлімшесі", rate: 0.75, total_rate: 1.75, employee_dative_ru: "Тестову Тесту Тестовичу", employee_dative_kk: "Тестовқа", custom_context: {keep: true}}, document_forms_ru: {employee_full_name_dative_ru: "Старая форма"}};
+    const draft = itemPayloadDraftFromRecord(JSON.parse(JSON.stringify(source)));
+    expect(draft.concurrent).toMatchObject({rate: "0.75", total_rate: "1.75", position_id: 77, org_unit_id: 43});
+    const payload = buildItemPayload("CONCURRENT_DUTY_START", {...draft, concurrent: {...draft.concurrent!, rate: "0,25", total_rate: "1,25"}});
+    expect(payload.concurrent).toMatchObject({...source.concurrent, rate: "0.25", total_rate: "1.25"});
+    expect(payload).not.toHaveProperty("to_rate");
+    expect(payload).not.toHaveProperty("employment_rate");
+    expect(source.concurrent.rate).toBe(0.75);
+  });
   it("round-trips childcare dates, both grounds and saved RU/KK forms independently", () => {
     const draft = { ...emptyItemPayloadDraft(), leave_start: "2026-08-01", leave_end: "2029-02-13",
       application_date: "2026-07-28", application_number: "APP-17", birth_certificate_date: "2026-02-13", birth_certificate_number: "9967264",
@@ -105,6 +115,7 @@ describe("personnelOrderPayload", () => {
       to_rate: 0.75,
     });
     expect(buildItemPayload("TRANSFER", draft)).toEqual({
+      document_forms_ru: {employee_full_name_accusative_ru: ""},
       to_org_unit_id: 5,
       to_position_id: 8,
       to_rate: 0.75,

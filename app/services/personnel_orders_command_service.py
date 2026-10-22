@@ -342,7 +342,16 @@ def _next_item_number(conn, order_id: int) -> int:
     return int(current or 0) + 1
 
 
+def _validate_combined_rates(conn, order_id: int) -> None:
+    from app.services.personnel_order_combined_rates import validate_order_combined_rates
+    try:
+        validate_order_combined_rates(conn, order_id)
+    except ValueError as exc:
+        raise PersonnelOrderValidationError(str(exc)) from exc
+
+
 def _validate_registerable_order(conn, order: Dict[str, Any]) -> None:
+    _validate_combined_rates(conn, int(order["order_id"]))
     order_number = str(order.get("order_number") or "").strip()
     if not order_number:
         raise PersonnelOrderValidationError("order_number is required before registration.")
@@ -647,6 +656,7 @@ def create_personnel_order_item_tx(
             "item_status": ITEM_STATUS_ACTIVE,
         },
     ).scalar_one()
+    _validate_combined_rates(conn, int(order_id))
     return int(item_id)
 
 
@@ -862,6 +872,7 @@ def create_personnel_order_item(
                 "item_status": ITEM_STATUS_ACTIVE,
             },
         ).scalar_one()
+        _validate_combined_rates(conn, order_id)
         resolved_type = _resolve_header_type_from_items(conn, order_id, str(order['order_type_code']))
         render_added_item(conn, order_id=order_id, item_id=int(new_item_id), template=template, actor_user_id=int(actor_user_id or order['created_by']))
 
@@ -1004,6 +1015,8 @@ def update_personnel_order_item(
     period_end: Optional[date] = None,
     payload: Optional[Dict[str, Any]] = None,
     item_number: Optional[int] = None,
+    template_version_id: Optional[int] = None,
+    actor_user_id: Optional[int] = None,
 ) -> Dict[str, Any]:
     _require_available()
 
@@ -1065,6 +1078,30 @@ def update_personnel_order_item(
         merged_employee_id = updates.get("employee_id", current_item.get("employee_id"))
         merged_payload_raw = payload if payload is not None else current_item.get("payload")
         merged_payload = merged_payload_raw if isinstance(merged_payload_raw, dict) else {}
+        template = None
+        if template_version_id is not None:
+            template = conn.execute(text("SELECT * FROM personnel_order_template_versions WHERE template_version_id=:id AND item_type_code=:code AND status='PUBLISHED' FOR SHARE"), {"id": template_version_id, "code": merged_type}).mappings().first()
+            if template is None:
+                raise PersonnelOrderValidationError("Выбранная опубликованная версия шаблона недоступна или не соответствует типу пункта.")
+            from app.services.personnel_order_manual_draft_service import prepare_manual_item_payload
+            current_date = conn.execute(text("SELECT effective_date FROM personnel_order_items WHERE item_id=:id"), {"id": item_id}).scalar_one()
+            merged_payload = prepare_manual_item_payload(conn, item_type_code=merged_type, employee_id=merged_employee_id, effective_date=updates.get("effective_date", current_date), period_start=period_start, period_end=period_end, item_payload=merged_payload, template_version_id=template_version_id)
+            updates["payload"] = json.dumps(merged_payload, ensure_ascii=False)
+        elif str(merged_type) != str(current_item["item_type_code"]):
+            raise PersonnelOrderValidationError("При изменении типа пункта выберите опубликованный шаблон.")
+        elif (merged_type in {"TRANSFER", "CONCURRENT_DUTY_START"}
+              and isinstance(merged_payload.get("transfer" if merged_type == "TRANSFER" else "concurrent"), dict)):
+            # Saving a bound point must refresh its text even when the user
+            # keeps its exact template. Never select a current default here.
+            bound_order = conn.execute(text("SELECT * FROM personnel_orders WHERE order_id=:id"), {"id": order_id}).mappings().one()
+            has_binding = bound_order.get("selected_template_version_id") is not None or conn.execute(
+                text("SELECT EXISTS(SELECT 1 FROM personnel_order_template_applications WHERE order_id=:id)"), {"id": order_id}
+            ).scalar_one()
+            if has_binding:
+                from app.services.personnel_order_item_templates import resolve_item_templates
+                active_items = list(conn.execute(text("SELECT * FROM personnel_order_items WHERE order_id=:id AND item_status='ACTIVE' ORDER BY item_number,item_id"), {"id": order_id}).mappings())
+                template = resolve_item_templates(conn, bound_order, active_items)[int(item_id)]
+                template_version_id = int(template["template_version_id"])
         current_periods = conn.execute(
             text("SELECT effective_date, period_start, period_end FROM public.personnel_order_items WHERE item_id = :item_id"),
             {"item_id": int(item_id)},
@@ -1114,6 +1151,16 @@ def update_personnel_order_item(
             ),
             params,
         )
+        _validate_combined_rates(conn, int(order_id))
+        if template is not None:
+            from app.services.personnel_order_add_item_service import render_added_item
+            render_added_item(conn, order_id=order_id, item_id=item_id, template=dict(template), actor_user_id=int(actor_user_id or order['created_by']))
+            first_id = conn.execute(text("SELECT item_id FROM personnel_order_items WHERE order_id=:id AND item_status='ACTIVE' ORDER BY item_number,item_id LIMIT 1"), {"id": order_id}).scalar_one()
+            if int(first_id) == int(item_id):
+                conn.execute(text("UPDATE personnel_orders SET selected_template_version_id=:v WHERE order_id=:id"), {"v": template_version_id, "id": order_id})
+            resolved_type = _resolve_header_type_from_items(conn, order_id, str(order['order_type_code']))
+            conn.execute(text("UPDATE personnel_orders SET order_type_code=:type, document_revision=document_revision+1 WHERE order_id=:id"), {"type": resolved_type, "id": order_id})
+
         conn.execute(
             text(
                 """

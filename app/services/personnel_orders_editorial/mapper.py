@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 from datetime import date, datetime
 from typing import Any, Dict, Mapping, Optional
+from app.services.personnel_order_transfer_name import confirmed_transfer_accusative
 
 
 def effective_text(override_text: Optional[str], generated_text: Optional[str]) -> str:
@@ -84,6 +85,7 @@ def build_item_ctx(item: Mapping[str, Any], employee_name: Optional[str]) -> Dic
         "recall_payload": payload if item.get("item_type_code") == "LEAVE.ANNUAL.RECALL" else None,
         "childcare_payload": payload if item.get("item_type_code") == "LEAVE.CHILDCARE.GRANT" else None,
         "employee_name": employee_name or pick_payload_value(payload, "source_employee_name"),
+        "employee_full_name_accusative_ru": confirmed_transfer_accusative(payload),
         "effective_date": iso_date(item.get("effective_date")),
         "org_unit_name": org_unit_name,
         "org_unit_document_genitive_kk": document_forms_kk.get("org_unit_document_genitive_kk"),

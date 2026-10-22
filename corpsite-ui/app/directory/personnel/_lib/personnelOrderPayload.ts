@@ -1,6 +1,12 @@
+import type { TransferFields } from "../_components/PersonnelOrderTransferFields";
+import type { ReplacementFields } from "../_components/PersonnelOrderReplacementFields";
 import type { PersonnelOrderType } from "./personnelOrderLabels";
 
 export type ItemPayloadDraft = {
+  employee_full_name_accusative_ru?: string;
+  concurrent?: TransferFields;
+  replacement?: ReplacementFields;
+  concurrent_template_version_id?: number;
   job_code?: string;
   position_title_ru?: string;
   position_title_kk?: string;
@@ -76,6 +82,8 @@ export function emptyItemPayloadDraft(): ItemPayloadDraft {
 
 export function itemPayloadDraftFromRecord(payload: Record<string, unknown> | null | undefined): ItemPayloadDraft {
   const source = payload || {};
+  const concurrent = source.concurrent && typeof source.concurrent === "object" && !Array.isArray(source.concurrent)
+    ? source.concurrent as Record<string, unknown> : undefined;
   const asString = (key: string, fallback = "") =>
     source[key] == null || source[key] === "" ? fallback : String(source[key]);
 
@@ -110,6 +118,12 @@ export function itemPayloadDraftFromRecord(payload: Record<string, unknown> | nu
     workPeriods.push({ start: String(source.work_period_start || ""), end: String(source.work_period_end || ""), days: String(source.work_period_days || "") });
   }
   return {
+    concurrent: concurrent ? {...concurrent, ...Object.fromEntries(
+      ["position_ru", "position_kk", "org_unit_ru", "org_unit_kk", "position_genitive_ru", "org_unit_genitive_ru", "basis_ru", "basis_kk", "rate", "total_rate"]
+        .map(key => [key, String(concurrent[key] ?? "")]),
+    )} as TransferFields : undefined,
+    employee_full_name_accusative_ru: String(ruForms.employee_full_name_accusative_ru || nestedForm("employee", ["full_name_accusative_ru"]) || ""),
+    replacement: source.replacement && typeof source.replacement === "object" && !Array.isArray(source.replacement) ? {...source.replacement} as ReplacementFields : undefined,
     org_unit_title_ru: asString("source_org_unit_name"),
     job_code: source.job_code == null ? undefined : String(source.job_code),
     position_title_ru: source.position_title_ru == null ? undefined : String(source.position_title_ru),
@@ -120,12 +134,12 @@ export function itemPayloadDraftFromRecord(payload: Record<string, unknown> | nu
     work_period_start: asString("work_period_start"), work_period_end: asString("work_period_end"), work_period_days: asString("work_period_days"),
     application_date: asString("basis_date", asString("application_date", typeof basis.date === "string" ? basis.date : "")), application_number: asString("basis_number", asString("application_number", typeof basis.number === "string" ? basis.number : "")),
     birth_certificate_date: String(certificate.date || ""), birth_certificate_number: String(certificate.number || ""),
-    employee_full_name_dative_ru: String(ruForms.employee_full_name_dative_ru || ""), employee_full_name_genitive_ru: String(ruForms.employee_full_name_genitive_ru || ""), position_document_nominative_ru: String(ruForms.position_document_nominative_ru || ""),
+    employee_full_name_dative_ru: String(concurrent?.employee_dative_ru || ruForms.employee_full_name_dative_ru || ""), employee_full_name_genitive_ru: String(ruForms.employee_full_name_genitive_ru || ""), position_document_nominative_ru: String(ruForms.position_document_nominative_ru || ""),
     vacation_benefit_applicable: source.vacation_benefit_applicable === true,
     vacation_benefit_rule: asString("vacation_benefit_rule"), leave_note: asString("note"),
     org_unit_document_genitive_kk: documentForm(["org_unit_document_genitive_kk", "org_unit_genitive", "document_genitive_kk"], "org_unit_name", ["document_genitive_kk", "genitive_kk"]),
     position_document_possessive_kk: documentForm(["position_document_possessive_kk", "position_possessive", "document_possessive_kk"], "position_name", ["document_possessive_kk", "possessive_kk"]),
-    employee_full_name_dative_kk: documentForm(["employee_full_name_dative_kk", "employee_dative", "full_name_dative_kk"], "employee", ["full_name_dative_kk", "dative_kk"]),
+    employee_full_name_dative_kk: String(concurrent?.employee_dative_kk || "") || documentForm(["employee_full_name_dative_kk", "employee_dative", "full_name_dative_kk"], "employee", ["full_name_dative_kk", "dative_kk"]),
     employee_full_name_genitive_kk: documentForm(["employee_full_name_genitive_kk", "employee_genitive", "full_name_genitive_kk"], "employee", ["full_name_genitive_kk", "genitive_kk"]),
     org_unit_id: asString("org_unit_id"),
     position_id: asString("position_id"),
@@ -265,6 +279,7 @@ export function buildItemPayload(
   }
 
   if (type === "TRANSFER") {
+    payload.document_forms_ru = {employee_full_name_accusative_ru: draft.employee_full_name_accusative_ru || ""};
     const toOrg = optionalNumber(draft.to_org_unit_id);
     const toPos = optionalNumber(draft.to_position_id);
     const toRate = optionalNumber(draft.to_rate);
@@ -283,6 +298,12 @@ export function buildItemPayload(
   }
 
   if (type === "CONCURRENT_DUTY_START") {
+    if (draft.concurrent) {
+      payload.concurrent = {...draft.concurrent, rate: String(draft.concurrent.rate || "").replace(",", "."), total_rate: String(draft.concurrent.total_rate || "").replace(",", "."), employee_dative_ru: draft.employee_full_name_dative_ru || "", employee_dative_kk: draft.employee_full_name_dative_kk || ""};
+      if (draft.replacement) payload.replacement = draft.replacement;
+      appendBasisSelection(payload, draft);
+      return payload;
+    }
     const concurrentRate = optionalNumber(draft.concurrent_rate);
     const totalRate = optionalNumber(draft.total_rate);
     if (concurrentRate != null) payload.concurrent_rate = concurrentRate;

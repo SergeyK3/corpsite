@@ -38,6 +38,7 @@ vi.mock("@/lib/orgScope", async (importOriginal) => {
 vi.mock("@/app/directory/employees/_lib/api.client", () => ({
   getEmployees: vi.fn(async () => ({ items: [], total: 0 })),
   getEmployee: vi.fn(),
+  getPositions: vi.fn(async () => ({items:[],total:0})),
 }));
 
 vi.mock("@/lib/taskOrgFilters", async (importOriginal) => {
@@ -123,6 +124,7 @@ vi.mock("../_lib/personnelOrdersApi.client", async (importOriginal) => {
   return {
     ...actual,
     getPersonnelOrderAddItemContext: vi.fn().mockResolvedValue({available: false, reason: "No bound template in legacy edit fixture"}),
+    getPersonnelOrderPublishedVariants: vi.fn(async () => ({items:[{template_id:30,template_version_id:49,name_ru:"Совмещение по ставке",replacement_mode:null}]})),
     createPersonnelOrderItem: vi.fn(),
     deletePersonnelOrderItem: vi.fn(),
     updatePersonnelOrderItem: vi.fn(),
@@ -757,5 +759,74 @@ describe("PersonnelOrderItemEditor startEdit org scope", () => {
       expect(screen.getByTestId("personnel-order-item-type-select")).toHaveValue("RATE_CHANGE");
     });
     expect(screen.getByTestId("personnel-order-new-rate-input")).toHaveValue("0.5");
+  });
+
+  it("reopens the TRANSFER form from the saved nested placement rather than RATE_CHANGE", async () => {
+    const saved = JSON.parse(JSON.stringify({item_id:10,order_id:1,item_number:1,item_type_code:"TRANSFER",item_status:"ACTIVE",employee_id:138,employee_name:"Тестов Тест Тестович",effective_date:"2026-11-01",payload:{to_rate:1,transfer:{org_unit_id:43,position_ru:"Врач",org_unit_ru:"Хирургия 2",rate:1}}}));
+    const props={orderId:1,items:[saved],onChanged:vi.fn()};
+    const first=render(<PersonnelOrderItemEditor {...props}/>);
+    first.unmount();
+    render(<PersonnelOrderItemEditor {...props} items={JSON.parse(JSON.stringify(props.items))}/>);
+    fireEvent.click(screen.getByRole("button",{name:"Редактировать"}));
+    await waitFor(()=>expect(screen.getByTestId("personnel-order-item-type-select")).toHaveValue("TRANSFER"));
+  });
+});
+
+
+describe("concurrent duty in the draft item editor", () => {
+  it.each([false,true])("autofills reopened concurrent names and preserves manual KK edits=%s on employee change", async manual => {
+    const first={...activeEmployee,fio:"Тестова Альбина Сериковна",first_name:"Альбина",middle_name:"Сериковна",last_name:"Маженова"};
+    vi.mocked(getEmployee).mockResolvedValue(first);
+    render(<PersonnelOrderItemEditor orderId={1} orderTypeCode="COMPOSITE" items={[{item_id:11,order_id:1,item_number:2,item_type_code:"CONCURRENT_DUTY_START",item_status:"ACTIVE",employee_id:138,payload:{concurrent:{position_ru:"Врач",org_unit_ru:"Отделение терапии",rate:"0.25",total_rate:"1.25"}}}]} onChanged={vi.fn()}/>);
+    fireEvent.click(screen.getByRole("button",{name:"Редактировать"}));
+    const kk=screen.getByLabelText("ФИО в дательном падеже (KK)");
+    await waitFor(()=>expect(kk).toHaveValue("Альбина Сериковна Маженоваға"));
+    expect(screen.getByLabelText("Дополнительная должность в родительном падеже (RU)")).toHaveValue("врача");
+    expect(screen.getByLabelText("Дополнительное подразделение в родительном падеже (RU)")).toHaveValue("отделения терапии");
+    if(manual)fireEvent.change(kk,{target:{value:"Ручная форма КК"}});
+    const second={...activeEmployee,id:"139",fio:"Тестов Второй Сотрудник",document_forms_kk:{employee_full_name_dative_kk:"Подтверждённая вторая форма"}};
+    vi.mocked(getEmployee).mockResolvedValue(second);
+    vi.mocked(getEmployees).mockResolvedValue({items:[second],total:1});
+    fireEvent.click(screen.getByRole("button",{name:"Сменить сотрудника"}));
+    fireEvent.change(screen.getByTestId("personnel-order-employee-search-input"),{target:{value:"Второй"}});
+    fireEvent.click(await screen.findByTestId("personnel-order-employee-option-139"));
+    await waitFor(()=>expect(getEmployee).toHaveBeenLastCalledWith("139"));
+    await waitFor(()=>expect(kk).toHaveValue(manual?"Ручная форма КК":"Подтверждённая вторая форма"));
+  });
+  it("keeps the KK warning for ambiguous source data and allows a manual correction", async () => {
+    const ambiguous={...activeEmployee,first_name:"Тест",last_name:"Серги"};
+    vi.mocked(getEmployee).mockResolvedValue(ambiguous);
+    render(<PersonnelOrderItemEditor orderId={1} orderTypeCode="COMPOSITE" items={[{item_id:11,order_id:1,item_number:2,item_type_code:"CONCURRENT_DUTY_START",item_status:"ACTIVE",employee_id:138,payload:{concurrent:{position_ru:"Врач",org_unit_ru:"Отделение терапии",rate:"0.75",total_rate:"1.75"}}}]} onChanged={vi.fn()}/>);
+    fireEvent.click(screen.getByRole("button",{name:"Редактировать"}));
+    await waitFor(()=>expect(getEmployee).toHaveBeenCalled());
+    expect(screen.getByText(/Нет сохранённой формы ФИО/)).toBeInTheDocument();
+    expect(screen.getByLabelText("ФИО в дательном падеже (KK)")).toHaveValue("");
+    fireEvent.change(screen.getByLabelText("ФИО в дательном падеже (KK)"),{target:{value:"Уточнённая форма КК"}});
+    expect(screen.queryByText(/Нет сохранённой формы ФИО/)).not.toBeInTheDocument();
+  });
+  it.each([["0,25","1,25"],["0,5","1,5"],["0,75","1,75"]])("saves %s explicitly and preserves the separate transfer", async (rate,total) => {
+    const transfer = {item_id:10,order_id:1,item_number:1,item_type_code:"TRANSFER",item_status:"ACTIVE",employee_id:138,effective_date:"2026-11-01",payload:{transfer:{org_unit_id:73,position_id:77,rate:1,org_unit_ru:"Терапия",org_unit_kk:"Терапия бөлімшесі"},to_rate:1}};
+    const concurrent = {item_id:11,order_id:1,item_number:2,item_type_code:"CONCURRENT_DUTY_START",item_status:"ACTIVE",employee_id:138,effective_date:"2026-11-01",payload:{concurrent:{position_ru:"Врач",position_kk:"дәрігер",org_unit_ru:"Терапия",org_unit_kk:"Терапия бөлімшесі",position_genitive_ru:"врача",org_unit_genitive_ru:"терапии",basis_ru:"Заявление",basis_kk:"Өтініш",rate:"0.25",total_rate:"1.25",employee_dative_ru:"Тестову Тесту Тестовичу",employee_dative_kk:"Тестовқа"}}};
+    const snapshot = JSON.stringify(transfer);
+    render(<PersonnelOrderItemEditor orderId={1} orderTypeCode="TRANSFER" items={[transfer,JSON.parse(JSON.stringify(concurrent))]} onChanged={vi.fn()}/>);
+    fireEvent.click(screen.getAllByRole("button",{name:"Редактировать"})[1]);
+    expect(screen.getByTestId("personnel-order-item-type-select")).toHaveValue("CONCURRENT_DUTY_START");
+    expect(screen.getByRole("option",{name:"Совмещение"})).toBeInTheDocument();
+    await screen.findByRole("option",{name:/Совмещение по ставке/});
+    fireEvent.change(screen.getByLabelText("Шаблон совмещения по ставке"),{target:{value:"49"}});
+    fireEvent.change(screen.getByLabelText("Дополнительная ставка"),{target:{value:rate}});
+    expect(screen.getByLabelText("Общая ставка")).toHaveValue("1.25");
+    fireEvent.change(screen.getByLabelText("Общая ставка"),{target:{value:total}});
+    fireEvent.click(screen.getByRole("button",{name:"Сохранить пункт"}));
+    await waitFor(()=>expect(updatePersonnelOrderItem).toHaveBeenCalled());
+    expect(updatePersonnelOrderItem).toHaveBeenLastCalledWith(1,11,expect.objectContaining({item_type_code:"CONCURRENT_DUTY_START",template_version_id:49,payload:expect.objectContaining({concurrent:expect.objectContaining({rate:rate.replace(',','.'),total_rate:total.replace(',','.'),org_unit_kk:"Терапия бөлімшесі",employee_dative_ru:"Тестову Тесту Тестовичу"})})}));
+    expect(JSON.stringify(transfer)).toBe(snapshot);
+  });
+  it("fills the missing KK unit form when reopening a historical rate change", async () => {
+    vi.mocked(getEmployee).mockResolvedValue({...activeEmployee,org_unit:{...activeEmployee.org_unit,name_kk:"Терапия бөлімшесі",document_genitive_kk:"Терапия бөлімшесінің"}});
+    render(<PersonnelOrderItemEditor orderId={1} orderTypeCode="TRANSFER" items={[{item_id:12,order_id:1,item_number:1,item_type_code:"TRANSFER",item_status:"ACTIVE",employee_id:138,payload:{to_rate:0.5}}]} onChanged={vi.fn()}/>);
+    fireEvent.click(screen.getByRole("button",{name:"Редактировать"}));
+    await waitFor(()=>expect(screen.getByLabelText("KK: подразделение в тексте")).toHaveValue("Терапия бөлімшесінің"));
+    expect(screen.getByTestId("personnel-order-item-type-select")).toHaveValue("RATE_CHANGE");
   });
 });

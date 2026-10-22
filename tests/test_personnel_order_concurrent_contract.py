@@ -19,7 +19,7 @@ def test_renderer_uses_additional_placement_and_never_main_position():
     assert "врача отделения терапии" in texts['body_template_ru']
     assert "терапия бөлімшесінің дәрігер" in texts['body_template_kk']
     for key in ('body_template_ru','body_template_kk'):
-        assert '0.5' in texts[key] and '1.5' in texts[key]
+        assert '0,5' in texts[key] and '1,5' in texts[key]
         assert 'Директор' not in texts[key] and 'Администрация' not in texts[key] and '{{' not in texts[key]
 
 def test_saved_preview_has_dative_date_and_real_rates():
@@ -27,7 +27,7 @@ def test_saved_preview_has_dative_date_and_real_rates():
     assert '2026 жылғы 21 мамырдан' in preview['kk']['body']
     assert 'Иванову Ивану Ивановичу' in preview['ru']['body']
     assert 'с 21.05.2026' in preview['ru']['body']
-    assert '0.5' in preview['ru']['body'] and '1.5' in preview['kk']['body']
+    assert '0,5' in preview['ru']['body'] and '1,5' in preview['kk']['body']
 
 @pytest.mark.parametrize('rate,total',[(0,1.5),(-1,1.5),('NaN',1.5),(0.5,0.5),(0.5,'Infinity')])
 def test_invalid_rates_block_creation(rate,total):

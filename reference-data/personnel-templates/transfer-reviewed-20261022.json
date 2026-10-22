@@ -1,0 +1,10 @@
+{
+  "title_ru": "О переводе",
+  "title_kk": "Ауыстыру туралы",
+  "preamble_ru": "В соответствии со статьей 38 Трудового кодекса Республики Казахстан",
+  "preamble_kk": "Қазақстан Республикасының Еңбек Кодексінің 38-бабына сәйкес",
+  "body_template_ru": "Перевести {{employee.full_name_dative_ru}} в подразделение „{{org_unit.title_ru}}“ на должность „{{position.title_ru}}“ со ставкой {{rate}} с {{effective_date}}.",
+  "body_template_kk": "{{effective_date}} бастап келесі қызметкер ауыстырылсын: {{employee.full_name}}; жаңа лауазымы: {{position.title_kk}}; бөлімшесі: {{org_unit.title_kk}}; жұмыспен қамтылу мөлшері: {{rate}} ставка.",
+  "basis_template_ru": "Основание: {{basis}}.",
+  "basis_template_kk": "Негіз: {{basis}}."
+}
