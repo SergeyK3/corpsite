@@ -2,6 +2,7 @@
 "use client";
 
 import * as React from "react";
+import { EXCEL_BUTTON_CLASS } from "@/lib/tableExport";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
@@ -19,6 +20,7 @@ import type { EmployeeCreateFormValues } from "./EmployeeCreateForm";
 
 import {
   getEmployees,
+  exportStaffExcel,
   getPositions,
   getDepartments,
   mapApiErrorToMessage,
@@ -150,6 +152,7 @@ export default function EmployeesPageClient(props: Props) {
   const readOnly = props.readOnly === true;
   const managementView = props.managementView === true;
   const isStaffRoute = routeBase === "/directory/staff";
+  const showStaffExport = pathname === "/directory/staff" || pathname === "/directory/staff/";
 
   const pageTitle =
     props.pageTitle ??
@@ -187,6 +190,8 @@ export default function EmployeesPageClient(props: Props) {
       : { items: [], total: 0 }
   );
   const [loading, setLoading] = React.useState(false);
+  const [exporting, setExporting] = React.useState(false);
+  const [exportMessage, setExportMessage] = React.useState<string | null>(null);
   const [search, setSearch] = React.useState(qText);
   const [error, setError] = React.useState<string | null>(
     props.initialError ? String(props.initialError) : null
@@ -355,22 +360,47 @@ export default function EmployeesPageClient(props: Props) {
     setCreateInitialValues(buildDefaultCreateValues(orgUnitId));
   }, [orgUnitId]);
 
+  const employeeFilters = React.useMemo(() => {
+    const inactiveStatus = status === "inactive";
+    return {
+      status,
+      department_id: inactiveStatus ? null : departmentId || null,
+      position_id: inactiveStatus ? null : positionId || null,
+      org_group_id: inactiveStatus ? null : orgGroupId ?? null,
+      org_unit_id: inactiveStatus ? null : orgUnitId || null,
+      include_children: !inactiveStatus && Boolean(orgUnitId),
+      include_applicants: false,
+      q: qText || null,
+    };
+  }, [status, departmentId, positionId, orgGroupId, orgUnitId, qText]);
+
+  React.useEffect(() => setExportMessage(null), [employeeFilters]);
+
+  async function handleExport() {
+    if (!showStaffExport || loading || error || exporting) return;
+    setExportMessage(null);
+    if (data.total === 0) {
+      setExportMessage("Нет записей для выгрузки по текущим фильтрам.");
+      return;
+    }
+    setExporting(true);
+    try {
+      await exportStaffExcel(employeeFilters);
+    } catch (e) {
+      setExportMessage(e instanceof Error ? e.message : "Не удалось выгрузить список в Excel.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   const loadItems = React.useCallback(async () => {
     const seq = ++loadSeqRef.current;
     setLoading(true);
     setError(null);
 
     try {
-      const inactiveStatus = status === "inactive";
       const json = await getEmployees({
-        status,
-        department_id: inactiveStatus ? null : departmentId || null,
-        position_id: inactiveStatus ? null : positionId || null,
-        org_group_id: inactiveStatus ? null : orgGroupId ?? null,
-        org_unit_id: inactiveStatus ? null : orgUnitId || null,
-        include_children: !inactiveStatus && Boolean(orgUnitId),
-        include_applicants: false,
-        q: qText || null,
+        ...employeeFilters,
         limit: String(limitNum),
         offset: String(offsetNum),
       });
@@ -388,7 +418,7 @@ export default function EmployeesPageClient(props: Props) {
     } finally {
       if (seq === loadSeqRef.current) setLoading(false);
     }
-  }, [status, departmentId, positionId, orgGroupId, orgUnitId, qText, limitNum, offsetNum]);
+  }, [employeeFilters, limitNum, offsetNum]);
 
   React.useEffect(() => {
     void loadItems();
@@ -673,9 +703,20 @@ export default function EmployeesPageClient(props: Props) {
               </div>
             )}
 
-            <div className="mb-2 text-xs text-zinc-600 dark:text-zinc-400">
-              Всего: {data.total} · Показано: {data.items.length}
+            <div className="mb-2 flex flex-wrap items-center gap-3 text-xs text-zinc-600 dark:text-zinc-400">
+              <span>Всего: {data.total} · Показано: {data.items.length}</span>
+              {showStaffExport ? (
+                <button
+                  type="button"
+                  onClick={() => void handleExport()}
+                  disabled={loading || exporting || !!error}
+                  className={EXCEL_BUTTON_CLASS}
+                >
+                  {exporting ? "Выгрузка…" : "Выгрузить в Excel"}
+                </button>
+              ) : null}
             </div>
+            {exportMessage ? <p role="status" className="mb-3 text-sm">{exportMessage}</p> : null}
 
             <EmployeesTable
               items={data.items}

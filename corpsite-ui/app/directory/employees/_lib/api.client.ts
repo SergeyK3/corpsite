@@ -18,6 +18,7 @@ import type {
 import { buildHeaders } from "@/lib/api";
 import { formatThrownError } from "@/lib/i18n";
 import { resolveApiUrl } from "@/lib/apiBase";
+import { downloadExcelBlob } from "@/lib/tableExport";
 
 function getDevUserId(): string | null {
   const appEnv = (process.env.NEXT_PUBLIC_APP_ENV || "dev").trim().toLowerCase();
@@ -153,6 +154,22 @@ export async function getEmployees(args: {
   });
 
   return apiGetJson<EmployeesResponse>("/directory/employees", qs);
+}
+
+export async function exportStaffExcel(args: Parameters<typeof getEmployees>[0]): Promise<void> {
+  const { limit: _limit, offset: _offset, include_applicants: _applicants, ...filters } = args;
+  const qs = buildQuery({
+    ...filters,
+    include_children: filters.include_children ? "true" : undefined,
+  });
+  const res = await fetch(`${resolveApiUrl("/directory/employees/export.xlsx")}?${qs}`, {
+    headers: apiAuthHeaders(),
+    cache: "no-store",
+  });
+  if (res.status === 404) throw new Error("Нет записей для выгрузки по текущим фильтрам.");
+  if (!res.ok) throw new Error("Не удалось выгрузить список в Excel. Попробуйте ещё раз.");
+  const blob = await res.blob();
+  downloadExcelBlob(blob, "Персонал.xlsx");
 }
 
 /**

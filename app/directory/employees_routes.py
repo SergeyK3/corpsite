@@ -5,6 +5,7 @@ from datetime import date
 from typing import Any, Dict, Optional, List, Literal, Union
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
+from fastapi.responses import Response
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
@@ -452,6 +453,43 @@ def list_employees(
         raise
     except Exception as e:
         raise as_http500(e)
+
+
+@router.get("/employees/export.xlsx")
+def export_employees(
+    status: str = Query(default="all", pattern="^(active|inactive|all)$"),
+    q: Optional[str] = Query(default=None),
+    department_id: Optional[int] = Query(default=None, ge=1),
+    position_id: Optional[int] = Query(default=None, ge=1),
+    org_group_id: Optional[int] = Query(default=None, ge=1),
+    org_unit_id: Optional[int] = Query(default=None, ge=1),
+    include_children: bool = Query(default=False),
+    sort: Optional[str] = Query(default=None),
+    order: Optional[str] = Query(default=None),
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Response:
+    from app.services.staff_export import build_staff_workbook
+
+    # Use the roster route itself so visibility, filtering and ordering stay identical.
+    items: List[Dict[str, Any]] = []
+    while True:
+        result = list_employees(
+            status=status, q=q, department_id=department_id, position_id=position_id,
+            org_group_id=org_group_id, org_unit_id=org_unit_id,
+            include_children=include_children, include_applicants=False,
+            limit=200, offset=len(items), sort=sort, order=order, user=user,
+        )
+        page = result["items"]
+        items.extend(page)
+        if len(items) >= result["total"] or not page:
+            break
+    if not items:
+        raise HTTPException(status_code=404, detail="Нет записей для выгрузки по текущим фильтрам.")
+    return Response(
+        content=build_staff_workbook(items),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="staff.xlsx"', "Cache-Control": "no-store"},
+    )
 
 
 @router.post("/employees", status_code=201)
