@@ -2,6 +2,8 @@
 "use client";
 
 import * as React from "react";
+import ExportExcelButton from "@/components/ExportExcelButton";
+import { allExportPages, type ExcelTable } from "@/lib/tableExport";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { buildEmployeeCardHref } from "@/lib/employeeCardNav";
@@ -420,6 +422,23 @@ export default function PersonnelJournalPageClient() {
     });
   }, [employeeSearch, items]);
 
+  async function loadExcel(): Promise<ExcelTable> {
+    const rows = await allExportPages((page) => listPersonnelEvents({
+      event_category: eventCategory || undefined,
+      event_type: isLeaveCategory ? undefined : eventType || undefined,
+      leave_kind: isLeaveCategory ? leaveKind || undefined : undefined,
+      leave_operation: isLeaveCategory ? leaveOperation || undefined : undefined,
+      date_from: dateFrom || undefined, date_to: dateTo || undefined,
+      org_group_id: orgFilters.org_group_id, org_unit_id: orgFilters.org_unit_id, position_id: orgFilters.position_id, ...page,
+    }));
+    const q = employeeSearch.trim().toLowerCase();
+    const filtered = rows.filter((row) => !q || String(row.employee_name || "").toLowerCase().includes(q) || String(row.employee_id).includes(q));
+    return {
+      headers: ["Дата", "Сотрудник", "Событие", "Из отделения", "В отделение", "Детали", "Приказ"],
+      rows: filtered.map((row) => [fmtDate(row.effective_date), row.employee_name || `#${row.employee_id}`, eventRowLabel(row), nameOrDash(row.from_org_unit_name), nameOrDash(row.to_org_unit_name), formatEventDetails(row).join("\n"), row.order_number || row.import_order_preparation?.candidate_order_number || "Приказ не связан"]),
+    };
+  }
+
   const categories = React.useMemo(() => {
     const byCode = new Map<string, { code: string; label: string }>();
     registryItems.forEach((item) => {
@@ -619,6 +638,7 @@ export default function PersonnelJournalPageClient() {
               : `${total} событий`}
         </div>
       </form>
+      <ExportExcelButton load={loadExcel} filename="Кадровый_журнал.xlsx" disabled={loading || !!error} />
 
       {registryError ? (
         <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/55 dark:bg-amber-950/35 dark:text-amber-100">

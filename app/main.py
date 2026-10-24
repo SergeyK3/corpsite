@@ -22,6 +22,7 @@ from app.errors import raise_error, ErrorCode
 
 from app.db.engine import engine
 from app.meta import router as meta_router
+from app.api.table_export_routes import router as table_export_router
 from app.tasks import router as tasks_router
 from app.task_events import router as task_events_router
 from app.tg_bind import router as tg_bind_router
@@ -118,6 +119,7 @@ app.add_middleware(
 # Routers (public)
 # -----------------------
 app.include_router(meta_router)
+app.include_router(table_export_router)
 app.include_router(auth_router)  # /auth/login, /auth/me
 app.include_router(tasks_router)
 app.include_router(task_events_router)  # MUST be before legacy /tasks/me/events if any

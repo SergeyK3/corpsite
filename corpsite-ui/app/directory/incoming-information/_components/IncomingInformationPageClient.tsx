@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import * as React from "react";
+import ExportExcelButton from "@/components/ExportExcelButton";
+import { allExportPages, type ExcelTable } from "@/lib/tableExport";
 
 import { INCOMING_INFORMATION_NAV_HREF } from "@/lib/incomingInformationNav";
 
@@ -111,6 +113,13 @@ export default function IncomingInformationPageClient() {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<LoadError>(null);
   const [retryVersion, setRetryVersion] = React.useState(0);
+  async function loadExcel(): Promise<ExcelTable> {
+    const rows = await allExportPages(listIncomingDocuments, INCOMING_DOCUMENTS_PAGE_LIMIT);
+    return {
+      headers: ["Рег. номер", "Дата регистрации", "Тип", "Отправитель", "Краткое содержание", "Основной исполнитель", "Срок", "Статус"],
+      rows: rows.map((item) => [item.registration_number, formatDate(item.registered_at, true), item.document_type_label, item.sender_display, item.summary, item.primary_executor_display || "—", formatDate(item.due_date) + (item.is_overdue ? "; Просрочено" : ""), item.status_label]),
+    };
+  }
 
   React.useEffect(() => {
     if (invalidOffset) router.replace(INCOMING_INFORMATION_NAV_HREF);
@@ -165,9 +174,14 @@ export default function IncomingInformationPageClient() {
 
   return (
     <div className="space-y-4 p-4" data-testid="incoming-information-page">
-      <div>
+      <div data-testid="incoming-information-header">
         <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">Входящая информация</h1>
         <p className="mt-1 text-sm text-zinc-500">Read-only реестр доступных вам входящих документов.</p>
+        {!loading && !error ? (
+          <div className="mt-3">
+            <ExportExcelButton load={loadExcel} filename="Входящая_информация.xlsx" />
+          </div>
+        ) : null}
       </div>
 
       {loading ? (

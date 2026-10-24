@@ -2,6 +2,8 @@
 "use client";
 
 import * as React from "react";
+import ExportExcelButton from "@/components/ExportExcelButton";
+import { allExportPages, normalizeExportPage, type ExcelTable } from "@/lib/tableExport";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import OrgScopeFilter from "@/components/OrgScopeFilter";
@@ -147,6 +149,13 @@ export default function RolesPageClient() {
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [drawerMode, setDrawerMode] = React.useState<"create" | "edit">("create");
   const [selectedRole, setSelectedRole] = React.useState<RoleItem | null>(null);
+
+  async function loadExcel(): Promise<ExcelTable> {
+    const rows = await allExportPages(async (page) => normalizeExportPage(await apiFetchJson<RolesResponse>(API_BASE, {
+      query: { q: search || undefined, is_active: onlyActive ? true : undefined, org_group_id: orgGroupId, org_unit_id: orgUnitId ?? undefined, ...page },
+    })));
+    return { headers: ["ID", "Код роли", "Название", "Активна"], rows: rows.map((role) => [roleIdOf(role), roleCodeOf(role), roleNameOf(role), recordStatusLabel(role.is_active ? "active" : "inactive")]) };
+  }
 
   React.useEffect(() => {
     selectedRoleIdRef.current = selectedRole ? roleIdOf(selectedRole) : null;
@@ -418,6 +427,7 @@ export default function RolesPageClient() {
             <div className="mb-1.5 flex flex-col gap-1 text-[11px] text-zinc-600 dark:text-zinc-400 md:flex-row md:items-center md:justify-between">
               <div>
                 Всего: {total}
+                <ExportExcelButton load={loadExcel} filename="Роли.xlsx" disabled={loading || !!pageError} />
                 {total > 0 ? <span className="ml-2">· показано: {pageFrom}–{pageTo}</span> : null}
               </div>
 

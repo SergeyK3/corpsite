@@ -43,6 +43,17 @@ function response(items = [item], total = items.length, offset = 0) {
   return { items, total, limit: 25, offset };
 }
 
+function expectExportAbove(contentTestId: string) {
+  const button = screen.getByRole("button", { name: "Выгрузить в Excel" });
+  const description = screen.getByText("Read-only реестр доступных вам входящих документов.");
+  expect(screen.getByTestId("incoming-information-header")).toContainElement(button);
+  expect(description.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(button.parentElement?.parentElement).not.toBe(description.parentElement);
+  expect(screen.getByTestId("incoming-information-total")).not.toContainElement(button);
+  expect(button.compareDocumentPosition(screen.getByTestId(contentTestId)) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(screen.getAllByRole("button", { name: "Выгрузить в Excel" })).toHaveLength(1);
+}
+
 describe("IncomingInformationPageClient", () => {
   beforeEach(() => {
     currentSearchParams = new URLSearchParams();
@@ -58,6 +69,22 @@ describe("IncomingInformationPageClient", () => {
     listIncomingDocumentsMock.mockReturnValue(new Promise(() => undefined));
     render(<IncomingInformationPageClient />);
     expect(screen.getByTestId("incoming-information-loading")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Выгрузить в Excel" })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    { label: "populated list", items: [item], total: 60, offset: 0, content: "incoming-information-table" },
+    { label: "empty result", items: [], total: 0, offset: 0, content: "incoming-information-empty" },
+    { label: "second page", items: [item], total: 60, offset: 25, content: "incoming-information-table" },
+  ])("places export in a separate row below the description before the $label", async ({ items, total, offset, content }) => {
+    currentSearchParams = new URLSearchParams(offset ? `offset=${offset}` : "");
+    listIncomingDocumentsMock.mockResolvedValue(response(items, total, offset));
+    render(<IncomingInformationPageClient />);
+    await screen.findByTestId(content);
+    expectExportAbove(content);
+    expect(listIncomingDocumentsMock).toHaveBeenCalledWith({ limit: 25, offset });
+    expect(pushMock).not.toHaveBeenCalled();
+    expect(replaceMock).not.toHaveBeenCalled();
   });
 
   it("renders populated rows, backend overdue flag and detail link", async () => {
@@ -92,6 +119,7 @@ describe("IncomingInformationPageClient", () => {
     expect(await screen.findByTestId("incoming-information-forbidden")).toHaveTextContent(
       "Нет доступа к реестру",
     );
+    expect(screen.queryByRole("button", { name: "Выгрузить в Excel" })).not.toBeInTheDocument();
   });
 
   it("renders network error and retries", async () => {
@@ -109,14 +137,20 @@ describe("IncomingInformationPageClient", () => {
   it("uses offset from URL and pushes pagination history entries", async () => {
     currentSearchParams = new URLSearchParams("offset=25");
     listIncomingDocumentsMock.mockResolvedValue(response([item], 60, 25));
-    render(<IncomingInformationPageClient />);
+    const view = render(<IncomingInformationPageClient />);
 
     await screen.findByTestId("incoming-information-table");
+    expectExportAbove("incoming-information-table");
     expect(listIncomingDocumentsMock).toHaveBeenCalledWith({ limit: 25, offset: 25 });
     fireEvent.click(screen.getByTestId("incoming-information-page-prev"));
     fireEvent.click(screen.getByTestId("incoming-information-page-next"));
     expect(pushMock).toHaveBeenNthCalledWith(1, "/directory/incoming-information");
     expect(pushMock).toHaveBeenNthCalledWith(2, "/directory/incoming-information?offset=50");
+    currentSearchParams = new URLSearchParams("offset=50");
+    view.rerender(<IncomingInformationPageClient />);
+    await waitFor(() => expect(screen.getByTestId("incoming-information-total")).toHaveTextContent("страница 3 из 3"));
+    expectExportAbove("incoming-information-table");
+    expect(listIncomingDocumentsMock).toHaveBeenLastCalledWith({ limit: 25, offset: 50 });
   });
 
   it("normalizes an invalid or negative URL offset without sending it to backend", async () => {

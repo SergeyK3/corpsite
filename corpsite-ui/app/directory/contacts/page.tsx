@@ -2,6 +2,8 @@
 "use client";
 
 import * as React from "react";
+import ExportExcelButton from "@/components/ExportExcelButton";
+import { allExportPages, normalizeExportPage, type ExcelTable } from "@/lib/tableExport";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import OrgScopeFilter from "@/components/OrgScopeFilter";
 import OrgUnitScopeFilter from "@/components/OrgUnitScopeFilter";
@@ -393,6 +395,35 @@ export default function ContactsPage() {
   const page = Math.floor(offset / PAGE_SIZE) + 1;
   const pages = Math.max(1, Math.ceil(Math.max(total, 1) / PAGE_SIZE));
 
+  async function loadExcel(): Promise<ExcelTable> {
+    const scopeQuery = { org_group_id: orgGroupId, org_unit_id: orgUnitId ?? undefined };
+    // Build the same composite rows once, using the full filtered contact list.
+    const contacts = await allExportPages(async (page) => normalizeExportPage(await apiFetchJson<ContactsResponse>(API_BASE, { query: { ...scopeQuery, q: appliedSearch || undefined, ...page } })));
+    function optionalSource(error: unknown): never[] {
+      // These sources are optional in the table, too. Other failures must not
+      // silently produce an incomplete workbook.
+      if (Number((error as { status?: number })?.status) === 403) return [];
+      throw error;
+    }
+    const [positions, working] = await Promise.all([
+      allExportPages(async (page) => normalizeExportPage(await apiFetchJson<{ items: PositionSlot[]; total?: number }>(POSITIONS_API, { query: { ...scopeQuery, ...page } }))).catch(optionalSource),
+      allExportPages(async (page) => normalizeExportPage(await apiFetchJson<{ items: WorkingExpertRow[]; total?: number }>(WORKING_CONTACTS_API, { query: { ...scopeQuery, active_only: true, ...page } }))).catch(optionalSource),
+    ]);
+    const rows = buildDisplayRows(contacts, normalizePositionItems({ items: positions }), normalizeWorkingExperts({ items: working }));
+    return {
+      headers: ["ID", "ФИО", uiFieldLabel("person_id"), "Телефон", "Telegram ID"],
+      rows: rows.map((row) => {
+        if (row.kind === "slot") return ["слот", `${row.slot_label}\nконтакт не заполнен`, "—", "—", "—"];
+        if (row.kind === "expert") {
+          const item = row.item;
+          const role = String(item.role_name_ru ?? item.role_name ?? "").trim();
+          return ["эксперт", [String(item.full_name ?? "").trim() || role || "—", role].filter(Boolean).join("\n"), "—", String(item.phone ?? "").trim() || "—", formatTelegramId(item.telegram_id)];
+        }
+        return [row.item.contact_id, String(row.item.full_name ?? "").trim() || "—", row.item.person_id ?? "—", String(row.item.phone ?? "").trim() || "—", formatTelegramId(row.item.telegram_numeric_id)];
+      }),
+    };
+  }
+
   React.useEffect(() => {
     setOffset(0);
   }, [orgGroupId, orgUnitId]);
@@ -667,6 +698,7 @@ export default function ContactsPage() {
             <div className="mb-1.5 flex items-center justify-between gap-2 text-[11px] text-zinc-600 dark:text-zinc-400">
               <div>
                 Контактов: {total} · Строк в списке: {displayRows.length}
+                <ExportExcelButton load={loadExcel} filename="Контакты.xlsx" disabled={loading || !!pageError} />
                 {displayRows.length > items.length ? (
                   <span className="ml-1">· включая пустые слоты</span>
                 ) : null}

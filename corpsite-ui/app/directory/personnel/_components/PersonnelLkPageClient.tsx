@@ -3,6 +3,9 @@
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import ExportExcelButton from "@/components/ExportExcelButton";
+import { allExportPages, type ExcelTable } from "@/lib/tableExport";
+import { formatPersonnelLkRate, personnelLkRecordKindLabel, personnelLkStatusLabel } from "../_lib/personnelLkLabels";
 
 import TaskOrgFiltersBar from "@/components/TaskOrgFiltersBar";
 import { useCurrentUser } from "@/lib/currentUser";
@@ -49,6 +52,15 @@ export default function PersonnelLkPageClient() {
   const canReadMigrationStatus = canReadPprMigrationStatus(me);
   const filters = React.useMemo(() => parsePersonnelLkRegistryState(searchParams), [searchParams]);
   const listLoadKey = React.useMemo(() => buildPersonnelLkListLoadKey(filters), [filters]);
+  async function loadExcel(): Promise<ExcelTable> {
+    const rows = await allExportPages((page) => listPersonnelLkRegistry({
+      q: filters.q || undefined,
+      record_kind: filters.record_kind ? filters.record_kind as PersonnelLkRecordKind : undefined,
+      status: filters.status, application_status: filters.application_status || undefined,
+      org_group_id: filters.org_group_id, org_unit_id: filters.org_unit_id, position_id: filters.position_id, ...page,
+    }));
+    return { headers: ["ФИО", "ИИН", "Тип", "Ставка", "Статус"], rows: rows.map((item) => [item.fio || "—", item.iin || "—", personnelLkRecordKindLabel(item.record_kind), formatPersonnelLkRate(item.rate), personnelLkStatusLabel(item)]) };
+  }
   const registryReturnHref = React.useMemo(
     () => buildPersonnelLkRegistryHref(filters),
     [filters],
@@ -447,6 +459,7 @@ export default function PersonnelLkPageClient() {
         <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-zinc-600 dark:text-zinc-400">
           <span data-testid="personnel-lk-total">
             Всего: {total} · страница {page} из {pageCount}
+            <ExportExcelButton load={loadExcel} filename="Личные_карточки.xlsx" disabled={loading || !!error} />
           </span>
           <div className="flex gap-2">
             <button

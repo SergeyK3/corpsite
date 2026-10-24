@@ -2,6 +2,8 @@
 "use client";
 
 import Link from "next/link";
+import ExportExcelButton from "@/components/ExportExcelButton";
+import { allExportPages, type ExcelTable } from "@/lib/tableExport";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import ConfirmDialog from "../../_components/shared/ConfirmDialog";
@@ -159,6 +161,14 @@ export default function OrgUnitsAdminClient() {
     () => new Map(groups.map((g) => [g.group_id, g.group_name])),
     [groups],
   );
+
+  async function loadExcel(): Promise<ExcelTable> {
+    const rows = await allExportPages((page) => fetchAdminOrgUnits({ ...listParams, ...page }));
+    return {
+      headers: ["ID", "Наименование", "Код", "Группа", "Родитель", "Статус", "Дети", "Сотрудники"],
+      rows: rows.map((unit) => [unit.unit_id, unit.name, unit.code ?? "—", resolveGroupLabel(unit.group_id, unit.group_name, groupLabelById), unit.parent_name ? `${unit.parent_name} (#${unit.parent_unit_id})` : "—", recordStatusLabel(unit.is_active ? "active" : "inactive"), unit.child_count ?? 0, unit.active_employee_count ?? 0]),
+    };
+  }
 
   const rootUnits = useMemo(() => findRootUnits(items), [items]);
   const rootExists = rootUnits.length > 0;
@@ -460,6 +470,7 @@ export default function OrgUnitsAdminClient() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-xl font-semibold">Справочник подразделений</h1>
+          <ExportExcelButton load={loadExcel} filename="Подразделения.xlsx" disabled={loading || !!error} />
           <p className="text-sm text-zinc-600 dark:text-zinc-400">
             Административный CRUD с контролем зависимостей.{" "}
             <Link href="/admin/system" className="underline">

@@ -1,6 +1,8 @@
 "use client";
 
 import * as React from "react";
+import ExportExcelButton from "@/components/ExportExcelButton";
+import { allExportPages, type ExcelTable } from "@/lib/tableExport";
 
 import { listArchiveReview, mapOoApiError } from "../_lib/api";
 import type {
@@ -85,6 +87,20 @@ export default function ArchiveReviewPanel({
   const [reloadToken, setReloadToken] = React.useState(0);
   const [selectedRowId, setSelectedRowId] = React.useState<number | null>(null);
   const [notice, setNotice] = React.useState<string | null>(null);
+
+  async function loadExcel(): Promise<ExcelTable> {
+    const rows = await allExportPages((page) => listArchiveReview({
+      search: filters.search.trim() || undefined,
+      initial_review_state: filters.initialReviewState || undefined,
+      review_outcome: filters.reviewOutcome || undefined, archive_section: filters.archiveSection || undefined,
+      only_missing_requisites: filters.onlyMissingRequisites || undefined,
+      only_duplicate_sha: filters.onlyDuplicateSha || undefined, only_order_298: filters.onlyOrder298 || undefined, ...page,
+    }), PAGE_SIZE);
+    return {
+      headers: ["Excel-строка", "Раздел архива", "Имя файла", "Исходный статус", "Исходное состояние", "Результат проверки", "Номер", "Дата", "Предмет/заголовок", "Относительный путь", "Проблема", "Официальный документ"],
+      rows: rows.map((item) => [item.excel_row, item.archive_section, item.file_name, item.source_status, REVIEW_STATE_LABELS[item.initial_review_state], item.review_outcome ? REVIEW_OUTCOME_LABELS[item.review_outcome] : "Не проверено", item.order_number || "—", formatOrderDate(item.order_date), item.subject || "—", item.relative_path || "—", [item.duplicate_sha ? "⚠ Дубликат файла" : "", item.repeated_298 ? "⚠ Повтор № 298-ө" : ""].filter(Boolean).join("; ") || "—", item.official_document_id ? `Документ #${item.official_document_id}` : "Не связан"]),
+    };
+  }
 
   React.useEffect(() => {
     let active = true;
@@ -259,6 +275,7 @@ export default function ArchiveReviewPanel({
 
       <div className="flex flex-wrap items-center justify-between gap-2 text-sm" aria-label="Пагинация архива">
         <span>Найдено: {data.total} · Страница {page + 1} из {pageCount}</span>
+        <ExportExcelButton load={loadExcel} filename="Архив_на_проверке.xlsx" disabled={loading} />
         <div className="flex gap-2">
           <button
             type="button"

@@ -1,6 +1,10 @@
 "use client";
 
 import * as React from "react";
+import ExportExcelButton from "@/components/ExportExcelButton";
+import { allExportPages, type ExcelTable } from "@/lib/tableExport";
+import { formatDateTime, languageCoverageLabel } from "../_lib/mappers";
+import { draftingPathLabel, workspaceStageLabel, documentStatusLabel } from "../_lib/status";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { apiAuthMe } from "@/lib/api";
@@ -51,6 +55,23 @@ export default function OperationalOrdersPageClient() {
   const scope = searchParams.get("scope") || "all";
   const promoted = searchParams.get("promoted") || "";
   const lang = searchParams.get("lang") || "";
+
+  async function loadExcel(): Promise<ExcelTable> {
+    if (tab === "documents") {
+      const rows = await allExportPages((page) => listDocuments({ status: docStatus || undefined, submitting_org_unit_id: orgFilters.org_unit_id, ...page }));
+      return { headers: ["ID", "Workspace", "Подразделение", "Статус", "Ver", "Готов к подписи", "Создан"], rows: rows.map((item) => [item.document_id, `#${item.workspace_id}`, `#${item.submitting_org_unit_id ?? "—"}`, documentStatusLabel(item.status), item.version, formatDateTime(item.ready_for_signature_at), formatDateTime(item.created_at)]) };
+    }
+    const rows = await allExportPages((page) => listWorkspaces({
+      stage: stage || undefined, submitting_org_unit_id: orgFilters.org_unit_id,
+      record_creator_user_id: scope === "mine" && me?.user_id ? me.user_id : undefined,
+      promoted: promoted === "yes" ? true : promoted === "no" ? false : undefined, ...page,
+    }));
+    const filtered = rows.filter((w) => lang === "ru" ? w.ru_present : lang === "kk" ? w.kk_present : lang === "both" ? w.ru_present && w.kk_present : true);
+    return {
+      headers: ["ID", "Название", "Подразделение", "Автор", "Создатель", "Путь", "Стадия", "Языки", "Уточнения", "Перевод", "Создан", "Обновлён", "Ver", "Документ"],
+      rows: filtered.map((item) => [item.workspace_id, item.proposed_title || "—", `#${item.submitting_org_unit_id}`, item.content_author_reference, `#${item.record_creator_user_id}`, draftingPathLabel(item.drafting_path), workspaceStageLabel(item.stage), languageCoverageLabel(item.ru_present, item.kk_present), item.open_clarification_count ?? 0, item.has_active_translation ? "Да" : "—", formatDateTime(item.created_at), formatDateTime(item.updated_at), item.version, item.document_id ? `#${item.document_id}` : "—"]),
+    };
+  }
 
   React.useEffect(() => {
     apiAuthMe()
@@ -267,11 +288,13 @@ export default function OperationalOrdersPageClient() {
         />
       ) : tab === "workspaces" ? (
         <>
+          <ExportExcelButton load={loadExcel} filename="Производственные_проекты.xlsx" disabled={loading || !!error} />
           <p className="text-xs text-zinc-500">Всего: {total}</p>
           <WorkspacesTable items={workspaces} loading={loading} />
         </>
       ) : (
         <>
+          <ExportExcelButton load={loadExcel} filename="Производственные_приказы.xlsx" disabled={loading || !!error} />
           <p className="text-xs text-zinc-500">Всего: {total}</p>
           <DocumentsTable items={documents} loading={loading} />
         </>

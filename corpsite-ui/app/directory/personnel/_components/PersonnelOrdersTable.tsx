@@ -19,7 +19,7 @@ export type PersonnelOrdersTableProps = {
   onDelete?: (row: PersonnelOrderListItem) => void;
 };
 
-function formatEmployees(row: PersonnelOrderListItem): string {
+export function formatEmployees(row: PersonnelOrderListItem): string {
   const names = (row.employee_names || []).filter(Boolean);
   if (names.length > 0) return names.join(", ");
   const ids = row.employee_ids || [];
@@ -27,7 +27,7 @@ function formatEmployees(row: PersonnelOrderListItem): string {
   return "—";
 }
 
-function sourceTitle(row: PersonnelOrderListItem): string {
+export function sourceTitle(row: PersonnelOrderListItem): string {
   const title = row.source_title;
   return typeof title === "string" && title !== "" ? title : "—";
 }

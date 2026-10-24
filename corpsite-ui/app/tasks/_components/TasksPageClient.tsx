@@ -2,6 +2,8 @@
 "use client";
 
 import * as React from "react";
+import ExportExcelButton from "@/components/ExportExcelButton";
+import { allExportPages, normalizeExportPage, type ExcelTable } from "@/lib/tableExport";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import TaskOrgFiltersBar from "@/components/TaskOrgFiltersBar";
@@ -318,6 +320,21 @@ export default function TasksPageClient() {
   }, [items, taskKind]);
 
   const displayTotal = taskKind === "other" ? displayItems.length : total;
+
+  async function loadExcel(): Promise<ExcelTable> {
+    const rows = await allExportPages<any>(async (page) => normalizeExportPage<any>(await apiFetchJson<any>("/tasks", { query: {
+      scope: taskScope, status_filter: tab,
+      ...(taskScope === "team" && isSystemAdmin ? { org_group_id: orgGroupId, org_unit_id: orgUnitId || undefined, position_id: positionId } : {}),
+      search: searchQuery || undefined,
+      task_kind: taskKind === "regular" || taskKind === "adhoc" ? taskKind : undefined,
+      ...page,
+    } })));
+    const filtered = taskKind === "other" ? rows.filter((item) => normalizeTaskKind(item?.task_kind) === "other") : rows;
+    return {
+      headers: ["ID", "Название", "Периодичность", ...(showExecutorColumn ? ["Роль"] : []), "Статус", "Дедлайн"],
+      rows: filtered.map((item) => [taskIdOf(item), taskTitleOf(item), taskPeriodicityLabel(item), ...(showExecutorColumn ? [executorRoleLabelOf(item)] : []), statusTextOf(item), formatDeadline(item)]),
+    };
+  }
 
   const resetDrawerState = React.useCallback(() => {
     detailsRequestRef.current += 1;
@@ -992,6 +1009,7 @@ export default function TasksPageClient() {
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2 text-sm text-zinc-600 dark:text-zinc-400">
               <div>
                 {scopeRu(taskScope)} · Всего: {displayTotal} · Показано: {displayItems.length}
+                <ExportExcelButton load={loadExcel} filename="Задачи.xlsx" disabled={listLoading || !!pageError} />
                 {listLoading ? <span className="ml-2">· загрузка…</span> : null}
                 {manualRolesLoading ? <span className="ml-2">· роли…</span> : null}
               </div>

@@ -1,6 +1,10 @@
 "use client";
 
 import * as React from "react";
+import ExportExcelButton from "@/components/ExportExcelButton";
+import { allExportPages, type ExcelTable } from "@/lib/tableExport";
+import { formatPersonnelOrderDate, formatPersonnelOrderNumber } from "../_lib/personnelOrdersApi.client";
+import { formatEmployees, sourceTitle } from "./PersonnelOrdersTable";
 import { usePersonnelSectionLanguage, type PersonnelSectionLanguage } from "../_lib/personnelSectionLanguage";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCurrentUser } from "@/lib/currentUser";
@@ -154,6 +158,14 @@ export default function PersonnelOrdersPageClient() {
   );
 
   const filterHints = activeFilterSummary(filters, language);
+
+  async function loadExcel(): Promise<ExcelTable> {
+    const rows = await allExportPages((page) => listPersonnelOrders({ ...filters, order_id: undefined, ...page }));
+    return {
+      headers: ["№ приказа", "Дата", "Исходное название", "Тип", "Статус", "Сотрудники", "Пунктов"],
+      rows: filterPersonnelOrdersBySearch(rows, filters.q).map((row) => [formatPersonnelOrderNumber(row.order_number), formatPersonnelOrderDate(row.order_date), sourceTitle(row), personnelOrderTypeLabel(row.order_type_code, language), personnelOrderStatusLabel(row.status) + (row.is_archived ? "; 📦 Архив" : ""), formatEmployees(row), row.item_count]),
+    };
+  }
 
   function updateFilters(next: Partial<PersonnelOrdersFilters>) {
     const merged: PersonnelOrdersFilters = { ...filters, ...next };
@@ -391,6 +403,7 @@ export default function PersonnelOrdersPageClient() {
         </div>
       ) : null}
 
+      <ExportExcelButton load={loadExcel} filename="Кадровые_приказы.xlsx" disabled={loading || !!error} />
       <PersonnelOrdersTable
         items={filteredItems}
         loading={loading}
