@@ -16,7 +16,7 @@ from app.services import personnel_orders_command_service as commands
 from app.services.personnel_orders_query_service import PersonnelOrderValidationError
 
 URL = os.environ.get("TEST_DATABASE_URL", "")
-pytestmark = pytest.mark.skipif(not URL or make_url(URL).host not in ("localhost", "127.0.0.1") or make_url(URL).database != "corpsite_test", reason="requires local migrated corpsite_test")
+pytestmark = pytest.mark.skipif(not URL or make_url(URL).host not in ("localhost", "127.0.0.1") or not (make_url(URL).database == "corpsite_test" or (str(make_url(URL).database).startswith("corpsite_supplementary_percent_") and str(make_url(URL).database).endswith("_test"))), reason="requires a local migrated test database")
 
 
 class TransactionEngine:
@@ -53,6 +53,37 @@ def publish(conn, code="SUPPLEMENTARY_PAY", texts=None):
 def pay_payload(percent=25, name="Сотруднику Первому", basis="Личное заявление"):
     from app.services.personnel_order_service_area_contract import SAMPLE_RECIPIENT
     return {"allowance_recipient": SAMPLE_RECIPIENT, "allowance": {"percent": percent, "employee_dative_ru": name, "employee_dative_kk": "Бірінші қызметкерге", "basis_ru": basis, "basis_kk": "Жеке өтініш"}}
+
+
+@pytest.mark.parametrize('percent', [25, 35, 50])
+def test_supplementary_percent_add_edit_reopen_and_bilingual_regeneration(database, percent):
+    from app.services.personnel_order_supplementary_pay_contract import BODY_RU, BODY_KK
+    from app.services.personnel_orders_editorial.generation_service import generate_editorial
+    from app.services import personnel_orders_query_service as queries
+    version, actor = publish(database, texts={'body_template_ru': BODY_RU, 'body_template_kk': BODY_KK})
+    order_id, employees = create_order(database, version, actor, pay_payload())
+    assert order_id != 5647
+    detail = commands.create_personnel_order_item(order_id=order_id, item_type_code='SUPPLEMENTARY_PAY',
+        employee_id=employees[1], effective_date=date(2026, 2, 3), payload=pay_payload(percent),
+        actor_user_id=actor, template_version_id=version['template_version_id'])
+    item_id = detail['items'][1]['item_id']
+    assert detail['items'][1]['payload']['allowance']['percent'] == percent
+    saved = dict(detail['items'][1]['payload'])
+    for value in (50 if percent == 35 else 35, percent):
+        changed = {**saved, 'allowance': {**saved['allowance'], 'percent': value}}
+        detail = commands.update_personnel_order_item(order_id=order_id, item_id=item_id,
+            payload=changed, actor_user_id=actor)
+        assert detail['items'][1]['payload']['allowance']['percent'] == value
+    generate_editorial(order_id, user_id=actor, conn=database)
+    reopened = queries.get_personnel_order(order_id)
+    allowance = reopened['items'][1]['payload']['allowance']
+    assert allowance['percent'] == percent and type(allowance['percent']) is int
+    assert allowance['basis_ru'] == saved['allowance']['basis_ru']
+    for locale in ('ru', 'kk'):
+        body = database.execute(text("SELECT generated_text FROM personnel_order_item_editorial_blocks WHERE order_item_id=:id AND locale=:locale AND block_type='body'"),
+            {'id': item_id, 'locale': locale}).scalar_one()
+        assert f'{percent}%' in body and '{{' not in body
+    assert inherited.get_add_item_context(order_id)['template']['template_version_id'] == version['template_version_id']
 
 
 def create_order(conn, version, actor, payload, code="SUPPLEMENTARY_PAY"):
@@ -108,7 +139,7 @@ def test_invalid_addition_is_atomic(database, problem):
     args = dict(order_id=order_id, item_type_code="SUPPLEMENTARY_PAY", employee_id=employees[1], effective_date=date(2026, 2, 2), payload=pay_payload(), actor_user_id=actor, template_version_id=version["template_version_id"])
     if problem == "other_type": args["item_type_code"] = "TRANSFER"
     if problem == "wrong_version": args["template_version_id"] += 100000
-    if problem == "invalid_percent": args["payload"]["allowance"]["percent"] = 30
+    if problem == "invalid_percent": args["payload"]["allowance"]["percent"] = 35.5
     if problem == "missing_basis": args["payload"]["allowance"]["basis_kk"] = ""
     before = first_blocks(database, order_id)
     with pytest.raises(PersonnelOrderValidationError): commands.create_personnel_order_item(**args)

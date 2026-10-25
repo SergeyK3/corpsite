@@ -47,7 +47,8 @@ async function fill(percent: string) {
   fireEvent.click(await screen.findByRole("option", {name: employee.fio}));
   await screen.findByTestId("allowance-recipient");
   fireEvent.change(screen.getByLabelText("Дата действия"), {target: {value: "2026-02-02"}});
-  fireEvent.change(screen.getByLabelText("Доплата"), {target: {value: percent}});
+  fireEvent.change(screen.getByLabelText("Доплата"), {target: {value: percent === '35' ? 'other' : percent}});
+  if (percent === '35') fireEvent.change(screen.getByLabelText('Процент доплаты'), {target:{value:percent}});
   await waitFor(() => expect(screen.getByRole("button", {name: "Добавить пункт"})).toBeEnabled());
 }
 
@@ -60,7 +61,7 @@ it("offers published types and retains input across keyboard-compatible disclosu
   expect(screen.queryByLabelText("Замещаемый сотрудник")).not.toBeInTheDocument();
   expect(screen.getByLabelText("Основание (RU)")).toHaveValue("Личное заявление");
   expect(screen.getByLabelText("Основание (KK)")).toHaveValue("Жеке өтініш");
-  expect(within(screen.getByLabelText("Доплата")).getAllByRole("option").map(option => option.textContent)).toEqual(["Выберите доплату", "+25%", "+50%"]);
+  expect(within(screen.getByLabelText("Доплата")).getAllByRole("option").map(option => option.textContent)).toEqual(["Выберите доплату", "+25%", "+50%", "Другое"]);
   expect(screen.getByRole("button", {name: "Добавить пункт"})).toBeDisabled();
   fireEvent.change(screen.getByLabelText("Основание (RU)"), {target: {value: "Мой текст"}});
   const input = screen.getByLabelText("Сотрудник");
@@ -73,7 +74,7 @@ it("offers published types and retains input across keyboard-compatible disclosu
   expect(getPersonnelOrderPublishedTemplateTitle).not.toHaveBeenCalled();
 });
 
-it.each(["25", "50"])("adds a second employee with numeric %s, then resets and collapses", async percent => {
+it.each(["25", "35", "50"])("adds a second employee with numeric %s, then resets and collapses", async percent => {
   const onChanged = await setup(); await fill(percent);
   fireEvent.change(screen.getByLabelText("Основание (KK)"), {target: {value: "Өз өтініші"}});
   fireEvent.click(screen.getByRole("button", {name: "Добавить пункт"}));

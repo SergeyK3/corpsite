@@ -31,8 +31,9 @@ def values(allowance, recipient, effective_date):
     missing=[key for key in ('employee_dative_ru','employee_dative_kk','basis_ru','basis_kk') if not t(allowance,key)]
     missing += [key for key in ('position_ru','org_unit_ru','org_unit_kk') if not t(recipient,key)]
     if missing:raise ValueError('Заполните данные доплаты: '+', '.join(missing)+'.')
-    percent=number(allowance.get('percent'),'Доплата')
-    if percent not in (25,50):raise ValueError('Выберите доплату +25% или +50%.')
+    percent=number(allowance.get('percent'),'Доплата',maximum=100)
+    if percent != percent.to_integral_value():
+        raise ValueError('Процент доплаты должен быть целым числом от 1 до 100.')
     try:start=date.fromisoformat(str(effective_date))
     except ValueError:raise ValueError('Укажите дату начала доплаты.') from None
     unit=t(recipient,'org_unit_genitive_ru') or russian_reference_case(t(recipient,'org_unit_ru'),'genitive') or 'подразделения «'+t(recipient,'org_unit_ru')+'»'

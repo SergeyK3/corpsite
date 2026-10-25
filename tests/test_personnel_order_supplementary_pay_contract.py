@@ -15,7 +15,7 @@ def allowance(percent=25):
             'employee_dative_kk':'Раушан Тастемировна Касымоваға',
             'basis_ru':'Служебная записка','basis_kk':'Қызметтік хат'}
 
-@pytest.mark.parametrize('percent',[25,50])
+@pytest.mark.parametrize('percent',[1,25,35,36,50,100])
 def test_simple_allowance_complete_bilingual_contract(percent):
     t=texts();validate_template_texts('SUPPLEMENTARY_PAY',t)
     result=_render({'item_type_code':'SUPPLEMENTARY_PAY',**t},values(allowance(str(percent)),SAMPLE_RECIPIENT,'2026-02-02'))
@@ -28,7 +28,7 @@ def test_simple_allowance_complete_bilingual_contract(percent):
     assert all(token not in result['body_template_ru']+result['body_template_kk'] for token in ('{{','[','ставк','отпуск','демалыс'))
     assert '25%' in preview_draft('SUPPLEMENTARY_PAY',t)['kk']['body']
 
-@pytest.mark.parametrize('percent',[None,'',0,30,75])
+@pytest.mark.parametrize('percent',[None,'',0,-1,101,'35.5',True,'NaN','Infinity'])
 def test_percent_is_required_and_restricted(percent):
     with pytest.raises(ValueError):values(allowance(percent),SAMPLE_RECIPIENT,'2026-02-02')
 

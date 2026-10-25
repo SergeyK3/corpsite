@@ -1,4 +1,6 @@
 "use client";
+import PersonnelOrderAllowancePercent from "./PersonnelOrderAllowancePercent";
+import { allowancePercentError } from "../_lib/personnelOrderAllowancePercent";
 
 import PersonnelOrderTransferFields, {type TransferFields} from "./PersonnelOrderTransferFields";
 import PersonnelOrderReplacementFields, {blankReplacement, type ReplacementFields} from "./PersonnelOrderReplacementFields";
@@ -163,7 +165,10 @@ function assignmentSummary(value: unknown): string | null {
 
 function sourceItemSummary(item: PersonnelOrderItem): string {
   const payload = item.payload || {};
+  const allowance = payload.allowance && typeof payload.allowance === "object" && !Array.isArray(payload.allowance) ? payload.allowance as Record<string, unknown> : {};
+  const percent = allowance.percent;
   const summaries = [
+    item.item_type_code === "SUPPLEMENTARY_PAY" && (typeof percent === "number" || typeof percent === "string") && String(percent).trim() && Number.isFinite(Number(percent)) ? `Доплата: ${percent}%` : null,
     assignmentSummary(payload.assignment),
     assignmentSummary(payload.to_assignment),
     typeof payload.termination_reason === "string" ? payload.termination_reason : null,
@@ -826,6 +831,10 @@ export default function PersonnelOrderItemEditor({
     if (disabled) return false;
     if (formDisclosure.current) formDisclosure.current.open = true;
     setError(null);
+    if (itemTypeCode === "SUPPLEMENTARY_PAY" && (payloadDraft.allowance || payloadDraft.allowance_percent !== undefined)) {
+      const percentError = allowancePercentError(payloadDraft.allowance_percent || "");
+      if (percentError) { setError(percentError); return false; }
+    }
 
     const employeeNumeric = Number(employeeId);
     const savedEmployeeIsUnchanged =
@@ -1263,6 +1272,10 @@ export default function PersonnelOrderItemEditor({
   }
 
   function renderAdditionalSection() {
+    if (itemTypeCode === "SUPPLEMENTARY_PAY") {
+      return <PersonnelOrderAllowancePercent key={editingItemId ?? "new"} value={payloadDraft.allowance_percent ?? ""}
+        onChange={value=>setPayloadDraft(previous=>({...previous,allowance_percent:value}))} inputClassName={FIELD_INPUT_CLASS}/>;
+    }
     if (formConfig?.showConcurrentDutyStartFields) {
       const value: TransferFields = {position_ru:"",position_kk:"",org_unit_ru:"",org_unit_kk:"",basis_ru:"",basis_kk:"",rate:payloadDraft.concurrent_rate || "",total_rate:payloadDraft.total_rate || "",...payloadDraft.concurrent};
       const setConcurrent: React.Dispatch<React.SetStateAction<TransferFields>> = change => setPayloadDraft(previous => {

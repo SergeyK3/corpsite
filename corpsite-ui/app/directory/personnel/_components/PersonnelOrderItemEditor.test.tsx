@@ -231,6 +231,33 @@ async function selectEmployeeFromSearch() {
   });
 }
 
+it.each([25,35,50])('edits and reopens structured supplementary percent %s without losing recipient or bases', async percent => {
+  const allowance={percent:50,employee_dative_ru:'Тестовому сотруднику',employee_dative_kk:'Сынақ қызметкеріне',basis_ru:'Ручное основание',basis_kk:'Жеке негіз',basis_type:'RECIPIENT_BASE_SALARY'};
+  const recipient={assignment_id:77,position_ru:'Врач',position_kk:'дәрігері',org_unit_ru:'Отделение',org_unit_kk:'бөлімшесінің'};
+  const original={item_id:901,order_id:1,item_number:1,item_type_code:'SUPPLEMENTARY_PAY',item_status:'ACTIVE',employee_id:138,employee_name:'Тестовый сотрудник',effective_date:'2026-10-24',payload:{allowance,allowance_recipient:recipient,untouched:'Сохранить'}};
+  const onChanged=vi.fn();
+  const ui=render(<PersonnelOrderItemEditor orderId={1} orderTypeCode="COMPOSITE" items={[original]} onChanged={onChanged}/>);
+  fireEvent.click(screen.getByRole('button',{name:'Редактировать'}));
+  const select=await screen.findByLabelText('Доплата');
+  expect(select).toHaveValue('50');
+  fireEvent.change(select,{target:{value:percent===35?'other':String(percent)}});
+  if(percent===35){
+    const input=screen.getByLabelText('Процент доплаты');expect(input).toHaveAttribute('step','1');
+    fireEvent.change(input,{target:{value:'35'}});
+  }
+  fireEvent.click(screen.getByRole('button',{name:'Сохранить пункт'}));
+  await waitFor(()=>expect(updatePersonnelOrderItem).toHaveBeenCalledTimes(1));
+  const body=vi.mocked(updatePersonnelOrderItem).mock.calls[0][2];
+  expect(body.item_type_code).toBe('SUPPLEMENTARY_PAY');
+  expect(body.payload).toMatchObject({allowance:{...allowance,percent},allowance_recipient:recipient,untouched:'Сохранить'});
+  const saved={...original,payload:body.payload!};
+  ui.rerender(<PersonnelOrderItemEditor orderId={1} orderTypeCode="COMPOSITE" items={[saved]} onChanged={onChanged}/>);
+  expect(screen.getByText(`Доплата: ${percent}%`)).toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button',{name:'Редактировать'}));
+  expect(await screen.findByLabelText('Доплата')).toHaveValue(percent===35?'other':String(percent));
+  if(percent===35)expect(screen.getByLabelText('Процент доплаты')).toHaveValue(35);
+});
+
 describe("item save → editorial generation integration", () => {
   function setup() {
     let persisted: PersonnelOrderDetailResponse = {

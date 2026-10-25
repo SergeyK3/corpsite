@@ -3,6 +3,8 @@ import type { ReplacementFields } from "../_components/PersonnelOrderReplacement
 import type { PersonnelOrderType } from "./personnelOrderLabels";
 
 export type ItemPayloadDraft = {
+  allowance?: Record<string, unknown>;
+  allowance_percent?: string;
   employee_full_name_accusative_ru?: string;
   concurrent?: TransferFields;
   replacement?: ReplacementFields;
@@ -124,6 +126,8 @@ export function itemPayloadDraftFromRecord(payload: Record<string, unknown> | nu
     )} as TransferFields : undefined,
     employee_full_name_accusative_ru: String(ruForms.employee_full_name_accusative_ru || nestedForm("employee", ["full_name_accusative_ru"]) || ""),
     replacement: source.replacement && typeof source.replacement === "object" && !Array.isArray(source.replacement) ? {...source.replacement} as ReplacementFields : undefined,
+    allowance: source.allowance && typeof source.allowance === "object" && !Array.isArray(source.allowance) ? {...source.allowance} as Record<string, unknown> : undefined,
+    allowance_percent: source.allowance && typeof source.allowance === "object" && !Array.isArray(source.allowance) ? String((source.allowance as Record<string, unknown>).percent ?? "") : undefined,
     org_unit_title_ru: asString("source_org_unit_name"),
     job_code: source.job_code == null ? undefined : String(source.job_code),
     position_title_ru: source.position_title_ru == null ? undefined : String(source.position_title_ru),
@@ -203,6 +207,9 @@ export function buildItemPayload(
 ): Record<string, unknown> {
   const type = String(itemTypeCode || "").trim().toUpperCase() as PersonnelOrderType;
   const payload: Record<string, unknown> = {};
+  if (type === "SUPPLEMENTARY_PAY" && (draft.allowance || draft.allowance_percent !== undefined)) {
+    payload.allowance = { ...draft.allowance, percent: optionalNumber(draft.allowance_percent) };
+  }
   if (draft.job_code !== undefined) payload.job_code = draft.job_code || null;
   for (const key of ["position_title_ru", "position_title_kk", "org_unit_title_kk"] as const) {
     if (draft[key] !== undefined) payload[key] = draft[key] || null;

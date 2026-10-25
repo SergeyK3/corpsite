@@ -6,6 +6,7 @@ import { PERSONNEL_ORDER_TYPE_LABELS } from "./personnelOrderLabels";
  * RATE_CHANGE is a UI-only alias that persists as backend TRANSFER with to_rate only.
  */
 export type PersonnelOrderItemFormType =
+  | "SUPPLEMENTARY_PAY"
   | "TRANSFER"
   | "TERMINATION"
   | "RATE_CHANGE"
@@ -85,6 +86,13 @@ function entry(
 }
 
 const REGISTRY: Record<PersonnelOrderItemFormType, ItemFormRegistryEntry> = {
+  SUPPLEMENTARY_PAY: entry({
+    employeePicker: true, employeePickerActiveOnly: true, employeePickerMode: "required",
+    showCurrentPlacement: false, showTargetPlacement: false, showTargetRate: false,
+    showTerminationReason: false, showConcurrentDutyStartFields: false, showConcurrentDutyEndFields: false,
+    showHirePlacement: false, clearTargetOnEmployeeChange: false, backendItemType: "SUPPLEMENTARY_PAY",
+    orgPlacementSectionTitle: "",
+  }),
   "LEAVE.CHILDCARE.GRANT": entry({
     employeePicker: true, employeePickerActiveOnly: true, employeePickerMode: "required",
     showCurrentPlacement: true, showTargetPlacement: false, showTargetRate: false,
@@ -232,6 +240,7 @@ export const PERSONNEL_ORDER_ITEM_FORM_TYPE_OPTIONS: ReadonlyArray<{
   value: PersonnelOrderItemFormType;
   label: string;
 }> = [
+  { value: "SUPPLEMENTARY_PAY", label: PERSONNEL_ORDER_TYPE_LABELS.SUPPLEMENTARY_PAY },
   { value: "LEAVE.ANNUAL.GRANT", label: "Ежегодный трудовой отпуск" },
   { value: "LEAVE.CHILDCARE.GRANT", label: PERSONNEL_ORDER_TYPE_LABELS["LEAVE.CHILDCARE.GRANT"] },
   { value: "LEAVE.UNPAID.GRANT", label: "Отпуск без сохранения заработной платы" },

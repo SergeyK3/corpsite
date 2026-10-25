@@ -1,4 +1,6 @@
 "use client";
+import PersonnelOrderAllowancePercent from "./PersonnelOrderAllowancePercent";
+import { allowancePercentError } from "../_lib/personnelOrderAllowancePercent";
 
 import * as React from "react";
 import {concurrentEmployeeDatives} from "../_lib/personnelOrderConcurrentForms";
@@ -361,7 +363,8 @@ export default function PersonnelOrderCreateDialog({
   if (replacementMode) blockedReasons.push(...replacementBlockers(replacementFields,replacementMode,effective,optionalPlacement,serviceArea));
   if(serviceArea || simpleAllowance)blockedReasons.push(...recipientBlockers(allowanceRecipient,employee,!simpleAllowance,!simpleAllowance));
   if(simpleAllowance) {
-    if(!['25','50'].includes(replacementFields.allowance_percent))blockedReasons.push('Выберите доплату +25% или +50%.');
+    const percentError = allowancePercentError(replacementFields.allowance_percent);
+    if (percentError) blockedReasons.push(percentError);
     for(const [key,label] of [['basis_ru','Основание (RU)'],['basis_kk','Основание (KK)']] as const)if(!simpleAllowanceBasis[key].trim())blockedReasons.push(`Заполните поле «${label}».`);
     if(!kk.employee_full_name_dative_ru.trim())blockedReasons.push('Заполните ФИО в дательном падеже (RU).');
     if(!kk.employee_full_name_dative_kk.trim())blockedReasons.push('Заполните ФИО в дательном падеже (KK).');
@@ -831,7 +834,7 @@ export default function PersonnelOrderCreateDialog({
               {employee && transfer ? <Field label="ФИО в винительном падеже (RU)"><input aria-label="ФИО в винительном падеже (RU)" value={kk.employee_full_name_accusative_ru} onChange={e=>setKk(current=>({...current,employee_full_name_accusative_ru:e.target.value}))} className={inputClassName}/>{!kk.employee_full_name_accusative_ru.trim() ? <p role="alert">Нет подтверждённого ФИО в винительном падеже (RU). Заполните вручную.</p> : null}</Field> : null}
               {employee && (serviceArea || simpleAllowance)?<PersonnelOrderAllowanceRecipient employee={employee} value={allowanceRecipient} onChange={setAllowanceRecipient}/>:null}
               {simpleAllowance ? <section data-testid="simple-allowance-fields" className="space-y-3 sm:col-span-2">
-                <Field label="Доплата"><select aria-label="Доплата" required className={inputClassName} value={replacementFields.allowance_percent} onChange={e=>setReplacementFields(current=>({...current,allowance_percent:e.target.value}))}><option value="">Выберите доплату</option><option value="25">+25%</option><option value="50">+50%</option></select></Field>
+                <PersonnelOrderAllowancePercent value={replacementFields.allowance_percent} onChange={value=>setReplacementFields(current=>({...current,allowance_percent:value}))} inputClassName={inputClassName}/>
                 {(['ru','kk'] as const).map(lang=><Field key={lang} label={`Основание (${lang.toUpperCase()})`}><input aria-label={`Основание (${lang.toUpperCase()})`} className={inputClassName} value={simpleAllowanceBasis[`basis_${lang}`]} onChange={e=>setSimpleAllowanceBasis(current=>({...current,[`basis_${lang}`]:e.target.value}))}/></Field>)}
               </section> : null}
               {employee && (transfer || concurrent) ? <PersonnelOrderTransferFields value={transferFields} onChange={setTransferFields} orgUnits={orgUnitOptions} disabled={busy} mode={cessation ? "cessation" : concurrent ? "concurrent" : "transfer"} showRates={replacementMode!=="PAY"} rateOptional={workAllowance} documentFormsKK={Boolean(replacementMode)} autoCaseForms={serviceArea} autoGenitiveForms={concurrent && !cessation && !serviceArea} /> : null}

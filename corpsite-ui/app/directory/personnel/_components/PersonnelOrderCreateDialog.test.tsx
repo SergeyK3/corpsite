@@ -231,7 +231,7 @@ async function chooseTypeInMenu(type: string) {
   fireEvent.click(screen.getByRole("menuitem", { name: personnelOrderTypeLabel(type, "kk") }));
 }
 
-it.each(['25','50'])('creates simple supplementary pay through server template 6/version 11 with %s percent and no replacement or rates', async percent=>{
+it.each(['25','35','50'])('creates simple supplementary pay through server template 6/version 11 with %s percent and no replacement or rates', async percent=>{
   const variant={template_id:6,template_version_id:11,version_number:1,name_ru:'О дополнительной оплате',name_kk:'Қосымша ақы туралы',title_ru:'О дополнительной оплате',title_kk:'Қосымша ақы туралы',is_default:true};
   vi.mocked(getPersonnelOrderPublishedVariants).mockImplementation(async code=>({items:code==='SUPPLEMENTARY_PAY'?[variant]:[],independent_supported:true}));
   setup();
@@ -241,7 +241,7 @@ it.each(['25','50'])('creates simple supplementary pay through server template 6
   expect(screen.getByLabelText('Основание (RU)')).toHaveValue('Личное заявление');
   expect(screen.getByLabelText('Основание (KK)')).toHaveValue('Жеке өтініш');
   expect(screen.getByTestId('personnel-order-create-blockers')).not.toHaveTextContent('Заполните поле «Основание');
-  const bases=percent==='25'?{ru:'Личное заявление',kk:'Жеке өтініш'}:{ru:'Служебная записка',kk:'Қызметтік хат'};
+  const bases=percent!=='50'?{ru:'Личное заявление',kk:'Жеке өтініш'}:{ru:'Служебная записка',kk:'Қызметтік хат'};
   if(percent==='50'){
     fireEvent.change(screen.getByLabelText('Основание (RU)'),{target:{value:bases.ru}});
     fireEvent.change(screen.getByLabelText('Основание (KK)'),{target:{value:bases.kk}});
@@ -254,13 +254,14 @@ it.each(['25','50'])('creates simple supplementary pay through server template 6
   expect(screen.getByLabelText('Основание (RU)')).toHaveValue(bases.ru);
   expect(screen.getByLabelText('Основание (KK)')).toHaveValue(bases.kk);
   const selector=await screen.findByRole('combobox',{name:'Доплата'});
-  expect(Array.from(selector.querySelectorAll('option')).map(o=>o.value)).toEqual(['','25','50']);
+  expect(Array.from(selector.querySelectorAll('option')).map(o=>o.value)).toEqual(['','25','50','other']);
   expect(screen.queryByTestId('replacement-fields')).not.toBeInTheDocument();
   for(const label of ['Дополнительная ставка','Общая ставка','Замещаемый сотрудник (RU)','База расчёта доплаты (RU)'])expect(screen.queryByLabelText(label)).not.toBeInTheDocument();
   for(const [label,value] of [['Номер приказа','TEST-simple-pay'],['Дата приказа','2026-10-10'],['Дата действия','2026-02-02']])fireEvent.change(screen.getByLabelText(label),{target:{value}});
   const submit=screen.getByRole('button',{name:'Создать приказ'});
   expect(submit).toBeDisabled();
-  fireEvent.change(selector,{target:{value:percent}});
+  fireEvent.change(selector,{target:{value:percent==='35'?'other':percent}});
+  if(percent==='35')fireEvent.change(screen.getByLabelText('Процент доплаты'),{target:{value:percent}});
   vi.mocked(previewPersonnelOrderHeaderDuplicate).mockResolvedValue({blocking:false,warnings:[],candidates:[]});
   vi.mocked(createManualPersonnelOrderDraft).mockResolvedValue({order_id:1} as never);
   await waitFor(()=>expect(screen.queryByTestId('personnel-order-create-blockers')?.textContent||'').toBe(''));
