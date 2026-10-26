@@ -44,7 +44,12 @@ def make_plan(inventory,production,schema,approvals=None):
         return next((d for d in decisions if position_key(d['source_key'])==position_key(row)),None)
     def effective_position(row):
         decision=decision_for(row)
-        return {**row,'category':decision['target_category']} if decision else row
+        result={**row,'category':decision['target_category']} if decision else dict(row)
+        # A legacy local confirmed flag is not proof of human review. Imported
+        # text stays available for review, never automatically confirmed.
+        result['translation_status']='needs_review'
+        result['document_form_status']='needs_review'
+        return result
     def matching_positions(row):
         decision=decision_for(row)
         keys=[position_key(effective_position(row))]
@@ -76,7 +81,10 @@ def make_plan(inventory,production,schema,approvals=None):
             conflicts=[]
             for k,change in changes.items():
                 if k in ('name_kk','document_possessive_kk','document_nominative_ru','job_nameru','job_namekk','job_namekk_doc','name') and change['before'] and change['before']!=change['after']:
-                    conflicts.append(k)
+                    unreviewed_auto = (table=='positions' and production.get('policy_receipt')=='posdir001:forms-needs-review:v2'
+                        and matches[0].get('translation_status')=='needs_review' and matches[0].get('document_form_status')=='needs_review'
+                        and change['after'] is not None and str(change['after']).strip())
+                    if not unreviewed_auto:conflicts.append(k)
                 if k in ('translation_status','document_form_status') and change['before']=='confirmed' and change['after']!='confirmed':conflicts.append(k)
             if conflicts:entry.update(status='CONFLICT',operation='NONE',reason='Existing nonempty value/confirmed state differs',conflicting_fields=conflicts)
         return entry
@@ -90,7 +98,14 @@ def make_plan(inventory,production,schema,approvals=None):
         effective=effective_position(row)
         key=position_key(effective)
         matches=matching_positions(row)
+        if len(matches)==1:
+            # Keep a later human confirmation only when the approved target
+            # policy is present and the corresponding text is unchanged.
+            for status,fields in (('translation_status',('name_kk',)),('document_form_status',('document_nominative_ru','document_possessive_kk'))):
+                if production.get('policy_receipt')=='posdir001:forms-needs-review:v2' and matches[0].get(status)=='confirmed' and all(matches[0].get(field)==effective.get(field) for field in fields):
+                    effective[status]='confirmed'
         entry=record('positions',key,{k:effective.get(k) for k in FIELDS['positions']},matches)
+        if len(matches)==1:entry['target_revision']=matches[0].get('revision')
         if decision:
             entry.update(approval_id=decision['approval_id'],source_key=position_key(row),preserve_existing_target_identity=True)
             if len(matches)!=1:entry.update(status='MANUAL',operation='NONE',reason='Approved existing identity must resolve to exactly one target; INSERT forbidden')
@@ -162,7 +177,7 @@ def make_plan(inventory,production,schema,approvals=None):
     blockers=[]
     if production['database_revision']!=['poprint001']:blockers.append('Schema is not poprint001; separately approve schema update and re-audit; no stamp')
     if any(e['status'] in ('CONFLICT','MANUAL') for e in records):blockers.append('Resolve every CONFLICT/MANUAL before an addressed apply')
-    return {'format':'personnel-dictionary-proposal-v1','executable':False,'source_commit':'60997f57e686a233dcd1f1b4dfb566b3e17dfc9e',
+    return {'format':'personnel-dictionary-proposal-v2','executable':False,'review_policy':'auto_needs_review','source_commit':'60997f57e686a233dcd1f1b4dfb566b3e17dfc9e',
         'source_inventory_fingerprint':fingerprint(inventory),'production_snapshot_fingerprint':fingerprint(production),
         'production_schema_revision':production['database_revision'],'required_schema_revision':'poprint001',
         'global_blockers':blockers,

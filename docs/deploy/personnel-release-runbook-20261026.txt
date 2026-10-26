@@ -1,0 +1,260 @@
+Кадровые справочники: выпуск приложения/схемы и последующий перенос
+
+СТАТУС: подготовка и изолированная репетиция. Команды ниже на production
+НЕ выполнялись. Upload, переключение, миграции и перенос — только после
+отдельного согласования владельца. Полный production-дамп НЕ скачивается.
+
+Проверенный исходный production SHA: 12985ba17bc6b794fcf03733c95f423b0a720b98.
+Целевой SHA читается из release-manifest.json пакета, а не угадывается по master.
+Пакет содержит incremental Git bundle, Linux .next, SHA256SUMS и проверенный
+исходный код. Dump, .env, пароли и персональные строки в пакет не входят.
+
+Результат репетиции на полной копии production-СХЕМЫ (229 таблиц), шести
+неперсональных справочниках и синтетических сотрудниках/назначениях/приказах:
+podup001 -> posdir001 -> medspec001 -> poprint001, одна canonical head.
+После схемы: 111 needs_review/needs_review, 0 автоматических confirmed,
+73 непустых KK-названия/формы. Формы и прежние IDs сохраняются.
+Пересчитанный тестовый перенос: SKIP 253, INSERT 116, UPDATE 43, конфликтов 0.
+После переноса: positions 143 (141 исходных + 2 production-only), связи 108,
+синонимы 11, специальности 61 (55 активных, 6 архивных), группы 3.
+ID 24/52: technical; LAUNDRY_MACHINE_OPERATOR сохранена, TECHNICIAN добавлена.
+ID 47: other, добавлена SOCIAL_WORKER. Все автоматически перенесённые формы
+остаются needs_review: старый local confirmed не считается ручным согласованием.
+Повтор того же утверждённого пакета: 412 SKIP, без изменения revision.
+Защищённые данные 223 таблиц не изменились; проверены откат искусственного
+сбоя и восстановление до схемы и до переноса. Результаты — в validation-summary.
+Это не копия персональных данных production и не замена проверке полного
+backup на самом VPS перед разрешённым применением.
+
+ЛОКАЛЬНАЯ hrlocal303
+
+hrlocal303 — отдельная локальная история, не revision канонического графа.
+В опубликованном профиле отсутствует её автоматический маршрут в poprint001.
+Нельзя выполнять canonical upgrade head на этой БД и нельзя делать stamp.
+review_existing_directory выполняет только явно согласованный переход статусов
+с полным before-manifest и сохраняет ledger hrlocal303. Это проверено тестом.
+Слияние историй требует отдельного проекта; оно не нужно и не выполняется
+для production, который находится на podup001. Неподтверждённая старая схема
+без policy receipt блокируется до любых изменений.
+
+0. ПРЕДУСЛОВИЯ И СОГЛАСОВАНИЯ
+
+Ровно следующие production-действия требуют отдельного согласия:
+1) Размещение пакета на VPS, создание защищённого server-local backup и новой
+   проверочной БД на VPS; согласованное окно и остановка всех писателей.
+2) Переключение приложения/сервисов на конкретный SHA и применение трёх миграций,
+   включая заполнение справочных форм со статусом needs_review.
+3) Применение заново рассчитанного ПОСЛЕ миграций плана справочников, утверждённого
+   по SHA256 конкретного JSON. Согласования категорий уже есть; повторять их не нужно.
+4) Аварийное восстановление в новую recovery-БД и обратное переключение кода/env,
+   если smoke или перенос не прошли. Этот сценарий желательно утвердить заранее.
+Локальные сборка/тесты, подготовительные commit/push уже разрешены.
+
+1. РАЗМЕЩЕНИЕ И ПРОВЕРКА ПАКЕТА (только после согласия 1)
+
+# На VPS, после доставки только release-архива и его .sha256:
+set -euo pipefail
+BASE=/opt/projects/corpsite
+ARCHIVE=/opt/projects/corpsite/staging/personnel-release-RELEASE_SHA.tar.gz
+(cd "$(dirname "$ARCHIVE")" && sha256sum -c "$(basename "$ARCHIVE").sha256")
+STAGE="$BASE/staging/personnel-release"
+install -d -m 0700 "$STAGE"
+tar -xzf "$ARCHIVE" -C "$STAGE"
+cd "$STAGE"
+sha256sum -c SHA256SUMS
+SHA=$(python3 -c 'import json; print(json.load(open("release-manifest.json"))["source_sha"])')
+[[ "$SHA" =~ ^[0-9a-f]{40}$ ]]
+OLD=$(readlink -f "$BASE/app")
+test -L "$BASE/app"
+test "$(git -C "$OLD" rev-parse HEAD)" = 12985ba17bc6b794fcf03733c95f423b0a720b98
+NEW="$BASE/releases/$SHA"
+test ! -e "$NEW"
+git clone --no-hardlinks --no-checkout "$OLD" "$NEW"
+git -C "$NEW" bundle verify "$STAGE/release-code.bundle"
+git -C "$NEW" fetch "$STAGE/release-code.bundle" refs/heads/master
+git -C "$NEW" checkout --detach "$SHA"
+test "$(git -C "$NEW" rev-parse HEAD)" = "$SHA"
+cmp "$OLD/requirements.txt" "$NEW/requirements.txt"
+cmp "$OLD/corpsite-ui/package-lock.json" "$NEW/corpsite-ui/package-lock.json"
+ln -s "$(readlink -f "$OLD/.venv")" "$NEW/.venv"
+install -m 0600 "$OLD/.env" "$NEW/.env"
+install -m 0600 "$OLD/corpsite-ui/.env.production" "$NEW/corpsite-ui/.env.production"
+# Существующие файлы данных не копировать и не переносить: сохранить ссылки.
+for rel in .data logs runtime/hr-import corpsite-bot/.data; do
+  test -e "$OLD/$rel"
+  test ! -e "$NEW/$rel"
+  install -d "$(dirname "$NEW/$rel")"
+  ln -s "$(readlink -f "$OLD/$rel")" "$NEW/$rel"
+done
+chmod 0755 "$NEW/scripts/ops/run_regular_tasks_cron.sh" \
+  "$NEW/scripts/ops/scheduler_post_deploy_smoke.sh" "$NEW/scripts/ops/corpsite_healthcheck.sh"
+cd "$NEW/corpsite-ui"
+test "$(node -p 'process.versions.node.split(".")[0]')" = 22
+npm ci --no-audit --no-fund
+tar -xzf "$STAGE/frontend-next-linux.tar.gz" -C "$NEW/corpsite-ui"
+test "$(node -p 'require("./.next/required-server-files.json").config.deploymentId')" = "$SHA"
+# Linux build использует NEXT_PUBLIC_APP_ENV=prod, NEXT_PUBLIC_API_BASE_URL=/api,
+# NEXT_PUBLIC_DEV_X_USER_ID=''. Проверить совпадение конфигурации, не выводя секреты:
+"$NEW/.venv/bin/python" -c 'from dotenv import dotenv_values; v=dotenv_values(".env.production"); expected={"NEXT_PUBLIC_APP_ENV":"prod","NEXT_PUBLIC_API_BASE_URL":"/api","NEXT_PUBLIC_DEV_X_USER_ID":""}; assert all(v.get(k)==x for k,x in expected.items()), "Frontend config changed; rebuild required"'
+cd "$NEW"
+export PYTHONPATH="$NEW"
+.venv/bin/python -m alembic heads
+# Ожидается ровно: poprint001 (personnel_settings) (head).
+.venv/bin/python -m alembic current
+# До операции ожидается ровно podup001. Любое расхождение => остановка, без stamp.
+.venv/bin/python -m scripts.personnel_dictionary_release snapshot --output "$STAGE/before-schema-preflight.json"
+.venv/bin/python -c 'import json,sys; p=json.load(open(sys.argv[1])); assert p["database_revision"]==["podup001"], "Unexpected revision; STOP"' "$STAGE/before-schema-preflight.json"
+.venv/bin/python -c 'from alembic.config import Config; from alembic.script import ScriptDirectory; assert ScriptDirectory.from_config(Config("alembic.ini")).get_heads()==["poprint001"]'
+
+2. ОКНО И ПОЛНЫЙ BACKUP НА VPS (согласие 1)
+
+STAMP=$(date -u +%Y%m%d%H%M%S)
+BACKUP="$BASE/backups/personnel-$STAMP"
+install -d -m 0700 "$BACKUP"
+WRITERS=(corpsite-frontend.service corpsite-backend.service corpsite-bot.service \
+  corpsite-regular-tasks.timer corpsite-healthcheck.timer)
+for unit in "${WRITERS[@]}"; do
+  if systemctl is-active --quiet "$unit"; then printf '%s\n' "$unit"; fi
+done > "$BACKUP/active-units.before"
+sudo systemctl stop "${WRITERS[@]}" corpsite-regular-tasks.service corpsite-healthcheck.service
+for unit in "${WRITERS[@]}" corpsite-regular-tasks.service corpsite-healthcheck.service; do
+  if systemctl is-active --quiet "$unit"; then echo "Writer still active: $unit" >&2; exit 1; fi
+done
+# Не запускать ручные импорты/cron. Healthcheck остановлен, чтобы не поднял backend.
+install -m 0600 "$OLD/.env" "$BACKUP/env.before"
+printf '%s\n' "$OLD" > "$BACKUP/release.before"
+.venv/bin/python -m scripts.personnel_vps_backup backup --server-local-only \
+  --env-file "$OLD/.env" --output "$BACKUP/before-schema.dump"
+.venv/bin/python -m scripts.personnel_vps_backup verify --server-local-only \
+  --env-file "$OLD/.env" --backup "$BACKUP/before-schema.dump"
+VERIFY_DB="corpsite_release_verify_$STAMP"
+.venv/bin/python -m scripts.personnel_vps_backup restore-copy --server-local-only \
+  --env-file "$OLD/.env" --backup "$BACKUP/before-schema.dump" --database "$VERIFY_DB"
+# Ожидается backup_verified=true и revision=[podup001]; сверены все таблицы
+# по количествам/серверным digest в том же snapshot. Dump остаётся на VPS.
+# Исходная БД не удаляется. Новая verify-БД не используется приложением.
+
+3. ПЕРЕКЛЮЧЕНИЕ КОДА И МИГРАЦИИ (согласие 2)
+
+BACKEND_DROPIN="/etc/systemd/system/corpsite-backend.service.d/90-personnel-$SHA.conf"
+FRONTEND_DROPIN="/etc/systemd/system/corpsite-frontend.service.d/90-personnel-$SHA.conf"
+test ! -e "$BACKEND_DROPIN"; test ! -e "$FRONTEND_DROPIN"
+sudo install -d /etc/systemd/system/corpsite-backend.service.d /etc/systemd/system/corpsite-frontend.service.d
+printf '[Service]\nWorkingDirectory=%s\nExecStart=\nExecStart=%s/.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000\n' "$NEW" "$NEW" | sudo tee "$BACKEND_DROPIN" >/dev/null
+printf '[Service]\nWorkingDirectory=%s/corpsite-ui\nEnvironment=NEXT_DEPLOYMENT_ID=%s\nExecStart=\nExecStart=/usr/bin/node %s/corpsite-ui/node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port 3000\n' "$NEW" "$SHA" "$NEW" | sudo tee "$FRONTEND_DROPIN" >/dev/null
+# Обычной смены app symlink недостаточно: текущие unit имеют абсолютные пути.
+ln -s "$NEW" "$BASE/app.next"
+mv -Tf "$BASE/app.next" "$BASE/app"
+sudo systemctl daemon-reload
+test "$(systemctl show corpsite-backend -p WorkingDirectory --value)" = "$NEW"
+test "$(systemctl show corpsite-frontend -p WorkingDirectory --value)" = "$NEW/corpsite-ui"
+.venv/bin/python -m alembic upgrade poprint001
+.venv/bin/python -m alembic current
+.venv/bin/python -m alembic heads
+# Оба результата — единственная poprint001.
+.venv/bin/python -m scripts.personnel_dictionary_release snapshot --output "$BACKUP/after-schema.json"
+.venv/bin/python -c 'import json,sys; s=json.load(open(sys.argv[1])); assert s["database_revision"]==["poprint001"] and s["policy_receipt"]=="posdir001:forms-needs-review:v2"; assert all(r["translation_status"]==r["document_form_status"]=="needs_review" for r in s["dictionaries"]["positions"]["rows"])' "$BACKUP/after-schema.json"
+.venv/bin/python -m scripts.personnel_dictionary_release plan \
+  --inventory reference-data/dictionaries/local-review-20261026.json \
+  --approvals docs/deploy/personnel-dictionary-owner-approvals-20261026.json \
+  --snapshot "$BACKUP/after-schema.json" --output "$BACKUP/transfer-plan.json"
+sha256sum "$BACKUP/transfer-plan.json"
+# Тестовое ожидание: 253 SKIP / 116 INSERT / 43 UPDATE, global_blockers=[];
+# реальные значения и before/after обязательно утверждаются заново.
+
+4. ПЕРЕНОС (только согласие 3 на SHA256 свежего transfer-plan.json)
+
+# Если между фазами приложение запускалось, снова остановить писателей,
+# сделать НОВЫЙ server-local backup/restore-copy и свежий snapshot/plan.
+# Нельзя откатывать поздний перенос к старому before-schema.dump с потерей
+# новых кадровых записей. Следующая копия делается непосредственно перед DML.
+.venv/bin/python -m scripts.personnel_vps_backup backup --server-local-only \
+  --env-file "$NEW/.env" --output "$BACKUP/before-transfer.dump"
+.venv/bin/python -m scripts.personnel_vps_backup restore-copy --server-local-only \
+  --env-file "$NEW/.env" --backup "$BACKUP/before-transfer.dump" \
+  --database "corpsite_release_verify_transfer_$STAMP"
+.venv/bin/python -m scripts.personnel_dictionary_release apply \
+  --inventory reference-data/dictionaries/local-review-20261026.json \
+  --approvals docs/deploy/personnel-dictionary-owner-approvals-20261026.json \
+  --plan "$BACKUP/transfer-plan.json" --output "$BACKUP/transfer-dry-run.json"
+# По умолчанию строго READ ONLY. Ожидается applied=false.
+read -r -p 'Введите SHA256 отдельно утверждённого transfer-plan.json: ' APPROVED_PLAN_SHA
+.venv/bin/python -m scripts.personnel_dictionary_release apply --apply \
+  --approve-plan-sha256 "$APPROVED_PLAN_SHA" \
+  --inventory reference-data/dictionaries/local-review-20261026.json \
+  --approvals docs/deploy/personnel-dictionary-owner-approvals-20261026.json \
+  --plan "$BACKUP/transfer-plan.json" --output "$BACKUP/transfer-journal.json"
+# Ожидается transaction_status=committed; before/after сохранены перед COMMIT;
+# protected_before == protected_after (223 таблицы в текущей схеме).
+# При ошибке/дрейфе — ROLLBACK всей транзакции, не ручное продолжение с середины.
+# Для повторного запуска выбрать НОВОЕ имя journal: оригинал нельзя перезаписывать.
+# pending_commit после обрыва соединения не доказывает COMMIT или ROLLBACK:
+# сначала READ ONLY snapshot/plan, затем при необходимости повтор с новым journal.
+
+5. КОНТРОЛЬ И ЗАПУСК
+
+.venv/bin/python -m scripts.personnel_dictionary_release snapshot --output "$BACKUP/after-transfer.json"
+.venv/bin/python -m scripts.personnel_dictionary_release plan \
+  --inventory reference-data/dictionaries/local-review-20261026.json \
+  --approvals docs/deploy/personnel-dictionary-owner-approvals-20261026.json \
+  --snapshot "$BACKUP/after-transfer.json" --output "$BACKUP/reconcile-after.json"
+# Ожидается 412 SKIP, без INSERT/UPDATE/CONFLICT/MANUAL; 0 новых confirmed.
+.venv/bin/python -c 'import json,sys; p=json.load(open(sys.argv[1])); assert not p["global_blockers"] and len(p["records"])==412 and all(r["operation"]=="SKIP" for r in p["records"])' "$BACKUP/reconcile-after.json"
+.venv/bin/python -c 'import json,sys; d=json.load(open(sys.argv[1]))["dictionaries"]; p={r["position_id"]:r for r in d["positions"]["rows"]}; m={r["position_id"]:r["job_code"] for r in d["position_job_catalog"]["rows"]}; assert p[24]["category"]==p[52]["category"]=="technical" and p[47]["category"]=="other"; assert m[24]=="LAUNDRY_MACHINE_OPERATOR" and m[52]=="TECHNICIAN" and m[47]=="SOCIAL_WORKER"' "$BACKUP/after-transfer.json"
+# Проверить ID 24/52/47 и их связи, 55 active/6 inactive специальностей,
+# 3 группы, 11 синонимов. Производственные-only строки не удаляются.
+sudo systemctl start corpsite-backend corpsite-frontend
+curl --fail --silent --show-error http://127.0.0.1:8000/health
+curl --silent --output /dev/null --write-out '%{http_code}\n' http://127.0.0.1:3000/login
+curl --silent --output /dev/null --write-out '%{http_code}\n' http://127.0.0.1:3000/directory/personnel
+curl --silent --output /dev/null --write-out '%{http_code}\n' http://127.0.0.1:3000/directory/positions
+# Backend 200; UI 200/30x с корректным переходом на login при отсутствии сессии.
+# Авторизованно вручную проверить RU/KK, optional specialty, заголовки preview/
+# print на НОВОМ синтетическом/тестовом приказе по отдельной процедуре.
+# Не редактировать реальные приказы и не запускать импорт/catch-up/promotion.
+# После успешной проверки вернуть только ранее активные бот и таймеры:
+for unit in corpsite-bot.service corpsite-regular-tasks.timer corpsite-healthcheck.timer; do
+  if grep -Fxq "$unit" "$BACKUP/active-units.before"; then sudo systemctl start "$unit"; fi
+done
+
+6. ВОССТАНОВЛЕНИЕ ПРИ СБОЕ (согласие 4, пока писатели остановлены)
+
+# Штатный downgrade не применять. Он намеренно отказывает; попытка отката
+# всей цепочки откатывается транзакционно. Nextval может оставить пробел ID.
+sudo systemctl stop "${WRITERS[@]}" corpsite-regular-tasks.service corpsite-healthcheck.service
+RECOVERY_DB="corpsite_recovery_$STAMP"
+# Выбрать backup непосредственно перед НЕУДАВШЕЙСЯ фазой:
+RESTORE_DUMP="$BACKUP/before-schema.dump"  # либо before-transfer.dump после схемы
+.venv/bin/python -m scripts.personnel_vps_backup restore-copy --server-local-only \
+  --env-file "$NEW/.env" --backup "$RESTORE_DUMP" --database "$RECOVERY_DB"
+.venv/bin/python -m scripts.personnel_vps_backup recovery-env --server-local-only \
+  --env-file "$BACKUP/env.before" --database "$RECOVERY_DB" --output "$BACKUP/recovered.env"
+RESTORED_REV=$(python3 -c 'import json,sys; r=json.load(open(sys.argv[1]))["revision"]; assert len(r)==1; print(r[0])' "$RESTORE_DUMP.manifest.json")
+case "$RESTORED_REV" in
+  podup001)
+    install -m 0600 "$BACKUP/recovered.env" "$OLD/.env"
+    if test -f "$BACKEND_DROPIN"; then sudo rm -- "$BACKEND_DROPIN"; fi
+    if test -f "$FRONTEND_DROPIN"; then sudo rm -- "$FRONTEND_DROPIN"; fi
+    RECOVERED_RELEASE="$OLD"
+    ;;
+  poprint001)
+    install -m 0600 "$BACKUP/recovered.env" "$NEW/.env"
+    RECOVERED_RELEASE="$NEW"
+    ;;
+  *) echo 'Неожиданная revision резервной копии; остановка' >&2; exit 1 ;;
+esac
+ln -s "$RECOVERED_RELEASE" "$BASE/app.recovery"
+mv -Tf "$BASE/app.recovery" "$BASE/app"
+sudo systemctl daemon-reload
+cd "$RECOVERED_RELEASE"
+export PYTHONPATH="$RECOVERED_RELEASE"
+.venv/bin/python -m alembic current
+# Сверить с RESTORED_REV. restore-copy уже проверил все таблицы и счётчики.
+sudo systemctl start corpsite-backend corpsite-frontend
+curl --fail --silent --show-error http://127.0.0.1:8000/health
+# При before-transfer новый код/drop-ins сохранены; при before-schema возвращён старый.
+# До открытия записи выполнить UI smoke из раздела 5.
+# Бот и таймеры вернуть только после smoke, как в разделе 5.
+# Старую БД, dump, manifest и журналы сохранить. Автоматического DROP БД нет.
+# Если после backup уже были новые пользовательские записи — не делать blind
+# restore: нужен отдельно согласованный план сохранения этих изменений.

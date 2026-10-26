@@ -149,3 +149,32 @@ def test_category_change_rejects_wrong_target_id_and_duplicate_before_after_iden
     s,t,c=fixture();t['dictionaries']['positions']['rows'][0]['category']='other'
     t['dictionaries']['positions']['rows'].append({**t['dictionaries']['positions']['rows'][0],'position_id':901,'category':'technical'})
     assert next(r for r in make_plan(s,t,c,category_change_approval())['records'] if r['table']=='positions')['status']=='MANUAL'
+
+
+def test_imported_legacy_confirmed_is_not_promoted_and_target_human_review_is_preserved():
+    s,t,c=fixture()
+    for collection in (s,t):
+        collection['dictionaries']['positions']['rows'][0].update(name_kk='TEST KK',document_possessive_kk='TEST KK form')
+    s['dictionaries']['positions']['rows'][0].update(translation_status='confirmed',document_form_status='confirmed')
+    t['policy_receipt']='posdir001:forms-needs-review:v2'
+    p=make_plan(s,t,c)
+    pos=next(r for r in p['records'] if r['table']=='positions')
+    assert pos['desired']['translation_status']==pos['desired']['document_form_status']=='needs_review'
+    assert pos['status']=='MATCH'
+    t['dictionaries']['positions']['rows'][0].update(translation_status='confirmed',document_form_status='confirmed')
+    pos=next(r for r in make_plan(s,t,c)['records'] if r['table']=='positions')
+    assert pos['status']=='MATCH' and pos['desired']['translation_status']=='confirmed'
+    s['dictionaries']['positions']['rows'][0]['document_nominative_ru']='TEST changed RU form'
+    pos=next(r for r in make_plan(s,t,c)['records'] if r['table']=='positions')
+    assert pos['status']=='CONFLICT' and pos['desired']['document_form_status']=='needs_review'
+
+
+def test_replacement_of_unreviewed_migration_text_needs_policy_receipt():
+    s,t,c=fixture();s['dictionaries']['positions']['rows'][0]['name_kk']='TEST approved source text'
+    t['dictionaries']['positions']['rows'][0]['name_kk']='TEST automatic old text'
+    assert next(r for r in make_plan(s,t,c)['records'] if r['table']=='positions')['status']=='CONFLICT'
+    t['policy_receipt']='posdir001:forms-needs-review:v2'
+    pos=next(r for r in make_plan(s,t,c)['records'] if r['table']=='positions')
+    assert pos['status']=='UPDATE' and pos['desired']['translation_status']=='needs_review'
+    s['dictionaries']['positions']['rows'][0]['name_kk']=None
+    assert next(r for r in make_plan(s,t,c)['records'] if r['table']=='positions')['status']=='CONFLICT'

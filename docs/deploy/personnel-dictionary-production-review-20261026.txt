@@ -1,5 +1,11 @@
 Production: сверка кадровых справочников и проект переноса, 26.10.2026
 
+ВЫПУСК И ПЕРЕНОС: personnel-release-runbook-20261026.txt и
+personnel-release-validation-20261026.json. Исторический JSON-план ниже
+не исполняется: после миграций scripts.personnel_dictionary_release создаёт
+новый план v2, привязанный к БД, снимку и согласованиям. Автоматические
+формы импортируются как needs_review, независимо от старого local confirmed.
+
 АКТУАЛИЗАЦИЯ POSDIR001: canonical policy v2
 По решению владельца автоматический backfill теперь оставляет оба статуса
 needs_review. Тексты всех 111 строк сохранены; автоматически confirmed=0.

@@ -23,19 +23,18 @@ def test_versioned_fresh_plan_preserves_approved_targets_and_snapshot_provenance
     import hashlib
     import json
     from pathlib import Path
-    from scripts.plan_personnel_dictionary_transfer import make_plan
+    from scripts.plan_personnel_dictionary_transfer import fingerprint
     root=Path(__file__).resolve().parents[1]
     read=lambda p:json.loads((root/p).read_text(encoding='utf-8'))
     plan=read('docs/deploy/personnel-dictionary-production-plan-20261026.json')
     snapshot=read(plan['planning_inputs']['production_snapshot'])
     assert snapshot['transaction_read_only']=='on'
     assert plan['planning_commit']=='daf276c816bd2d0d2f4ea9bb4311a56caea26b08'
-    planner=(root/'scripts/plan_personnel_dictionary_transfer.py').read_bytes().replace(b'\r\n',b'\n')
-    assert hashlib.sha256(planner).hexdigest()==plan['planning_inputs']['planner_sha256']
-    generated=make_plan(read('reference-data/dictionaries/local-review-20261026.json'),snapshot,snapshot,
-                        read('docs/deploy/personnel-dictionary-owner-approvals-20261026.json'))
-    assert generated['records']==plan['records']
-    assert generated['expected_operations']==plan['expected_operations']
+    # This is a frozen pre-migration artifact from daf276c8, not an executable
+    # plan for the new review policy. A new plan must follow the actual upgrade.
+    assert len(plan['planning_inputs']['planner_sha256'])==64
+    assert fingerprint(snapshot)==plan['production_snapshot_fingerprint']
+    assert fingerprint(read('reference-data/dictionaries/local-review-20261026.json'))==plan['source_inventory_fingerprint']
     for target_id,code,operation in ((24,'LAUNDRY_MACHINE_OPERATOR','SKIP'),(52,'TECHNICIAN','INSERT')):
         record=next(r for r in plan['records'] if r.get('target_identity_guard',{}).get('expected_target_position_id')==target_id)
         assert record['before']['category']=='other' and record['desired']['category']=='technical'

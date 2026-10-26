@@ -71,7 +71,9 @@ def test_empty_unmapped_values_and_existing_kk_text_are_not_invented_or_trimmed(
 
 def test_legacy_schema_refuses_blind_reset_and_explicit_transition_preserves_text(fresh_database):
     initialize(fresh_database)
-    with fresh_database.begin() as conn:legacy_upgrade(conn)
+    with fresh_database.begin() as conn:
+        legacy_upgrade(conn)
+        conn.exec_driver_sql("CREATE TABLE public.alembic_version(version_num text PRIMARY KEY);INSERT INTO public.alembic_version VALUES('hrlocal303')")
     with fresh_database.connect() as conn:before=fingerprint(conn);original=rows(conn)
     with pytest.raises(RuntimeError,match='owner-reviewed'):
         with fresh_database.begin() as conn:current.upgrade(conn)
@@ -90,6 +92,7 @@ def test_legacy_schema_refuses_blind_reset_and_explicit_transition_preserves_tex
         approved=fingerprint(conn)
         current.review_existing_directory(conn,manifest);current.upgrade(conn)
         assert fingerprint(conn)==approved
+        assert conn.exec_driver_sql('SELECT version_num FROM public.alembic_version').scalar()=='hrlocal303'
 
 
 def test_legacy_transition_requires_complete_review_and_rejects_drift(fresh_database):

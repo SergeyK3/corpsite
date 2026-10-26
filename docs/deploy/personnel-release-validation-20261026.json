@@ -1,0 +1,183 @@
+{
+  "format": "personnel-release-validation-v1",
+  "date": "2026-10-26",
+  "production_sha": "12985ba17bc6b794fcf03733c95f423b0a720b98",
+  "production_revision": [
+    "podup001"
+  ],
+  "production_locale": {
+    "encoding": "UTF8",
+    "datcollate": "en_US.utf8",
+    "datctype": "en_US.utf8",
+    "datlocprovider": "c"
+  },
+  "preparation_base_origin_master": "db833071c5ed9db664162f41aad99ed9b0e0acd7",
+  "release_sha": "Pinned by package release-manifest.json and Linux deploymentId",
+  "no_production_changes": true,
+  "production_personnel_rows_exported": false,
+  "inventory_sha256": "3055b61c9899d195a0a30fa0c89165c7f22b99e72bc987ce451fc4caaad76b51",
+  "rehearsal": {
+    "scope": "full production schema, six nonpersonal dictionaries, synthetic personnel only",
+    "production_unchanged": true,
+    "migration_head": "poprint001",
+    "canonical_head_count": 1,
+    "initial_positions": 111,
+    "initial_needs_review": 111,
+    "transfer_operations": {
+      "SKIP": 253,
+      "INSERT": 116,
+      "UPDATE": 43
+    },
+    "repeat": {
+      "applied": false,
+      "already_applied": true,
+      "operations": {
+        "SKIP": 412
+      }
+    },
+    "protected_tables_verified": 223,
+    "final_counts": {
+      "positions": 143,
+      "position_job_catalog": 108,
+      "position_aliases": 11,
+      "medical_specialties": 61,
+      "medical_specialty_groups": 3
+    },
+    "all_positions_needs_review": true,
+    "category_ids_preserved": [
+      24,
+      52,
+      47
+    ],
+    "downgrade_refusal": "Kazakh specialty names are user data; preserve them before rollback",
+    "migration_restore_verified": true,
+    "transfer_restore_verified": true,
+    "transaction_failure_rollback_verified": true,
+    "schema_constraints_triggers_restore_verified": true,
+    "sequence_restore_verified": true,
+    "transaction_rollback_may_consume_sequence_numbers": true,
+    "published_title_immutable_verified": true
+  },
+  "cli": {
+    "approval_hash_required": true,
+    "target_database_bound": "corpsite_cli_apply_test",
+    "commit_journal_written": true,
+    "existing_journal_overwrite_refused": true,
+    "repeat_noop": true,
+    "operations": {
+      "SKIP": 253,
+      "INSERT": 116,
+      "UPDATE": 43
+    },
+    "protected_tables": 223
+  },
+  "backend": {
+    "passed": 101,
+    "subtests_passed": 17,
+    "skipped": 0,
+    "command": [
+      "-m",
+      "pytest",
+      "--noconftest",
+      "-o",
+      "addopts=",
+      "-p",
+      "no:cacheprovider",
+      "--basetemp",
+      "runtime/release-final-tests-temp",
+      "--tb=short",
+      "-q",
+      "-k",
+      "not real_apply",
+      "tests/test_agreed_dictionaries_isolated.py",
+      "tests/test_job_catalog_unit.py",
+      "tests/test_personnel_dictionary_readonly_snapshot.py",
+      "tests/test_personnel_dictionary_transfer_plan.py",
+      "tests/test_personnel_order_medical_specialty.py",
+      "tests/test_personnel_order_print_title_chain_postgres.py",
+      "tests/test_personnel_order_print_titles_isolated.py",
+      "tests/test_personnel_order_print_titles_migration_isolated.py",
+      "tests/test_posdir_needs_review_migration.py",
+      "tests/test_simple_concurrent_specialty_isolated.py",
+      "tests/test_personnel_dictionary_release_executor.py",
+      "tests/test_personnel_vps_backup_isolated.py",
+      "tests/test_personnel_order_concurrent_contract.py"
+    ]
+  },
+  "frontend": {
+    "passed": 234,
+    "failed": 0,
+    "suites": 30,
+    "linux_build": "Next production build and TypeScript successful; immutable final SHA is rebuilt by packager preparation",
+    "node_image": "node:22.14.0-bookworm-slim"
+  },
+  "backend_smoke": {
+    "status": 200,
+    "response": {
+      "status": "ok"
+    },
+    "lifespan_workers_started": false
+  },
+  "frontend_smoke": {
+    "/login": {
+      "status": 200,
+      "body_bytes": 12777
+    },
+    "/directory/personnel": {
+      "status": 200,
+      "body_bytes": 13316
+    },
+    "/directory/positions": {
+      "status": 200,
+      "body_bytes": 12581
+    },
+    "/directory/medical-specialties": {
+      "status": 200,
+      "body_bytes": 12703
+    },
+    "/admin/templates": {
+      "status": 200,
+      "body_bytes": 13493
+    }
+  },
+  "vps_backup_helper_test": {
+    "backup": true,
+    "verify_checksum": true,
+    "restore_into_new_database": true,
+    "schema_indexes_constraints_triggers_views": true,
+    "identity_sequences": true,
+    "database_locale_preserved": true,
+    "existing_target_refused": true,
+    "recovery_env": true,
+    "corruption_detected": true
+  },
+  "legacy_local_schema": {
+    "revision": "hrlocal303",
+    "canonical_upgrade_supported": false,
+    "stamp_allowed": false,
+    "reviewed_status_transition_keeps_ledger": true,
+    "production_affected": false
+  },
+  "preparation_files": [
+    "docs/deploy/personnel-dictionary-production-review-20261026.txt",
+    "docs/deploy/personnel-release-runbook-20261026.txt",
+    "docs/deploy/personnel-release-validation-20261026.txt",
+    "docs/deploy/personnel-release-validation-20261026.json",
+    "scripts/plan_personnel_dictionary_transfer.py",
+    "scripts/personnel_dictionary_release.py",
+    "scripts/personnel_vps_backup.py",
+    "scripts/build_personnel_release.py",
+    "tests/test_personnel_dictionary_release_executor.py",
+    "tests/test_personnel_dictionary_transfer_plan.py",
+    "tests/test_personnel_dictionary_readonly_snapshot.py",
+    "tests/test_posdir_needs_review_migration.py",
+    "tests/test_personnel_vps_backup_isolated.py"
+  ],
+  "approval_actions": [
+    "Upload/stage release, server-local backup and verification database, writer maintenance window",
+    "Switch pinned code/systemd units and apply posdir001, medspec001, poprint001",
+    "Approve fresh post-migration plan SHA256 and apply dictionary DML",
+    "Emergency recovery into new database and code/env switch if needed; may be pre-approved"
+  ],
+  "runbook": "docs/deploy/personnel-release-runbook-20261026.txt"
+}
