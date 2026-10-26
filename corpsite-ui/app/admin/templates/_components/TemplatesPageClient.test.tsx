@@ -24,6 +24,20 @@ const open = async (label = "Редактировать шаблон") => { awai
 const changeTitle = (value: string) => fireEvent.change(screen.getByLabelText("Заголовок RU"), { target: { value } });
 
 describe("TemplatesPageClient draft lifecycle", () => {
+  it('saves an official print heading independently of the detailed internal name and reports a missing KK heading',async()=>{
+    const internal='О совмещении (О замещении на время отпуска как доп ставка)';
+    vi.mocked(getPersonnelOrderTemplateDraft).mockResolvedValue({...draft,title_ru:internal,print_title_ru:'О замещении',print_title_kk:null});
+    setup();await open();
+    expect(screen.getByLabelText('Заголовок RU')).toHaveValue(internal);
+    expect(screen.getByLabelText('Печатный заголовок RU')).toHaveValue('О замещении');
+    expect(screen.getByLabelText('Печатный заголовок KK')).toHaveValue('');
+    expect(screen.getByText(/требуется согласование отсутствующих/)).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Печатный заголовок RU'),{target:{value:'О замещении (TEST official parentheses)'}});
+    fireEvent.click(screen.getByRole('button',{name:'Сохранить черновик'}));
+    await waitFor(()=>expect(savePersonnelOrderTemplateDraft).toHaveBeenCalledWith('TERMINATION',expect.objectContaining({
+      title_ru:internal,print_title_ru:'О замещении (TEST official parentheses)',print_title_kk:null,
+    })));
+  });
   it("lists and searches every independent identity rather than only the type's default name",async()=>{
     const first={template_id:9,item_type_code:"TERMINATION",name_ru:"TEST обычный",name_kk:"TEST бірінші",is_default:true,template_version_id:20,draft_version_id:null};
     const second={...first,template_id:24,name_ru:"TEST процентная доплата",name_kk:"TEST қосымша ақы",is_default:false,template_version_id:null,draft_version_id:36};

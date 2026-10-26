@@ -145,6 +145,7 @@ class PersonnelOrderDetailResponse(BaseModel):
     prints: List[PersonnelOrderPrintOut]
     events: List[PersonnelOrderLinkedEventOut]
     acknowledgements: List["PersonnelOrderAcknowledgementOut"] = Field(default_factory=list)
+    print_title_snapshot: Optional[Dict[str, Any]] = None
 
 
 class PersonnelOrderAcknowledgementOut(BaseModel):
@@ -534,6 +535,9 @@ class PersonnelOrderPublishedTemplateTitleOut(BaseModel):
     item_type_code: str
     title_ru: str
     title_kk: str
+    print_title_ru: Optional[str] = None
+    print_title_kk: Optional[str] = None
+    print_title_approval_required: list[str] = []
 
 
 class PersonnelOrderManualDraftCreateOut(BaseModel):

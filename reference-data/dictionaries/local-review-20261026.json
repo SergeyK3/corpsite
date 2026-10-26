@@ -1,0 +1,3363 @@
+{
+  "format": "local-dictionary-review-inventory-v1",
+  "captured_date": "2026-10-26",
+  "purpose": "Inventory for separate deployment review. NOT an automatic production import or migration. Local IDs are not portable.",
+  "production_compared": false,
+  "summary": {
+    "positions": {
+      "count": 141,
+      "sha256": "dc08d0d034a44c7b5f719a3fb3455925850cb02751b656f14826bb89fb1e5e90"
+    },
+    "position_aliases": {
+      "count": 11,
+      "sha256": "d1bddb7a1e81a3af7e6a5e7ec4ea51827df0f6551b77b687d85b6399a34ced37"
+    },
+    "position_job_catalog": {
+      "count": 108,
+      "sha256": "f55d6e7f7dae3ac7731dcf50f30f43b876a651100e4b4480ec5189fc8ccd2e4b"
+    },
+    "job_positions_catalog": {
+      "count": 88,
+      "sha256": "fcb8d19162ea69e12e1b617a6cac7807416209a12380bd8f5f56b2e80edd1211"
+    },
+    "medical_specialties": {
+      "count": 61,
+      "sha256": "9b34a51bc6c2b2d22563c1a746c25029bd8050bbacc14824b9e6dc1f982eee68"
+    },
+    "medical_specialty_groups": {
+      "count": 3,
+      "sha256": "b0fe4eaf6e900868597dbf8166e3eb2279e7fb848a8cbbc2aff32aaa54104c47"
+    },
+    "specialties_active": 55,
+    "specialties_with_kk": 55,
+    "positions_confirmed_kk": 113,
+    "family_differences_from_versioned_catalog": [],
+    "link_differences_from_versioned_catalog": []
+  },
+  "dictionaries": {
+    "positions": {
+      "count": 141,
+      "sha256": "dc08d0d034a44c7b5f719a3fb3455925850cb02751b656f14826bb89fb1e5e90",
+      "rows": [
+        {
+          "name": "Аналитик ЭРОБ",
+          "name_kk": "Онкологиялық науқастардың электрондық тіркелімінің талдаушысы",
+          "category": "admin",
+          "revision": 3,
+          "position_id": 61,
+          "record_kind": "variant",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Аналитик ЭРОБ",
+          "document_possessive_kk": "онкологиялық науқастардың электрондық тіркелімінің талдаушысы"
+        },
+        {
+          "name": "Архивариус",
+          "name_kk": "Мұрағатшы",
+          "category": "admin",
+          "revision": 1,
+          "position_id": 1,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Архивариус",
+          "document_possessive_kk": "мұрағатшысы"
+        },
+        {
+          "name": "Аудитор",
+          "name_kk": "Аудитор",
+          "category": "admin",
+          "revision": 1,
+          "position_id": 2,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Аудитор",
+          "document_possessive_kk": "аудиторы"
+        },
+        {
+          "name": "Буфетчица",
+          "name_kk": "Буфетші",
+          "category": "technical",
+          "revision": 1,
+          "position_id": 723,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Буфетчица",
+          "document_possessive_kk": "буфетшісі"
+        },
+        {
+          "name": "Бухгалтер",
+          "name_kk": "Бухгалтер",
+          "category": "admin",
+          "revision": 1,
+          "position_id": 3,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Бухгалтер",
+          "document_possessive_kk": "бухгалтері"
+        },
+        {
+          "name": "Бухгалтер-кассир",
+          "name_kk": "Бухгалтер-кассир",
+          "category": "admin",
+          "revision": 1,
+          "position_id": 4,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Бухгалтер-кассир",
+          "document_possessive_kk": "бухгалтер-кассирі"
+        },
+        {
+          "name": "Бухгалтер по учету основных средств",
+          "name_kk": "Негізгі құралдарды есепке алу жөніндегі бухгалтер",
+          "category": "other",
+          "revision": 1,
+          "position_id": 731,
+          "record_kind": "standalone",
+          "translation_status": "needs_review",
+          "document_form_status": "needs_review",
+          "document_nominative_ru": null,
+          "document_possessive_kk": null
+        },
+        {
+          "name": "Бухгалтер-экономист",
+          "name_kk": "Бухгалтер-экономист",
+          "category": "admin",
+          "revision": 1,
+          "position_id": 724,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Бухгалтер-экономист",
+          "document_possessive_kk": "бухгалтер-экономисті"
+        },
+        {
+          "name": "Водитель",
+          "name_kk": "Жүргізуші",
+          "category": "technical",
+          "revision": 1,
+          "position_id": 5,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Водитель",
+          "document_possessive_kk": "жүргізушісі"
+        },
+        {
+          "name": "Врач",
+          "name_kk": "Дәрігер",
+          "category": "medical",
+          "revision": 1,
+          "position_id": 6,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Врач",
+          "document_possessive_kk": "дәрігері"
+        },
+        {
+          "name": "врач амбулаторного приема",
+          "name_kk": "Амбулаториялық қабылдау дәрігері",
+          "category": "medical",
+          "revision": 3,
+          "position_id": 759,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "needs_review",
+          "document_nominative_ru": "врач амбулаторного приема",
+          "document_possessive_kk": "амбулаториялық қабылдау дәрігері"
+        },
+        {
+          "name": "врач ординатор",
+          "name_kk": "Ординатор дәрігер",
+          "category": "medical",
+          "revision": 1,
+          "position_id": 758,
+          "record_kind": "standalone",
+          "translation_status": "needs_review",
+          "document_form_status": "needs_review",
+          "document_nominative_ru": null,
+          "document_possessive_kk": null
+        },
+        {
+          "name": "Врач-эксперт",
+          "name_kk": "Дәрігер-сарапшы",
+          "category": "medical",
+          "revision": 1,
+          "position_id": 721,
+          "record_kind": "variant",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Врач-эксперт",
+          "document_possessive_kk": "дәрігер-сарапшысы"
+        },
+        {
+          "name": "гардеробщица",
+          "name_kk": "Гардеробшы",
+          "category": "other",
+          "revision": 1,
+          "position_id": 732,
+          "record_kind": "standalone",
+          "translation_status": "needs_review",
+          "document_form_status": "needs_review",
+          "document_nominative_ru": null,
+          "document_possessive_kk": null
+        },
+        {
+          "name": "Главная медсестра",
+          "name_kk": "Бас мейіргер",
+          "category": "medical",
+          "revision": 1,
+          "position_id": 7,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Главная медсестра",
+          "document_possessive_kk": "бас мейіргері"
+        },
+        {
+          "name": "Главный бухгалтер",
+          "name_kk": "Бас бухгалтер",
+          "category": "admin",
+          "revision": 1,
+          "position_id": 8,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Главный бухгалтер",
+          "document_possessive_kk": "бас бухгалтері"
+        },
+        {
+          "name": "Главный инженер",
+          "name_kk": "Бас инженер",
+          "category": "technical",
+          "revision": 1,
+          "position_id": 728,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Главный инженер",
+          "document_possessive_kk": "бас инженері"
+        },
+        {
+          "name": "Главный экономист",
+          "name_kk": "Бас экономист",
+          "category": "admin",
+          "revision": 1,
+          "position_id": 59,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Главный экономист",
+          "document_possessive_kk": "бас экономисті"
+        },
+        {
+          "name": "Дворник",
+          "name_kk": "Аула сыпырушы",
+          "category": "technical",
+          "revision": 1,
+          "position_id": 9,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Дворник",
+          "document_possessive_kk": "аула сыпырушысы"
+        },
+        {
+          "name": "Дезинфектор",
+          "name_kk": "Дезинфектор",
+          "category": "technical",
+          "revision": 1,
+          "position_id": 10,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Дезинфектор",
+          "document_possessive_kk": "дезинфекторы"
+        },
+        {
+          "name": "Диетсестра",
+          "name_kk": "Диеталық мейіргер",
+          "category": "medical",
+          "revision": 1,
+          "position_id": 11,
+          "record_kind": "variant",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Диетсестра",
+          "document_possessive_kk": "диеталық мейіргері"
+        },
+        {
+          "name": "Директор",
+          "name_kk": "Директор",
+          "category": "leaders",
+          "revision": 1,
+          "position_id": 62,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Директор",
+          "document_possessive_kk": "директоры"
+        },
+        {
+          "name": "Зав. ГО и ЧС",
+          "name_kk": "Азаматтық қорғаныс және төтенше жағдайлар жөніндегі меңгеруші",
+          "category": "other",
+          "revision": 1,
+          "position_id": 733,
+          "record_kind": "standalone",
+          "translation_status": "needs_review",
+          "document_form_status": "needs_review",
+          "document_nominative_ru": null,
+          "document_possessive_kk": null
+        },
+        {
+          "name": "Заведующая прачечной",
+          "name_kk": "Кір жуу орнының меңгерушісі",
+          "category": "leaders",
+          "revision": 1,
+          "position_id": 12,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Заведующая прачечной",
+          "document_possessive_kk": "кір жуу орнының меңгерушісі"
+        },
+        {
+          "name": "Заведующий аптекой",
+          "name_kk": "Дәріхана меңгерушісі",
+          "category": "leaders",
+          "revision": 1,
+          "position_id": 63,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Заведующий аптекой",
+          "document_possessive_kk": "дәріхана меңгерушісі"
+        },
+        {
+          "name": "Заведующий гинекологическим отделением",
+          "name_kk": "Гинекология бөлімшесінің меңгерушісі",
+          "category": "leaders",
+          "revision": 3,
+          "position_id": 64,
+          "record_kind": "variant",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Заведующий гинекологическим отделением",
+          "document_possessive_kk": "гинекология бөлімшесінің меңгерушісі"
+        },
+        {
+          "name": "Заведующий диспансерным отделением",
+          "name_kk": "Диспансер бөлімшесінің меңгерушісі",
+          "category": "leaders",
+          "revision": 3,
+          "position_id": 65,
+          "record_kind": "variant",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Заведующий диспансерным отделением",
+          "document_possessive_kk": "диспансер бөлімшесінің меңгерушісі"
+        },
+        {
+          "name": "Заведующий инсультным отделением",
+          "name_kk": "Инсульт бөлімшесінің меңгерушісі",
+          "category": "leaders",
+          "revision": 3,
+          "position_id": 66,
+          "record_kind": "variant",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Заведующий инсультным отделением",
+          "document_possessive_kk": "инсульт бөлімшесінің меңгерушісі"
+        },
+        {
+          "name": "Заведующий отделением",
+          "name_kk": "Бөлімше меңгерушісі",
+          "category": "other",
+          "revision": 1,
+          "position_id": 714,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Заведующий отделением",
+          "document_possessive_kk": "бөлімше меңгерушісі"
+        },
+        {
+          "name": "Заведующий отделением амбулаторной хирургии",
+          "name_kk": "Амбулаториялық хирургия бөлімшесінің меңгерушісі",
+          "category": "leaders",
+          "revision": 3,
+          "position_id": 67,
+          "record_kind": "variant",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Заведующий отделением амбулаторной хирургии",
+          "document_possessive_kk": "амбулаториялық хирургия бөлімшесінің меңгерушісі"
+        },
+        {
+          "name": "Заведующий отделением опухолей головы и шеи",
+          "name_kk": "Бас және мойын ісіктері бөлімшесінің меңгерушісі",
+          "category": "leaders",
+          "revision": 3,
+          "position_id": 68,
+          "record_kind": "variant",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Заведующий отделением опухолей головы и шеи",
+          "document_possessive_kk": "бас және мойын ісіктері бөлімшесінің меңгерушісі"
+        },
+        {
+          "name": "Заведующий отделением радиологии",
+          "name_kk": "Радиология бөлімшесінің меңгерушісі",
+          "category": "leaders",
+          "revision": 3,
+          "position_id": 69,
+          "record_kind": "variant",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Заведующий отделением радиологии",
+          "document_possessive_kk": "радиология бөлімшесінің меңгерушісі"
+        },
+        {
+          "name": "Заведующий отделением реабилитации",
+          "name_kk": "Оңалту бөлімшесінің меңгерушісі",
+          "category": "leaders",
+          "revision": 3,
+          "position_id": 70,
+          "record_kind": "variant",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Заведующий отделением реабилитации",
+          "document_possessive_kk": "оңалту бөлімшесінің меңгерушісі"
+        },
+        {
+          "name": "Заведующий отделением химиотерапии 1",
+          "name_kk": "№ 1 химиотерапия бөлімшесінің меңгерушісі",
+          "category": "leaders",
+          "revision": 2,
+          "position_id": 71,
+          "record_kind": "variant",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Заведующий отделением химиотерапии 1",
+          "document_possessive_kk": "№ 1 химиотерапия бөлімшесінің меңгерушісі"
+        },
+        {
+          "name": "Заведующий отделением химиотерапии 2",
+          "name_kk": "№ 2 химиотерапия бөлімшесінің меңгерушісі",
+          "category": "leaders",
+          "revision": 3,
+          "position_id": 72,
+          "record_kind": "variant",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Заведующий отделением химиотерапии 2",
+          "document_possessive_kk": "№ 2 химиотерапия бөлімшесінің меңгерушісі"
+        },
+        {
+          "name": "Заведующий ОТ и ТБ",
+          "name_kk": "Еңбекті қорғау және қауіпсіздік техникасы жөніндегі меңгеруші",
+          "category": "leaders",
+          "revision": 1,
+          "position_id": 719,
+          "record_kind": "variant",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Заведующий ОТ и ТБ",
+          "document_possessive_kk": "еңбекті қорғау және қауіпсіздік техникасы жөніндегі меңгерушісі"
+        },
+        {
+          "name": "Заведующий паллиативным отделением",
+          "name_kk": "Паллиативтік бөлімшенің меңгерушісі",
+          "category": "leaders",
+          "revision": 3,
+          "position_id": 73,
+          "record_kind": "variant",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Заведующий паллиативным отделением",
+          "document_possessive_kk": "паллиативтік бөлімшенің меңгерушісі"
+        },
+        {
+          "name": "Заведующий складом",
+          "name_kk": "Қойма меңгерушісі",
+          "category": "leaders",
+          "revision": 1,
+          "position_id": 13,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Заведующий складом",
+          "document_possessive_kk": "қойма меңгерушісі"
+        },
+        {
+          "name": "Заведующий хирургическим отделением 1",
+          "name_kk": "№ 1 хирургия бөлімшесінің меңгерушісі",
+          "category": "leaders",
+          "revision": 3,
+          "position_id": 74,
+          "record_kind": "variant",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Заведующий хирургическим отделением 1",
+          "document_possessive_kk": "№ 1 хирургия бөлімшесінің меңгерушісі"
+        },
+        {
+          "name": "Заведующий хирургическим отделением 2",
+          "name_kk": "№ 2 хирургия бөлімшесінің меңгерушісі",
+          "category": "leaders",
+          "revision": 3,
+          "position_id": 75,
+          "record_kind": "variant",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Заведующий хирургическим отделением 2",
+          "document_possessive_kk": "№ 2 хирургия бөлімшесінің меңгерушісі"
+        },
+        {
+          "name": "зам главного бухгалтера",
+          "name_kk": "Бас бухгалтердің орынбасары",
+          "category": "leaders",
+          "revision": 1,
+          "position_id": 76,
+          "record_kind": "variant",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "зам главного бухгалтера",
+          "document_possessive_kk": "бас бухгалтердің орынбасары"
+        },
+        {
+          "name": "Зам директора",
+          "name_kk": "Директордың орынбасары",
+          "category": "leaders",
+          "revision": 1,
+          "position_id": 14,
+          "record_kind": "variant",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Зам директора",
+          "document_possessive_kk": "директордың орынбасары"
+        },
+        {
+          "name": "Зам по адм вопросам",
+          "name_kk": "Әкімшілік мәселелер жөніндегі орынбасар",
+          "category": "leaders",
+          "revision": 1,
+          "position_id": 77,
+          "record_kind": "variant",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Зам по адм вопросам",
+          "document_possessive_kk": "әкімшілік мәселелер жөніндегі орынбасары"
+        },
+        {
+          "name": "Зам по диспансеру и внутр экспертизе",
+          "name_kk": "Диспансер және ішкі сараптама жөніндегі орынбасар",
+          "category": "leaders",
+          "revision": 1,
+          "position_id": 78,
+          "record_kind": "variant",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Зам по диспансеру и внутр экспертизе",
+          "document_possessive_kk": "диспансер және ішкі сараптама жөніндегі орынбасары"
+        },
+        {
+          "name": "Зам по лечебной работе",
+          "name_kk": "Емдеу жұмысы жөніндегі орынбасар",
+          "category": "leaders",
+          "revision": 1,
+          "position_id": 79,
+          "record_kind": "variant",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Зам по лечебной работе",
+          "document_possessive_kk": "емдеу жұмысы жөніндегі орынбасары"
+        },
+        {
+          "name": "Зам по стратегии",
+          "name_kk": "Стратегия жөніндегі орынбасар",
+          "category": "leaders",
+          "revision": 1,
+          "position_id": 80,
+          "record_kind": "variant",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Зам по стратегии",
+          "document_possessive_kk": "стратегия жөніндегі орынбасары"
+        },
+        {
+          "name": "зам рук-ля отдела статистики",
+          "name_kk": "Статистика бөлімі басшысының орынбасары",
+          "category": "leaders",
+          "revision": 1,
+          "position_id": 81,
+          "record_kind": "variant",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "зам рук-ля отдела статистики",
+          "document_possessive_kk": "статистика бөлімі басшысының орынбасары"
+        },
+        {
+          "name": "Инженер",
+          "name_kk": "Инженер",
+          "category": "technical",
+          "revision": 1,
+          "position_id": 16,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Инженер",
+          "document_possessive_kk": "инженері"
+        },
+        {
+          "name": "Инженер-мед.физик",
+          "name_kk": "Инженер-медицина физигі",
+          "category": "technical",
+          "revision": 2,
+          "position_id": 17,
+          "record_kind": "variant",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Инженер-мед.физик",
+          "document_possessive_kk": "инженер-медицина физигі"
+        },
+        {
+          "name": "инженер по охране труда и ОБ",
+          "name_kk": "Еңбекті қорғау және қауіпсіздік техникасы жөніндегі инженер",
+          "category": "other",
+          "revision": 1,
+          "position_id": 735,
+          "record_kind": "standalone",
+          "translation_status": "needs_review",
+          "document_form_status": "needs_review",
+          "document_nominative_ru": null,
+          "document_possessive_kk": null
+        },
+        {
+          "name": "инженер радиационной безопасности",
+          "name_kk": "Радиациялық қауіпсіздік жөніндегі инженер",
+          "category": "other",
+          "revision": 1,
+          "position_id": 734,
+          "record_kind": "standalone",
+          "translation_status": "needs_review",
+          "document_form_status": "needs_review",
+          "document_nominative_ru": null,
+          "document_possessive_kk": null
+        },
+        {
+          "name": "Кассир",
+          "name_kk": "Кассир",
+          "category": "admin",
+          "revision": 1,
+          "position_id": 18,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Кассир",
+          "document_possessive_kk": "кассирі"
+        },
+        {
+          "name": "кислородчик",
+          "name_kk": "Ауа бөлу аппаратшысы",
+          "category": "other",
+          "revision": 1,
+          "position_id": 736,
+          "record_kind": "standalone",
+          "translation_status": "needs_review",
+          "document_form_status": "needs_review",
+          "document_nominative_ru": null,
+          "document_possessive_kk": null
+        },
+        {
+          "name": "Комендант",
+          "name_kk": "Комендант",
+          "category": "technical",
+          "revision": 2,
+          "position_id": 19,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Комендант",
+          "document_possessive_kk": "коменданты"
+        },
+        {
+          "name": "Комплаенс-офицер",
+          "name_kk": "Комплаенс-офицер",
+          "category": "admin",
+          "revision": 1,
+          "position_id": 727,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Комплаенс-офицер",
+          "document_possessive_kk": "комплаенс-офицері"
+        },
+        {
+          "name": "Курьер",
+          "name_kk": "Курьер",
+          "category": "technical",
+          "revision": 1,
+          "position_id": 20,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Курьер",
+          "document_possessive_kk": "курьері"
+        },
+        {
+          "name": "Кухрабочий",
+          "name_kk": "Асүй жұмысшысы",
+          "category": "technical",
+          "revision": 1,
+          "position_id": 21,
+          "record_kind": "variant",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Кухрабочий",
+          "document_possessive_kk": "асүй жұмысшысы"
+        },
+        {
+          "name": "Лаборант",
+          "name_kk": "Зертханашы",
+          "category": "medical",
+          "revision": 1,
+          "position_id": 22,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Лаборант",
+          "document_possessive_kk": "зертханашысы"
+        },
+        {
+          "name": "лаборант гамма установки",
+          "name_kk": "Гамма-қондырғы зертханашысы",
+          "category": "medical",
+          "revision": 1,
+          "position_id": 737,
+          "record_kind": "standalone",
+          "translation_status": "needs_review",
+          "document_form_status": "needs_review",
+          "document_nominative_ru": null,
+          "document_possessive_kk": null
+        },
+        {
+          "name": "Лифтер",
+          "name_kk": "Лифтші",
+          "category": "technical",
+          "revision": 1,
+          "position_id": 23,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Лифтер",
+          "document_possessive_kk": "лифтшісі"
+        },
+        {
+          "name": "маляр",
+          "name_kk": "Сырлаушы",
+          "category": "other",
+          "revision": 1,
+          "position_id": 741,
+          "record_kind": "standalone",
+          "translation_status": "needs_review",
+          "document_form_status": "needs_review",
+          "document_nominative_ru": null,
+          "document_possessive_kk": null
+        },
+        {
+          "name": "Машинист по стирке белья",
+          "name_kk": "Кір жуу машинисі",
+          "category": "technical",
+          "revision": 1,
+          "position_id": 715,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Машинист по стирке белья",
+          "document_possessive_kk": "кір жуу машинисі"
+        },
+        {
+          "name": "Медбрат",
+          "name_kk": "Мейіргер",
+          "category": "medical",
+          "revision": 1,
+          "position_id": 25,
+          "record_kind": "variant",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Медбрат",
+          "document_possessive_kk": "мейіргері"
+        },
+        {
+          "name": "Медицинский статистик",
+          "name_kk": "Медициналық статистик",
+          "category": "medical",
+          "revision": 1,
+          "position_id": 717,
+          "record_kind": "variant",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Медицинский статистик",
+          "document_possessive_kk": "медициналық статистигі"
+        },
+        {
+          "name": "медицинский техник",
+          "name_kk": "Медициналық техник",
+          "category": "other",
+          "revision": 1,
+          "position_id": 745,
+          "record_kind": "standalone",
+          "translation_status": "needs_review",
+          "document_form_status": "needs_review",
+          "document_nominative_ru": null,
+          "document_possessive_kk": null
+        },
+        {
+          "name": "медрегистратор",
+          "name_kk": "Медициналық тіркеуші",
+          "category": "medical",
+          "revision": 2,
+          "position_id": 26,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "медрегистратор",
+          "document_possessive_kk": "медициналық тіркеушісі"
+        },
+        {
+          "name": "Медсестра",
+          "name_kk": "Мейіргер",
+          "category": "medical",
+          "revision": 1,
+          "position_id": 27,
+          "record_kind": "variant",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Медсестра",
+          "document_possessive_kk": "мейіргері"
+        },
+        {
+          "name": "медсестра амбулаторного приема",
+          "name_kk": "Амбулаториялық қабылдау мейіргері",
+          "category": "medical",
+          "revision": 1,
+          "position_id": 743,
+          "record_kind": "standalone",
+          "translation_status": "needs_review",
+          "document_form_status": "needs_review",
+          "document_nominative_ru": null,
+          "document_possessive_kk": null
+        },
+        {
+          "name": "медсестра массажистка",
+          "name_kk": "Медициналық массажист",
+          "category": "medical",
+          "revision": 1,
+          "position_id": 747,
+          "record_kind": "standalone",
+          "translation_status": "needs_review",
+          "document_form_status": "needs_review",
+          "document_nominative_ru": null,
+          "document_possessive_kk": null
+        },
+        {
+          "name": "медсестра операционная",
+          "name_kk": "Операция мейіргері",
+          "category": "medical",
+          "revision": 1,
+          "position_id": 738,
+          "record_kind": "standalone",
+          "translation_status": "needs_review",
+          "document_form_status": "needs_review",
+          "document_nominative_ru": null,
+          "document_possessive_kk": null
+        },
+        {
+          "name": "медсестра перевязочная",
+          "name_kk": "Таңу мейіргері",
+          "category": "medical",
+          "revision": 1,
+          "position_id": 742,
+          "record_kind": "standalone",
+          "translation_status": "needs_review",
+          "document_form_status": "needs_review",
+          "document_nominative_ru": null,
+          "document_possessive_kk": null
+        },
+        {
+          "name": "медсестра по инф.контролю",
+          "name_kk": "Инфекциялық бақылау жөніндегі мейіргер",
+          "category": "medical",
+          "revision": 1,
+          "position_id": 746,
+          "record_kind": "standalone",
+          "translation_status": "needs_review",
+          "document_form_status": "needs_review",
+          "document_nominative_ru": null,
+          "document_possessive_kk": null
+        },
+        {
+          "name": "медсестра постовая",
+          "name_kk": "Палаталық мейіргер",
+          "category": "medical",
+          "revision": 1,
+          "position_id": 739,
+          "record_kind": "standalone",
+          "translation_status": "needs_review",
+          "document_form_status": "needs_review",
+          "document_nominative_ru": null,
+          "document_possessive_kk": null
+        },
+        {
+          "name": "медсестра стоматологического кабинета",
+          "name_kk": "Стоматологиялық кабинет мейіргері",
+          "category": "medical",
+          "revision": 1,
+          "position_id": 744,
+          "record_kind": "standalone",
+          "translation_status": "needs_review",
+          "document_form_status": "needs_review",
+          "document_nominative_ru": null,
+          "document_possessive_kk": null
+        },
+        {
+          "name": "медсестра УЗИ кабинета",
+          "name_kk": "УДЗ кабинетінің мейіргері",
+          "category": "medical",
+          "revision": 1,
+          "position_id": 740,
+          "record_kind": "standalone",
+          "translation_status": "needs_review",
+          "document_form_status": "needs_review",
+          "document_nominative_ru": null,
+          "document_possessive_kk": null
+        },
+        {
+          "name": "Медстатистик",
+          "name_kk": "Медициналық статистик",
+          "category": "medical",
+          "revision": 1,
+          "position_id": 28,
+          "record_kind": "search_synonym",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Медстатистик",
+          "document_possessive_kk": "медициналық статистигі"
+        },
+        {
+          "name": "медстатистик по вводу в ЭРОБ",
+          "name_kk": "Онкологиялық науқастардың электрондық тіркеліміне деректер енгізу жөніндегі медициналық статистик",
+          "category": "medical",
+          "revision": 3,
+          "position_id": 82,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "медстатистик по вводу в ЭРОБ",
+          "document_possessive_kk": "онкологиялық науқастардың электрондық тіркеліміне деректер енгізу жөніндегі медициналық статистигі"
+        },
+        {
+          "name": "медстатистик по выводу из ЭРОБ",
+          "name_kk": "Онкологиялық науқастардың электрондық тіркелімінен деректерді экспорттау жөніндегі медициналық статистик",
+          "category": "medical",
+          "revision": 3,
+          "position_id": 83,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "медстатистик по выводу из ЭРОБ",
+          "document_possessive_kk": "онкологиялық науқастардың электрондық тіркелімінен деректерді экспорттау жөніндегі медициналық статистигі"
+        },
+        {
+          "name": "Менеджер",
+          "name_kk": "Менеджер",
+          "category": "admin",
+          "revision": 1,
+          "position_id": 29,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Менеджер",
+          "document_possessive_kk": "менеджері"
+        },
+        {
+          "name": "Менеджер УЧР",
+          "name_kk": "Адам ресурстарын басқару менеджері",
+          "category": "admin",
+          "revision": 1,
+          "position_id": 340,
+          "record_kind": "variant",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Менеджер УЧР",
+          "document_possessive_kk": "адам ресурстарын басқару менеджері"
+        },
+        {
+          "name": "Монтажник",
+          "name_kk": "Монтажшы",
+          "category": "technical",
+          "revision": 1,
+          "position_id": 30,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Монтажник",
+          "document_possessive_kk": "монтажшысы"
+        },
+        {
+          "name": "Начальник отдела",
+          "name_kk": "Бөлім бастығы",
+          "category": "leaders",
+          "revision": 1,
+          "position_id": 31,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Начальник отдела",
+          "document_possessive_kk": "бөлім бастығы"
+        },
+        {
+          "name": "Оператор",
+          "name_kk": "Оператор",
+          "category": "admin",
+          "revision": 2,
+          "position_id": 32,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Оператор",
+          "document_possessive_kk": "операторы"
+        },
+        {
+          "name": "Оператор для обработки мед. документаций",
+          "name_kk": "Медициналық құжаттаманы өңдеу операторы",
+          "category": "other",
+          "revision": 1,
+          "position_id": 748,
+          "record_kind": "standalone",
+          "translation_status": "needs_review",
+          "document_form_status": "needs_review",
+          "document_nominative_ru": null,
+          "document_possessive_kk": null
+        },
+        {
+          "name": "Переводчик",
+          "name_kk": "Аудармашы",
+          "category": "admin",
+          "revision": 1,
+          "position_id": 33,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Переводчик",
+          "document_possessive_kk": "аудармашысы"
+        },
+        {
+          "name": "Переводчик казахского языка",
+          "name_kk": "Қазақ тілі аудармашысы",
+          "category": "admin",
+          "revision": 1,
+          "position_id": 342,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Переводчик казахского языка",
+          "document_possessive_kk": "қазақ тілі аудармашысы"
+        },
+        {
+          "name": "Плотник",
+          "name_kk": "Ағаш ұстасы",
+          "category": "technical",
+          "revision": 1,
+          "position_id": 34,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Плотник",
+          "document_possessive_kk": "ағаш ұстасы"
+        },
+        {
+          "name": "Повар",
+          "name_kk": "Аспаз",
+          "category": "technical",
+          "revision": 1,
+          "position_id": 35,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Повар",
+          "document_possessive_kk": "аспазы"
+        },
+        {
+          "name": "подсобный рабочий",
+          "name_kk": "Қосалқы жұмысшы",
+          "category": "other",
+          "revision": 1,
+          "position_id": 749,
+          "record_kind": "standalone",
+          "translation_status": "needs_review",
+          "document_form_status": "needs_review",
+          "document_nominative_ru": null,
+          "document_possessive_kk": null
+        },
+        {
+          "name": "Провизор",
+          "name_kk": "Провизор",
+          "category": "medical",
+          "revision": 1,
+          "position_id": 36,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Провизор",
+          "document_possessive_kk": "провизоры"
+        },
+        {
+          "name": "Процедурная медсестра",
+          "name_kk": "Емшара мейіргері",
+          "category": "medical",
+          "revision": 2,
+          "position_id": 729,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Процедурная медсестра",
+          "document_possessive_kk": "емшара мейіргері"
+        },
+        {
+          "name": "Психолог",
+          "name_kk": "Психолог",
+          "category": "medical",
+          "revision": 1,
+          "position_id": 37,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Психолог",
+          "document_possessive_kk": "психологі"
+        },
+        {
+          "name": "Рабочий",
+          "name_kk": "Жұмысшы",
+          "category": "technical",
+          "revision": 1,
+          "position_id": 38,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Рабочий",
+          "document_possessive_kk": "жұмысшысы"
+        },
+        {
+          "name": "рабочий (штукатур-маляр)",
+          "name_kk": "Жұмысшы (сылақшы-сырлаушы)",
+          "category": "other",
+          "revision": 1,
+          "position_id": 750,
+          "record_kind": "standalone",
+          "translation_status": "needs_review",
+          "document_form_status": "needs_review",
+          "document_nominative_ru": null,
+          "document_possessive_kk": null
+        },
+        {
+          "name": "регистратор рентгенархива",
+          "name_kk": "Рентген архивінің тіркеушісі",
+          "category": "other",
+          "revision": 1,
+          "position_id": 751,
+          "record_kind": "standalone",
+          "translation_status": "needs_review",
+          "document_form_status": "needs_review",
+          "document_nominative_ru": null,
+          "document_possessive_kk": null
+        },
+        {
+          "name": "рентгенлаборант",
+          "name_kk": "рентгенлаборанты",
+          "category": "medical",
+          "revision": 1,
+          "position_id": 730,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "рентгенлаборант",
+          "document_possessive_kk": "рентгенлаборанты"
+        },
+        {
+          "name": "Руков-ль службы химиотерапии",
+          "name_kk": "Химиотерапия қызметінің басшысы",
+          "category": "medical",
+          "revision": 1,
+          "position_id": 39,
+          "record_kind": "variant",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Руков-ль службы химиотерапии",
+          "document_possessive_kk": "химиотерапия қызметінің басшысы"
+        },
+        {
+          "name": "Руководитель",
+          "name_kk": "Басшы",
+          "category": "leaders",
+          "revision": 1,
+          "position_id": 84,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Руководитель",
+          "document_possessive_kk": "басшысы"
+        },
+        {
+          "name": "Руководитель административно-хозяйственной службы",
+          "name_kk": "Әкімшілік-шаруашылық қызметінің басшысы",
+          "category": "leaders",
+          "revision": 1,
+          "position_id": 722,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Руководитель административно-хозяйственной службы",
+          "document_possessive_kk": "әкімшілік-шаруашылық қызметінің басшысы"
+        },
+        {
+          "name": "Руководитель ОВЭиПД",
+          "name_kk": "ОВЭиПД басшысы",
+          "category": "leaders",
+          "revision": 1,
+          "position_id": 85,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Руководитель ОВЭиПД",
+          "document_possessive_kk": "ОВЭиПД басшысы"
+        },
+        {
+          "name": "Руководитель отдела",
+          "name_kk": "Бөлім басшысы",
+          "category": "leaders",
+          "revision": 1,
+          "position_id": 725,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Руководитель отдела",
+          "document_possessive_kk": "бөлім басшысы"
+        },
+        {
+          "name": "Руководитель отдела госзакупок",
+          "name_kk": "Мемлекеттік сатып алу бөлімінің басшысы",
+          "category": "leaders",
+          "revision": 1,
+          "position_id": 60,
+          "record_kind": "variant",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Руководитель отдела госзакупок",
+          "document_possessive_kk": "мемлекеттік сатып алу бөлімінің басшысы"
+        },
+        {
+          "name": "Руководитель отдела кадров",
+          "name_kk": "Кадрлар бөлімінің басшысы",
+          "category": "leaders",
+          "revision": 1,
+          "position_id": 86,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Руководитель отдела кадров",
+          "document_possessive_kk": "кадрлар бөлімінің басшысы"
+        },
+        {
+          "name": "Руководитель отдела статистики",
+          "name_kk": "Статистика бөлімінің басшысы",
+          "category": "leaders",
+          "revision": 1,
+          "position_id": 87,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Руководитель отдела статистики",
+          "document_possessive_kk": "статистика бөлімінің басшысы"
+        },
+        {
+          "name": "Руководитель приемного отделения",
+          "name_kk": "Қабылдау бөлімшесінің басшысы",
+          "category": "leaders",
+          "revision": 1,
+          "position_id": 88,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Руководитель приемного отделения",
+          "document_possessive_kk": "қабылдау бөлімшесінің басшысы"
+        },
+        {
+          "name": "Руководитель хозяйственной службы",
+          "name_kk": "Шаруашылық қызметінің басшысы",
+          "category": "leaders",
+          "revision": 1,
+          "position_id": 40,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Руководитель хозяйственной службы",
+          "document_possessive_kk": "шаруашылық қызметінің басшысы"
+        },
+        {
+          "name": "Санитар",
+          "name_kk": "Санитар",
+          "category": "medical",
+          "revision": 1,
+          "position_id": 41,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Санитар",
+          "document_possessive_kk": "санитары"
+        },
+        {
+          "name": "Санитарка",
+          "name_kk": "Санитар",
+          "category": "medical",
+          "revision": 1,
+          "position_id": 42,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Санитарка",
+          "document_possessive_kk": "санитары"
+        },
+        {
+          "name": "Санитарка-буфетчица",
+          "name_kk": "Санитар-буфетші",
+          "category": "medical",
+          "revision": 2,
+          "position_id": 43,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Санитарка-буфетчица",
+          "document_possessive_kk": "санитар-буфетшісі"
+        },
+        {
+          "name": "санитарка палатная",
+          "name_kk": "Палаталық санитар",
+          "category": "other",
+          "revision": 1,
+          "position_id": 752,
+          "record_kind": "standalone",
+          "translation_status": "needs_review",
+          "document_form_status": "needs_review",
+          "document_nominative_ru": null,
+          "document_possessive_kk": null
+        },
+        {
+          "name": "Санитар по транспортировке пациентов",
+          "name_kk": "Пациенттерді тасымалдау жөніндегі санитар",
+          "category": "medical",
+          "revision": 2,
+          "position_id": 720,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Санитар по транспортировке пациентов",
+          "document_possessive_kk": "пациенттерді тасымалдау жөніндегі санитары"
+        },
+        {
+          "name": "санитар-уборщица",
+          "name_kk": "Санитар-тазалаушы",
+          "category": "other",
+          "revision": 1,
+          "position_id": 753,
+          "record_kind": "standalone",
+          "translation_status": "needs_review",
+          "document_form_status": "needs_review",
+          "document_nominative_ru": null,
+          "document_possessive_kk": null
+        },
+        {
+          "name": "секретарь-референт",
+          "name_kk": "Хатшы-референт",
+          "category": "admin",
+          "revision": 1,
+          "position_id": 341,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "секретарь-референт",
+          "document_possessive_kk": "хатшы-референті"
+        },
+        {
+          "name": "сестра-хозяйка",
+          "name_kk": "шаруа бикесі",
+          "category": "technical",
+          "revision": 1,
+          "position_id": 44,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "сестра-хозяйка",
+          "document_possessive_kk": "шаруа бикесі"
+        },
+        {
+          "name": "системный администратор",
+          "name_kk": "Жүйелік әкімші",
+          "category": "technical",
+          "revision": 1,
+          "position_id": 45,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "системный администратор",
+          "document_possessive_kk": "жүйелік әкімшісі"
+        },
+        {
+          "name": "Слесарь по кислородной установке",
+          "name_kk": "Оттегі қондырғысы жөніндегі слесарь",
+          "category": "other",
+          "revision": 1,
+          "position_id": 754,
+          "record_kind": "standalone",
+          "translation_status": "needs_review",
+          "document_form_status": "needs_review",
+          "document_nominative_ru": null,
+          "document_possessive_kk": null
+        },
+        {
+          "name": "Слесарь-сантехник",
+          "name_kk": "Слесарь-сантехник",
+          "category": "technical",
+          "revision": 1,
+          "position_id": 46,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Слесарь-сантехник",
+          "document_possessive_kk": "слесарь-сантехнигі"
+        },
+        {
+          "name": "Социальный работник",
+          "name_kk": "Әлеуметтік қызметкер",
+          "category": "medical",
+          "revision": 1,
+          "position_id": 716,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Социальный работник",
+          "document_possessive_kk": "әлеуметтік қызметкері"
+        },
+        {
+          "name": "Специалист",
+          "name_kk": "Маман",
+          "category": "admin",
+          "revision": 1,
+          "position_id": 48,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Специалист",
+          "document_possessive_kk": "маманы"
+        },
+        {
+          "name": "Старшая медсестра",
+          "name_kk": "Аға мейіргер",
+          "category": "medical",
+          "revision": 1,
+          "position_id": 49,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Старшая медсестра",
+          "document_possessive_kk": "аға мейіргері"
+        },
+        {
+          "name": "Старший лаборант",
+          "name_kk": "Аға зертханашы",
+          "category": "medical",
+          "revision": 1,
+          "position_id": 50,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Старший лаборант",
+          "document_possessive_kk": "аға зертханашысы"
+        },
+        {
+          "name": "Старший ординатор",
+          "name_kk": "Аға ординатор",
+          "category": "medical",
+          "revision": 1,
+          "position_id": 726,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Старший ординатор",
+          "document_possessive_kk": "аға ординаторы"
+        },
+        {
+          "name": "Старший системный администратор",
+          "name_kk": "Аға жүйелік әкімші",
+          "category": "technical",
+          "revision": 1,
+          "position_id": 51,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Старший системный администратор",
+          "document_possessive_kk": "аға жүйелік әкімшісі"
+        },
+        {
+          "name": "Старший экономист",
+          "name_kk": "Аға экономист",
+          "category": "admin",
+          "revision": 1,
+          "position_id": 89,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Старший экономист",
+          "document_possessive_kk": "аға экономисті"
+        },
+        {
+          "name": "Техник",
+          "name_kk": "Техник",
+          "category": "technical",
+          "revision": 1,
+          "position_id": 718,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Техник",
+          "document_possessive_kk": "технигі"
+        },
+        {
+          "name": "техник по вентиляции и отоплению",
+          "name_kk": "Желдету және жылыту жөніндегі техник",
+          "category": "other",
+          "revision": 1,
+          "position_id": 755,
+          "record_kind": "standalone",
+          "translation_status": "needs_review",
+          "document_form_status": "needs_review",
+          "document_nominative_ru": null,
+          "document_possessive_kk": null
+        },
+        {
+          "name": "техник по кислороду",
+          "name_kk": "Оттегі жөніндегі техник",
+          "category": "other",
+          "revision": 1,
+          "position_id": 756,
+          "record_kind": "standalone",
+          "translation_status": "needs_review",
+          "document_form_status": "needs_review",
+          "document_nominative_ru": null,
+          "document_possessive_kk": null
+        },
+        {
+          "name": "техник по ремонту оборудования",
+          "name_kk": "Жабдықтарды жөндеу жөніндегі техник",
+          "category": "other",
+          "revision": 1,
+          "position_id": 757,
+          "record_kind": "standalone",
+          "translation_status": "needs_review",
+          "document_form_status": "needs_review",
+          "document_nominative_ru": null,
+          "document_possessive_kk": null
+        },
+        {
+          "name": "Уборщик помещений",
+          "name_kk": "Үй-жайларды тазалаушы",
+          "category": "technical",
+          "revision": 2,
+          "position_id": 53,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Уборщик помещений",
+          "document_possessive_kk": "үй-жайларды тазалаушысы"
+        },
+        {
+          "name": "Фармацевт",
+          "name_kk": "Фармацевт",
+          "category": "medical",
+          "revision": 1,
+          "position_id": 54,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Фармацевт",
+          "document_possessive_kk": "фармацевті"
+        },
+        {
+          "name": "экономист1",
+          "name_kk": "Экономист",
+          "category": "admin",
+          "revision": 1,
+          "position_id": 90,
+          "record_kind": "search_synonym",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "экономист1",
+          "document_possessive_kk": "экономисті"
+        },
+        {
+          "name": "экономист2",
+          "name_kk": "Экономист",
+          "category": "admin",
+          "revision": 1,
+          "position_id": 91,
+          "record_kind": "search_synonym",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "экономист2",
+          "document_possessive_kk": "экономисті"
+        },
+        {
+          "name": "экономист3",
+          "name_kk": "Экономист",
+          "category": "admin",
+          "revision": 1,
+          "position_id": 92,
+          "record_kind": "search_synonym",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "экономист3",
+          "document_possessive_kk": "экономисті"
+        },
+        {
+          "name": "Экономист",
+          "name_kk": "Экономист",
+          "category": "admin",
+          "revision": 1,
+          "position_id": 55,
+          "record_kind": "variant",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Экономист",
+          "document_possessive_kk": "экономисті"
+        },
+        {
+          "name": "эксперт ОВЭиПД амбулаторный",
+          "name_kk": "Амбулаториялық қызмет жөніндегі ішкі сарапшы",
+          "category": "medical",
+          "revision": 3,
+          "position_id": 93,
+          "record_kind": "variant",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "эксперт ОВЭиПД амбулаторный",
+          "document_possessive_kk": "амбулаториялық қызмет жөніндегі ішкі сарапшысы"
+        },
+        {
+          "name": "эксперт ОВЭиПД госпитальный",
+          "name_kk": "Стационарлық қызмет жөніндегі ішкі сарапшы",
+          "category": "medical",
+          "revision": 3,
+          "position_id": 94,
+          "record_kind": "variant",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "эксперт ОВЭиПД госпитальный",
+          "document_possessive_kk": "стационарлық қызмет жөніндегі ішкі сарапшысы"
+        },
+        {
+          "name": "эксперт ОВЭиПД по регистрации жалоб",
+          "name_kk": "Шағымдарды тіркеу жөніндегі ішкі сарапшы",
+          "category": "medical",
+          "revision": 3,
+          "position_id": 95,
+          "record_kind": "variant",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "эксперт ОВЭиПД по регистрации жалоб",
+          "document_possessive_kk": "шағымдарды тіркеу жөніндегі ішкі сарапшысы"
+        },
+        {
+          "name": "эксперт ОВЭиПД по улаживанию жалоб",
+          "name_kk": "Шағымдарды реттеу жөніндегі ішкі сарапшы",
+          "category": "medical",
+          "revision": 3,
+          "position_id": 96,
+          "record_kind": "variant",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "эксперт ОВЭиПД по улаживанию жалоб",
+          "document_possessive_kk": "шағымдарды реттеу жөніндегі ішкі сарапшысы"
+        },
+        {
+          "name": "Электрик",
+          "name_kk": "Электрик",
+          "category": "technical",
+          "revision": 1,
+          "position_id": 56,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Электрик",
+          "document_possessive_kk": "электригі"
+        },
+        {
+          "name": "Электромонтер",
+          "name_kk": "Электрмонтер",
+          "category": "technical",
+          "revision": 1,
+          "position_id": 57,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Электромонтер",
+          "document_possessive_kk": "электрмонтері"
+        },
+        {
+          "name": "Юрист",
+          "name_kk": "Заңгер",
+          "category": "admin",
+          "revision": 2,
+          "position_id": 58,
+          "record_kind": "standalone",
+          "translation_status": "confirmed",
+          "document_form_status": "confirmed",
+          "document_nominative_ru": "Юрист",
+          "document_possessive_kk": "заңгері"
+        }
+      ]
+    },
+    "position_aliases": {
+      "count": 11,
+      "sha256": "d1bddb7a1e81a3af7e6a5e7ec4ea51827df0f6551b77b687d85b6399a34ced37",
+      "rows": [
+        {
+          "alias_id": 10,
+          "alias_text": "Уборщица",
+          "position_id": 53,
+          "normalized_alias": "уборщица"
+        },
+        {
+          "alias_id": 11,
+          "alias_text": "юристконсульт",
+          "position_id": 58,
+          "normalized_alias": "юристконсульт"
+        },
+        {
+          "alias_id": 12,
+          "alias_text": "Санитарка-раздатчица",
+          "position_id": 43,
+          "normalized_alias": "санитарка раздатчица"
+        },
+        {
+          "alias_id": 13,
+          "alias_text": "Регистратор справочного бюро",
+          "position_id": 32,
+          "normalized_alias": "регистратор справочного бюро"
+        },
+        {
+          "alias_id": 3,
+          "alias_text": "сестра хозяйка",
+          "position_id": 44,
+          "normalized_alias": "сестра хозяйка"
+        },
+        {
+          "alias_id": 4,
+          "alias_text": "Медицинская сестра процедурная",
+          "position_id": 729,
+          "normalized_alias": "медицинская сестра процедурная"
+        },
+        {
+          "alias_id": 5,
+          "alias_text": "Процедурная медицинская сестра",
+          "position_id": 729,
+          "normalized_alias": "процедурная медицинская сестра"
+        },
+        {
+          "alias_id": 6,
+          "alias_text": "комендант здания",
+          "position_id": 19,
+          "normalized_alias": "комендант здания"
+        },
+        {
+          "alias_id": 7,
+          "alias_text": "медицинский физик",
+          "position_id": 17,
+          "normalized_alias": "медицинский физик"
+        },
+        {
+          "alias_id": 8,
+          "alias_text": "регистратор архива",
+          "position_id": 26,
+          "normalized_alias": "регистратор архива"
+        },
+        {
+          "alias_id": 9,
+          "alias_text": "санитар по транспортировке",
+          "position_id": 720,
+          "normalized_alias": "санитар по транспортировке"
+        }
+      ]
+    },
+    "position_job_catalog": {
+      "count": 108,
+      "sha256": "f55d6e7f7dae3ac7731dcf50f30f43b876a651100e4b4480ec5189fc8ccd2e4b",
+      "rows": [
+        {
+          "job_code": "ACC_DEPUTY",
+          "position_id": 76
+        },
+        {
+          "job_code": "ACC_HEAD",
+          "position_id": 8
+        },
+        {
+          "job_code": "ACCOUNTANT_CASHIER",
+          "position_id": 4
+        },
+        {
+          "job_code": "ACCOUNTANT_ECONOMIST",
+          "position_id": 724
+        },
+        {
+          "job_code": "ACCOUNTANT",
+          "position_id": 3
+        },
+        {
+          "job_code": "ADMIN_HOUSEKEEPING_SERVICE_HEAD",
+          "position_id": 722
+        },
+        {
+          "job_code": "ADMISSION_HEAD",
+          "position_id": 88
+        },
+        {
+          "job_code": "ARCHIVIST",
+          "position_id": 1
+        },
+        {
+          "job_code": "AUDITOR",
+          "position_id": 2
+        },
+        {
+          "job_code": "BUFFET_WORKER",
+          "position_id": 723
+        },
+        {
+          "job_code": "CARPENTER",
+          "position_id": 34
+        },
+        {
+          "job_code": "CASHIER",
+          "position_id": 18
+        },
+        {
+          "job_code": "CHEMOTHERAPY_SERVICE_HEAD",
+          "position_id": 39
+        },
+        {
+          "job_code": "CHIEF_ECONOMIST",
+          "position_id": 59
+        },
+        {
+          "job_code": "CHIEF_ENGINEER",
+          "position_id": 728
+        },
+        {
+          "job_code": "CHIEF_NURSE",
+          "position_id": 7
+        },
+        {
+          "job_code": "CLINICAL_DEPARTMENT_HEAD",
+          "position_id": 64
+        },
+        {
+          "job_code": "CLINICAL_DEPARTMENT_HEAD",
+          "position_id": 65
+        },
+        {
+          "job_code": "CLINICAL_DEPARTMENT_HEAD",
+          "position_id": 66
+        },
+        {
+          "job_code": "CLINICAL_DEPARTMENT_HEAD",
+          "position_id": 67
+        },
+        {
+          "job_code": "CLINICAL_DEPARTMENT_HEAD",
+          "position_id": 68
+        },
+        {
+          "job_code": "CLINICAL_DEPARTMENT_HEAD",
+          "position_id": 69
+        },
+        {
+          "job_code": "CLINICAL_DEPARTMENT_HEAD",
+          "position_id": 70
+        },
+        {
+          "job_code": "CLINICAL_DEPARTMENT_HEAD",
+          "position_id": 71
+        },
+        {
+          "job_code": "CLINICAL_DEPARTMENT_HEAD",
+          "position_id": 72
+        },
+        {
+          "job_code": "CLINICAL_DEPARTMENT_HEAD",
+          "position_id": 73
+        },
+        {
+          "job_code": "CLINICAL_DEPARTMENT_HEAD",
+          "position_id": 74
+        },
+        {
+          "job_code": "CLINICAL_DEPARTMENT_HEAD",
+          "position_id": 75
+        },
+        {
+          "job_code": "COMPLIANCE_OFFICER",
+          "position_id": 727
+        },
+        {
+          "job_code": "COOK",
+          "position_id": 35
+        },
+        {
+          "job_code": "COURIER",
+          "position_id": 20
+        },
+        {
+          "job_code": "DEP_ADMIN",
+          "position_id": 77
+        },
+        {
+          "job_code": "DEPARTMENT_CHIEF",
+          "position_id": 31
+        },
+        {
+          "job_code": "DEPARTMENT_HEAD_UNSPECIFIED",
+          "position_id": 714
+        },
+        {
+          "job_code": "DEPARTMENT_MANAGER",
+          "position_id": 725
+        },
+        {
+          "job_code": "DEP_MED",
+          "position_id": 79
+        },
+        {
+          "job_code": "DEP_OUTPATIENT_AUDIT",
+          "position_id": 78
+        },
+        {
+          "job_code": "DEP_STRATEGY",
+          "position_id": 80
+        },
+        {
+          "job_code": "DEPUTY_DIRECTOR",
+          "position_id": 14
+        },
+        {
+          "job_code": "DIET_NURSE",
+          "position_id": 11
+        },
+        {
+          "job_code": "DIRECTOR",
+          "position_id": 62
+        },
+        {
+          "job_code": "DISINFECTOR",
+          "position_id": 10
+        },
+        {
+          "job_code": "DRIVER",
+          "position_id": 5
+        },
+        {
+          "job_code": "ECONOMIST",
+          "position_id": 55
+        },
+        {
+          "job_code": "ECONOMIST",
+          "position_id": 90
+        },
+        {
+          "job_code": "ECONOMIST",
+          "position_id": 91
+        },
+        {
+          "job_code": "ECONOMIST",
+          "position_id": 92
+        },
+        {
+          "job_code": "ELECTRICAL_FITTER",
+          "position_id": 57
+        },
+        {
+          "job_code": "ELECTRICIAN",
+          "position_id": 56
+        },
+        {
+          "job_code": "ENGINEER",
+          "position_id": 16
+        },
+        {
+          "job_code": "EXPERT_PHYSICIAN",
+          "position_id": 721
+        },
+        {
+          "job_code": "EXPERT_PHYSICIAN",
+          "position_id": 93
+        },
+        {
+          "job_code": "EXPERT_PHYSICIAN",
+          "position_id": 94
+        },
+        {
+          "job_code": "EXPERT_PHYSICIAN",
+          "position_id": 95
+        },
+        {
+          "job_code": "EXPERT_PHYSICIAN",
+          "position_id": 96
+        },
+        {
+          "job_code": "FACILITY_SUPERVISOR",
+          "position_id": 19
+        },
+        {
+          "job_code": "HEAD",
+          "position_id": 84
+        },
+        {
+          "job_code": "HOUSEKEEPING_SERVICE_HEAD",
+          "position_id": 40
+        },
+        {
+          "job_code": "HR_HEAD",
+          "position_id": 86
+        },
+        {
+          "job_code": "HR_MANAGER",
+          "position_id": 340
+        },
+        {
+          "job_code": "INSTALLER",
+          "position_id": 30
+        },
+        {
+          "job_code": "KAZAKH_TRANSLATOR",
+          "position_id": 342
+        },
+        {
+          "job_code": "KITCHEN_WORKER",
+          "position_id": 21
+        },
+        {
+          "job_code": "LAB_ASSISTANT",
+          "position_id": 22
+        },
+        {
+          "job_code": "LAUNDRY_HEAD",
+          "position_id": 12
+        },
+        {
+          "job_code": "LAUNDRY_MACHINE_OPERATOR",
+          "position_id": 715
+        },
+        {
+          "job_code": "LAWYER",
+          "position_id": 58
+        },
+        {
+          "job_code": "LIFT_OPERATOR",
+          "position_id": 23
+        },
+        {
+          "job_code": "MANAGER",
+          "position_id": 29
+        },
+        {
+          "job_code": "MEDICAL_PHYSICIST_ENGINEER",
+          "position_id": 17
+        },
+        {
+          "job_code": "MEDICAL_REGISTRAR",
+          "position_id": 26
+        },
+        {
+          "job_code": "MEDICAL_STATISTICIAN",
+          "position_id": 28
+        },
+        {
+          "job_code": "MEDICAL_STATISTICIAN",
+          "position_id": 717
+        },
+        {
+          "job_code": "NURSE",
+          "position_id": 25
+        },
+        {
+          "job_code": "NURSE",
+          "position_id": 27
+        },
+        {
+          "job_code": "OCCUPATIONAL_SAFETY_HEAD",
+          "position_id": 719
+        },
+        {
+          "job_code": "OPERATOR",
+          "position_id": 32
+        },
+        {
+          "job_code": "PATIENT_TRANSPORT_SANITARY_WORKER",
+          "position_id": 720
+        },
+        {
+          "job_code": "PHARMACIST",
+          "position_id": 54
+        },
+        {
+          "job_code": "PHARMACY_HEAD",
+          "position_id": 63
+        },
+        {
+          "job_code": "PHYSICIAN",
+          "position_id": 6
+        },
+        {
+          "job_code": "PHYSICIAN_STATISTICIAN",
+          "position_id": 61
+        },
+        {
+          "job_code": "PLUMBER",
+          "position_id": 46
+        },
+        {
+          "job_code": "PROC_HEAD",
+          "position_id": 60
+        },
+        {
+          "job_code": "PROVISOR",
+          "position_id": 36
+        },
+        {
+          "job_code": "PSYCHOLOGIST",
+          "position_id": 37
+        },
+        {
+          "job_code": "QM_HEAD",
+          "position_id": 85
+        },
+        {
+          "job_code": "ROOM_CLEANER",
+          "position_id": 53
+        },
+        {
+          "job_code": "SANITARY_BUFFET_WORKER",
+          "position_id": 43
+        },
+        {
+          "job_code": "SANITARY_WORKER_FEMALE",
+          "position_id": 42
+        },
+        {
+          "job_code": "SANITARY_WORKER",
+          "position_id": 41
+        },
+        {
+          "job_code": "SECRETARY_REFERENT",
+          "position_id": 341
+        },
+        {
+          "job_code": "SENIOR_ECONOMIST",
+          "position_id": 89
+        },
+        {
+          "job_code": "SENIOR_LAB_ASSISTANT",
+          "position_id": 50
+        },
+        {
+          "job_code": "SENIOR_NURSE",
+          "position_id": 49
+        },
+        {
+          "job_code": "SENIOR_RESIDENT_PHYSICIAN",
+          "position_id": 726
+        },
+        {
+          "job_code": "SENIOR_SYSTEM_ADMINISTRATOR",
+          "position_id": 51
+        },
+        {
+          "job_code": "SISTER_HOUSEKEEPER",
+          "position_id": 44
+        },
+        {
+          "job_code": "SOCIAL_WORKER",
+          "position_id": 716
+        },
+        {
+          "job_code": "SPECIALIST",
+          "position_id": 48
+        },
+        {
+          "job_code": "STAT_HEAD_DEPUTY",
+          "position_id": 81
+        },
+        {
+          "job_code": "STAT_HEAD",
+          "position_id": 87
+        },
+        {
+          "job_code": "SYSTEM_ADMINISTRATOR",
+          "position_id": 45
+        },
+        {
+          "job_code": "TECHNICIAN",
+          "position_id": 718
+        },
+        {
+          "job_code": "TRANSLATOR",
+          "position_id": 33
+        },
+        {
+          "job_code": "WAREHOUSE_HEAD",
+          "position_id": 13
+        },
+        {
+          "job_code": "WORKER",
+          "position_id": 38
+        },
+        {
+          "job_code": "YARD_CLEANER",
+          "position_id": 9
+        }
+      ]
+    },
+    "job_positions_catalog": {
+      "count": 88,
+      "sha256": "fcb8d19162ea69e12e1b617a6cac7807416209a12380bd8f5f56b2e80edd1211",
+      "rows": [
+        {
+          "job_code": "ACC_DEPUTY",
+          "job_namekk": "Бас бухгалтердің орынбасары",
+          "job_nameru": "Заместитель главного бухгалтера",
+          "job_namekk_doc": "бас бухгалтердің орынбасары"
+        },
+        {
+          "job_code": "ACC_HEAD",
+          "job_namekk": "Бас бухгалтер",
+          "job_nameru": "Главный бухгалтер",
+          "job_namekk_doc": "бас бухгалтері"
+        },
+        {
+          "job_code": "ACCOUNTANT_CASHIER",
+          "job_namekk": "Бухгалтер-кассир",
+          "job_nameru": "Бухгалтер-кассир",
+          "job_namekk_doc": "бухгалтер-кассирі"
+        },
+        {
+          "job_code": "ACCOUNTANT_ECONOMIST",
+          "job_namekk": "Бухгалтер-экономист",
+          "job_nameru": "Бухгалтер-экономист",
+          "job_namekk_doc": "бухгалтер-экономисті"
+        },
+        {
+          "job_code": "ACCOUNTANT",
+          "job_namekk": "Бухгалтер",
+          "job_nameru": "Бухгалтер",
+          "job_namekk_doc": "бухгалтері"
+        },
+        {
+          "job_code": "ADMIN_HOUSEKEEPING_SERVICE_HEAD",
+          "job_namekk": "Әкімшілік-шаруашылық қызметінің басшысы",
+          "job_nameru": "Руководитель административно-хозяйственной службы",
+          "job_namekk_doc": "әкімшілік-шаруашылық қызметінің басшысы"
+        },
+        {
+          "job_code": "ADMISSION_HEAD",
+          "job_namekk": "Қабылдау бөлімшесінің басшысы",
+          "job_nameru": "Руководитель приемного отделения",
+          "job_namekk_doc": "қабылдау бөлімшесінің басшысы"
+        },
+        {
+          "job_code": "ARCHIVIST",
+          "job_namekk": "Мұрағатшы",
+          "job_nameru": "Архивариус",
+          "job_namekk_doc": "мұрағатшысы"
+        },
+        {
+          "job_code": "AUDITOR",
+          "job_namekk": "Аудитор",
+          "job_nameru": "Аудитор",
+          "job_namekk_doc": "аудиторы"
+        },
+        {
+          "job_code": "BUFFET_WORKER",
+          "job_namekk": "Буфетші",
+          "job_nameru": "Буфетчица",
+          "job_namekk_doc": "буфетшісі"
+        },
+        {
+          "job_code": "CARPENTER",
+          "job_namekk": "Ағаш ұстасы",
+          "job_nameru": "Плотник",
+          "job_namekk_doc": "ағаш ұстасы"
+        },
+        {
+          "job_code": "CASHIER",
+          "job_namekk": "Кассир",
+          "job_nameru": "Кассир",
+          "job_namekk_doc": "кассирі"
+        },
+        {
+          "job_code": "CHEMOTHERAPY_SERVICE_HEAD",
+          "job_namekk": "Химиотерапия қызметінің басшысы",
+          "job_nameru": "Руководитель службы химиотерапии",
+          "job_namekk_doc": "химиотерапия қызметінің басшысы"
+        },
+        {
+          "job_code": "CHIEF_ECONOMIST",
+          "job_namekk": "Бас экономист",
+          "job_nameru": "Главный экономист",
+          "job_namekk_doc": "бас экономисті"
+        },
+        {
+          "job_code": "CHIEF_ENGINEER",
+          "job_namekk": "Бас инженер",
+          "job_nameru": "Главный инженер",
+          "job_namekk_doc": "бас инженері"
+        },
+        {
+          "job_code": "CHIEF_NURSE",
+          "job_namekk": "Бас мейіргер",
+          "job_nameru": "Главная медсестра",
+          "job_namekk_doc": "бас мейіргері"
+        },
+        {
+          "job_code": "CLINICAL_DEPARTMENT_HEAD",
+          "job_namekk": "Клиникалық бөлімше меңгерушісі",
+          "job_nameru": "Заведующий клиническим отделением",
+          "job_namekk_doc": "клиникалық бөлімшесінің меңгерушісі"
+        },
+        {
+          "job_code": "COMPLIANCE_OFFICER",
+          "job_namekk": "Комплаенс-офицер",
+          "job_nameru": "Комплаенс-офицер",
+          "job_namekk_doc": "комплаенс-офицері"
+        },
+        {
+          "job_code": "COOK",
+          "job_namekk": "Аспаз",
+          "job_nameru": "Повар",
+          "job_namekk_doc": "аспазы"
+        },
+        {
+          "job_code": "COURIER",
+          "job_namekk": "Курьер",
+          "job_nameru": "Курьер",
+          "job_namekk_doc": "курьері"
+        },
+        {
+          "job_code": "DEP_ADMIN",
+          "job_namekk": "Әкімшілік мәселелер жөніндегі орынбасар",
+          "job_nameru": "Заместитель по административным вопросам",
+          "job_namekk_doc": "әкімшілік мәселелер жөніндегі орынбасары"
+        },
+        {
+          "job_code": "DEPARTMENT_CHIEF",
+          "job_namekk": "Бөлім бастығы",
+          "job_nameru": "Начальник отдела",
+          "job_namekk_doc": "бөлім бастығы"
+        },
+        {
+          "job_code": "DEPARTMENT_HEAD_UNSPECIFIED",
+          "job_namekk": "Бөлімше меңгерушісі",
+          "job_nameru": "Заведующий отделением",
+          "job_namekk_doc": "бөлімше меңгерушісі"
+        },
+        {
+          "job_code": "DEPARTMENT_MANAGER",
+          "job_namekk": "Бөлім басшысы",
+          "job_nameru": "Руководитель отдела",
+          "job_namekk_doc": "бөлім басшысы"
+        },
+        {
+          "job_code": "DEP_MED",
+          "job_namekk": "Емдеу жұмысы жөніндегі орынбасар",
+          "job_nameru": "Заместитель по лечебной работе",
+          "job_namekk_doc": "емдеу жұмысы жөніндегі орынбасары"
+        },
+        {
+          "job_code": "DEP_OUTPATIENT_AUDIT",
+          "job_namekk": "Диспансер және ішкі сараптама жөніндегі орынбасар",
+          "job_nameru": "Заместитель по диспансеру и внутренней экспертизе",
+          "job_namekk_doc": "диспансер және ішкі сараптама жөніндегі орынбасары"
+        },
+        {
+          "job_code": "DEP_STRATEGY",
+          "job_namekk": "Стратегия жөніндегі орынбасар",
+          "job_nameru": "Заместитель по стратегии",
+          "job_namekk_doc": "стратегия жөніндегі орынбасары"
+        },
+        {
+          "job_code": "DEPUTY_DIRECTOR",
+          "job_namekk": "Директордың орынбасары",
+          "job_nameru": "Заместитель директора",
+          "job_namekk_doc": "директордың орынбасары"
+        },
+        {
+          "job_code": "DIET_NURSE",
+          "job_namekk": "Диеталық мейіргер",
+          "job_nameru": "Диетическая медсестра",
+          "job_namekk_doc": "диеталық мейіргері"
+        },
+        {
+          "job_code": "DIRECTOR",
+          "job_namekk": "Директор",
+          "job_nameru": "Директор",
+          "job_namekk_doc": "директоры"
+        },
+        {
+          "job_code": "DISINFECTOR",
+          "job_namekk": "Дезинфектор",
+          "job_nameru": "Дезинфектор",
+          "job_namekk_doc": "дезинфекторы"
+        },
+        {
+          "job_code": "DRIVER",
+          "job_namekk": "Жүргізуші",
+          "job_nameru": "Водитель",
+          "job_namekk_doc": "жүргізушісі"
+        },
+        {
+          "job_code": "ECONOMIST",
+          "job_namekk": "Экономист",
+          "job_nameru": "Экономист",
+          "job_namekk_doc": "экономисті"
+        },
+        {
+          "job_code": "ELECTRICAL_FITTER",
+          "job_namekk": "Электрмонтер",
+          "job_nameru": "Электромонтер",
+          "job_namekk_doc": "электрмонтері"
+        },
+        {
+          "job_code": "ELECTRICIAN",
+          "job_namekk": "Электрик",
+          "job_nameru": "Электрик",
+          "job_namekk_doc": "электригі"
+        },
+        {
+          "job_code": "ENGINEER",
+          "job_namekk": "Инженер",
+          "job_nameru": "Инженер",
+          "job_namekk_doc": "инженері"
+        },
+        {
+          "job_code": "EXPERT_PHYSICIAN",
+          "job_namekk": "Дәрігер-сарапшы",
+          "job_nameru": "Врач-эксперт",
+          "job_namekk_doc": "дәрігер-сарапшысы"
+        },
+        {
+          "job_code": "FACILITY_SUPERVISOR",
+          "job_namekk": "Комендант",
+          "job_nameru": "Комендант",
+          "job_namekk_doc": "коменданты"
+        },
+        {
+          "job_code": "HEAD",
+          "job_namekk": "Басшы",
+          "job_nameru": "Руководитель",
+          "job_namekk_doc": "басшысы"
+        },
+        {
+          "job_code": "HOUSEKEEPING_SERVICE_HEAD",
+          "job_namekk": "Шаруашылық қызметінің басшысы",
+          "job_nameru": "Руководитель хозяйственной службы",
+          "job_namekk_doc": "шаруашылық қызметінің басшысы"
+        },
+        {
+          "job_code": "HR_HEAD",
+          "job_namekk": "Кадрлар бөлімінің басшысы",
+          "job_nameru": "Руководитель отдела кадров",
+          "job_namekk_doc": "кадрлар бөлімінің басшысы"
+        },
+        {
+          "job_code": "HR_MANAGER",
+          "job_namekk": "Адам ресурстарын басқару менеджері",
+          "job_nameru": "Менеджер по управлению человеческими ресурсами",
+          "job_namekk_doc": "адам ресурстарын басқару менеджері"
+        },
+        {
+          "job_code": "INSTALLER",
+          "job_namekk": "Монтажшы",
+          "job_nameru": "Монтажник",
+          "job_namekk_doc": "монтажшысы"
+        },
+        {
+          "job_code": "KAZAKH_TRANSLATOR",
+          "job_namekk": "Қазақ тілі аудармашысы",
+          "job_nameru": "Переводчик казахского языка",
+          "job_namekk_doc": "қазақ тілі аудармашысы"
+        },
+        {
+          "job_code": "KITCHEN_WORKER",
+          "job_namekk": "Асүй жұмысшысы",
+          "job_nameru": "Рабочий кухни",
+          "job_namekk_doc": "асүй жұмысшысы"
+        },
+        {
+          "job_code": "LAB_ASSISTANT",
+          "job_namekk": "Зертханашы",
+          "job_nameru": "Лаборант",
+          "job_namekk_doc": "зертханашысы"
+        },
+        {
+          "job_code": "LAUNDRY_HEAD",
+          "job_namekk": "Кір жуу орнының меңгерушісі",
+          "job_nameru": "Заведующая прачечной",
+          "job_namekk_doc": "кір жуу орнының меңгерушісі"
+        },
+        {
+          "job_code": "LAUNDRY_MACHINE_OPERATOR",
+          "job_namekk": "Кір жуу машинисі",
+          "job_nameru": "Машинист по стирке белья",
+          "job_namekk_doc": "кір жуу машинисі"
+        },
+        {
+          "job_code": "LAWYER",
+          "job_namekk": "Заңгер",
+          "job_nameru": "Юрист",
+          "job_namekk_doc": "заңгері"
+        },
+        {
+          "job_code": "LIFT_OPERATOR",
+          "job_namekk": "Лифтші",
+          "job_nameru": "Лифтер",
+          "job_namekk_doc": "лифтшісі"
+        },
+        {
+          "job_code": "MANAGER",
+          "job_namekk": "Менеджер",
+          "job_nameru": "Менеджер",
+          "job_namekk_doc": "менеджері"
+        },
+        {
+          "job_code": "MEDICAL_PHYSICIST_ENGINEER",
+          "job_namekk": "Инженер-медицина физигі",
+          "job_nameru": "Инженер — медицинский физик",
+          "job_namekk_doc": "инженер-медицина физигі"
+        },
+        {
+          "job_code": "MEDICAL_REGISTRAR",
+          "job_namekk": "Медициналық тіркеуші",
+          "job_nameru": "медрегистратор",
+          "job_namekk_doc": "медициналық тіркеушісі"
+        },
+        {
+          "job_code": "MEDICAL_STATISTICIAN",
+          "job_namekk": "Медициналық статистик",
+          "job_nameru": "Медицинский статистик",
+          "job_namekk_doc": "медициналық статистигі"
+        },
+        {
+          "job_code": "NURSE",
+          "job_namekk": "Мейіргер",
+          "job_nameru": "Медсестра",
+          "job_namekk_doc": "мейіргері"
+        },
+        {
+          "job_code": "OCCUPATIONAL_SAFETY_HEAD",
+          "job_namekk": "Еңбекті қорғау және қауіпсіздік техникасы жөніндегі меңгеруші",
+          "job_nameru": "Заведующий по охране труда и технике безопасности",
+          "job_namekk_doc": "еңбекті қорғау және қауіпсіздік техникасы жөніндегі меңгерушісі"
+        },
+        {
+          "job_code": "OPERATOR",
+          "job_namekk": "Оператор",
+          "job_nameru": "Оператор",
+          "job_namekk_doc": "операторы"
+        },
+        {
+          "job_code": "PATIENT_TRANSPORT_SANITARY_WORKER",
+          "job_namekk": "Пациенттерді тасымалдау жөніндегі санитар",
+          "job_nameru": "Санитар по транспортировке пациентов",
+          "job_namekk_doc": "пациенттерді тасымалдау жөніндегі санитары"
+        },
+        {
+          "job_code": "PHARMACIST",
+          "job_namekk": "Фармацевт",
+          "job_nameru": "Фармацевт",
+          "job_namekk_doc": "фармацевті"
+        },
+        {
+          "job_code": "PHARMACY_HEAD",
+          "job_namekk": "Дәріхана меңгерушісі",
+          "job_nameru": "Заведующий аптекой",
+          "job_namekk_doc": "дәріхана меңгерушісі"
+        },
+        {
+          "job_code": "PHYSICIAN",
+          "job_namekk": "Дәрігер",
+          "job_nameru": "Врач",
+          "job_namekk_doc": "дәрігері"
+        },
+        {
+          "job_code": "PHYSICIAN_STATISTICIAN",
+          "job_namekk": "Дәрігер-статистик",
+          "job_nameru": "Врач-статистик",
+          "job_namekk_doc": "дәрігер-статистигі"
+        },
+        {
+          "job_code": "PLUMBER",
+          "job_namekk": "Слесарь-сантехник",
+          "job_nameru": "Слесарь-сантехник",
+          "job_namekk_doc": "слесарь-сантехнигі"
+        },
+        {
+          "job_code": "PROC_HEAD",
+          "job_namekk": "Мемлекеттік сатып алу бөлімінің басшысы",
+          "job_nameru": "Руководитель отдела государственных закупок",
+          "job_namekk_doc": "мемлекеттік сатып алу бөлімінің басшысы"
+        },
+        {
+          "job_code": "PROVISOR",
+          "job_namekk": "Провизор",
+          "job_nameru": "Провизор",
+          "job_namekk_doc": "провизоры"
+        },
+        {
+          "job_code": "PSYCHOLOGIST",
+          "job_namekk": "Психолог",
+          "job_nameru": "Психолог",
+          "job_namekk_doc": "психологі"
+        },
+        {
+          "job_code": "QM_HEAD",
+          "job_namekk": "ОВЭиПД басшысы",
+          "job_nameru": "Руководитель ОВЭиПД",
+          "job_namekk_doc": "ОВЭиПД басшысы"
+        },
+        {
+          "job_code": "ROOM_CLEANER",
+          "job_namekk": "Үй-жайларды тазалаушы",
+          "job_nameru": "Уборщик помещений",
+          "job_namekk_doc": "үй-жайларды тазалаушысы"
+        },
+        {
+          "job_code": "SANITARY_BUFFET_WORKER",
+          "job_namekk": "Санитар-буфетші",
+          "job_nameru": "Санитарка-буфетчица",
+          "job_namekk_doc": "санитар-буфетшісі"
+        },
+        {
+          "job_code": "SANITARY_WORKER_FEMALE",
+          "job_namekk": "Санитар",
+          "job_nameru": "Санитарка",
+          "job_namekk_doc": "санитары"
+        },
+        {
+          "job_code": "SANITARY_WORKER",
+          "job_namekk": "Санитар",
+          "job_nameru": "Санитар",
+          "job_namekk_doc": "санитары"
+        },
+        {
+          "job_code": "SECRETARY_REFERENT",
+          "job_namekk": "Хатшы-референт",
+          "job_nameru": "секретарь-референт",
+          "job_namekk_doc": "хатшы-референті"
+        },
+        {
+          "job_code": "SENIOR_ECONOMIST",
+          "job_namekk": "Аға экономист",
+          "job_nameru": "Старший экономист",
+          "job_namekk_doc": "аға экономисті"
+        },
+        {
+          "job_code": "SENIOR_LAB_ASSISTANT",
+          "job_namekk": "Аға зертханашы",
+          "job_nameru": "Старший лаборант",
+          "job_namekk_doc": "аға зертханашысы"
+        },
+        {
+          "job_code": "SENIOR_NURSE",
+          "job_namekk": "Аға мейіргер",
+          "job_nameru": "Старшая медсестра",
+          "job_namekk_doc": "аға мейіргері"
+        },
+        {
+          "job_code": "SENIOR_RESIDENT_PHYSICIAN",
+          "job_namekk": "Аға ординатор",
+          "job_nameru": "Старший ординатор",
+          "job_namekk_doc": "аға ординаторы"
+        },
+        {
+          "job_code": "SENIOR_SYSTEM_ADMINISTRATOR",
+          "job_namekk": "Аға жүйелік әкімші",
+          "job_nameru": "Старший системный администратор",
+          "job_namekk_doc": "аға жүйелік әкімшісі"
+        },
+        {
+          "job_code": "SISTER_HOUSEKEEPER",
+          "job_namekk": "шаруа бикесі",
+          "job_nameru": "сестра-хозяйка",
+          "job_namekk_doc": "шаруа бикесі"
+        },
+        {
+          "job_code": "SOCIAL_WORKER",
+          "job_namekk": "Әлеуметтік қызметкер",
+          "job_nameru": "Социальный работник",
+          "job_namekk_doc": "әлеуметтік қызметкері"
+        },
+        {
+          "job_code": "SPECIALIST",
+          "job_namekk": "Маман",
+          "job_nameru": "Специалист",
+          "job_namekk_doc": "маманы"
+        },
+        {
+          "job_code": "STAT_HEAD_DEPUTY",
+          "job_namekk": "Статистика бөлімі басшысының орынбасары",
+          "job_nameru": "Заместитель руководителя отдела статистики",
+          "job_namekk_doc": "статистика бөлімі басшысының орынбасары"
+        },
+        {
+          "job_code": "STAT_HEAD",
+          "job_namekk": "Статистика бөлімінің басшысы",
+          "job_nameru": "Руководитель отдела статистики",
+          "job_namekk_doc": "статистика бөлімінің басшысы"
+        },
+        {
+          "job_code": "SYSTEM_ADMINISTRATOR",
+          "job_namekk": "Жүйелік әкімші",
+          "job_nameru": "системный администратор",
+          "job_namekk_doc": "жүйелік әкімшісі"
+        },
+        {
+          "job_code": "TECHNICIAN",
+          "job_namekk": "Техник",
+          "job_nameru": "Техник",
+          "job_namekk_doc": "технигі"
+        },
+        {
+          "job_code": "TRANSLATOR",
+          "job_namekk": "Аудармашы",
+          "job_nameru": "Переводчик",
+          "job_namekk_doc": "аудармашысы"
+        },
+        {
+          "job_code": "WAREHOUSE_HEAD",
+          "job_namekk": "Қойма меңгерушісі",
+          "job_nameru": "Заведующий складом",
+          "job_namekk_doc": "қойма меңгерушісі"
+        },
+        {
+          "job_code": "WORKER",
+          "job_namekk": "Жұмысшы",
+          "job_nameru": "Рабочий",
+          "job_namekk_doc": "жұмысшысы"
+        },
+        {
+          "job_code": "YARD_CLEANER",
+          "job_namekk": "Аула сыпырушы",
+          "job_nameru": "Дворник",
+          "job_namekk_doc": "аула сыпырушысы"
+        }
+      ]
+    },
+    "medical_specialties": {
+      "count": 61,
+      "sha256": "9b34a51bc6c2b2d22563c1a746c25029bd8050bbacc14824b9e6dc1f982eee68",
+      "rows": [
+        {
+          "code": "GENERAL",
+          "name": "Медицинская сестра",
+          "name_kk": null,
+          "group_id": 2,
+          "is_active": false,
+          "created_at": "2026-06-16T03:00:22.964461+00:00",
+          "medical_specialty_id": 6
+        },
+        {
+          "code": "GYNECOLOGY",
+          "name": "Врач-акушер-гинеколог",
+          "name_kk": null,
+          "group_id": 1,
+          "is_active": false,
+          "created_at": "2026-06-16T03:00:22.964461+00:00",
+          "medical_specialty_id": 1
+        },
+        {
+          "code": "MED_05B065CC53B6000AB9245A52",
+          "name": "Анестезиология и реаниматология",
+          "name_kk": "Анестезиология және реаниматология",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:05.015669+00:00",
+          "medical_specialty_id": 9
+        },
+        {
+          "code": "MED_0BB1E96CB8E18C56DBB2B5CC",
+          "name": "Ядерная медицина",
+          "name_kk": "Ядролық медицина",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:38.801034+00:00",
+          "medical_specialty_id": 56
+        },
+        {
+          "code": "MED_0C31004AC991DFC21562CDBC",
+          "name": "Кардиохирургия",
+          "name_kk": "Кардиохирургия",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:14.437767+00:00",
+          "medical_specialty_id": 23
+        },
+        {
+          "code": "MED_1391F8D62ABBACF9C2C8EDB3",
+          "name": "Фтизиатрия",
+          "name_kk": "Фтизиатрия",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:36.102216+00:00",
+          "medical_specialty_id": 52
+        },
+        {
+          "code": "MED_1692D52BBED8E4C96D722B16",
+          "name": "Клиническая фармакология",
+          "name_kk": "Клиникалық фармакология",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:16.357072+00:00",
+          "medical_specialty_id": 26
+        },
+        {
+          "code": "MED_27BECADE23D120C11B2A76EA",
+          "name": "Акушерство и гинекология",
+          "name_kk": "Акушерия және гинекология",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:35:04.993729+00:00",
+          "medical_specialty_id": 57
+        },
+        {
+          "code": "MED_289CC9343D4E384B563CE60B",
+          "name": "Семейная медицина",
+          "name_kk": "Отбасы медицинасы",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:21.123265+00:00",
+          "medical_specialty_id": 33
+        },
+        {
+          "code": "MED_2AEABA5BD464C7B05FC0FDC8",
+          "name": "Нейрохирургия",
+          "name_kk": "Нейрохирургия",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:18.357516+00:00",
+          "medical_specialty_id": 29
+        },
+        {
+          "code": "MED_2C50319D75C13CF1A0EA93F9",
+          "name": "Онкология и гематология (детская)",
+          "name_kk": "Онкология және гематология (балалар)",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:20.324969+00:00",
+          "medical_specialty_id": 32
+        },
+        {
+          "code": "MED_3128EF35E0C3386820084D26",
+          "name": "Медицина чрезвычайных ситуаций и катастроф",
+          "name_kk": "Төтенше жағдайлар мен апаттар медицинасы",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:32.797218+00:00",
+          "medical_specialty_id": 47
+        },
+        {
+          "code": "MED_32152456D973047C6A7AE8BD",
+          "name": "Терапия",
+          "name_kk": "Терапия",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:35:07.587769+00:00",
+          "medical_specialty_id": 61
+        },
+        {
+          "code": "MED_33967C39D719BC1EBBA0FF6B",
+          "name": "Медицина труда (профессиональная патология)",
+          "name_kk": "Еңбек медицинасы (кәсіптік патология)",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:10.374236+00:00",
+          "medical_specialty_id": 17
+        },
+        {
+          "code": "MED_33CBB775A1C0962933B0E8C7",
+          "name": "Урология и андрология",
+          "name_kk": "Урология және андрология",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:34.798854+00:00",
+          "medical_specialty_id": 50
+        },
+        {
+          "code": "MED_36AC9686EA96C93CA33953E3",
+          "name": "Сестринское дело",
+          "name_kk": "Мейіргер ісі",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:35:06.250973+00:00",
+          "medical_specialty_id": 59
+        },
+        {
+          "code": "MED_42503128F677EF36B2C4116D",
+          "name": "Пульмонология",
+          "name_kk": "Пульмонология",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:25.681623+00:00",
+          "medical_specialty_id": 40
+        },
+        {
+          "code": "MED_491C041BF858B7DAB3AF8960",
+          "name": "Патологическая анатомия",
+          "name_kk": "Патологиялық анатомия",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:23.060768+00:00",
+          "medical_specialty_id": 36
+        },
+        {
+          "code": "MED_496BB77FEB06888A8119E04A",
+          "name": "Эрготерапия",
+          "name_kk": "Эрготерапия",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:38.11165+00:00",
+          "medical_specialty_id": 55
+        },
+        {
+          "code": "MED_4A667FA4CCA77B7EF1F80BD4",
+          "name": "Аллергология и иммунология",
+          "name_kk": "Аллергология және иммунология",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:03.580955+00:00",
+          "medical_specialty_id": 7
+        },
+        {
+          "code": "MED_4B9719B7981C7AB0A94F0DEE",
+          "name": "Кардиология",
+          "name_kk": "Кардиология",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:13.788944+00:00",
+          "medical_specialty_id": 22
+        },
+        {
+          "code": "MED_4FFE84AF8670FDEDC298379F",
+          "name": "Военная хирургия",
+          "name_kk": "Әскери хирургия",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:06.336339+00:00",
+          "medical_specialty_id": 11
+        },
+        {
+          "code": "MED_5E0DBBE4D2AC6B9EECA065F1",
+          "name": "Стоматология",
+          "name_kk": "Стоматология",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:28.334213+00:00",
+          "medical_specialty_id": 44
+        },
+        {
+          "code": "MED_5EA2F273A1168DCB3B4FC03E",
+          "name": "Кинезитерапия",
+          "name_kk": "Кинезитерапия",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:15.078037+00:00",
+          "medical_specialty_id": 24
+        },
+        {
+          "code": "MED_60C5CBCC9AA49D1F7C10D113",
+          "name": "Гематология",
+          "name_kk": "Гематология",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:08.245273+00:00",
+          "medical_specialty_id": 14
+        },
+        {
+          "code": "MED_657DF5AFA38572DEC5939667",
+          "name": "Неотложная медицина",
+          "name_kk": "Кезек күттірмейтін медицина",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:13.155419+00:00",
+          "medical_specialty_id": 21
+        },
+        {
+          "code": "MED_6B9D781472DE9A7F87272223",
+          "name": "Дерматовенерология",
+          "name_kk": "Дерматовенерология",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:08.927998+00:00",
+          "medical_specialty_id": 15
+        },
+        {
+          "code": "MED_6F684F4B39AA019999B26F55",
+          "name": "Физическая медицина и реабилитация",
+          "name_kk": "Физикалық медицина және оңалту",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:35.45681+00:00",
+          "medical_specialty_id": 51
+        },
+        {
+          "code": "MED_700DC69100798E97E84602CF",
+          "name": "Оториноларингология",
+          "name_kk": "Оториноларингология",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:21.762984+00:00",
+          "medical_specialty_id": 34
+        },
+        {
+          "code": "MED_733C9ED41ED74C2166490348",
+          "name": "Педиатрия",
+          "name_kk": "Педиатрия",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:23.680478+00:00",
+          "medical_specialty_id": 37
+        },
+        {
+          "code": "MED_739B55EC1E93D5DF16A19E02",
+          "name": "Традиционная терапия (традиционная медицина)",
+          "name_kk": "Дәстүрлі терапия (дәстүрлі медицина)",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:09.729713+00:00",
+          "medical_specialty_id": 16
+        },
+        {
+          "code": "MED_7C3DB073FCA97F45CA88F6CB",
+          "name": "Токсикология",
+          "name_kk": "Токсикология",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:32.069482+00:00",
+          "medical_specialty_id": 46
+        },
+        {
+          "code": "MED_7FF07D737D34768C7001D7BE",
+          "name": "Радиология",
+          "name_kk": "Радиология",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:26.341265+00:00",
+          "medical_specialty_id": 41
+        },
+        {
+          "code": "MED_838BB0CCC58C63E382233ED1",
+          "name": "Травматология-ортопедия",
+          "name_kk": "Травматология-ортопедия",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:33.443351+00:00",
+          "medical_specialty_id": 48
+        },
+        {
+          "code": "MED_8C648B92557C85BB4ECD1AC3",
+          "name": "Военная терапия",
+          "name_kk": "Әскери терапия",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:05.709526+00:00",
+          "medical_specialty_id": 10
+        },
+        {
+          "code": "MED_96FEBFC78BFCC6F5D8CD6CBE",
+          "name": "Психиатрия",
+          "name_kk": "Психиатрия",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:24.97464+00:00",
+          "medical_specialty_id": 39
+        },
+        {
+          "code": "MED_96FF84847807693A6B734359",
+          "name": "Нефрология",
+          "name_kk": "Нефрология",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:19.69553+00:00",
+          "medical_specialty_id": 31
+        },
+        {
+          "code": "MED_989B333699047F994721A03D",
+          "name": "Общая хирургия",
+          "name_kk": "Жалпы хирургия",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:35:05.621293+00:00",
+          "medical_specialty_id": 58
+        },
+        {
+          "code": "MED_98C4BBB8EA3CB7D66FDC6B53",
+          "name": "Офтальмология",
+          "name_kk": "Офтальмология",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:22.385792+00:00",
+          "medical_specialty_id": 35
+        },
+        {
+          "code": "MED_99922A939715CFDF91625065",
+          "name": "Онкология",
+          "name_kk": "Онкология",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:35:06.926159+00:00",
+          "medical_specialty_id": 60
+        },
+        {
+          "code": "MED_9A878A158C759224F02BCB40",
+          "name": "Неврология",
+          "name_kk": "Неврология",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:17.67541+00:00",
+          "medical_specialty_id": 28
+        },
+        {
+          "code": "MED_9D3E6A719EC814AC156AC7A0",
+          "name": "Общая врачебная практика",
+          "name_kk": "Жалпы дәрігерлік практика",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:11.017086+00:00",
+          "medical_specialty_id": 18
+        },
+        {
+          "code": "MED_9FF4DC130F22EC476CD5F92C",
+          "name": "Медицинская генетика",
+          "name_kk": "Медициналық генетика",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:16.977772+00:00",
+          "medical_specialty_id": 27
+        },
+        {
+          "code": "MED_A4E019F123324B992BF761DE",
+          "name": "Гастроэнтерология",
+          "name_kk": "Гастроэнтерология",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:07.611936+00:00",
+          "medical_specialty_id": 13
+        },
+        {
+          "code": "MED_ACC82ED39DC3599BED8A0D4F",
+          "name": "Детская хирургия",
+          "name_kk": "Балалар хирургиясы",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:06.967431+00:00",
+          "medical_specialty_id": 12
+        },
+        {
+          "code": "MED_ADB5A9BDFA810736AF66C1BC",
+          "name": "Челюстно-лицевая хирургия",
+          "name_kk": "Жақ-бет хирургиясы",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:11.812522+00:00",
+          "medical_specialty_id": 19
+        },
+        {
+          "code": "MED_AEB8B7AA07506C8778A0DA82",
+          "name": "Судебно-медицинская экспертиза",
+          "name_kk": "Сот-медициналық сараптама",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:27.773287+00:00",
+          "medical_specialty_id": 43
+        },
+        {
+          "code": "MED_B2FD828406ACF44EFAE3974A",
+          "name": "Неонатология",
+          "name_kk": "Неонатология",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:19.075143+00:00",
+          "medical_specialty_id": 30
+        },
+        {
+          "code": "MED_B9FE4AE5747CEE3BB24898A9",
+          "name": "Трансфузиология",
+          "name_kk": "Трансфузиология",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:34.102019+00:00",
+          "medical_specialty_id": 49
+        },
+        {
+          "code": "MED_BB1F03505A70BD940A687A81",
+          "name": "Спортивная медицина",
+          "name_kk": "Спорт медицинасы",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:31.351692+00:00",
+          "medical_specialty_id": 45
+        },
+        {
+          "code": "MED_BF544941F0F4B932CBF60587",
+          "name": "Ревматология",
+          "name_kk": "Ревматология",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:27.039049+00:00",
+          "medical_specialty_id": 42
+        },
+        {
+          "code": "MED_C058C36612BD90008ADCD8CB",
+          "name": "Эндокринология",
+          "name_kk": "Эндокринология",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:37.460449+00:00",
+          "medical_specialty_id": 54
+        },
+        {
+          "code": "MED_CE7908F0E749EF0608F9F2C3",
+          "name": "Функциональная диагностика",
+          "name_kk": "Функционалдық диагностика",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:36.810166+00:00",
+          "medical_specialty_id": 53
+        },
+        {
+          "code": "MED_D185E67173407932495E759E",
+          "name": "Пластическая хирургия",
+          "name_kk": "Пластикалық хирургия",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:24.340883+00:00",
+          "medical_specialty_id": 38
+        },
+        {
+          "code": "MED_E7EDB05821123E92FA6761DE",
+          "name": "Клиническая лабораторная диагностика",
+          "name_kk": "Клиникалық зертханалық диагностика",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:15.708552+00:00",
+          "medical_specialty_id": 25
+        },
+        {
+          "code": "MED_F5BC8A9D39B9C85688929EB6",
+          "name": "Ангиохирургия",
+          "name_kk": "Ангиохирургия",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:04.307675+00:00",
+          "medical_specialty_id": 8
+        },
+        {
+          "code": "MED_FD4DF5C823013FAA4C5621A5",
+          "name": "Инфекционные болезни",
+          "name_kk": "Инфекциялық аурулар",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:12.44958+00:00",
+          "medical_specialty_id": 20
+        },
+        {
+          "code": "ONCOLOGY",
+          "name": "Врач-онколог",
+          "name_kk": null,
+          "group_id": 1,
+          "is_active": false,
+          "created_at": "2026-06-16T03:00:22.964461+00:00",
+          "medical_specialty_id": 4
+        },
+        {
+          "code": "OR",
+          "name": "Операционная медсестра",
+          "name_kk": null,
+          "group_id": 2,
+          "is_active": false,
+          "created_at": "2026-06-16T03:00:22.964461+00:00",
+          "medical_specialty_id": 5
+        },
+        {
+          "code": "SURGERY",
+          "name": "Врач-хирург",
+          "name_kk": null,
+          "group_id": 1,
+          "is_active": false,
+          "created_at": "2026-06-16T03:00:22.964461+00:00",
+          "medical_specialty_id": 3
+        },
+        {
+          "code": "THERAPY",
+          "name": "Врач-терапевт",
+          "name_kk": null,
+          "group_id": 1,
+          "is_active": false,
+          "created_at": "2026-06-16T03:00:22.964461+00:00",
+          "medical_specialty_id": 2
+        }
+      ]
+    },
+    "medical_specialty_groups": {
+      "count": 3,
+      "sha256": "b0fe4eaf6e900868597dbf8166e3eb2279e7fb848a8cbbc2aff32aaa54104c47",
+      "rows": [
+        {
+          "code": "DOCTOR",
+          "name": "Врачи",
+          "group_id": 1,
+          "is_active": true,
+          "created_at": "2026-06-16T03:00:22.964461+00:00"
+        },
+        {
+          "code": "NURSE",
+          "name": "Средний медицинский персонал",
+          "group_id": 2,
+          "is_active": true,
+          "created_at": "2026-06-16T03:00:22.964461+00:00"
+        },
+        {
+          "code": "UNCLASSIFIED",
+          "name": "Без классификации",
+          "group_id": 3,
+          "is_active": true,
+          "created_at": "2026-10-25T15:20:03.580955+00:00"
+        }
+      ]
+    }
+  }
+}

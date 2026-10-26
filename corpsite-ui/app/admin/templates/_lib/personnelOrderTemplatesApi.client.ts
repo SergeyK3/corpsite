@@ -47,15 +47,18 @@ export function listPersonnelOrderTemplateCatalog() {
 }
 
 export type PersonnelOrderTemplateDraft = { type_changed?: boolean;
+  print_title_ru?: string|null; print_title_kk?: string|null;
   name_ru?: string | null; name_kk?: string | null;
   template_version_id: number; template_id?: number; item_type_code: string; version_number: number; status: string; revision: number; based_on_built_in: boolean;
   published_at?: string | null; published_by_user_id?: number | null;
   title_ru: string; title_kk: string; preamble_ru: string; preamble_kk: string; body_template_ru: string; body_template_kk: string; basis_template_ru: string; basis_template_kk: string;
 };
-export type PersonnelOrderTemplateDraftText = Pick<PersonnelOrderTemplateDraft, "title_ru" | "title_kk" | "preamble_ru" | "preamble_kk" | "body_template_ru" | "body_template_kk" | "basis_template_ru" | "basis_template_kk">;
+export type PersonnelOrderTemplateDraftText = Pick<PersonnelOrderTemplateDraft, "title_ru" | "title_kk" | "print_title_ru" | "print_title_kk" | "preamble_ru" | "preamble_kk" | "body_template_ru" | "body_template_kk" | "basis_template_ru" | "basis_template_kk">;
 export type PersonnelOrderTemplateEditorBase = PersonnelOrderTemplateDraftText & { source: "PUBLISHED" | "INITIAL"; template_id?: number | null; item_type_code: string; template_version_id: number | null; version_number: number | null; revision: number | null; };
 export function editablePersonnelOrderTemplateDraftText(source: PersonnelOrderTemplateDraftText): PersonnelOrderTemplateDraftText {
   return {
+    ...('print_title_ru' in source ? {print_title_ru:source.print_title_ru}:{}),
+    ...('print_title_kk' in source ? {print_title_kk:source.print_title_kk}:{}),
     title_ru: source.title_ru,
     title_kk: source.title_kk,
     preamble_ru: source.preamble_ru,

@@ -11,9 +11,11 @@ from sqlalchemy.exc import IntegrityError
 
 from app.db.engine import engine
 from app.services.personnel_order_template_specs import get_personnel_order_template_spec
+from app.services.personnel_order_print_titles import PRINT_TITLE_FIELDS, print_title_errors, printable_template, initial_print_titles, approved_variant_print_titles, version_print_titles
 
 EDITABLE_TYPE = "LEAVE.UNPAID.GRANT"
 TEXT_FIELDS = ("title_ru", "title_kk", "preamble_ru", "preamble_kk", "body_template_ru", "body_template_kk", "basis_template_ru", "basis_template_kk")
+VERSION_FIELDS = TEXT_FIELDS + PRINT_TITLE_FIELDS
 _TOKEN = re.compile(r"\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}")
 _FORBIDDEN = re.compile(r"<\s*/?\s*(?:script|style)|javascript:|=>|\b(?:if|for|function)\s*\(", re.I)
 
@@ -59,9 +61,10 @@ def _row(row: Mapping[str, Any]) -> dict[str, Any]:
         "basis_template_ru", "basis_template_kk", "based_on_built_in", "created_at", "updated_at",
     )}
     result["template_id"] = row.get("template_id")
+    result.update({field:row.get(field) for field in PRINT_TITLE_FIELDS})
     result["published_at"] = row.get("published_at")
     result["published_by_user_id"] = row.get("published_by_user_id")
-    return result
+    return version_print_titles(result)
 
 
 def _assert_type(item_type_code: str) -> None:
@@ -131,6 +134,7 @@ def copy_template(item_type_code: str, source_version_id: int | None, name_ru: s
     with engine.begin() as conn:
         if base_source == "INITIAL" and source_version_id is None and expected_revision is None:
             values = dict(get_personnel_order_template_spec(source_type_code).initial_texts)
+            values.update(initial_print_titles(item_type_code, names['ru']))
             # Give the existing built-in template its default identity, without
             # creating/changing any of its versions or content.
             _resolve_template(conn, source_type_code, None, create=True, lock=True)
@@ -140,7 +144,10 @@ def copy_template(item_type_code: str, source_version_id: int | None, name_ru: s
                 raise TemplateDraftError("TEMPLATE_VERSION_NOT_FOUND", "Исходная версия не найдена.")
             if int(source["revision"]) != expected_revision:
                 raise TemplateDraftError("TEMPLATE_REVISION_CONFLICT", "Исходная версия изменена. Обновите страницу.", conflict=True)
-            values = {field: source[field] for field in TEXT_FIELDS}
+            values = {field: source.get(field) for field in VERSION_FIELDS}
+            for field,value in approved_variant_print_titles(item_type_code,names['ru']).items():
+                if values.get(field) is None:
+                    values[field]=value
         else:
             raise TemplateDraftError("TEMPLATE_BASE_SOURCE_INVALID", "Некорректный источник копии.")
         # Keep copied tokens verbatim, including incompatible tokens in a draft.
@@ -155,11 +162,11 @@ def copy_template(item_type_code: str, source_version_id: int | None, name_ru: s
         """), {"type": item_type_code, **names, "actor": actor_user_id, "source": source_version_id}).scalar_one()
         row = conn.execute(text("""
           INSERT INTO public.personnel_order_template_versions(template_id,item_type_code,version_number,status,
-            title_ru,title_kk,preamble_ru,preamble_kk,body_template_ru,body_template_kk,basis_template_ru,basis_template_kk,
+            title_ru,title_kk,print_title_ru,print_title_kk,preamble_ru,preamble_kk,body_template_ru,body_template_kk,basis_template_ru,basis_template_kk,
             based_on_built_in,created_by_user_id,updated_by_user_id)
-          VALUES(:template,:type,1,'DRAFT',:title_ru,:title_kk,:preamble_ru,:preamble_kk,:body_template_ru,:body_template_kk,
+          VALUES(:template,:type,1,'DRAFT',:title_ru,:title_kk,:print_title_ru,:print_title_kk,:preamble_ru,:preamble_kk,:body_template_ru,:body_template_kk,
             :basis_template_ru,:basis_template_kk,:built_in,:actor,:actor) RETURNING *
-        """), {**values, "template": new_id, "type": item_type_code, "actor": actor_user_id, "built_in": base_source == "INITIAL"}).mappings().one()
+        """), {**{field:values.get(field) for field in PRINT_TITLE_FIELDS}, **values, "template": new_id, "type": item_type_code, "actor": actor_user_id, "built_in": base_source == "INITIAL"}).mappings().one()
     return {**_row(row), "name_ru": names["ru"], "name_kk": names["kk"]}
 
 
@@ -238,6 +245,8 @@ def _validate(values: Mapping[str, str], item_type_code: str = EDITABLE_TYPE, *,
     spec = get_personnel_order_template_spec(item_type_code)
     variables = set(spec.allowed_variables)
     for field, value in values.items():
+        if field in PRINT_TITLE_FIELDS and (value is None or not str(value).strip()):
+            continue  # Incomplete drafts are allowed; publication requires approval.
         if not isinstance(value, str) or (require_complete and not value.strip()):
             raise TemplateDraftError("TEMPLATE_TEXT_REQUIRED", f"{field} обязателен.")
         if _FORBIDDEN.search(value):
@@ -300,11 +309,12 @@ def get_editor_base(item_type_code: str, template_id: int | None = None) -> dict
             "template_version_id": published["template_version_id"],
             "version_number": published["version_number"],
             "revision": published["revision"],
-            **{field: published[field] for field in TEXT_FIELDS},
+            **{field: published.get(field) for field in VERSION_FIELDS},
+            **{field:value for field,value in approved_variant_print_titles(item_type_code,published['title_ru']).items() if published.get(field) is None},
         }
     return {"source": "INITIAL", "item_type_code": item_type_code, "template_id": template_id,
             "template_version_id": None, "version_number": None, "revision": None,
-            **dict(get_personnel_order_template_spec(item_type_code).initial_texts)}
+            **dict(get_personnel_order_template_spec(item_type_code).initial_texts), **initial_print_titles(item_type_code)}
 
 
 @compatible_template_schema
@@ -333,17 +343,21 @@ def create_draft_from_working_copy(
                 raise TemplateDraftError("TEMPLATE_PUBLISHED_CONFLICT", "Published template has changed.", conflict=True)
         else:
             raise TemplateDraftError("TEMPLATE_BASE_SOURCE_INVALID", "Invalid editor base.")
-        if published is not None and all(published[field] == values[field] for field in TEXT_FIELDS):
+        values = {**{field:published.get(field) if published is not None else None for field in PRINT_TITLE_FIELDS}, **values}
+        for field,value in approved_variant_print_titles(item_type_code,values['title_ru']).items():
+            if values.get(field) is None:
+                values[field]=value
+        if published is not None and all(published.get(field) == values.get(field) for field in VERSION_FIELDS):
             raise TemplateDraftError("TEMPLATE_DRAFT_IDENTICAL_TO_PUBLISHED", "Draft must differ from the published template.")
         existing = conn.execute(text("SELECT * FROM public.personnel_order_template_versions WHERE template_id=:template AND status='DRAFT' FOR UPDATE"), {"template": scope}).mappings().first()
         if existing is not None:
             raise TemplateDraftError("TEMPLATE_DRAFT_ALREADY_EXISTS", "A draft already exists.", conflict=True)
         row = conn.execute(text("""
             INSERT INTO public.personnel_order_template_versions
-            (template_id, item_type_code, version_number, status, title_ru, title_kk, preamble_ru, preamble_kk, body_template_ru, body_template_kk, basis_template_ru, basis_template_kk, created_by_user_id, updated_by_user_id)
-            VALUES (:template, :type, (SELECT COALESCE(MAX(version_number), 0) + 1 FROM public.personnel_order_template_versions WHERE template_id=:template), 'DRAFT', :title_ru, :title_kk, :preamble_ru, :preamble_kk, :body_template_ru, :body_template_kk, :basis_template_ru, :basis_template_kk, :actor, :actor)
+            (template_id, item_type_code, version_number, status, title_ru, title_kk, print_title_ru, print_title_kk, preamble_ru, preamble_kk, body_template_ru, body_template_kk, basis_template_ru, basis_template_kk, created_by_user_id, updated_by_user_id)
+            VALUES (:template, :type, (SELECT COALESCE(MAX(version_number), 0) + 1 FROM public.personnel_order_template_versions WHERE template_id=:template), 'DRAFT', :title_ru, :title_kk, :print_title_ru, :print_title_kk, :preamble_ru, :preamble_kk, :body_template_ru, :body_template_kk, :basis_template_ru, :basis_template_kk, :actor, :actor)
             RETURNING *
-        """), {**{field: values[field] for field in TEXT_FIELDS}, "type": item_type_code, "template": scope, "actor": actor_user_id}).mappings().one()
+        """), {**{field: values.get(field) for field in VERSION_FIELDS}, "type": item_type_code, "template": scope, "actor": actor_user_id}).mappings().one()
         conn.execute(text("UPDATE public.personnel_order_templates SET name_ru=COALESCE(NULLIF(:ru,''),name_ru),name_kk=COALESCE(NULLIF(:kk,''),name_kk) WHERE template_id=:id"), {"id": scope, "ru": values["title_ru"].strip(), "kk": values["title_kk"].strip()})
     return _row(row)
 
@@ -356,9 +370,11 @@ def publish_draft(item_type_code: str, expected_revision: int, actor_user_id: in
         draft = conn.execute(text("SELECT * FROM public.personnel_order_template_versions WHERE template_id=:template AND status='DRAFT' FOR UPDATE"), {"template": scope}).mappings().first()
         if draft is None: raise TemplateDraftError("TEMPLATE_DRAFT_NOT_FOUND", "Черновая версия не создана.")
         if int(draft["revision"]) != expected_revision: raise TemplateDraftError("TEMPLATE_REVISION_CONFLICT", "Черновик изменён другим пользователем.", conflict=True)
-        _validate({field: draft[field] for field in TEXT_FIELDS}, item_type_code)
+        _validate({field: draft.get(field) for field in VERSION_FIELDS}, item_type_code)
+        if print_title_errors(draft):
+            raise TemplateDraftError("PRINT_TITLE_APPROVAL_REQUIRED", " ".join(print_title_errors(draft)))
         published = conn.execute(text("SELECT * FROM public.personnel_order_template_versions WHERE template_id=:template AND status='PUBLISHED' FOR UPDATE"), {"template": scope}).mappings().first()
-        if published is not None and all(draft[field] == published[field] for field in TEXT_FIELDS):
+        if published is not None and all(draft.get(field) == published.get(field) for field in VERSION_FIELDS):
             raise TemplateDraftError("TEMPLATE_DRAFT_IDENTICAL_TO_PUBLISHED", "Draft must differ from the published template.")
         conn.execute(text("UPDATE public.personnel_order_template_versions SET status='ARCHIVED', updated_at=now() WHERE template_id=:template AND status='PUBLISHED'"), {"template": scope})
         row = conn.execute(text("UPDATE public.personnel_order_template_versions SET status='PUBLISHED', published_at=now(), published_by_user_id=:actor, updated_by_user_id=:actor, updated_at=now() WHERE template_version_id=:id RETURNING *"), {"actor": actor_user_id, "id": draft["template_version_id"]}).mappings().one()
@@ -380,17 +396,18 @@ def save_draft(item_type_code: str, expected_revision: int, values: Mapping[str,
         if expected_template_version_id is not None and int(current["template_version_id"]) != expected_template_version_id:
             raise TemplateDraftError("TEMPLATE_REVISION_CONFLICT", "Открыта другая версия черновика. Обновите редактор.", conflict=True)
         conn.execute(text("UPDATE public.personnel_order_templates SET name_ru=COALESCE(NULLIF(:ru,''),name_ru),name_kk=COALESCE(NULLIF(:kk,''),name_kk) WHERE template_id=:id"), {"id": scope, "ru": values["title_ru"].strip(), "kk": values["title_kk"].strip()})
-        if all(current[key] == values[key] for key in values): return _row(current)
+        if all(current.get(key) == values[key] for key in values): return _row(current)
         row = conn.execute(text("""
-            UPDATE public.personnel_order_template_versions SET title_ru=:title_ru, title_kk=:title_kk, preamble_ru=:preamble_ru, preamble_kk=:preamble_kk,
+            UPDATE public.personnel_order_template_versions SET title_ru=:title_ru, title_kk=:title_kk, print_title_ru=:print_title_ru, print_title_kk=:print_title_kk, preamble_ru=:preamble_ru, preamble_kk=:preamble_kk,
             body_template_ru=:body_template_ru, body_template_kk=:body_template_kk, basis_template_ru=:basis_template_ru, basis_template_kk=:basis_template_kk,
             revision=revision+1, updated_by_user_id=:actor, updated_at=now() WHERE template_version_id=:id RETURNING *
-        """), {**values, "actor": actor_user_id, "id": current["template_version_id"]}).mappings().one()
+        """), {**{field:current.get(field) for field in PRINT_TITLE_FIELDS}, **values, "actor": actor_user_id, "id": current["template_version_id"]}).mappings().one()
     return _row(row)
 
 
 def preview_draft(item_type_code: str, values: Mapping[str, str]) -> dict[str, Any]:
     _assert_type(item_type_code); _validate(values, item_type_code, require_complete=False)
+    values = printable_template({**dict.fromkeys(PRINT_TITLE_FIELDS), **values}, preview=True)
     spec = get_personnel_order_template_spec(item_type_code)
     samples = {
         "employee.full_name": "[[ФИО сотрудника]]", "position.title_ru": "[[Должность]]", "position.title_kk": "[[Лауазым]]", "position.document_nominative_ru": "[[Должность в именительном падеже]]", "org_unit.title_ru": "[[Подразделение]]", "org_unit.title_kk": "[[Бөлімше]]",

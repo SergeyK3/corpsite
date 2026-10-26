@@ -1,5 +1,6 @@
 # FILE: app/services/directory_service.py
 from __future__ import annotations
+from app.services.position_directory_service import consumer_position
 
 import json
 from datetime import date, datetime
@@ -427,7 +428,13 @@ def _employee_select_sql(emp_rel: str, emp_cols: List[str]) -> Tuple[str, Dict[s
         for field in ("name_kk", "document_possessive_kk", "document_nominative_ru"):
             select_parts.append(f"NULLIF(BTRIM(({position_record}) ->> '{field}'), '') AS pos_{field}")
         relations = _list_relations()
-        if ("job_positions_catalog", "table") in relations and ("position_job_catalog", "table") in relations:
+        if ("position_directory", "view") in relations:
+            join_sql += f" LEFT JOIN public.position_directory job_catalog ON job_catalog.position_id = ({effective_position_id_expr})"
+            for field in ("job_code", "job_nameru", "job_namekk", "job_namekk_doc"):
+                select_parts.append(f"job_catalog.{field} AS pos_{field}")
+            for field in ('translation_status','document_form_status','record_kind','family_name_ru'):
+                select_parts.append(f"job_catalog.{field} AS pos_{field}")
+        elif ("job_positions_catalog", "table") in relations and ("position_job_catalog", "table") in relations:
             join_sql += (
                 f" LEFT JOIN public.position_job_catalog job_map ON job_map.position_id = ({effective_position_id_expr})"
                 " LEFT JOIN public.job_positions_catalog job_catalog ON job_catalog.job_code = job_map.job_code"
@@ -541,13 +548,14 @@ def _normalize_employee_joined(row: Dict[str, Any], emp_rel: str) -> Dict[str, A
         "first_name": row.get("person_first_name") or row.get("e_first"),
         "middle_name": row.get("person_middle_name") or row.get("e_mid"),
         "department": {"id": row.get("e_dept_id"), "name": row.get("dept_name")},
-        "position": {
+        "position": consumer_position({
             "id": row.get("e_pos_id"), "name": row.get("pos_name"),
             "name_kk": row.get("pos_name_kk"),
             "document_possessive_kk": row.get("pos_document_possessive_kk"),
             "document_nominative_ru": row.get("pos_document_nominative_ru"),
             **{field: row.get(f"pos_{field}") for field in ("job_code", "job_nameru", "job_namekk", "job_namekk_doc")},
-        },
+            **{field: row.get(f"pos_{field}") for field in ('translation_status','document_form_status','record_kind','family_name_ru')},
+        }),
         "org_unit": {
             "unit_id": org_unit_id,
             "name": row.get("org_unit_name"),
@@ -1049,16 +1057,18 @@ def get_employee(
         available_assignments = []
         person_id = int(row["e_person_id"]) if row.get("e_person_id") is not None else None
         if include_assignments and person_id is not None and ("person_assignments", "table") in _list_relations():
-            assignment_rows = conn.execute(text("""
+            position_relation = 'public.position_directory' if ('position_directory','view') in _list_relations() else 'public.positions'
+            assignment_rows = conn.execute(text(f"""
                 SELECT pa.assignment_id, pa.position_id, pa.org_unit_id, pa.rate, pa.is_primary, to_jsonb(p) AS position, to_jsonb(ou) AS org_unit
                 FROM public.person_assignments pa
-                LEFT JOIN public.positions p ON p.position_id=pa.position_id
+                LEFT JOIN {position_relation} p ON p.position_id=pa.position_id
                 LEFT JOIN public.org_units ou ON ou.unit_id=pa.org_unit_id
                 WHERE pa.person_id=:person AND pa.active_flag IS TRUE
                   AND pa.lifecycle_status='active' AND pa.start_date<=CURRENT_DATE
                   AND (pa.end_date IS NULL OR pa.end_date>=CURRENT_DATE)
                 ORDER BY pa.assignment_id
             """), {"person": person_id}).mappings().all()
+            assignment_rows = [{**r, 'position': consumer_position(r['position'])} for r in assignment_rows]
             primary = [r for r in assignment_rows if r["is_primary"] is True]
             available_assignments = [dict(r) for r in assignment_rows
                 if (scope_unit_ids is None or r["org_unit_id"] in scope_unit_ids)

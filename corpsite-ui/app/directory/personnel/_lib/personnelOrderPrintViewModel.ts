@@ -1,3 +1,4 @@
+import {personnelOrderPrintTitle} from "./personnelOrderPrintTitle";
 import { withoutAutomaticOrderClosing } from "./personnelOrderClosingText";
 import type {
   PersonnelOrderDetailResponse,
@@ -233,8 +234,8 @@ function pickLocalizedTexts(
   );
   const fallback = documentTitleFallback(detail.order.order_type_code);
   const title: LocalizedText = {
-    kk: editorialTitle?.kk || fromLocalized.kk || fallback.kk || null,
-    ru: editorialTitle?.ru || fromLocalized.ru || fallback.ru || null,
+    kk: personnelOrderPrintTitle(detail,'kk',editorial) || editorialTitle?.kk || fromLocalized.kk || fallback.kk || null,
+    ru: personnelOrderPrintTitle(detail,'ru',editorial) || editorialTitle?.ru || fromLocalized.ru || fallback.ru || null,
   };
 
   const legacyPreamble = localizedText(kk?.preamble, ru?.preamble);

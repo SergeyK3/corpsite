@@ -1,4 +1,5 @@
 import { withoutAutomaticOrderClosing } from "../_lib/personnelOrderClosingText";
+import {personnelOrderPrintTitle} from '../_lib/personnelOrderPrintTitle';
 import { formatPersonnelOrderActionStartDate } from "../_lib/personnelOrderPrintFormat";
 import type {
   PersonnelOrderDetailResponse,
@@ -299,7 +300,7 @@ export function renderPersonnelOrderDocument(
   const activeItems = detail.items
     .filter((item) => String(item.item_status).toUpperCase() !== "VOIDED")
     .sort((left, right) => left.item_number - right.item_number || left.item_id - right.item_id);
-  const snapshotTitle = orderText("title");
+  const snapshotTitle = personnelOrderPrintTitle(detail,language,editorial) || orderText("title");
   const snapshotPreamble = orderText("preamble");
   const snapshotClosingBlock = editorial?.order_blocks.find(
     (block) => block.block_type === "closing" && block.locale === language,
@@ -395,7 +396,7 @@ export function renderPersonnelOrderDocument(
     ...rendered,
     // A saved current editorial block is the effective document text.  The
     // type renderer above remains the safe fallback for legacy records.
-    title: orderBlockOverride("title") || titleFor(templateKey, language),
+    title: personnelOrderPrintTitle(detail,language,editorial) || orderBlockOverride("title") || titleFor(templateKey, language),
     preamble: preambleWithoutOrderVerb(orderBlockOverride("preamble") || rendered.preamble, language),
     directive: orderVerb(language),
     points,

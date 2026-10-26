@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from datetime import date
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, List
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, PositiveInt
 
 from app.auth import get_current_user
 from app.services.employee_documents_service import (
@@ -25,7 +25,8 @@ from app.services.employee_documents_service import (
 )
 
 from .common import as_http500, call_service
-from .rbac import require_personnel_admin_or_403
+from .rbac import require_personnel_admin_or_403, require_privileged_or_403
+from app.services.medical_specialties_directory_service import create_specialty, get_specialty, archive_specialties
 
 router = APIRouter()
 
@@ -120,6 +121,9 @@ def get_medical_specialties(
     group_id: Optional[int] = Query(default=None, ge=1),
     group_code: Optional[str] = Query(default=None),
     is_active: bool = Query(default=True),
+    q: Optional[str] = Query(default=None, max_length=500),
+    limit: Optional[int] = Query(default=None, ge=1, le=1000),
+    offset: int = Query(default=0, ge=0),
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
     require_personnel_admin_or_403(user)
@@ -129,9 +133,40 @@ def get_medical_specialties(
             group_id=group_id,
             group_code=group_code,
             is_active=is_active,
+            q=q, limit=limit, offset=offset,
         )
     except Exception as e:
         raise as_http500(e)
+
+
+class MedicalSpecialtyCreateIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(min_length=1, max_length=500)
+    name_kk: Optional[str] = Field(default=None, min_length=1, max_length=500)
+    group_id: Optional[int] = Field(default=None, ge=1)
+
+
+@router.post("/medical-specialties", status_code=201)
+def post_medical_specialty(payload: MedicalSpecialtyCreateIn, user: Dict[str, Any] = Depends(get_current_user)):
+    require_privileged_or_403(user)
+    return create_specialty(**payload.model_dump())
+
+
+class MedicalSpecialtyArchiveIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    specialty_ids: List[PositiveInt] = Field(min_length=1, max_length=100)
+
+
+@router.post("/medical-specialties/archive")
+def archive_medical_specialties(payload: MedicalSpecialtyArchiveIn, user: Dict[str, Any] = Depends(get_current_user)):
+    require_privileged_or_403(user)
+    return archive_specialties(payload.specialty_ids)
+
+
+@router.get("/medical-specialties/{specialty_id}")
+def read_medical_specialty(specialty_id: int = Path(ge=1), user: Dict[str, Any] = Depends(get_current_user)):
+    require_personnel_admin_or_403(user)
+    return get_specialty(specialty_id)
 
 
 @router.get("/employee-documents")

@@ -215,7 +215,12 @@ def get_personnel_order_published_template_title(item_type_code: str, _user: Dic
         raise validation_error_to_http422(PersonnelOrderValidationError(str(exc))) from exc
     if template is None:
         raise HTTPException(status_code=404, detail={"code": "PUBLISHED_TEMPLATE_NOT_FOUND"})
-    return {"template_version_id": template.get("template_version_id"), "item_type_code": template["item_type_code"], "title_ru": template["title_ru"], "title_kk": template["title_kk"]}
+    from app.services.personnel_order_print_titles import print_title_errors, version_print_titles
+    template = version_print_titles(template)
+    return {"template_version_id": template.get("template_version_id"), "item_type_code": template["item_type_code"],
+            "title_ru": template.get("print_title_ru") or "", "title_kk": template.get("print_title_kk") or "",
+            "print_title_ru": template.get("print_title_ru"), "print_title_kk": template.get("print_title_kk"),
+            "print_title_approval_required": print_title_errors(template)}
 
 
 @router.post("/personnel-orders/manual-draft", response_model=PersonnelOrderManualDraftCreateOut, status_code=201)

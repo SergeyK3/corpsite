@@ -3,6 +3,7 @@ import PersonnelOrderAllowancePercent from "./PersonnelOrderAllowancePercent";
 import { allowancePercentError } from "../_lib/personnelOrderAllowancePercent";
 
 import * as React from "react";
+import PersonnelOrderMedicalSpecialtyPicker, {type MedicalSpecialtySnapshot} from "./PersonnelOrderMedicalSpecialtyPicker";
 import {concurrentEmployeeDatives} from "../_lib/personnelOrderConcurrentForms";
 import { usePersonnelSectionLanguage } from "../_lib/personnelSectionLanguage";
 import { PERSONNEL_ORDER_CREATE_TYPES } from "../_lib/personnelOrderLabels";
@@ -238,6 +239,8 @@ export default function PersonnelOrderCreateDialog({
   const [allowanceRecipient,setAllowanceRecipient]=React.useState<AllowanceRecipient>(blankAllowanceRecipient);
   const [ablativeKk, setAblativeKk] = React.useState("");
   const transfer = type === "TRANSFER";
+  const [medicalSpecialty,setMedicalSpecialty]=React.useState<MedicalSpecialtySnapshot|null>(null);
+  React.useEffect(()=>setMedicalSpecialty(null),[open,itemContext?.orderId,type]);
   const [transferFields, setTransferFields] = React.useState<TransferFields>({ position_ru: "", position_kk: "", org_unit_ru: "", org_unit_kk: "", rate: "", basis_ru: "", basis_kk: "" });
   const transferLabels = { position_ru: "Новая должность (RU)", position_kk: "Новая должность (KK)", org_unit_ru: "Новое подразделение (RU)", org_unit_kk: "Новое подразделение (KK)", rate: "Ставка после перевода", basis_ru: "Основание перевода (RU)", basis_kk: "Основание перевода (KK)" };
   const recall = type === "LEAVE.ANNUAL.RECALL";
@@ -676,6 +679,7 @@ export default function PersonnelOrderCreateDialog({
               document_forms_ru: { position_document_nominative_ru: kk.position_document_nominative_ru, employee_full_name_dative_ru: kk.employee_full_name_dative_ru },
             },
       };
+      if ((transfer || concurrent && !cessation && !replacementMode) && medicalSpecialty && request.item_payload) Object.assign(request.item_payload,{medical_specialty:medicalSpecialty});
       if (itemContext) {
         const result = await createPersonnelOrderItem(itemContext.orderId, {
           template_version_id: resolvedVersion,
@@ -837,7 +841,7 @@ export default function PersonnelOrderCreateDialog({
                 <PersonnelOrderAllowancePercent value={replacementFields.allowance_percent} onChange={value=>setReplacementFields(current=>({...current,allowance_percent:value}))} inputClassName={inputClassName}/>
                 {(['ru','kk'] as const).map(lang=><Field key={lang} label={`Основание (${lang.toUpperCase()})`}><input aria-label={`Основание (${lang.toUpperCase()})`} className={inputClassName} value={simpleAllowanceBasis[`basis_${lang}`]} onChange={e=>setSimpleAllowanceBasis(current=>({...current,[`basis_${lang}`]:e.target.value}))}/></Field>)}
               </section> : null}
-              {employee && (transfer || concurrent) ? <PersonnelOrderTransferFields value={transferFields} onChange={setTransferFields} orgUnits={orgUnitOptions} disabled={busy} mode={cessation ? "cessation" : concurrent ? "concurrent" : "transfer"} showRates={replacementMode!=="PAY"} rateOptional={workAllowance} documentFormsKK={Boolean(replacementMode)} autoCaseForms={serviceArea} autoGenitiveForms={concurrent && !cessation && !serviceArea} /> : null}
+              {employee && (transfer || concurrent) ? <PersonnelOrderTransferFields value={transferFields} onChange={setTransferFields} orgUnits={orgUnitOptions} disabled={busy} mode={cessation ? "cessation" : concurrent ? "concurrent" : "transfer"} showRates={replacementMode!=="PAY"} rateOptional={workAllowance} documentFormsKK={Boolean(replacementMode)} autoCaseForms={serviceArea} autoGenitiveForms={concurrent && !cessation && !serviceArea} afterDepartment={transfer || concurrent && !cessation && !replacementMode ? <PersonnelOrderMedicalSpecialtyPicker value={medicalSpecialty} onChange={setMedicalSpecialty} disabled={busy}/> : undefined} /> : null}
               {employee && (concurrent || simpleAllowance) && !cessation ? <section className="space-y-3 sm:col-span-2"><p className="text-xs">Проверьте предложенные формы ФИО в дательном падеже; их можно уточнить вручную.</p>{([['employee_full_name_dative_ru','ФИО в дательном падеже (RU)'],['employee_full_name_dative_kk','ФИО в дательном падеже (KK)']] as const).map(([key,label])=><Field key={key} label={label}><input aria-label={label} value={kk[key]} onChange={e=>{editedEmployeeDatives.current.add(key);setKk(current=>({...current,[key]:e.target.value}));}} className={inputClassName}/></Field>)}</section> : null}
               {employee && replacementMode ? <PersonnelOrderReplacementFields value={replacementFields} onChange={setReplacementFields} orgUnits={orgUnitOptions} mode={replacementMode} start={effective} fixedAllowance={optionalPlacement} serviceArea={serviceArea}/> : null}
               {employee && !recall && !transfer && !concurrent && !simpleAllowance ? <details open={formsExpanded} onToggle={(event) => setFormsExpanded(event.currentTarget.open)} className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-700" data-testid="personnel-order-text-forms">

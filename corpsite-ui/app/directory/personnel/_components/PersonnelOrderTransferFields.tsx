@@ -62,7 +62,8 @@ function SearchField({ label, value, options, locale, onEdit, onSelect, disabled
   </div>;
 }
 
-export default function PersonnelOrderTransferFields({ value, onChange, orgUnits, disabled = false, mode = "transfer", showRates = true, rateOptional = false, showBasis = true, placementLabel, documentFormsKK = false, autoCaseForms=false, autoGenitiveForms=false, onManualEdit }: {
+export default function PersonnelOrderTransferFields({ value, onChange, orgUnits, disabled = false, mode = "transfer", showRates = true, rateOptional = false, showBasis = true, placementLabel, documentFormsKK = false, autoCaseForms=false, autoGenitiveForms=false, afterDepartment, onManualEdit }: {
+  afterDepartment?: React.ReactNode;
   value: TransferFields; onChange: React.Dispatch<React.SetStateAction<TransferFields>>; orgUnits: OrgUnitSelectOption[]; disabled?: boolean; mode?: "transfer" | "concurrent" | "cessation"; showRates?: boolean; rateOptional?: boolean; showBasis?: boolean; placementLabel?: string; documentFormsKK?: boolean; autoCaseForms?:boolean; autoGenitiveForms?: boolean; onManualEdit?:(key:keyof TransferFields)=>void;
 }) {
   const cessation = mode === "cessation";
@@ -133,6 +134,7 @@ export default function PersonnelOrderTransferFields({ value, onChange, orgUnits
       const key = `${kind}_${locale}` as const;
       return <SearchField key={key} label={`${kind === "position" ? (placementLabel ? `${placementLabel} должность` : concurrent ? "Дополнительная должность" : "Новая должность") : (placementLabel ? `${placementLabel.replace(/ая$/, "ое")} подразделение` : concurrent ? "Дополнительное подразделение" : "Новое подразделение")} (${locale.toUpperCase()})`} value={value[key]} locale={locale} options={kind === "position" ? positions : units} disabled={disabled} onEdit={text => {onManualEdit?.(key);onChange(current => ({ ...current, [key]: text }));}} onSelect={(option, previousText) => {onManualEdit?.(key);choose(kind, option, locale, previousText);}} />;
     }))}
+    {afterDepartment}
     {(value.position_id && !value.position_kk.trim()) || (value.org_unit_id && !value.org_unit_kk.trim()) ? <p role="status" className="text-xs text-amber-700">{autoCaseForms&&placementLabel?'В справочнике отсутствует казахский перевод выбранной записи. Необязательное поле KK можно оставить пустым или уточнить вручную.':'В справочнике отсутствует казахский перевод выбранной записи. Заполните поле KK вручную.'}</p> : null}
     {concurrent ? <>
       <p className="text-xs">{placementLabel ? "Уточните должность и подразделение замещаемого сотрудника в родительном падеже." : autoCaseForms ? "Дополнительная должность и подразделение необязательны. В распорядительном тексте используются данные назначения получателя." : "Уточните русские названия в родительном падеже для текста приказа. Основная должность в этот текст не подставляется."}</p>

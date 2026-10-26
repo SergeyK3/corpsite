@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { CurrentUserProvider } from "@/lib/currentUser";
@@ -23,6 +23,12 @@ vi.mock("@/components/OrgUnitScopeFilter", () => ({
 }));
 
 const apiFetchJson = vi.fn();
+const downloadTableExcel = vi.fn();
+
+vi.mock("@/lib/tableExport", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@/lib/tableExport")>(),
+  downloadTableExcel: (...args: unknown[]) => downloadTableExcel(...args),
+}));
 
 vi.mock("../../../../lib/api", () => ({
   apiFetchJson: (...args: unknown[]) => apiFetchJson(...args),
@@ -61,6 +67,155 @@ const USED_FIXTURE = {
   ],
   total: 2,
 };
+
+const COMPACT_POSITION = {
+  position_id: 71,
+  name: 'Заведующий отделением химиотерапии 1 с длинным уточнением наименования отделения',
+  name_kk: '№ 1 химиотерапия бөлімшесінің толық атауы көрсетілген бөлімше меңгерушісі',
+  category: 'leaders', job_code: 'CLINICAL_DEPARTMENT_HEAD',
+  family_name_ru: 'Заведующий клиническим отделением',
+  document_nominative_ru: 'Сохранённая документная форма RU',
+  document_possessive_kk: 'Сохранённая документная форма KK',
+  document_form_status: 'confirmed', translation_status: 'confirmed',
+  record_kind: 'variant', revision: 7, aliases: ['Заведующий химиотерапией 1'],
+};
+
+describe('positions Excel export', () => {
+  function setup(rows = Array.from({length:111}, (_, i) => ({...COMPACT_POSITION, position_id:i+1, name:`Должность ${i+1}`}))) {
+    downloadTableExcel.mockReset().mockImplementation(async (table) => {
+      if (!table.rows.length) throw new Error('Нет записей для выгрузки по текущим фильтрам.');
+    });
+    apiFetchJson.mockImplementation(async (_path, {query}) => ({
+      items:rows.slice(query.offset, query.offset + query.limit), total:rows.length,
+    }));
+    renderWithMe({user_id:1,role_id:2,is_system_admin:true});
+  }
+  it('exports all 111 rows from zero after navigating to page two, without changing the current page', async () => {
+    searchParams = new URLSearchParams(); setup();
+    await screen.findByText('Должность 1');
+    await new Promise(resolve => setTimeout(resolve, 300));
+    fireEvent.click(screen.getByRole('button', {name:'Вперёд'}));
+    await screen.findByText('Должность 51');
+    const start = apiFetchJson.mock.calls.length;
+    fireEvent.click(screen.getByRole('button', {name:'Выгрузить в Excel'}));
+    await waitFor(() => expect(downloadTableExcel).toHaveBeenCalledOnce());
+    expect(apiFetchJson.mock.calls.slice(start).map(c=>c[1].query.offset)).toEqual([0,50,100]);
+    const [table, filename] = downloadTableExcel.mock.calls[0];
+    expect(table.rows).toHaveLength(111);
+    expect(table.rows.map((r:unknown[])=>r[0])).toEqual(Array.from({length:111},(_,i)=>i+1));
+    expect(filename).toBe('Должности.xlsx');
+    expect(screen.getByText('Стр. 2')).toBeInTheDocument();
+    expect(screen.getByText('Должность 51')).toBeInTheDocument();
+  });
+  it.each([
+    ['org_group_id=3', {org_group_id:3}],
+    ['org_group_id=3&org_unit_id=74&position_scope=allowed', {org_unit_id:74,scope:'allowed'}],
+    ['org_unit_id=74&position_scope=used', {org_unit_id:74,scope:'used'}],
+  ])('keeps search and filters on every export request for %s', async (params, scope) => {
+    searchParams = new URLSearchParams(params); setup();
+    await screen.findByText('Должность 1');
+    fireEvent.change(screen.getByRole('combobox'), {target:{value:'leaders'}});
+    fireEvent.click(screen.getByTestId('positions-delete-status-blocked'));
+    await waitFor(()=>expect(screen.getByRole('button',{name:'Выгрузить в Excel'})).toBeEnabled());
+    // Export must use the current text even before the 250 ms table debounce.
+    fireEvent.change(screen.getByPlaceholderText('Поиск по названию должности'), {target:{value:'  химиотерапии  '}});
+    const start = apiFetchJson.mock.calls.length;
+    fireEvent.click(screen.getByRole('button', {name:'Выгрузить в Excel'}));
+    await waitFor(()=>expect(downloadTableExcel).toHaveBeenCalledOnce());
+    const calls = apiFetchJson.mock.calls.slice(start);
+    expect(calls).toHaveLength(3);
+    for (const call of calls) expect(call[1].query).toMatchObject({
+      ...scope, q:'химиотерапии', category:'leaders', delete_status:'blocked', limit:50,
+    });
+    if ('org_unit_id' in scope) for (const call of calls) expect(call[1].query).not.toHaveProperty('org_group_id');
+  });
+  it('exports exact variants, family data, aliases, forms and statuses, keeping missing values blank', async () => {
+    searchParams = new URLSearchParams();
+    setup([{...COMPACT_POSITION,position_id:1,name:'Точный вариант',family_name_kk:'Общий KK'},
+      {position_id:2,name:'Без перевода'}] as any);
+    await screen.findByText('Точный вариант');
+    fireEvent.click(screen.getByRole('button',{name:'Выгрузить в Excel'}));
+    await waitFor(()=>expect(downloadTableExcel).toHaveBeenCalledOnce());
+    const table = downloadTableExcel.mock.calls[0][0];
+    expect(table.rows[0]).toEqual([1,'Точный вариант',COMPACT_POSITION.name_kk,'leaders','CLINICAL_DEPARTMENT_HEAD',
+      'variant',COMPACT_POSITION.family_name_ru,'Общий KK',COMPACT_POSITION.aliases[0],
+      COMPACT_POSITION.document_nominative_ru,COMPACT_POSITION.document_possessive_kk,'confirmed','confirmed']);
+    expect(table.rows[1]).toEqual([2,'Без перевода',...Array(11).fill(null)]);
+    expect(table.headers).toHaveLength(13);
+  });
+  it('reports an empty result without a download', async () => {
+    searchParams = new URLSearchParams(); setup([]);
+    await screen.findByText('Записи не найдены.');
+    fireEvent.click(screen.getByRole('button',{name:'Выгрузить в Excel'}));
+    expect(await screen.findByRole('status')).toHaveTextContent('Нет записей для выгрузки по текущим фильтрам.');
+  });
+  it('does not download a partial result when a later page is denied', async () => {
+    searchParams = new URLSearchParams(); setup();
+    await screen.findByText('Должность 1');
+    apiFetchJson.mockImplementation(async (_path, {query}) => {
+      if(query.offset) throw new Error('Доступ запрещён');
+      return {items:[COMPACT_POSITION], total:111};
+    });
+    fireEvent.click(screen.getByRole('button',{name:'Выгрузить в Excel'}));
+    expect(await screen.findByRole('status')).toHaveTextContent('Доступ запрещён');
+    expect(downloadTableExcel).not.toHaveBeenCalled();
+  });
+});
+
+describe('compact bilingual positions table',()=>{
+  function mockDirectory(){
+    let current={...COMPACT_POSITION};
+    apiFetchJson.mockImplementation((path:string,options?:{method?:string;body?:Record<string,unknown>})=>{
+      if(path==='/directory/position-families')return Promise.resolve({items:[{job_code:COMPACT_POSITION.job_code,job_nameru:COMPACT_POSITION.family_name_ru,job_namekk:'Общее KK',job_namekk_doc:'Общая форма'}]});
+      if(path==='/directory/positions/71'){
+        if(options?.method==='PUT')current={...current,...options.body,revision:current.revision+1};
+        return Promise.resolve({...current});
+      }
+      return Promise.resolve({items:[current,{...COMPACT_POSITION,position_id:72,name:'Заведующий отделением химиотерапии 2',name_kk:null}],total:2});
+    });
+  }
+  it('has exactly five columns and one record per row, with no group or document titles',async()=>{
+    searchParams=new URLSearchParams();mockDirectory();
+    renderWithMe({user_id:1,role_id:2,is_system_admin:true});
+    const ru=await screen.findByText(COMPACT_POSITION.name);
+    expect(screen.getAllByRole('columnheader').map(h=>h.textContent?.trim())).toEqual(['ID','Название RU','Название KK','Категория','Действия']);
+    expect(screen.getAllByRole('row')).toHaveLength(3);
+    const row=ru.closest('tr')!;const cells=within(row).getAllByRole('cell');
+    expect(cells).toHaveLength(5);
+    expect(cells[1]).toHaveTextContent(COMPACT_POSITION.name);
+    expect(cells[2]).toHaveTextContent(COMPACT_POSITION.name_kk);
+    expect(ru).toHaveAttribute('title',COMPACT_POSITION.name);
+    expect(ru).toHaveClass('truncate');
+    expect(screen.getByText(COMPACT_POSITION.name_kk)).toHaveAttribute('title',COMPACT_POSITION.name_kk);
+    expect(within(screen.getAllByRole('row')[2]).getAllByRole('cell')[2]).toHaveTextContent('—');
+    expect(screen.queryByText(COMPACT_POSITION.family_name_ru)).not.toBeInTheDocument();
+    expect(screen.queryByText(COMPACT_POSITION.document_possessive_kk)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button',{name:/CLINICAL_DEPARTMENT_HEAD/})).not.toBeInTheDocument();
+    expect(screen.getByRole('region',{name:'Таблица должностей'})).toHaveClass('overflow-x-auto');
+  });
+  it('keeps forms, classification, aliases and revision available for editing',async()=>{
+    searchParams=new URLSearchParams();mockDirectory();
+    renderWithMe({user_id:1,role_id:2,is_system_admin:true});
+    const row=(await screen.findByText(COMPACT_POSITION.name)).closest('tr')!;
+    fireEvent.click(within(row).getByRole('button',{name:'Изменить'}));
+    await screen.findByRole('option',{name:/CLINICAL_DEPARTMENT_HEAD/});
+    expect(screen.getByLabelText('Документная форма RU')).toHaveValue(COMPACT_POSITION.document_nominative_ru);
+    expect(screen.getByLabelText('Документная форма KK')).toHaveValue(COMPACT_POSITION.document_possessive_kk);
+    expect(screen.getByLabelText('Общий вид должности')).toHaveValue(COMPACT_POSITION.job_code);
+    expect(screen.getByLabelText('Тип записи')).toHaveValue('variant');
+    expect(screen.getByLabelText(/Поисковые синонимы/)).toHaveValue(COMPACT_POSITION.aliases[0]);
+    fireEvent.click(screen.getByRole('button',{name:'Сохранить'}));
+    await waitFor(()=>expect(apiFetchJson).toHaveBeenCalledWith('/directory/positions/71',expect.objectContaining({method:'PUT',body:expect.objectContaining({name:COMPACT_POSITION.name,name_kk:COMPACT_POSITION.name_kk,document_possessive_kk:COMPACT_POSITION.document_possessive_kk,job_code:COMPACT_POSITION.job_code,expected_revision:7})})));
+  });
+  it('keeps the admission checkbox in actions rather than adding a sixth column',async()=>{
+    searchParams=new URLSearchParams('org_unit_id=74&position_scope=used');mockDirectory();
+    renderWithMe({user_id:1,role_id:2,is_system_admin:true});
+    const checkbox=await screen.findByRole('checkbox',{name:`Разрешена для приёма: ${COMPACT_POSITION.name}`});
+    const cells=within(checkbox.closest('tr')!).getAllByRole('cell');
+    expect(cells).toHaveLength(5);expect(cells[4]).toContainElement(checkbox);
+    expect(screen.getAllByRole('columnheader')).toHaveLength(5);
+  });
+});
 
 const ALLOWED_FIXTURE = {
   items: [
@@ -1106,4 +1261,53 @@ describe("PositionsPageClient delete permissions", () => {
     expect(screen.getByTestId("position-delete-details-102")).toHaveTextContent("Заявления кандидатов: 1");
     expect(screen.queryByRole("button", { name: "Удалить" })).not.toBeInTheDocument();
   });
+});
+
+
+describe('verified position saves',()=>{
+ const target={position_id:91,name:'Рентген лаборант',category:'medical' as const,name_kk:'ТЕСТ: KK',document_nominative_ru:'рентген лаборант',document_possessive_kk:'ТЕСТ: форма KK',translation_status:'confirmed' as const,document_form_status:'confirmed' as const,record_kind:'variant' as const,job_code:'RADIOGRAPHER_TEST',aliases:['ТЕСТ: синоним'],revision:1};
+ function setupSave(read?:()=>Promise<unknown>){
+  searchParams=new URLSearchParams();let saved:typeof target|null=null;
+  apiFetchJson.mockImplementation(async(path:string,options?:{method?:string;body?:Record<string,unknown>})=>{
+   if(path==='/directory/position-families')return {items:[{job_code:'WRONG_TEST',job_nameru:'Ошибочный тестовый вид',job_namekk:'ТЕСТ',job_namekk_doc:'ТЕСТ'},{job_code:target.job_code,job_nameru:'Тестовый общий вид',job_namekk:'ТЕСТ',job_namekk_doc:'ТЕСТ'}]};
+   if(path==='/directory/positions/91'){
+    if(options?.method==='PUT'){saved={...target,...options.body,revision:(saved?.revision??1)+1};return saved;}
+    return read?read():saved;
+   }
+   if(path==='/directory/positions'&&options?.method==='POST'){saved={...target,...options.body};return saved;}
+   return {items:saved?[saved]:[],total:saved?1:0};
+  });renderWithMe({user_id:1,role_id:2,is_system_admin:true});return {readSaved:()=>saved};
+ }
+ async function fillTarget(){
+  fireEvent.click(screen.getByRole('button',{name:'Создать'}));
+  fireEvent.change(screen.getByLabelText(/Название должности/),{target:{value:target.name}});
+  fireEvent.change(screen.getByLabelText('Категория *'),{target:{value:target.category}});
+  await screen.findByRole('option',{name:/RADIOGRAPHER_TEST/});
+  for(const [label,value] of [['Общий вид должности',target.job_code],['Тип записи',target.record_kind],['Название KK',target.name_kk],['Документная форма RU',target.document_nominative_ru],['Документная форма KK',target.document_possessive_kk],['Статус названия KK','confirmed'],['Статус документной формы KK','confirmed']] as const)fireEvent.change(screen.getByLabelText(label),{target:{value}});
+  fireEvent.change(screen.getByLabelText(/Поисковые синонимы/),{target:{value:target.aliases.join('\n')}});
+ }
+ it('shows Saved only after the mutation and verification GET resolve',async()=>{
+  let finish!:(value:unknown)=>void;setupSave(()=>new Promise(resolve=>{finish=resolve;}));await fillTarget();
+  fireEvent.click(screen.getByRole('button',{name:'Сохранить'}));
+  await waitFor(()=>expect(apiFetchJson).toHaveBeenCalledWith('/directory/positions/91'));
+  expect(screen.queryByRole('button',{name:'Сохранено'})).not.toBeInTheDocument();
+  expect(screen.getByRole('button',{name:'Сохранение...'})).toBeDisabled();
+  finish(target);await screen.findByRole('button',{name:'Сохранено'});
+  expect(screen.getByLabelText('Общий вид должности')).toHaveValue(target.job_code);
+  fireEvent.change(screen.getByLabelText('Название KK'),{target:{value:'Новая правка'}});
+  expect(screen.queryByRole('button',{name:'Сохранено'})).not.toBeInTheDocument();
+ });
+ it('retries PUT for a created ID after its read-back fails instead of another POST',async()=>{
+  let reads=0;const fixture=setupSave(async()=>{if(++reads===1)throw new Error('Read-back unavailable');return {...fixture.readSaved()};});await fillTarget();
+  fireEvent.click(screen.getByRole('button',{name:'Сохранить'}));await screen.findByText('Read-back unavailable');
+  expect(screen.queryByRole('button',{name:'Сохранено'})).not.toBeInTheDocument();expect(screen.getByLabelText('Название KK')).toHaveValue(target.name_kk);
+  fireEvent.click(screen.getByRole('button',{name:'Сохранить'}));await screen.findByRole('button',{name:'Сохранено'});
+  expect(apiFetchJson.mock.calls.filter(c=>c[1]?.method==='POST')).toHaveLength(1);
+  expect(apiFetchJson.mock.calls.filter(c=>c[1]?.method==='PUT')).toHaveLength(1);
+ });
+ it('does not confirm a response which lost an entered field',async()=>{
+  setupSave(async()=>({...target,job_code:'WRONG_TEST'}));await fillTarget();fireEvent.click(screen.getByRole('button',{name:'Сохранить'}));
+  await screen.findByText(/повторное чтение не подтвердило все поля/);
+  expect(screen.queryByRole('button',{name:'Сохранено'})).not.toBeInTheDocument();expect(screen.getByLabelText('Общий вид должности')).toHaveValue(target.job_code);
+ });
 });

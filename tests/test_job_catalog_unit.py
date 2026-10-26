@@ -135,7 +135,8 @@ class CatalogTests(unittest.TestCase):
                 self.assertEqual(values['position.title_ru'], 'Ручная RU')
                 self.assertEqual(values['position.document_nominative_ru'], 'Ручная RU')
                 self.assertEqual(values['position.title_kk'], 'Ручная KK')
-                self.assertEqual(values['org_unit.title_ru'], 'Справочное подразделение')
+                expected_unit = 'справочное подразделение' if code == 'TRANSFER' else 'Справочное подразделение'
+                self.assertEqual(values['org_unit.title_ru'], expected_unit)
 
 
     def test_nominal_titles_and_grammatical_forms_are_distinct_snapshots(self):

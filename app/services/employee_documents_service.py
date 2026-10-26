@@ -503,58 +503,14 @@ def list_medical_specialty_groups() -> Dict[str, Any]:
 
 
 def list_medical_specialties(
-    *,
-    group_id: Optional[int] = None,
-    group_code: Optional[str] = None,
-    is_active: bool = True,
+    *, group_id: Optional[int] = None, group_code: Optional[str] = None,
+    is_active: bool = True, q: Optional[str] = None,
+    limit: Optional[int] = None, offset: int = 0,
 ) -> Dict[str, Any]:
-    if not employee_documents_available():
-        return {"items": [], "total": 0}
-
-    clauses = ["1=1"]
-    params: Dict[str, Any] = {}
-    if is_active:
-        clauses.append("ms.is_active = TRUE")
-    if group_id is not None:
-        clauses.append("ms.group_id = :group_id")
-        params["group_id"] = int(group_id)
-    if group_code:
-        clauses.append("g.code = :group_code")
-        params["group_code"] = str(group_code).strip().upper()
-
-    where_sql = " AND ".join(clauses)
-    with engine.begin() as conn:
-        rows = conn.execute(
-            text(
-                f"""
-                SELECT
-                    ms.medical_specialty_id,
-                    ms.group_id,
-                    g.code AS group_code,
-                    ms.code,
-                    ms.name,
-                    ms.is_active
-                FROM public.medical_specialties ms
-                JOIN public.medical_specialty_groups g ON g.group_id = ms.group_id
-                WHERE {where_sql}
-                ORDER BY g.code, ms.name
-                """
-            ),
-            params,
-        ).mappings().all()
-
-    items = [
-        {
-            "medical_specialty_id": int(r["medical_specialty_id"]),
-            "group_id": int(r["group_id"]),
-            "group_code": str(r["group_code"]),
-            "code": str(r["code"]),
-            "name": str(r["name"]),
-            "is_active": bool(r["is_active"]),
-        }
-        for r in rows
-    ]
-    return {"items": items, "total": len(items)}
+    # Preserve the existing default (all active rows) for document selectors.
+    from app.services.medical_specialties_directory_service import list_specialties
+    return list_specialties(group_id=group_id, group_code=group_code,
+                            is_active=is_active, q=q, limit=limit, offset=offset)
 
 
 def list_employee_documents(

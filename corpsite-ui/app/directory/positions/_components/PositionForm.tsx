@@ -2,10 +2,12 @@
 "use client";
 
 import * as React from "react";
+import {positionSignature,type PositionSaveResult} from "./positionSaveState";
+import PositionDetailsFields, {type PositionDetails} from "./PositionDetailsFields";
 
 export type PositionCategory = "leaders" | "medical" | "admin" | "technical" | "other";
 
-export type PositionFormValues = {
+export type PositionFormValues = PositionDetails & {
   name: string;
   category: PositionCategory;
 };
@@ -16,7 +18,7 @@ type PositionFormProps = {
   orgUnitLabel?: string | null;
   saving?: boolean;
   error?: string | null;
-  onSubmit: (values: PositionFormValues) => Promise<void> | void;
+  onSubmit: (values: PositionFormValues) => Promise<PositionSaveResult | void> | PositionSaveResult | void;
   onCancel: () => void;
 };
 
@@ -39,20 +41,29 @@ export default function PositionForm({
 }: PositionFormProps) {
   const [values, setValues] = React.useState<PositionFormValues>(initialValues);
 
-  React.useEffect(() => {
+  const [savedSignature,setSavedSignature]=React.useState<string|null>(null);
+  const [submitError,setSubmitError]=React.useState<string|null>(null);
+  // Apply a re-read revision before the form becomes interactive again.
+  // A passive effect can otherwise overwrite the first edit after saving.
+  React.useLayoutEffect(() => {
     setValues(initialValues);
+    setSavedSignature(previous=>previous===positionSignature(initialValues)?previous:null);
   }, [initialValues]);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    await onSubmit({
-      name: values.name.trim(),
-      category: values.category,
-    });
+    if(saving)return;
+    setSubmitError(null);setSavedSignature(null);
+    try {
+      const result=await onSubmit({...values,name:values.name.trim(),category:values.category});
+      if(result){setValues(result.savedValues);setSavedSignature(positionSignature(result.savedValues));}
+      else setSubmitError("Сохранение не подтверждено. Проверьте сообщение сервера и повторите попытку.");
+    }catch(caught){setSubmitError(caught instanceof Error?caught.message:"Не удалось сохранить должность.");}
+
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex h-full flex-col bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50">
+    <form data-testid="position-form" aria-busy={saving} onSubmit={handleSubmit} className="flex h-full flex-col bg-white dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50">
       <div className="flex items-start justify-between border-b border-zinc-200 dark:border-zinc-800 px-6 py-5">
         <div>
           <h2 className="text-2xl font-semibold leading-tight text-zinc-900 dark:text-zinc-50">
@@ -64,6 +75,7 @@ export default function PositionForm({
         <button
           type="button"
           onClick={onCancel}
+          disabled={saving}
           className="rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-4 py-2 text-sm text-zinc-800 dark:text-zinc-200 transition hover:bg-zinc-200 dark:hover:bg-zinc-700"
         >
           Закрыть
@@ -71,13 +83,7 @@ export default function PositionForm({
       </div>
 
       <div className="flex-1 overflow-y-auto px-6 py-5">
-        <div className="mx-auto flex w-full max-w-3xl flex-col gap-5">
-          {!!error && (
-            <div className="rounded-xl border border-red-200 dark:border-red-900/55 bg-red-50 dark:bg-red-950/35 px-4 py-3 text-sm text-red-800 dark:text-red-200">
-              {error}
-            </div>
-          )}
-
+        <fieldset disabled={saving} className="mx-auto flex w-full max-w-3xl flex-col gap-5">
           {orgUnitLabel ? (
             <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 px-4 py-3 text-sm text-zinc-700 dark:text-zinc-300">
               <div className="text-xs uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
@@ -129,10 +135,17 @@ export default function PositionForm({
               ))}
             </select>
           </div>
-        </div>
+          <PositionDetailsFields value={values} onChange={details=>setValues(v=>({...v,...details}))} />
+        </fieldset>
       </div>
 
-      <div className="flex items-center justify-end gap-3 border-t border-zinc-200 dark:border-zinc-800 px-6 py-4">
+      <div data-testid="position-save-footer" className="shrink-0 border-t border-zinc-200 dark:border-zinc-800 px-6 py-4">
+        {!saving && !!(error||submitError) && (
+          <div role="alert" className="mb-3 max-h-32 overflow-y-auto rounded-xl border border-red-200 dark:border-red-900/55 bg-red-50 dark:bg-red-950/35 px-4 py-3 text-sm text-red-800 dark:text-red-200">
+            {error||submitError}
+          </div>
+        )}
+        <div className="flex items-center justify-end gap-3">
         <button
           type="button"
           onClick={onCancel}
@@ -147,8 +160,9 @@ export default function PositionForm({
           disabled={saving}
           className="rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium text-white transition hover:bg-blue-500 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {saving ? "Сохранение..." : "Сохранить"}
+          {saving ? "Сохранение..." : savedSignature===positionSignature(values) ? "Сохранено" : "Сохранить"}
         </button>
+        </div>
       </div>
     </form>
   );

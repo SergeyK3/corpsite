@@ -1,6 +1,8 @@
 """Resolve an existing order's exact contract and render only its new item."""
 from __future__ import annotations
 
+from app.services.personnel_order_print_titles import template_text_snapshot
+
 import hashlib
 import json
 from typing import Any
@@ -92,4 +94,4 @@ def render_added_item(conn: Any, *, order_id: int, item_id: int, template: dict[
             fingerprint = hashlib.sha256(json.dumps({"template": template["template_version_id"], "item": dict(item), "text": value}, default=str, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
             upsert_item_block(conn, order_item_id=item_id, locale=locale, block_type=block, generated={"generated_text": value, "source_fingerprint": fingerprint, "generator_key": "bound_template", "generator_version": "1"}, basis_required=bool(rendered[f"basis_template_{locale}"].strip()))
     entry = {"order_item_id": item_id, "item_number": item["item_number"], "proposed": {f"{block}_{locale}": rendered[f"{block}_template_{locale}"] for block in ("body", "basis") for locale in ("ru", "kk")}}
-    conn.execute(text("INSERT INTO personnel_order_template_applications(order_id,order_item_id,template_version_id,template_snapshot,rendered_snapshot,previous_editorial_blocks,applied_by_user_id) VALUES(:o,:i,:v,CAST(:t AS jsonb),CAST(:r AS jsonb),'[]'::jsonb,:a)"), {"o": order_id, "i": item_id, "v": template["template_version_id"], "t": json.dumps({key: template[key] for key in _FIELDS}, ensure_ascii=False), "r": json.dumps({"items": [entry]}, ensure_ascii=False), "a": actor_user_id})
+    conn.execute(text("INSERT INTO personnel_order_template_applications(order_id,order_item_id,template_version_id,template_snapshot,rendered_snapshot,previous_editorial_blocks,applied_by_user_id) VALUES(:o,:i,:v,CAST(:t AS jsonb),CAST(:r AS jsonb),'[]'::jsonb,:a)"), {"o": order_id, "i": item_id, "v": template["template_version_id"], "t": json.dumps(template_text_snapshot(template, _FIELDS), ensure_ascii=False), "r": json.dumps({"items": [entry]}, ensure_ascii=False), "a": actor_user_id})

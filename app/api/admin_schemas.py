@@ -77,6 +77,8 @@ class PersonnelOrderTemplateDraftText(BaseModel):
     model_config = ConfigDict(extra="forbid")
     title_ru: str
     title_kk: str
+    print_title_ru: Optional[str] = None
+    print_title_kk: Optional[str] = None
     preamble_ru: str
     preamble_kk: str
     body_template_ru: str

@@ -14,10 +14,17 @@ from sqlalchemy import text
 from app.db.engine import engine as default_engine
 from app.services.personnel_order_template_specs import get_personnel_order_template_spec
 from app.services.personnel_order_template_validation import TemplateValidationError, validate_template_texts
+from app.services.personnel_order_print_titles import PRINT_TITLE_FIELDS
 
 SCHEMA_VERSION = 1
 TEXT_FIELDS = ("title_ru", "title_kk", "preamble_ru", "preamble_kk", "body_template_ru", "body_template_kk", "basis_template_ru", "basis_template_kk")
 MANIFEST_FIELDS = ("schema_version", "item_type_code", *TEXT_FIELDS, "allowed_variables", "required_variables", "base_content_sha256", "content_sha256")
+MANIFEST_FIELDS_V2 = ("schema_version", "item_type_code", *TEXT_FIELDS, *PRINT_TITLE_FIELDS, "allowed_variables", "required_variables", "base_content_sha256", "content_sha256")
+
+
+def _texts_with_print_titles(row):
+    return {**{field:row[field] for field in TEXT_FIELDS},
+            **({field:row.get(field) or '' for field in PRINT_TITLE_FIELDS} if any(row.get(field) is not None for field in PRINT_TITLE_FIELDS) else {})}
 _FILENAME = re.compile(r"^draft-v([1-9][0-9]*)\.json$")
 _TOKEN = re.compile(r"\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}")
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
@@ -56,7 +63,7 @@ def _canonical_json(value: Any) -> bytes:
 
 
 def content_sha256(item_type_code: str, values: Mapping[str, str]) -> str:
-    return hashlib.sha256(_canonical_json({"item_type_code": item_type_code, **{field: values[field] for field in TEXT_FIELDS}})).hexdigest()
+    return hashlib.sha256(_canonical_json({"item_type_code": item_type_code, **{field: values[field] for field in TEXT_FIELDS}, **{field:values[field] for field in PRINT_TITLE_FIELDS if field in values}})).hexdigest()
 
 
 def _built_in_hash(item_type_code: str) -> str:
@@ -106,9 +113,14 @@ def _validate_declared_variable_contract(
 
 
 def build_manifest(item_type_code: str, values: Mapping[str, str], *, base_content_sha256: str | None = None) -> dict[str, Any]:
-    validate_template_texts(item_type_code, values)
+    if set(values)-set(TEXT_FIELDS)-set(PRINT_TITLE_FIELDS):
+        raise TemplateValidationError('Unknown template text fields')
+    validate_template_texts(item_type_code, {field:values[field] for field in TEXT_FIELDS})
+    from app.services.personnel_order_template_draft_service import _validate
+    _validate(values,item_type_code,require_complete=False)
     allowed, required = _spec_variables(item_type_code)
-    return {"schema_version": SCHEMA_VERSION, "item_type_code": item_type_code, **{field: values[field] for field in TEXT_FIELDS}, "allowed_variables": allowed, "required_variables": required, "base_content_sha256": base_content_sha256 or _built_in_hash(item_type_code), "content_sha256": content_sha256(item_type_code, values)}
+    printed={field:values.get(field) or '' for field in PRINT_TITLE_FIELDS} if any(field in values for field in PRINT_TITLE_FIELDS) else {}
+    return {"schema_version": 2 if printed else SCHEMA_VERSION, "item_type_code": item_type_code, **{field: values[field] for field in TEXT_FIELDS}, **printed, "allowed_variables": allowed, "required_variables": required, "base_content_sha256": base_content_sha256 or _built_in_hash(item_type_code), "content_sha256": content_sha256(item_type_code, {**values,**printed})}
 
 
 def manifest_path(item_type_code: str, root: Path = MANIFEST_ROOT, version: int = 1) -> Path:
@@ -118,7 +130,8 @@ def manifest_path(item_type_code: str, root: Path = MANIFEST_ROOT, version: int 
 
 
 def _manifest_bytes(manifest: Mapping[str, Any]) -> bytes:
-    return json.dumps({field: manifest[field] for field in MANIFEST_FIELDS}, ensure_ascii=False, indent=2).replace("\r\n", "\n").encode("utf-8") + b"\n"
+    fields=MANIFEST_FIELDS_V2 if manifest.get('schema_version')==2 else MANIFEST_FIELDS
+    return json.dumps({field: manifest[field] for field in fields}, ensure_ascii=False, indent=2).replace("\r\n", "\n").encode("utf-8") + b"\n"
 
 
 def _write_atomic(path: Path, payload: bytes) -> None:
@@ -143,13 +156,17 @@ def load_manifest(path: Path) -> dict[str, Any]:
         raw = path.read_bytes(); manifest = json.loads(raw.decode("utf-8"))
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise ManifestError(f"Invalid manifest {path}: {exc}") from exc
-    if not isinstance(manifest, dict) or tuple(manifest) != MANIFEST_FIELDS: raise ManifestError(f"{path}: manifest fields must be exactly {MANIFEST_FIELDS}")
+    fields=MANIFEST_FIELDS_V2 if isinstance(manifest,dict) and manifest.get('schema_version')==2 else MANIFEST_FIELDS
+    if not isinstance(manifest, dict) or tuple(manifest) != fields: raise ManifestError(f"{path}: manifest fields must be exactly {fields}")
     if raw != _manifest_bytes(manifest): raise ManifestError(f"{path}: manifest is not canonical UTF-8 JSON")
     item_type_code = manifest["item_type_code"]
-    if not isinstance(item_type_code, str) or manifest["schema_version"] != SCHEMA_VERSION: raise ManifestError(f"{path}: unsupported schema or item type")
-    values = {field: manifest[field] for field in TEXT_FIELDS}
+    if not isinstance(item_type_code, str) or manifest["schema_version"] not in (1,2): raise ManifestError(f"{path}: unsupported schema or item type")
+    values = _texts_with_print_titles(manifest)
     try:
-        validate_template_texts(item_type_code, values)
+        validate_template_texts(item_type_code, {field:values[field] for field in TEXT_FIELDS})
+        if manifest['schema_version']==2:
+            from app.services.personnel_order_template_draft_service import _validate
+            _validate(values,item_type_code,require_complete=False)
     except (TemplateValidationError, ValueError) as exc:
         raise ManifestError(f"{path}: {exc}") from exc
     if manifest["content_sha256"] != content_sha256(item_type_code, values): raise ManifestError(f"{path}: content_sha256 mismatch")
@@ -201,9 +218,9 @@ def export_drafts(item_types: Sequence[str], *, db_engine: Any = default_engine,
     with db_engine.connect() as connection:
         for item_type_code in item_types:
             get_personnel_order_template_spec(item_type_code)
-            row = connection.execute(text("""SELECT title_ru, title_kk, preamble_ru, preamble_kk, body_template_ru, body_template_kk, basis_template_ru, basis_template_kk FROM public.personnel_order_template_versions WHERE item_type_code=:type AND template_id IN (SELECT template_id FROM public.personnel_order_templates WHERE item_type_code=:type AND is_default) AND status='DRAFT' ORDER BY revision DESC, template_version_id DESC LIMIT 1"""), {"type": item_type_code}).mappings().first()
+            row = connection.execute(text("""SELECT to_jsonb(personnel_order_template_versions)->>'print_title_ru' print_title_ru, to_jsonb(personnel_order_template_versions)->>'print_title_kk' print_title_kk, title_ru, title_kk, preamble_ru, preamble_kk, body_template_ru, body_template_kk, basis_template_ru, basis_template_kk FROM public.personnel_order_template_versions WHERE item_type_code=:type AND template_id IN (SELECT template_id FROM public.personnel_order_templates WHERE item_type_code=:type AND is_default) AND status='DRAFT' ORDER BY revision DESC, template_version_id DESC LIMIT 1"""), {"type": item_type_code}).mappings().first()
             if row is None: raise ManifestError(f"No DRAFT exists for {item_type_code}")
-            drafts[item_type_code] = {field: row[field] for field in TEXT_FIELDS}
+            drafts[item_type_code] = _texts_with_print_titles(row)
     return {item_type_code: write_manifest(item_type_code, values, root) for item_type_code, values in drafts.items()}
 
 
@@ -225,7 +242,7 @@ def export_published(
     with db_engine.connect() as connection:
         row = connection.execute(
             text(
-                """SELECT template_version_id, item_type_code, status,
+                """SELECT template_version_id, item_type_code, status, to_jsonb(personnel_order_template_versions)->>'print_title_ru' print_title_ru, to_jsonb(personnel_order_template_versions)->>'print_title_kk' print_title_kk,
                           title_ru, title_kk, preamble_ru, preamble_kk,
                           body_template_ru, body_template_kk,
                           basis_template_ru, basis_template_kk
@@ -242,14 +259,14 @@ def export_published(
         raise ManifestError("Template version item type does not match requested item type")
     if str(row["status"]) != "PUBLISHED":
         raise ManifestError("Template version must have PUBLISHED status")
-    values = {field: row[field] for field in TEXT_FIELDS}
+    values = _texts_with_print_titles(row)
     return {item_type_code: write_manifest(item_type_code, values, root)}
 
 
 def _sync_plan(chain: Sequence[Mapping[str, Any]], row: Mapping[str, Any] | None) -> tuple[str, Sequence[Mapping[str, Any]]]:
     if row is None: return "CREATE", [chain[-1]]
     item_type_code = str(chain[-1]["item_type_code"])
-    current_hash = content_sha256(item_type_code, {field: row[field] for field in TEXT_FIELDS})
+    current_hash = content_sha256(item_type_code, _texts_with_print_titles(row))
     if current_hash == chain[-1]["content_sha256"]:
         return "NO_OP", []
     if current_hash == chain[0]["base_content_sha256"]: return ("CREATE", [chain[-1]]) if row.get("status") == "PUBLISHED" else ("UPDATE", chain)
@@ -281,10 +298,13 @@ def sync_manifests(*, apply: bool, db_engine: Any = default_engine, root: Path =
         if any(status == "CONFLICT" for _, _, _, status in planned): return results
         for item_type_code, manifests, row, status in planned:
             if status == "CREATE":
-                values = {field: manifests[-1][field] for field in TEXT_FIELDS}
-                connection.execute(text("""INSERT INTO public.personnel_order_template_versions (item_type_code, version_number, status, title_ru, title_kk, preamble_ru, preamble_kk, body_template_ru, body_template_kk, basis_template_ru, basis_template_kk) VALUES (:type, (SELECT COALESCE(MAX(version_number), 0) + 1 FROM public.personnel_order_template_versions WHERE item_type_code=:type AND template_id IN (SELECT template_id FROM public.personnel_order_templates WHERE item_type_code=:type AND is_default)), 'DRAFT', :title_ru, :title_kk, :preamble_ru, :preamble_kk, :body_template_ru, :body_template_kk, :basis_template_ru, :basis_template_kk)"""), {**values, "type": item_type_code})
+                values = {**_texts_with_print_titles(manifests[-1]), **{field:manifests[-1].get(field) for field in PRINT_TITLE_FIELDS}}
+                print_columns = 'print_title_ru, print_title_kk, ' if manifests[-1]['schema_version']==2 else ''
+                print_values = ':print_title_ru, :print_title_kk, ' if print_columns else ''
+                connection.execute(text(f"""INSERT INTO public.personnel_order_template_versions (item_type_code, version_number, status, title_ru, title_kk, {print_columns}preamble_ru, preamble_kk, body_template_ru, body_template_kk, basis_template_ru, basis_template_kk) VALUES (:type, (SELECT COALESCE(MAX(version_number), 0) + 1 FROM public.personnel_order_template_versions WHERE item_type_code=:type AND template_id IN (SELECT template_id FROM public.personnel_order_templates WHERE item_type_code=:type AND is_default)), 'DRAFT', :title_ru, :title_kk, {print_values}:preamble_ru, :preamble_kk, :body_template_ru, :body_template_kk, :basis_template_ru, :basis_template_kk)"""), {**values, "type": item_type_code})
             elif status == "UPDATE":
                 for manifest in manifests:
-                    values = {field: manifest[field] for field in TEXT_FIELDS}
-                    connection.execute(text("""UPDATE public.personnel_order_template_versions SET title_ru=:title_ru, title_kk=:title_kk, preamble_ru=:preamble_ru, preamble_kk=:preamble_kk, body_template_ru=:body_template_ru, body_template_kk=:body_template_kk, basis_template_ru=:basis_template_ru, basis_template_kk=:basis_template_kk, revision=revision+1, updated_at=now() WHERE template_version_id=:id"""), {**values, "id": row["template_version_id"]})
+                    values = {**_texts_with_print_titles(manifest), **{field:manifest.get(field,row.get(field)) for field in PRINT_TITLE_FIELDS}}
+                    print_assignments = 'print_title_ru=:print_title_ru, print_title_kk=:print_title_kk, ' if manifest['schema_version']==2 else ''
+                    connection.execute(text(f"""UPDATE public.personnel_order_template_versions SET title_ru=:title_ru, title_kk=:title_kk, {print_assignments}preamble_ru=:preamble_ru, preamble_kk=:preamble_kk, body_template_ru=:body_template_ru, body_template_kk=:body_template_kk, basis_template_ru=:basis_template_ru, basis_template_kk=:basis_template_kk, revision=revision+1, updated_at=now() WHERE template_version_id=:id"""), {**values, "id": row["template_version_id"]})
     return results

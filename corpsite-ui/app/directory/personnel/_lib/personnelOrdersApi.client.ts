@@ -167,6 +167,7 @@ export type PersonnelOrdersListResponse = {
 };
 
 export type PersonnelOrderDetailResponse = {
+  print_title_snapshot?: {template_version_id:number;print_title_ru?:string|null;print_title_kk?:string|null;template_title_ru?:string|null;template_title_kk?:string|null;legacy:boolean;requires_update:boolean;missing_locales:string[]}|null;
   order: PersonnelOrderHeader;
   items: PersonnelOrderItem[];
   localized_texts: PersonnelOrderLocalizedText[];
@@ -719,7 +720,7 @@ export async function createManualPersonnelOrderDraft(
   });
 }
 
-export async function getPersonnelOrderPublishedTemplateTitle(itemTypeCode: string, versionId?: number): Promise<{ template_version_id?: number; item_type_code: string; title_ru: string; title_kk: string }> {
+export async function getPersonnelOrderPublishedTemplateTitle(itemTypeCode: string, versionId?: number): Promise<{ template_version_id?: number; item_type_code: string; title_ru: string; title_kk: string; print_title_ru?:string|null;print_title_kk?:string|null;print_title_approval_required?:string[] }> {
   return requestJson("GET", `/directory/personnel-orders/templates/${encodeURIComponent(itemTypeCode)}/published-title${versionId == null ? "" : `?template_version_id=${versionId}`}`, {
     fallback: "Опубликованный шаблон не найден.",
   });

@@ -42,7 +42,7 @@ const DRAFT_HEIGHT_STORAGE_PREFIX = "corpsite.personnel-order-template-draft-hei
 const TEXTAREA_MIN_HEIGHT = 64;
 const TEXTAREA_MAX_HEIGHT = 640;
 
-type DraftHeightPair = "title" | "preamble" | "body_template" | "basis_template";
+type DraftHeightPair = "title" | "print_title" | "preamble" | "body_template" | "basis_template";
 
 const DRAFT_HEIGHT_FIELDS: Array<{
   pair: DraftHeightPair;
@@ -51,6 +51,7 @@ const DRAFT_HEIGHT_FIELDS: Array<{
   heightClass: string;
 }> = [
   { pair: "title", ru: ["title_ru", "Заголовок RU"], kk: ["title_kk", "Заголовок KK"], heightClass: "h-16" },
+  { pair: "print_title", ru: ["print_title_ru", "Печатный заголовок RU"], kk: ["print_title_kk", "Печатный заголовок KK"], heightClass: "h-16" },
   { pair: "preamble", ru: ["preamble_ru", "Преамбула RU"], kk: ["preamble_kk", "Преамбула KK"], heightClass: "h-28" },
   { pair: "body_template", ru: ["body_template_ru", "Распорядительный текст RU"], kk: ["body_template_kk", "Распорядительный текст KK"], heightClass: "h-48" },
   { pair: "basis_template", ru: ["basis_template_ru", "Основание RU"], kk: ["basis_template_kk", "Основание KK"], heightClass: "h-28" },
@@ -146,6 +147,8 @@ function PreviewFooter({ locale, itemTypeCode }: { locale: "ru" | "kk"; itemType
 
 function editableDraftText(source: PersonnelOrderTemplateDraftText): PersonnelOrderTemplateDraftText {
   return {
+    ...('print_title_ru' in source ? {print_title_ru:source.print_title_ru}:{}),
+    ...('print_title_kk' in source ? {print_title_kk:source.print_title_kk}:{}),
     title_ru: source.title_ru,
     title_kk: source.title_kk,
     preamble_ru: source.preamble_ru,
@@ -309,7 +312,7 @@ function DraftEditor({ editor, published, onSaved, onPublished, variables, requi
   const differsFromPublished = serverDraft != null && published != null && !textMatches(serverDraft, published);
   const canSave = !saving && (isInitialWorkingCopy || isDirty);
   const incompatible = Object.entries(values).flatMap(([field, value]) => {
-    const tokens = [...value.matchAll(/\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g)].map(match => match[1]);
+    const tokens = [...(value || '').matchAll(/\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g)].map(match => match[1]);
     const unknown = [...new Set(tokens.filter(code => !variables.includes(code)))];
     const missing = (requiredVariables?.[field as keyof PersonnelOrderTemplateDraftText] ?? []).filter(code => !tokens.includes(code));
     return unknown.length || missing.length ? [{ field, unknown, missing }] : [];
@@ -411,6 +414,8 @@ function DraftEditor({ editor, published, onSaved, onPublished, variables, requi
       </div> : null}
       {warning ? <p className="mt-2 text-sm font-medium text-amber-700" role="note">{warning}</p> : null}
 
+      <p className="mt-3 text-sm">«Заголовок RU/KK» — подробное внутреннее название для выбора шаблона. В документ выводится только отдельный печатный заголовок. Пустой печатный заголовок требует согласования; формулировку KK указывайте по утверждённому источнику.</p>
+      {(!values.print_title_ru?.trim() || !values.print_title_kk?.trim()) ? <p role="status" className="text-sm text-amber-700">Печатные заголовки RU/KK: требуется согласование отсутствующих значений.</p>:null}
       <div className="mt-3 grid grid-cols-1 gap-x-4 gap-y-3 md:grid-cols-2" data-testid="template-draft-fields">
         <h5 className="text-base font-semibold" data-testid="template-draft-language-ru">Русский</h5>
         <h5 className="text-base font-semibold" data-testid="template-draft-language-kk">Қазақша</h5>
@@ -421,7 +426,7 @@ function DraftEditor({ editor, published, onSaved, onPublished, variables, requi
               aria-label={ru[1]}
               data-height-pair={pair}
               ref={(node) => { ruTextareas.current[ru[0]] = node; }}
-              value={values[ru[0]]}
+              value={values[ru[0]] || ''}
               onChange={(e) => change(ru[0], e.target.value)}
               className={`mt-1 w-full resize-y rounded border p-2 ${heightClass}`}
               style={{ minHeight: TEXTAREA_MIN_HEIGHT, maxHeight: TEXTAREA_MAX_HEIGHT }}
@@ -432,7 +437,7 @@ function DraftEditor({ editor, published, onSaved, onPublished, variables, requi
             <textarea
               aria-label={kk[1]}
               ref={(node) => { kkTextareas.current[kk[0]] = node; }}
-              value={values[kk[0]]}
+              value={values[kk[0]] || ''}
               onChange={(e) => change(kk[0], e.target.value)}
               className={`mt-1 w-full resize-none rounded border p-2 ${heightClass}`}
               style={{ minHeight: TEXTAREA_MIN_HEIGHT, maxHeight: TEXTAREA_MAX_HEIGHT }}

@@ -184,6 +184,17 @@ def prepare_manual_item_payload(conn: Any, *, item_type_code: str, employee_id: 
         base_payload["concurrent"] = dict(supplied)
         base_payload["concurrent_rate"] = supplied["rate"]
         base_payload["remaining_rate"] = supplied["remaining_rate"]
+    if (item_type_code in {"TRANSFER", "CONCURRENT_DUTY_START"}
+            and not base_payload.get("replacement") and "medical_specialty" in (item_payload or {})):
+        from app.services.personnel_order_medical_specialty import specialty_values
+        base_payload["medical_specialty"] = item_payload["medical_specialty"]
+        selected_texts = {}
+        if template_version_id is not None:
+            selected_texts = conn.execute(text("SELECT * FROM personnel_order_template_versions WHERE template_version_id=:id"), {"id": template_version_id}).mappings().first() or {}
+        try:
+            specialty_values(item_type_code, base_payload, selected_texts)
+        except ValueError as exc:
+            raise PersonnelOrderValidationError(str(exc)) from exc
     return base_payload
 
 

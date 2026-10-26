@@ -1,8 +1,11 @@
+import type {MedicalSpecialtySnapshot} from "../_components/PersonnelOrderMedicalSpecialtyPicker";
 import type { TransferFields } from "../_components/PersonnelOrderTransferFields";
 import type { ReplacementFields } from "../_components/PersonnelOrderReplacementFields";
 import type { PersonnelOrderType } from "./personnelOrderLabels";
 
 export type ItemPayloadDraft = {
+  transfer?: TransferFields;
+  medical_specialty?: MedicalSpecialtySnapshot|null;
   allowance?: Record<string, unknown>;
   allowance_percent?: string;
   employee_full_name_accusative_ru?: string;
@@ -120,6 +123,16 @@ export function itemPayloadDraftFromRecord(payload: Record<string, unknown> | nu
     workPeriods.push({ start: String(source.work_period_start || ""), end: String(source.work_period_end || ""), days: String(source.work_period_days || "") });
   }
   return {
+    medical_specialty: source.medical_specialty === null ? null : source.medical_specialty && typeof source.medical_specialty==='object' ? {...source.medical_specialty as MedicalSpecialtySnapshot} : undefined,
+    transfer: source.transfer && typeof source.transfer === "object" ? {...source.transfer,
+      position_ru:String((source.transfer as Record<string,unknown>).position_ru ?? ""),
+      position_kk:String((source.transfer as Record<string,unknown>).position_kk ?? ""),
+      org_unit_ru:String((source.transfer as Record<string,unknown>).org_unit_ru ?? ""),
+      org_unit_kk:String((source.transfer as Record<string,unknown>).org_unit_kk ?? ""),
+      rate:String((source.transfer as Record<string,unknown>).rate ?? ""),
+      basis_ru:String((source.transfer as Record<string,unknown>).basis_ru ?? ""),
+      basis_kk:String((source.transfer as Record<string,unknown>).basis_kk ?? "")
+    } : undefined,
     concurrent: concurrent ? {...concurrent, ...Object.fromEntries(
       ["position_ru", "position_kk", "org_unit_ru", "org_unit_kk", "position_genitive_ru", "org_unit_genitive_ru", "basis_ru", "basis_kk", "rate", "total_rate"]
         .map(key => [key, String(concurrent[key] ?? "")]),
@@ -286,7 +299,13 @@ export function buildItemPayload(
   }
 
   if (type === "TRANSFER") {
+    if(draft.medical_specialty!==undefined)payload.medical_specialty=draft.medical_specialty;
     payload.document_forms_ru = {employee_full_name_accusative_ru: draft.employee_full_name_accusative_ru || ""};
+    if(draft.transfer){
+      payload.transfer={...draft.transfer,rate:String(draft.transfer.rate || "").replace(",",".")};
+      appendBasisSelection(payload,draft);
+      return payload;
+    }
     const toOrg = optionalNumber(draft.to_org_unit_id);
     const toPos = optionalNumber(draft.to_position_id);
     const toRate = optionalNumber(draft.to_rate);
@@ -305,6 +324,7 @@ export function buildItemPayload(
   }
 
   if (type === "CONCURRENT_DUTY_START") {
+    if(!draft.replacement && draft.medical_specialty!==undefined)payload.medical_specialty=draft.medical_specialty;
     if (draft.concurrent) {
       payload.concurrent = {...draft.concurrent, rate: String(draft.concurrent.rate || "").replace(",", "."), total_rate: String(draft.concurrent.total_rate || "").replace(",", "."), employee_dative_ru: draft.employee_full_name_dative_ru || "", employee_dative_kk: draft.employee_full_name_dative_kk || ""};
       if (draft.replacement) payload.replacement = draft.replacement;

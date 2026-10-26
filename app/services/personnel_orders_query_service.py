@@ -761,6 +761,10 @@ def get_personnel_order(order_id: int) -> Dict[str, Any]:
         ).mappings().all()
 
         acknowledgement_rows = []
+        from app.services.personnel_order_print_titles import load_order_print_title_snapshot
+        print_title_snapshot = load_order_print_title_snapshot(conn, int(order_id), item_rows,
+            composite=str(header_row.get('order_type_code') or '').upper() == 'COMPOSITE'
+            or len({item['item_type_code'] for item in item_rows if item['item_status']=='ACTIVE'}) > 1)
         if conn.execute(text("SELECT to_regclass('public.personnel_order_acknowledgement_events')")).scalar_one() is not None:
             acknowledgement_rows = conn.execute(text("""
                 SELECT DISTINCT ON (employee_id)
@@ -773,6 +777,7 @@ def get_personnel_order(order_id: int) -> Dict[str, Any]:
 
     return {
         "order": _serialize_order_header(dict(header_row), include_archive_summary=True),
+        "print_title_snapshot": print_title_snapshot,
         "items": [_serialize_order_item(dict(row)) for row in item_rows],
         "localized_texts": [_serialize_localized_text(dict(row)) for row in localized_rows],
         "attachments": [_serialize_attachment(dict(row)) for row in attachment_rows],

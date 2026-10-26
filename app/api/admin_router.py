@@ -161,13 +161,13 @@ def admin_get_personnel_order_template_editor_base(item_type_code: str, _admin: 
 
 @router.post("/personnel-order-templates/{item_type_code}/draft", response_model=PersonnelOrderTemplateDraftOut)
 def admin_create_personnel_order_template_draft(item_type_code: str, body: PersonnelOrderTemplateWorkingCopySave, admin: Dict[str, Any] = Depends(require_sysadmin_api), template_id: Annotated[int | None, Query(ge=1)] = None) -> Dict[str, Any]:
-    try: return create_draft_from_working_copy(item_type_code, body.base_source, body.base_published_template_version_id, body.base_published_revision, body.model_dump(exclude={"base_source", "base_published_template_version_id", "base_published_revision"}), int(admin["user_id"]), **({"template_id": template_id} if template_id is not None else {}))
+    try: return create_draft_from_working_copy(item_type_code, body.base_source, body.base_published_template_version_id, body.base_published_revision, body.model_dump(exclude_none=True, exclude={"base_source", "base_published_template_version_id", "base_published_revision"}), int(admin["user_id"]), **({"template_id": template_id} if template_id is not None else {}))
     except TemplateDraftError as exc: raise _template_draft_error(exc) from exc
 
 
 @router.put("/personnel-order-templates/{item_type_code}/draft", response_model=PersonnelOrderTemplateDraftOut)
 def admin_save_personnel_order_template_draft(item_type_code: str, body: PersonnelOrderTemplateDraftSave, admin: Dict[str, Any] = Depends(require_sysadmin_api), template_id: Annotated[int | None, Query(ge=1)] = None) -> Dict[str, Any]:
-    try: return save_draft(item_type_code, body.expected_revision, body.model_dump(exclude={"expected_revision", "expected_template_version_id"}), int(admin["user_id"]), **({"template_id": template_id} if template_id is not None else {}), **({"expected_template_version_id": body.expected_template_version_id} if body.expected_template_version_id is not None else {}))
+    try: return save_draft(item_type_code, body.expected_revision, body.model_dump(exclude_none=True, exclude={"expected_revision", "expected_template_version_id"}), int(admin["user_id"]), **({"template_id": template_id} if template_id is not None else {}), **({"expected_template_version_id": body.expected_template_version_id} if body.expected_template_version_id is not None else {}))
     except TemplateDraftError as exc: raise _template_draft_error(exc) from exc
 
 
@@ -192,7 +192,7 @@ def admin_preview_saved_personnel_template(item_type_code: str, expected_revisio
         if draft["revision"] != expected_revision:
             raise TemplateDraftError("TEMPLATE_REVISION_CONFLICT", "Черновик изменился. Обновите его перед просмотром.", conflict=True)
         return {"template_id": draft["template_id"], "template_version_id": draft["template_version_id"], "revision": draft["revision"],
-                "previews": preview_draft(item_type_code, {field: draft[field] for field in ("title_ru", "title_kk", "preamble_ru", "preamble_kk", "body_template_ru", "body_template_kk", "basis_template_ru", "basis_template_kk")})}
+                "previews": preview_draft(item_type_code, {field: draft.get(field) for field in ("title_ru", "title_kk", "print_title_ru", "print_title_kk", "preamble_ru", "preamble_kk", "body_template_ru", "body_template_kk", "basis_template_ru", "basis_template_kk")})}
     except TemplateDraftError as exc: raise _template_draft_error(exc) from exc
 
 

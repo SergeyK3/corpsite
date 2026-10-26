@@ -5,6 +5,8 @@ import * as React from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import OrgScopeFilter from "@/components/OrgScopeFilter";
+import ExportExcelButton from "@/components/ExportExcelButton";
+import { allExportPages, normalizeExportPage, type ExcelTable } from "@/lib/tableExport";
 import OrgUnitScopeFilter from "@/components/OrgUnitScopeFilter";
 import { isSystemAdminRole } from "@/lib/adminNav";
 import { useCurrentUser } from "@/lib/currentUser";
@@ -14,6 +16,7 @@ import { formatThrownError } from "@/lib/i18n";
 import { readOrgScopeFromSearchParams } from "@/lib/orgScope";
 import PositionDrawer from "./PositionDrawer";
 import type { PositionFormValues } from "./PositionForm";
+import {normalizePositionName,verifyPositionSaved,positionSaveError,type SavedPosition,type PositionSaveResult} from "./positionSaveState";
 
 type PositionCategory = "all" | "leaders" | "medical" | "admin" | "technical" | "other";
 type PositionDeleteStatus = "deletable" | "blocked";
@@ -40,9 +43,20 @@ type PositionDeleteAssessment = {
 };
 
 type PositionItem = {
+  revision?: number;
   position_id?: number;
   id?: number;
   name: string;
+  name_kk?: string|null;
+  job_code?: string|null;
+  family_name_ru?: string|null;
+  family_name_kk?: string|null;
+  record_kind?: "standalone"|"variant"|"search_synonym"|null;
+  aliases?: string[]|null;
+  document_nominative_ru?: string|null;
+  translation_status?: "confirmed"|"needs_review";
+  document_possessive_kk?: string|null;
+  document_form_status?: "confirmed"|"needs_review";
   category?: string | null;
   category_name?: string | null;
   delete_assessment?: PositionDeleteAssessment;
@@ -306,6 +320,9 @@ export default function PositionsPageClient() {
   const [page, setPage] = React.useState(0);
 
   const [pageError, setPageError] = React.useState<string | null>(null);
+  const saveInFlight=React.useRef(false);
+  const saveTargetId=React.useRef<number|null>(null);
+  const editorRequest=React.useRef(0);
   const [drawerError, setDrawerError] = React.useState<string | null>(null);
 
   const [drawerOpen, setDrawerOpen] = React.useState(false);
@@ -426,6 +443,31 @@ export default function PositionsPageClient() {
     }
   }, [search, category, orgGroupId, orgUnitId, positionScope, deleteStatus, canDeletePositions, page]);
 
+  async function loadExcel(): Promise<ExcelTable> {
+    // Capture the visible filters once, including text still awaiting debounce.
+    const filters = buildPositionsListQuery({
+      search: searchInput, category, orgGroupId, orgUnitId, positionScope,
+      deleteStatus: canDeletePositions ? deleteStatus : null,
+    });
+    const rows = await allExportPages<PositionItem>(async (pagination) =>
+      normalizeExportPage(await apiFetchJson<PositionsResponse>(API_BASE, {
+        query: { ...filters, ...pagination },
+      })), PAGE_SIZE);
+    return {
+      headers: ["ID", "Название RU", "Название KK", "Категория", "Общий код", "Тип записи",
+        "Общий вид RU", "Общий вид KK", "Варианты названия / поисковые синонимы",
+        "Документная форма RU", "Документная форма KK", "Статус перевода", "Статус документной формы"],
+      rows: rows.map((item) => [
+        positionIdOf(item), item.name ?? null, item.name_kk ?? null, item.category ?? null,
+        item.job_code ?? null, item.record_kind ?? null,
+        item.family_name_ru ?? null, item.family_name_kk ?? null,
+        item.aliases?.join("\n") ?? null,
+        item.document_nominative_ru ?? null, item.document_possessive_kk ?? null,
+        item.translation_status ?? null, item.document_form_status ?? null,
+      ]),
+    };
+  }
+
   const setPositionScope = React.useCallback(
     (nextScope: PositionListScope) => {
       pendingScopeTransitionRef.current = nextScope;
@@ -452,21 +494,30 @@ export default function PositionsPageClient() {
   }, [page, total]);
 
   function openCreate() {
+    if(saveInFlight.current)return;
+    ++editorRequest.current;saveTargetId.current=null;
     setDrawerError(null);
     setSelectedItem(null);
     setDrawerMode("create");
     setDrawerOpen(true);
   }
 
-  function openEdit(item: PositionItem) {
-    setDrawerError(null);
-    setSelectedItem(item);
-    setDrawerMode("edit");
-    setDrawerOpen(true);
+  async function openEdit(item: PositionItem) {
+    if(saveInFlight.current)return;
+    const request=++editorRequest.current;
+    setDrawerError(null);setPageError(null);
+    try {
+      const id=positionIdOf(item);
+      const detail=await apiFetchJson<SavedPosition>(`${API_BASE}/${id}`);
+      if(request!==editorRequest.current)return;
+      if(Number(detail.position_id??detail.id)!==id)throw new Error("API вернул другую запись должности.");
+      saveTargetId.current=id;setSelectedItem(detail);setDrawerMode("edit");setDrawerOpen(true);
+    }catch(error){if(request===editorRequest.current)setPageError(extractErrorMessage(error));}
   }
 
   function closeDrawer() {
-    if (saving) return;
+    if (saveInFlight.current) return;
+    ++editorRequest.current;saveTargetId.current=null;
     setDrawerOpen(false);
     setDrawerError(null);
     setSelectedItem(null);
@@ -523,46 +574,29 @@ export default function PositionsPageClient() {
     }
   }
 
-  async function handleSubmit(values: PositionFormValues) {
-    setSaving(true);
-    setDrawerError(null);
-
+  async function handleSubmit(values: PositionFormValues):Promise<PositionSaveResult|void> {
+    if(saveInFlight.current)return;
+    saveInFlight.current=true;setSaving(true);setDrawerError(null);setPageSuccess(null);
     try {
-      const payload = {
-        name: values.name.trim(),
-        category: values.category,
-      };
-
-      if (drawerMode === "create") {
-        await apiFetchJson(API_BASE, {
-          method: "POST",
-          body: payload,
-        });
-
-        setDrawerOpen(false);
-        setSelectedItem(null);
-
-        if (page !== 0) {
-          setPage(0);
-        } else {
-          await loadItems();
-        }
-      } else {
-        const positionId = positionIdOf(selectedItem as PositionItem);
-        await apiFetchJson(`${API_BASE}/${positionId}`, {
-          method: "PUT",
-          body: payload,
-        });
-
-        setDrawerOpen(false);
-        setSelectedItem(null);
-        await loadItems();
-      }
-    } catch (error) {
-      setDrawerError(extractErrorMessage(error));
-    } finally {
-      setSaving(false);
-    }
+      const payload={...values,name:values.name.trim(),category:values.category};
+      const knownId=saveTargetId.current??(drawerMode==="edit"?positionIdOf(selectedItem as PositionItem):null);
+      const mutation=await apiFetchJson<SavedPosition>(knownId==null?API_BASE:`${API_BASE}/${knownId}`,{
+        method:knownId==null?"POST":"PUT",body:payload,
+      });
+      const id=Number(mutation.position_id??mutation.id??knownId);
+      if(!Number.isSafeInteger(id)||id<=0)throw new Error("API не вернул ID сохранённой должности. Проверьте справочник перед повтором.");
+      if(knownId!=null&&id!==knownId)throw new Error("API вернул другую запись должности. Повторная запись отменена.");
+      if(knownId==null&&(typeof mutation.name!=="string"||normalizePositionName(mutation.name)!==normalizePositionName(payload.name)))throw new Error("API не подтвердил ID создаваемой должности. Проверьте справочник перед повтором.");
+      // Remember a committed create before its verification GET. A read failure
+      // must turn the next attempt into PUT for this ID, never another POST.
+      saveTargetId.current=id;setSelectedItem({...payload,position_id:id,revision:mutation.revision??values.expected_revision});setDrawerMode("edit");
+      const readBack=await apiFetchJson<SavedPosition>(`${API_BASE}/${id}`);
+      const savedValues=verifyPositionSaved(payload,readBack,id);
+      setSelectedItem(readBack);setPageSuccess(`Должность «${readBack.name}» сохранена.`);
+      if(page!==0)setPage(0);else void loadItems();
+      return {savedValues};
+    }catch(error){setDrawerError(positionSaveError(error));}
+    finally{saveInFlight.current=false;setSaving(false);}
   }
 
   async function handleDeactivateAllowedPosition(item: PositionItem) {
@@ -678,18 +712,17 @@ export default function PositionsPageClient() {
         : null);
 
   return (
-    <div className="bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50">
+    <div className="min-w-0 max-w-full bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-50">
       <div className="mx-auto w-full max-w-[1440px] px-4 py-3">
         <div className="overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950">
           <div className="border-b border-zinc-200 dark:border-zinc-800 px-4 py-3">
-            <a href="/directory/job-positions" className="text-sm text-blue-600">Справочник RU / KK</a>
             <h1 className="text-xl font-semibold leading-none text-zinc-900 dark:text-zinc-50">
               Должности{filterCaption ? ` (${filterCaption})` : ""}
             </h1>
           </div>
 
           <div className="border-b border-zinc-200 dark:border-zinc-800 px-4 py-2">
-            <div className="flex flex-col gap-2 xl:flex-row xl:items-end">
+            <div className="flex flex-col gap-2 xl:flex-row xl:flex-wrap xl:items-end">
               <OrgScopeFilter
                 basePath="/directory/positions"
                 className="min-w-[240px]"
@@ -736,7 +769,7 @@ export default function PositionsPageClient() {
                 </div>
               ) : null}
 
-              <div className="flex-1">
+              <div className="min-w-[220px] flex-1">
                 <input
                   value={searchInput}
                   onChange={(e) => setSearchInput(e.target.value)}
@@ -767,6 +800,10 @@ export default function PositionsPageClient() {
               >
                 Обновить
               </button>
+
+              <div className="shrink-0 whitespace-nowrap">
+                <ExportExcelButton load={loadExcel} filename="Должности.xlsx" disabled={loading || !!pageError} />
+              </div>
 
               <button
                 type="button"
@@ -865,25 +902,23 @@ export default function PositionsPageClient() {
             </div>
 
             <div className="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-800">
-              <div className="overflow-x-auto">
-                <table className="min-w-full border-collapse">
+              <div className="max-w-full overflow-x-auto" role="region" aria-label="Таблица должностей" tabIndex={0} data-testid="positions-table-scroll">
+                <table className="w-full min-w-[760px] table-fixed border-collapse">
                   <thead>
                     <tr className="bg-zinc-100 dark:bg-zinc-900 text-left">
-                      <th className="w-[72px] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
+                      <th scope="col" className="w-[56px] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
                         ID
                       </th>
-                      <th className="px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
-                        Название
+                      <th scope="col" className="px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
+                        Название RU
                       </th>
-                      <th className="w-[190px] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
+                      <th scope="col" className="px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
+                        Название KK
+                      </th>
+                      <th scope="col" className="w-[120px] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
                         Категория
                       </th>
-                      {showUsedAllowedColumn ? (
-                        <th className="w-[150px] px-3 py-1 text-center text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
-                          Разрешена для приёма
-                        </th>
-                      ) : null}
-                      <th className="w-[170px] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
+                      <th scope="col" className="w-[170px] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
                         Действия
                       </th>
                     </tr>
@@ -892,13 +927,13 @@ export default function PositionsPageClient() {
                   <tbody>
                     {loading ? (
                       <tr>
-                        <td colSpan={showUsedAllowedColumn ? 5 : 4} className="px-3 py-2 text-[13px] text-zinc-600 dark:text-zinc-400">
+                        <td colSpan={5} className="px-3 py-2 text-[13px] text-zinc-600 dark:text-zinc-400">
                           Загрузка...
                         </td>
                       </tr>
                     ) : items.length === 0 ? (
                       <tr>
-                        <td colSpan={showUsedAllowedColumn ? 5 : 4} className="px-3 py-2 text-[13px] text-zinc-600 dark:text-zinc-400">
+                        <td colSpan={5} className="px-3 py-2 text-[13px] text-zinc-600 dark:text-zinc-400">
                           Записи не найдены.
                         </td>
                       </tr>
@@ -909,21 +944,27 @@ export default function PositionsPageClient() {
                             {positionIdOf(item)}
                           </td>
                           <td className="px-3 py-1 text-[13px] leading-4 text-zinc-900 dark:text-zinc-50">
-                            <div>{item.name}</div>
+                            <span className="block truncate" title={item.name}>{item.name}</span>
+                          </td>
+                          <td className="px-3 py-1 text-[13px] leading-4 text-zinc-900 dark:text-zinc-50">
+                            <span className="block truncate" title={item.name_kk || 'Казахское название требует уточнения'}>{item.name_kk || '—'}</span>
+                          </td>
+                          <td className="px-3 py-1 text-[13px] leading-4 text-zinc-600 dark:text-zinc-400">
+                            <span className="block truncate" title={getCategoryLabel(item)}>{getCategoryLabel(item)}</span>
+                          </td>
+                          <td className="px-3 py-1">
+                            <div className="flex flex-wrap items-center gap-1">
                             {canDeletePositions && item.delete_assessment?.can_delete === false ? (
                               <div
                                 className="mt-0.5 text-[11px] leading-4 text-zinc-600 dark:text-zinc-400"
                                 data-testid={`position-delete-dependencies-${positionIdOf(item)}`}
                               >
-                                <div>
-                                  Используется в {item.delete_assessment.total_dependencies} связанных записях. Удаление недоступно.
-                                </div>
-                                {item.delete_assessment.dependencies.length > 0 ? (
                                   <details className="mt-1" data-testid={`position-delete-details-${positionIdOf(item)}`}>
                                     <summary className="cursor-pointer text-zinc-700 underline underline-offset-2 hover:no-underline dark:text-zinc-300">
                                       Подробнее
                                     </summary>
                                     <div className="mt-1 space-y-1">
+                                      <div>Используется в {item.delete_assessment.total_dependencies} связанных записях. Удаление недоступно.</div>
                                       {item.delete_assessment.dependencies.map((dependency) => (
                                         <div key={dependency.key}>{dependency.label}: {dependency.count}</div>
                                       ))}
@@ -953,15 +994,10 @@ export default function PositionsPageClient() {
                                       ))}
                                     </div>
                                   </details>
-                                ) : null}
                               </div>
                             ) : null}
-                          </td>
-                          <td className="px-3 py-1 text-[13px] leading-4 text-zinc-600 dark:text-zinc-400">
-                            {getCategoryLabel(item)}
-                          </td>
                           {showUsedAllowedColumn ? (
-                            <td className="px-3 py-1 text-center">
+                            <label className="inline-flex items-center gap-1 text-[10px] leading-4">
                               <input
                                 type="checkbox"
                                 checked={allowedPositionIds.has(positionIdOf(item))}
@@ -970,10 +1006,9 @@ export default function PositionsPageClient() {
                                 aria-label={`Разрешена для приёма: ${item.name}`}
                                 data-testid={`used-position-allowed-${positionIdOf(item)}`}
                               />
-                            </td>
+                              Приём
+                            </label>
                           ) : null}
-                          <td className="px-3 py-1">
-                            <div className="flex items-center gap-1">
                               <button
                                 type="button"
                                 onClick={() => openEdit(item)}

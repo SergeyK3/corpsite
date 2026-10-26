@@ -10,6 +10,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.auth import get_current_user
 from app.db.engine import engine
+from app.services.position_directory_service import get_position as read_directory_position, save_details, resolve_existing_name
 from app.org_scope.apply import apply_org_scope
 from app.org_scope.types import OrgScopeParams, OrgScopeStrategy
 from app.security.directory_scope import (
@@ -45,6 +46,7 @@ class JobCatalogEdit(BaseModel):
 
 
 @router.get("/job-positions")
+@router.get("/position-families")
 def list_job_catalog(user: Dict[str, Any] = Depends(get_current_user)):
     scope = compute_scope(int(user["user_id"]), user)
     require_personnel_visibility_or_403(user, scope)
@@ -57,6 +59,7 @@ def list_job_catalog(user: Dict[str, Any] = Depends(get_current_user)):
 
 
 @router.put("/job-positions/{job_code}")
+@router.put("/position-families/{job_code}")
 def edit_job_catalog(job_code: str, payload: JobCatalogEdit, user: Dict[str, Any] = Depends(get_current_user)):
     if not _is_privileged(user):
         raise HTTPException(status_code=403, detail="Forbidden.")
@@ -68,14 +71,40 @@ def edit_job_catalog(job_code: str, payload: JobCatalogEdit, user: Dict[str, Any
             raise HTTPException(status_code=404, detail="Job code not found.")
     return dict(row)
 
+@router.post('/position-families')
+def create_position_family(payload: JobCatalogEdit, code: str = Query(pattern=r'^[A-Z][A-Z0-9_]*$', max_length=100),
+                           user: Dict[str, Any] = Depends(get_current_user)):
+    if not _is_privileged(user):
+        raise HTTPException(403, 'Forbidden.')
+    try:
+        with engine.begin() as conn:
+            row = conn.execute(text('INSERT INTO public.job_positions_catalog '
+                '(job_code,job_nameru,job_namekk,job_namekk_doc) '
+                'VALUES (:code,:job_nameru,:job_namekk,:job_namekk_doc) RETURNING *'),
+                {'code': code, **payload.model_dump()}).mappings().one()
+            return dict(row)
+    except IntegrityError:
+        raise HTTPException(409, 'Position family already exists.')
+
+
 ALLOWED_CATEGORIES = {"leaders", "medical", "admin", "technical", "other"}
 POSITION_LIST_SCOPES = {"used", "allowed"}
 POSITION_DELETE_STATUSES = {"deletable", "blocked"}
 
 
 class PositionUpsert(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     name: str = Field(..., min_length=1, max_length=500)
     category: str = Field(..., min_length=1, max_length=50)
+    name_kk: Optional[str] = Field(default=None, max_length=500)
+    document_nominative_ru: Optional[str] = Field(default=None, max_length=500)
+    document_possessive_kk: Optional[str] = Field(default=None, max_length=500)
+    translation_status: Literal['confirmed', 'needs_review'] = 'needs_review'
+    document_form_status: Literal['confirmed', 'needs_review'] = 'needs_review'
+    record_kind: Literal['standalone', 'variant', 'search_synonym'] = 'standalone'
+    job_code: Optional[str] = Field(default=None, max_length=100)
+    aliases: List[str] = Field(default_factory=list, max_length=100)
+    expected_revision: Optional[int] = Field(default=None, ge=1)
 
 
 class AllowedPositionPutIn(BaseModel):
@@ -431,7 +460,10 @@ def list_positions_crud(
 
     if q and q.strip():
         params["q"] = f"%{q.strip().lower()}%"
-        where_parts.append("LOWER(CAST(p.name AS TEXT)) LIKE :q")
+        where_parts.append("""(LOWER(p.name) LIKE :q OR LOWER(p.name_kk) LIKE :q
+            OR LOWER(p.family_name_ru) LIKE :q OR LOWER(p.job_code) LIKE :q
+            OR EXISTS (SELECT 1 FROM public.position_aliases a
+                WHERE a.position_id=p.position_id AND LOWER(a.alias_text) LIKE :q))""")
 
     if category and category.strip():
         params["category"] = _normalize_category(category)
@@ -525,15 +557,16 @@ def list_positions_crud(
             f"""
             {with_prefix}
             SELECT COUNT(*) AS cnt
-            FROM public.positions p
+            FROM public.position_directory p
             WHERE {where_sql}
             """
         )
         q_list = text(
             f"""
             {with_prefix}
-            SELECT p.position_id, p.name, p.category
-            FROM public.positions p
+            SELECT p.*, ARRAY(SELECT a.alias_text FROM public.position_aliases a
+                WHERE a.position_id=p.position_id ORDER BY a.alias_id) AS aliases
+            FROM public.position_directory p
             WHERE {where_sql}
             ORDER BY {order_sql}
             LIMIT :limit OFFSET :offset
@@ -554,17 +587,14 @@ def list_positions_crud(
     items = []
     for r in rows:
         position_id = int(r["position_id"])
-        item = {
-            "position_id": int(r["position_id"]),
-            "name": str(r["name"] or "").strip(),
-            "category": str(r["category"] or "").strip(),
-        }
+        item = dict(r)
         assessment = assessments.get(position_id)
         if assessment is not None:
             item["delete_assessment"] = assessment.to_dict()
         items.append(item)
     return {
         "items": items,
+        "can_edit": _is_privileged(user),
         "total": total,
         "filter_org_unit_id": int(org_unit_id) if org_unit_id is not None else None,
         "filter_org_unit_name": filter_org_unit_name,
@@ -580,26 +610,8 @@ def get_position(
     visibility_scope = compute_scope(uid, user)
     require_personnel_visibility_or_403(user, visibility_scope)
 
-    q_one = text(
-        """
-        SELECT position_id, name, category
-        FROM public.positions
-        WHERE position_id = :position_id
-        LIMIT 1
-        """
-    )
-
     with engine.begin() as conn:
-        row = conn.execute(q_one, {"position_id": position_id}).mappings().first()
-
-    if not row:
-        raise HTTPException(status_code=404, detail="Position not found.")
-
-    return {
-        "position_id": int(row["position_id"]),
-        "name": str(row["name"] or "").strip(),
-        "category": str(row["category"] or "").strip(),
-    }
+        return read_directory_position(conn, position_id)
 
 
 @router.get("/positions/{position_id}/dependencies")
@@ -660,6 +672,9 @@ def create_position(
 
     try:
         with engine.begin() as conn:
+            conn.execute(text("SELECT pg_advisory_xact_lock(hashtext('position_directory_write'))"))
+            if resolve_existing_name(conn, name):
+                raise HTTPException(409, 'Position or search synonym already exists.')
             exists = conn.execute(q_exists, {"name": name}).mappings().first()
             if exists:
                 raise HTTPException(status_code=409, detail="Position already exists.")
@@ -668,14 +683,11 @@ def create_position(
                 q_insert,
                 {"name": name, "category": category},
             ).mappings().first()
+            result = save_details(conn, int(row['position_id']), payload)
     except IntegrityError:
         raise HTTPException(status_code=409, detail="Position already exists or conflicts with existing data.")
 
-    return {
-        "position_id": int(row["position_id"]),
-        "name": str(row["name"] or "").strip(),
-        "category": str(row["category"] or "").strip(),
-    }
+    return result
 
 
 @router.put("/positions/{position_id}")
@@ -695,10 +707,11 @@ def update_position(
 
     q_exists = text(
         """
-        SELECT position_id, name
+        SELECT position_id, name, revision
         FROM public.positions
         WHERE position_id = :position_id
         LIMIT 1
+        FOR UPDATE
         """
     )
 
@@ -716,7 +729,8 @@ def update_position(
         """
         UPDATE public.positions
         SET name = :name,
-            category = :category
+            category = :category,
+            revision = revision + 1
         WHERE position_id = :position_id
         RETURNING position_id, name, category
         """
@@ -724,9 +738,14 @@ def update_position(
 
     try:
         with engine.begin() as conn:
+            conn.execute(text("SELECT pg_advisory_xact_lock(hashtext('position_directory_write'))"))
             exists = conn.execute(q_exists, {"position_id": position_id}).mappings().first()
             if not exists:
                 raise HTTPException(status_code=404, detail="Position not found.")
+            if payload.expected_revision is not None and payload.expected_revision != exists['revision']:
+                raise HTTPException(status_code=409, detail='Position changed. Reload before saving.')
+            if resolve_existing_name(conn, name, position_id):
+                raise HTTPException(409, 'Position or search synonym already exists.')
 
             dup = conn.execute(q_dup, {"position_id": position_id, "name": name}).first()
             if dup:
@@ -736,14 +755,11 @@ def update_position(
                 q_update,
                 {"position_id": position_id, "name": name, "category": category},
             ).mappings().first()
+            result = save_details(conn, position_id, payload)
     except IntegrityError:
         raise HTTPException(status_code=409, detail="Position update conflicts with existing data.")
 
-    return {
-        "position_id": int(row["position_id"]),
-        "name": str(row["name"] or "").strip(),
-        "category": str(row["category"] or "").strip(),
-    }
+    return result
 
 
 @router.delete(

@@ -6,6 +6,7 @@ import PersonnelOrderTransferFields, {type TransferFields} from "./PersonnelOrde
 import PersonnelOrderReplacementFields, {blankReplacement, type ReplacementFields} from "./PersonnelOrderReplacementFields";
 import PersonnelOrderInheritedItemForm from "./PersonnelOrderInheritedItemForm";
 import * as React from "react";
+import PersonnelOrderMedicalSpecialtyPicker from "./PersonnelOrderMedicalSpecialtyPicker";
 import {concurrentEmployeeDatives, refreshAutomaticForm} from "../_lib/personnelOrderConcurrentForms";
 
 import { getEmployee, getEmployees, getPositions } from "@/app/directory/employees/_lib/api.client";
@@ -1246,6 +1247,13 @@ export default function PersonnelOrderItemEditor({
   }
 
   function renderOrgPlacementSection() {
+    if (itemTypeCode === "TRANSFER" && payloadDraft.transfer) {
+      const setTransfer: React.Dispatch<React.SetStateAction<TransferFields>> = change => setPayloadDraft(previous => {
+        const current=previous.transfer!;
+        return {...previous,transfer:typeof change==='function'?change(current):change};
+      });
+      return <PersonnelOrderTransferFields value={payloadDraft.transfer} onChange={setTransfer} orgUnits={orgUnitCatalogOptions} mode="transfer" afterDepartment={<PersonnelOrderMedicalSpecialtyPicker value={payloadDraft.medical_specialty} disabled={disabled||saving} onChange={medical_specialty=>setPayloadDraft(previous=>({...previous,medical_specialty}))}/>}/>;
+    }
     if (formConfig?.showTargetPlacement) {
       return renderOrgPlacementCascade({
         sectionTitle: formConfig.orgPlacementSectionTitle,
@@ -1295,7 +1303,7 @@ export default function PersonnelOrderItemEditor({
           </select>
           {rateTemplateError ? <p role="alert">{rateTemplateError}</p> : !rateTemplates.length ? <p role="status">Опубликованные шаблоны по ставке не загружены или отсутствуют.</p> : null}
         </FormField>
-        <PersonnelOrderTransferFields value={value} onChange={setConcurrent} orgUnits={orgUnitCatalogOptions} mode="concurrent" autoGenitiveForms />
+        <PersonnelOrderTransferFields value={value} onChange={setConcurrent} orgUnits={orgUnitCatalogOptions} mode="concurrent" autoGenitiveForms afterDepartment={!payloadDraft.replacement ? <PersonnelOrderMedicalSpecialtyPicker value={payloadDraft.medical_specialty} disabled={disabled||saving} onChange={medical_specialty=>setPayloadDraft(previous=>({...previous,medical_specialty}))}/> : undefined} />
         {!payloadDraft.employee_full_name_dative_kk?.trim() ? <p role="alert" className="text-xs text-amber-700">Нет сохранённой формы ФИО (KK) или надёжных данных для штатного склонения. Заполните ФИО в дательном падеже (KK) вручную.</p> : null}
         {([['employee_full_name_dative_ru','ФИО в дательном падеже (RU)'],['employee_full_name_dative_kk','ФИО в дательном падеже (KK)']] as const).map(([key,label]) => <FormField key={key} label={label}><input aria-label={label} value={payloadDraft[key] || ""} onChange={event => updatePayloadField(key,event.target.value)} className={FIELD_INPUT_CLASS}/></FormField>)}
         {payloadDraft.replacement ? <PersonnelOrderReplacementFields value={{...blankReplacement(),...payloadDraft.replacement}} onChange={change => setPayloadDraft(previous => {const current={...blankReplacement(),...previous.replacement};return {...previous,replacement: typeof change === "function" ? change(current) : change};})} orgUnits={orgUnitCatalogOptions} mode="RATE" start={effectiveDate}/> : null}

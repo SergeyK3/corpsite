@@ -4,6 +4,7 @@ from __future__ import annotations
 from typing import Any
 
 from sqlalchemy import text
+from app.services.personnel_order_print_titles import pin_print_titles, version_print_titles
 
 
 def resolve_item_templates(conn: Any, order: Any, items: list[Any], *, allow_defaults: bool = False) -> dict[int, dict[str, Any]]:
@@ -11,6 +12,7 @@ def resolve_item_templates(conn: Any, order: Any, items: list[Any], *, allow_def
 
     applications = conn.execute(text("SELECT * FROM personnel_order_template_applications WHERE order_id=:id ORDER BY applied_at DESC,template_application_id DESC"), {"id": order["order_id"]}).mappings().all()
     bindings: dict[int, int] = {}
+    snapshots = {}
     for application in applications:
         covered = {application["order_item_id"]}
         snapshot = application["rendered_snapshot"] or {}
@@ -18,6 +20,7 @@ def resolve_item_templates(conn: Any, order: Any, items: list[Any], *, allow_def
         for item_id in covered:
             if item_id is not None:
                 bindings.setdefault(int(item_id), int(application["template_version_id"]))
+                snapshots.setdefault(int(item_id), (application.get('template_snapshot') or {}, snapshot.get('order') or {}))
 
     first = items[0]
     pinned = order.get("selected_template_version_id")
@@ -41,7 +44,10 @@ def resolve_item_templates(conn: Any, order: Any, items: list[Any], *, allow_def
             if version_id is None:
                 raise TemplateApplicationError("No PUBLISHED template exists for this item type.")
             raise TemplateApplicationError(f"Пункт {item['item_number']}: закреплённая версия {version_id} отсутствует, имеет другой тип или недоступный статус.")
-        result[item_id] = dict(template)
+        saved = snapshots.get(item_id)
+        if saved is None and version_id == (pinned if pinned is not None else first_binding):
+            saved = snapshots.get(int(first['item_id']))
+        result[item_id] = pin_print_titles(version_print_titles(template), *(saved or (None, None)))
     return result
 
 

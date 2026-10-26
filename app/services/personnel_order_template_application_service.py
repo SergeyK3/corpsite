@@ -1,6 +1,7 @@
 """Published templates applied atomically to all active item-level blocks."""
 from __future__ import annotations
 import json, re
+from app.services.personnel_order_print_titles import printable_template, template_text_snapshot, rendered_order_snapshot
 from typing import Any, Mapping
 from sqlalchemy import text
 from app.db.engine import engine
@@ -155,13 +156,21 @@ def _values(conn:Any,item:Mapping[str,Any],template:Mapping[str,Any]|None=None):
   values["org_unit.title_ru"] = russian_order_unit_name(values["org_unit.title_ru"])
   if values.get("rate"):
    values["rate.ru"] = _format_rate_value(values["rate"])
+ from app.services.personnel_order_medical_specialty import specialty_values
+ try: values.update(specialty_values(str(item['item_type_code']),payload,template or {}))
+ except ValueError as exc: raise TemplateApplicationError(str(exc)) from exc
  return values,warnings,missing
 def _render(template:Mapping[str,Any],values:Mapping[str,str], *, draft_preview:bool=False, item_only:bool=False):
+ try: template=printable_template(template,preview=draft_preview or item_only)
+ except ValueError as exc: raise TemplateApplicationError(str(exc)) from exc
  texts={k:template[k] for k in _FIELDS}
  if draft_preview:
   from app.services.personnel_order_template_draft_service import _validate
   _validate(texts,str(template["item_type_code"]),require_complete=False)
  else: validate_template_texts(str(template["item_type_code"]),texts)
+ from app.services.personnel_order_medical_specialty import specialty_texts
+ try: texts=specialty_texts(texts,str(template['item_type_code']),values)
+ except ValueError as exc: raise TemplateApplicationError(str(exc)) from exc
  missing=set()
  from app.services.personnel_order_service_area_contract import enabled
  optional_tokens={'replacement.clause','allowance.term'} if enabled(texts) else set()
@@ -208,7 +217,8 @@ def _preview(conn,order_id):
  for entry in entries:entry["current"]={f"{x['locale']}:{x['block_type']}":dict(x) for x in blocks if x["order_item_id"]==entry["order_item_id"]}
  overrides=[{"block_id":x["block_id"],"scope":x["scope"],"block_type":str(x["block_type"]).upper(),"language":str(x["locale"]).upper(),"order_item_id":x["order_item_id"]} for x in blocks if (x["override_text"] or "").strip()]
  prior=conn.execute(text("SELECT a.template_application_id application_id,a.template_version_id,t.version_number template_version_number,a.applied_at,a.applied_by_user_id FROM public.personnel_order_template_applications a JOIN public.personnel_order_template_versions t ON t.template_version_id=a.template_version_id WHERE a.order_id=:id ORDER BY a.applied_at DESC,a.template_application_id DESC LIMIT 1"),{"id":order_id}).mappings().first()
- result={"available":True,"template":{"template_version_id":template["template_version_id"],"version_number":template["version_number"],"item_type_code":template["item_type_code"]},"has_overrides":bool(overrides),"override_blocks":overrides,"has_prior_application":bool(prior),"last_application":dict(prior) if prior else None,"order_current":{f"{x['locale']}:{x['block_type']}":dict(x) for x in blocks if x["scope"]=="ORDER"},"order_proposed":{k:template[k] for k in ("title_ru","title_kk","preamble_ru","preamble_kk")},"items":entries,"order_revision":order["document_revision"]}
+ printed=printable_template(template,preview=True)
+ result={"available":True,"template":{"template_version_id":template["template_version_id"],"version_number":template["version_number"],"item_type_code":template["item_type_code"]},"has_overrides":bool(overrides),"override_blocks":overrides,"has_prior_application":bool(prior),"last_application":dict(prior) if prior else None,"order_current":{f"{x['locale']}:{x['block_type']}":dict(x) for x in blocks if x["scope"]=="ORDER"},"order_proposed":{k:printed[k] for k in ("title_ru","title_kk","preamble_ru","preamble_kk")},"items":entries,"order_revision":order["document_revision"]}
  if combined:
   from app.services.personnel_order_item_templates import common_order_text
   result["order_proposed"] = common_order_text(conn,order_id,result["order_proposed"])
@@ -258,4 +268,4 @@ def apply_template_application_tx(conn: Any, order_id: int, actor_user_id: int, 
     for version_id in dict.fromkeys(t["template_version_id"] for t in templates.values()):
         entries = [entry for entry in preview["items"] if templates[entry["order_item_id"]]["template_version_id"] == version_id]
         selected = templates[entries[0]["order_item_id"]]
-        conn.execute(text("INSERT INTO public.personnel_order_template_applications(order_id,order_item_id,template_version_id,template_snapshot,rendered_snapshot,previous_editorial_blocks,applied_by_user_id) VALUES(:o,:i,:t,CAST(:s AS jsonb),CAST(:r AS jsonb),CAST(:p AS jsonb),:a)"), {"o": order_id, "i": entries[0]["order_item_id"], "t": version_id, "s": json.dumps({k: selected[k] for k in _FIELDS}, ensure_ascii=False), "r": json.dumps({"order": preview["order_proposed"], "items": entries}, ensure_ascii=False, default=str), "p": json.dumps([dict(x) for x in before], default=str), "a": actor_user_id})
+        conn.execute(text("INSERT INTO public.personnel_order_template_applications(order_id,order_item_id,template_version_id,template_snapshot,rendered_snapshot,previous_editorial_blocks,applied_by_user_id) VALUES(:o,:i,:t,CAST(:s AS jsonb),CAST(:r AS jsonb),CAST(:p AS jsonb),:a)"), {"o": order_id, "i": entries[0]["order_item_id"], "t": version_id, "s": json.dumps(template_text_snapshot(selected, _FIELDS), ensure_ascii=False), "r": json.dumps({"order": rendered_order_snapshot(preview["order_proposed"], template), "items": entries}, ensure_ascii=False, default=str), "p": json.dumps([dict(x) for x in before], default=str), "a": actor_user_id})

@@ -4,6 +4,7 @@ from sqlalchemy import text
 
 
 def employee_catalog_context(conn, employee_id, effective_date=None):
+    unified = conn.execute(text("SELECT to_regclass('public.position_directory') IS NOT NULL")).scalar_one()
     catalog_ready = conn.execute(text("""SELECT
         to_regclass('public.job_positions_catalog') IS NOT NULL
         AND to_regclass('public.position_job_catalog') IS NOT NULL""")).scalar_one()
@@ -17,6 +18,17 @@ def employee_catalog_context(conn, employee_id, effective_date=None):
         COALESCE(NULLIF(to_jsonb(p)->>'document_nominative_ru', ''), p.name) AS position_ru,
         NULLIF(to_jsonb(p)->>'document_possessive_kk', '') AS position_kk"""
     position_name = "COALESCE(j.job_nameru, p.name)" if catalog_ready else "p.name"
+    if unified:
+        catalog_join = ''
+        position_name = 'p.name'
+        catalog_fields = """p.job_code, p.position_id,
+            p.translation_status AS position_translation_status,
+            p.document_form_status AS position_document_form_status,
+            p.name AS position_title_ru,
+            CASE WHEN p.translation_status='confirmed' THEN p.name_kk END AS position_title_kk,
+            COALESCE(p.document_nominative_ru,p.name) AS position_ru,
+            CASE WHEN p.document_form_status='confirmed' THEN p.document_possessive_kk END AS position_kk"""
+    position_relation = 'public.position_directory' if unified else 'public.positions'
     row = conn.execute(text(f"""
         SELECT e.full_name, pa.assignment_id,
                {position_name} AS position_name,
@@ -34,7 +46,7 @@ def employee_catalog_context(conn, employee_id, effective_date=None):
               AND (a.end_date IS NULL OR a.end_date >= :effective_date)
             ORDER BY a.start_date DESC, a.assignment_id DESC LIMIT 1
         ) pa ON TRUE
-        LEFT JOIN public.positions p ON p.position_id=pa.position_id
+        LEFT JOIN {position_relation} p ON p.position_id=pa.position_id
         {catalog_join}
         LEFT JOIN public.org_units ou ON ou.unit_id=pa.org_unit_id
         WHERE e.employee_id=:employee_id
@@ -47,6 +59,9 @@ def snapshot_catalog_forms(payload, context):
     result = dict(payload)
     if not context:
         return result
+    for key in ('position_id', 'assignment_id', 'position_translation_status', 'position_document_form_status'):
+        if context.get(key) is not None:
+            result.setdefault(key, context[key])
     for locale, defaults in {
         "ru": {"position_document_nominative_ru": context.get("position_ru")},
         "kk": {"position_document_possessive_kk": context.get("position_kk"),
@@ -61,9 +76,9 @@ def snapshot_catalog_forms(payload, context):
             result[key] = forms
     if context.get("job_code"):
         result.setdefault("job_code", context["job_code"])
-        for key in ("position_title_ru", "position_title_kk", "org_unit_title_kk"):
-            if context.get(key):
-                result.setdefault(key, context[key])
+    for key in ("position_title_ru", "position_title_kk", "org_unit_title_kk"):
+        if context.get(key):
+            result.setdefault(key, context[key])
     for key, source in (("source_position_name", "position_name"), ("source_org_unit_name", "org_unit_name")):
         if context.get(source):
             result.setdefault(key, context[source])
