@@ -105,6 +105,9 @@ export PYTHONPATH="$NEW"
 .venv/bin/python -m scripts.personnel_dictionary_release snapshot --output "$STAGE/before-schema-preflight.json"
 .venv/bin/python -c 'import json,sys; p=json.load(open(sys.argv[1])); assert p["database_revision"]==["podup001"], "Unexpected revision; STOP"' "$STAGE/before-schema-preflight.json"
 .venv/bin/python -c 'from alembic.config import Config; from alembic.script import ScriptDirectory; assert ScriptDirectory.from_config(Config("alembic.ini")).get_heads()==["poprint001"]'
+.venv/bin/python -m scripts.personnel_release_systemd prepare --sha "$SHA" --output "$STAGE/systemd-switch.json"
+# Имя нового drop-in выбрано ПОСЛЕ всех фактических DropInPaths, включая zzzzzz-*.
+# Исходные файлы, права и владельцы фиксируются в плане и остаются неизменными.
 
 2. ОКНО И ПОЛНЫЙ BACKUP НА VPS (согласие 1)
 
@@ -136,18 +139,14 @@ VERIFY_DB="corpsite_release_verify_$STAMP"
 
 3. ПЕРЕКЛЮЧЕНИЕ КОДА И МИГРАЦИИ (согласие 2)
 
-BACKEND_DROPIN="/etc/systemd/system/corpsite-backend.service.d/90-personnel-$SHA.conf"
-FRONTEND_DROPIN="/etc/systemd/system/corpsite-frontend.service.d/90-personnel-$SHA.conf"
-test ! -e "$BACKEND_DROPIN"; test ! -e "$FRONTEND_DROPIN"
-sudo install -d /etc/systemd/system/corpsite-backend.service.d /etc/systemd/system/corpsite-frontend.service.d
-printf '[Service]\nWorkingDirectory=%s\nExecStart=\nExecStart=%s/.venv/bin/python -m uvicorn app.main:app --host 127.0.0.1 --port 8000\n' "$NEW" "$NEW" | sudo tee "$BACKEND_DROPIN" >/dev/null
-printf '[Service]\nWorkingDirectory=%s/corpsite-ui\nEnvironment=NEXT_DEPLOYMENT_ID=%s\nExecStart=\nExecStart=/usr/bin/node %s/corpsite-ui/node_modules/next/dist/bin/next start --hostname 127.0.0.1 --port 3000\n' "$NEW" "$SHA" "$NEW" | sudo tee "$FRONTEND_DROPIN" >/dev/null
+sudo -n "$NEW/.venv/bin/python" -B "$NEW/scripts/personnel_release_systemd.py" install --plan "$STAGE/systemd-switch.json"
 # Обычной смены app symlink недостаточно: текущие unit имеют абсолютные пути.
 ln -s "$NEW" "$BASE/app.next"
 mv -Tf "$BASE/app.next" "$BASE/app"
 sudo systemctl daemon-reload
-test "$(systemctl show corpsite-backend -p WorkingDirectory --value)" = "$NEW"
-test "$(systemctl show corpsite-frontend -p WorkingDirectory --value)" = "$NEW/corpsite-ui"
+.venv/bin/python -m scripts.personnel_release_systemd verify --plan "$STAGE/systemd-switch.json"
+# До миграций проверены ОБА WorkingDirectory, полные ExecStart (executable/argv),
+# последний приоритет нового drop-in и сохранность всех исходных файлов.
 .venv/bin/python -m alembic upgrade poprint001
 .venv/bin/python -m alembic current
 .venv/bin/python -m alembic heads
@@ -233,8 +232,7 @@ RESTORED_REV=$(python3 -c 'import json,sys; r=json.load(open(sys.argv[1]))["revi
 case "$RESTORED_REV" in
   podup001)
     install -m 0600 "$BACKUP/recovered.env" "$OLD/.env"
-    if test -f "$BACKEND_DROPIN"; then sudo rm -- "$BACKEND_DROPIN"; fi
-    if test -f "$FRONTEND_DROPIN"; then sudo rm -- "$FRONTEND_DROPIN"; fi
+    sudo -n "$NEW/.venv/bin/python" -B "$NEW/scripts/personnel_release_systemd.py" remove --plan "$STAGE/systemd-switch.json"
     RECOVERED_RELEASE="$OLD"
     ;;
   poprint001)
@@ -246,6 +244,9 @@ esac
 ln -s "$RECOVERED_RELEASE" "$BASE/app.recovery"
 mv -Tf "$BASE/app.recovery" "$BASE/app"
 sudo systemctl daemon-reload
+if test "$RESTORED_REV" = podup001; then
+  "$NEW/.venv/bin/python" -B "$NEW/scripts/personnel_release_systemd.py" verify-original --plan "$STAGE/systemd-switch.json"
+fi
 cd "$RECOVERED_RELEASE"
 export PYTHONPATH="$RECOVERED_RELEASE"
 .venv/bin/python -m alembic current
