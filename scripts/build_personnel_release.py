@@ -42,8 +42,13 @@ def main():
     subprocess.run(['git','bundle','create',str(bundle),base+'..master'],cwd=repo,check=True)
     subprocess.run(['git','bundle','verify',str(bundle)],cwd=repo,check=True,capture_output=True)
     frontend=payload/'frontend-next-linux.tar.gz'
-    with tarfile.open(frontend,'w:gz') as archive:
-        archive.add(ui/'.next',arcname='.next',filter=lambda info:None if info.name=='.next/cache' or info.name.startswith('.next/cache/') else info)
+    # Next creates Linux symlinks for external packages. Windows tarfile cannot
+    # read those links from a Docker bind mount; GNU tar preserves them intact.
+    subprocess.run(['docker','run','--rm','--pull=never','--network','none',
+        '--mount','type=bind,source='+str(a.built_checkout.resolve())+',target=/work,readonly',
+        '--mount','type=bind,source='+str(payload)+',target=/output',
+        'node:22.14.0-bookworm-slim','tar','-czf','/output/'+frontend.name,
+        '--exclude=.next/cache','-C','/work/corpsite-ui','.next'],check=True)
     changed=git('diff','--name-only',base,sha).splitlines()
     commits=git('log','--reverse','--format=%H %s',base+'..'+sha).splitlines()
     (payload/'changed-files.txt').write_text('\n'.join(changed)+'\n',encoding='utf-8')
