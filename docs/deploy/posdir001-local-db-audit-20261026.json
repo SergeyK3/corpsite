@@ -1,0 +1,204 @@
+[
+  {
+    "database": "corpsite",
+    "revisions": [
+      "hrlocal303"
+    ],
+    "position_columns": [
+      "position_id",
+      "name",
+      "category",
+      "name_kk",
+      "document_nominative_ru",
+      "document_possessive_kk",
+      "translation_status",
+      "document_form_status",
+      "record_kind",
+      "revision"
+    ],
+    "read_only": "on",
+    "status_counts": [
+      {
+        "translation_status": "confirmed",
+        "document_form_status": "needs_review",
+        "count": 1
+      },
+      {
+        "translation_status": "needs_review",
+        "document_form_status": "needs_review",
+        "count": 28
+      },
+      {
+        "translation_status": "confirmed",
+        "document_form_status": "confirmed",
+        "count": 112
+      }
+    ]
+  },
+  {
+    "database": "corpsite_alembic_recovery_20261004",
+    "revisions": [
+      "orgkk001"
+    ],
+    "position_columns": [
+      "position_id",
+      "name",
+      "category"
+    ],
+    "read_only": "on"
+  },
+  {
+    "database": "corpsite_jobcat_ui_20261005_test",
+    "revisions": [
+      "jobcat001"
+    ],
+    "position_columns": [
+      "position_id",
+      "name",
+      "category",
+      "name_kk"
+    ],
+    "read_only": "on"
+  },
+  {
+    "database": "corpsite_position_directory_709afeb6_test",
+    "revisions": [
+      "hrlocal303"
+    ],
+    "position_columns": [
+      "position_id",
+      "name",
+      "category",
+      "name_kk",
+      "document_nominative_ru",
+      "document_possessive_kk",
+      "translation_status",
+      "document_form_status",
+      "record_kind",
+      "revision"
+    ],
+    "read_only": "on",
+    "status_counts": [
+      {
+        "translation_status": "needs_review",
+        "document_form_status": "needs_review",
+        "count": 19
+      },
+      {
+        "translation_status": "confirmed",
+        "document_form_status": "needs_review",
+        "count": 7
+      },
+      {
+        "translation_status": "confirmed",
+        "document_form_status": "confirmed",
+        "count": 91
+      }
+    ]
+  },
+  {
+    "database": "corpsite_position_directory_a0dc1a8b_test",
+    "revisions": [
+      "hrlocal303"
+    ],
+    "position_columns": [
+      "position_id",
+      "name",
+      "category",
+      "name_kk",
+      "document_nominative_ru",
+      "document_possessive_kk",
+      "translation_status",
+      "document_form_status",
+      "record_kind",
+      "revision"
+    ],
+    "read_only": "on",
+    "status_counts": [
+      {
+        "translation_status": "needs_review",
+        "document_form_status": "needs_review",
+        "count": 18
+      },
+      {
+        "translation_status": "confirmed",
+        "document_form_status": "needs_review",
+        "count": 2
+      },
+      {
+        "translation_status": "confirmed",
+        "document_form_status": "confirmed",
+        "count": 91
+      }
+    ]
+  },
+  {
+    "database": "corpsite_stage3_rehearsal",
+    "revisions": [
+      "hrlocal301"
+    ],
+    "position_columns": [
+      "position_id",
+      "name",
+      "category",
+      "name_kk"
+    ],
+    "read_only": "on"
+  },
+  {
+    "database": "corpsite_supplementary_percent_bed7548d_test",
+    "revisions": [
+      "hrlocal303"
+    ],
+    "position_columns": [
+      "position_id",
+      "name",
+      "category",
+      "name_kk",
+      "document_nominative_ru",
+      "document_possessive_kk",
+      "translation_status",
+      "document_form_status",
+      "record_kind",
+      "revision"
+    ],
+    "read_only": "on",
+    "status_counts": [
+      {
+        "translation_status": "confirmed",
+        "document_form_status": "confirmed",
+        "count": 111
+      }
+    ]
+  },
+  {
+    "database": "corpsite_test",
+    "revisions": [
+      "hrtpl001"
+    ],
+    "position_columns": [
+      "position_id",
+      "name",
+      "category"
+    ],
+    "read_only": "on"
+  },
+  {
+    "database": "corpsite_work_allowance_d08093a7_test",
+    "revisions": [
+      "hrtpl001"
+    ],
+    "position_columns": [
+      "position_id",
+      "name",
+      "category"
+    ],
+    "read_only": "on"
+  },
+  {
+    "database": "postgres",
+    "revisions": [],
+    "position_columns": [],
+    "read_only": "on"
+  }
+]

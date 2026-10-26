@@ -1,0 +1,4543 @@
+{
+  "snapshot_time_utc": "2026-10-26T07:18:38.915397+00:00",
+  "scope": "Exact production schema and rows of four position dictionaries; synthetic personnel references only",
+  "production_read_only": true,
+  "transaction_rollback_schema_and_rows_exact": true,
+  "transaction_rollback_sequence_changes": {
+    "public.position_aliases_alias_id_seq": {
+      "before": {
+        "last_value": 1,
+        "is_called": false
+      },
+      "after": {
+        "last_value": 1,
+        "is_called": true
+      }
+    }
+  },
+  "transaction_rollback_including_sequences_exact": false,
+  "repeat_upgrade_exact_noop": true,
+  "all_111_text_values_equal_legacy_backfill": true,
+  "position_changes": [
+    {
+      "position_id": 1,
+      "name": "Архивариус",
+      "category": "admin",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Мұрағатшы"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Архивариус"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "мұрағатшысы"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 2,
+      "name": "Аудитор",
+      "category": "admin",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Аудитор"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Аудитор"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "аудиторы"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 3,
+      "name": "Бухгалтер",
+      "category": "admin",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Бухгалтер"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Бухгалтер"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "бухгалтері"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 4,
+      "name": "Бухгалтер-кассир",
+      "category": "admin",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Бухгалтер-кассир"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Бухгалтер-кассир"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "бухгалтер-кассирі"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 5,
+      "name": "Водитель",
+      "category": "technical",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Жүргізуші"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Водитель"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "жүргізушісі"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 6,
+      "name": "Врач",
+      "category": "medical",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Дәрігер"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Врач"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "дәрігері"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 7,
+      "name": "Главная медсестра",
+      "category": "medical",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Бас мейіргер"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Главная медсестра"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "бас мейіргері"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 8,
+      "name": "Главный бухгалтер",
+      "category": "admin",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Бас бухгалтер"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Главный бухгалтер"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "бас бухгалтері"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 9,
+      "name": "Дворник",
+      "category": "technical",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Аула сыпырушы"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Дворник"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "аула сыпырушысы"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 10,
+      "name": "Дезинфектор",
+      "category": "technical",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Дезинфектор"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Дезинфектор"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "дезинфекторы"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 11,
+      "name": "Диетсестра",
+      "category": "medical",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Диеталық мейіргер"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Диетсестра"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "диеталық мейіргері"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "variant"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 12,
+      "name": "Заведующая прачечной",
+      "category": "leaders",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Кір жуу орнының меңгерушісі"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Заведующая прачечной"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "кір жуу орнының меңгерушісі"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 13,
+      "name": "Заведующий складом",
+      "category": "leaders",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Қойма меңгерушісі"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Заведующий складом"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "қойма меңгерушісі"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 14,
+      "name": "Зам директора",
+      "category": "leaders",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Директордың орынбасары"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Зам директора"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "директордың орынбасары"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "variant"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 16,
+      "name": "Инженер",
+      "category": "technical",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Инженер"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Инженер"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "инженері"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 17,
+      "name": "Инженер-мед.физик",
+      "category": "technical",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Инженер-медицина физигі"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Инженер-мед.физик"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "инженер-медицина физигі"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "variant"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 18,
+      "name": "Кассир",
+      "category": "admin",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Кассир"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Кассир"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "кассирі"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 19,
+      "name": "Комендант",
+      "category": "technical",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Комендант"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Комендант"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "коменданты"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 20,
+      "name": "Курьер",
+      "category": "technical",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Курьер"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Курьер"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "курьері"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 21,
+      "name": "Кухрабочий",
+      "category": "technical",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Асүй жұмысшысы"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Кухрабочий"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "асүй жұмысшысы"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "variant"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 22,
+      "name": "Лаборант",
+      "category": "medical",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Зертханашы"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Лаборант"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "зертханашысы"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 23,
+      "name": "Лифтер",
+      "category": "technical",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Лифтші"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Лифтер"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "лифтшісі"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 24,
+      "name": "Машинист по стирке белья",
+      "category": "other",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Кір жуу машинисі"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Машинист по стирке белья"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "кір жуу машинисі"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 25,
+      "name": "Медбрат",
+      "category": "medical",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Мейіргер"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Медбрат"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "мейіргері"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "variant"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 26,
+      "name": "медрегистратор",
+      "category": "medical",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Медициналық тіркеуші"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "медрегистратор"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "медициналық тіркеушісі"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 27,
+      "name": "Медсестра",
+      "category": "medical",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Мейіргер"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Медсестра"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "мейіргері"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "variant"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 28,
+      "name": "Медстатистик",
+      "category": "medical",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Медициналық статистик"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Медстатистик"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "медициналық статистигі"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "search_synonym"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 29,
+      "name": "Менеджер",
+      "category": "admin",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Менеджер"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Менеджер"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "менеджері"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 30,
+      "name": "Монтажник",
+      "category": "technical",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Монтажшы"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Монтажник"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "монтажшысы"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 31,
+      "name": "Начальник отдела",
+      "category": "leaders",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Бөлім бастығы"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Начальник отдела"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "бөлім бастығы"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 32,
+      "name": "Оператор",
+      "category": "admin",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Оператор"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Оператор"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "операторы"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 33,
+      "name": "Переводчик",
+      "category": "admin",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Аудармашы"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Переводчик"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "аудармашысы"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 34,
+      "name": "Плотник",
+      "category": "technical",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Ағаш ұстасы"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Плотник"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "ағаш ұстасы"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 35,
+      "name": "Повар",
+      "category": "technical",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Аспаз"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Повар"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "аспазы"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 36,
+      "name": "Провизор",
+      "category": "medical",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Провизор"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Провизор"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "провизоры"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 37,
+      "name": "Психолог",
+      "category": "medical",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Психолог"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Психолог"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "психологі"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 38,
+      "name": "Рабочий",
+      "category": "technical",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Жұмысшы"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Рабочий"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "жұмысшысы"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 39,
+      "name": "Руков-ль службы химиотерапии",
+      "category": "medical",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Химиотерапия қызметінің басшысы"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Руков-ль службы химиотерапии"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "химиотерапия қызметінің басшысы"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "variant"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 40,
+      "name": "Руководитель хозяйственной службы",
+      "category": "leaders",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Шаруашылық қызметінің басшысы"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Руководитель хозяйственной службы"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "шаруашылық қызметінің басшысы"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 41,
+      "name": "Санитар",
+      "category": "medical",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Санитар"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Санитар"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "санитары"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 42,
+      "name": "Санитарка",
+      "category": "medical",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Санитар"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Санитарка"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "санитары"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 43,
+      "name": "Санитарка-буфетчица",
+      "category": "medical",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Санитар-буфетші"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Санитарка-буфетчица"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "санитар-буфетшісі"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 44,
+      "name": "сестра-хозяйка",
+      "category": "technical",
+      "fields": {
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "сестра-хозяйка"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "шаруа бикесі"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 45,
+      "name": "системный администратор",
+      "category": "technical",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Жүйелік әкімші"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "системный администратор"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "жүйелік әкімшісі"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 46,
+      "name": "Слесарь-сантехник",
+      "category": "technical",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Слесарь-сантехник"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Слесарь-сантехник"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "слесарь-сантехнигі"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 47,
+      "name": "Социальный работник",
+      "category": "other",
+      "fields": {
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Социальный работник"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": null
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 48,
+      "name": "Специалист",
+      "category": "admin",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Маман"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Специалист"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "маманы"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 49,
+      "name": "Старшая медсестра",
+      "category": "medical",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Аға мейіргер"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Старшая медсестра"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "аға мейіргері"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 50,
+      "name": "Старший лаборант",
+      "category": "medical",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Аға зертханашы"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Старший лаборант"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "аға зертханашысы"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 51,
+      "name": "Старший системный администратор",
+      "category": "technical",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Аға жүйелік әкімші"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Старший системный администратор"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "аға жүйелік әкімшісі"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 52,
+      "name": "Техник",
+      "category": "other",
+      "fields": {
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Техник"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": null
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 53,
+      "name": "Уборщик помещений",
+      "category": "technical",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Үй-жайларды тазалаушы"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Уборщик помещений"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "үй-жайларды тазалаушысы"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 54,
+      "name": "Фармацевт",
+      "category": "medical",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Фармацевт"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Фармацевт"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "фармацевті"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 55,
+      "name": "Экономист",
+      "category": "admin",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Экономист"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Экономист"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "экономисті"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "variant"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 56,
+      "name": "Электрик",
+      "category": "technical",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Электрик"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Электрик"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "электригі"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 57,
+      "name": "Электромонтер",
+      "category": "technical",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Электрмонтер"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Электромонтер"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "электрмонтері"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 58,
+      "name": "Юрист",
+      "category": "admin",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Заңгер"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Юрист"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "заңгері"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 59,
+      "name": "Главный экономист",
+      "category": "admin",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Бас экономист"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Главный экономист"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "бас экономисті"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 60,
+      "name": "Руководитель отдела госзакупок",
+      "category": "leaders",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Мемлекеттік сатып алу бөлімінің басшысы"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Руководитель отдела госзакупок"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "мемлекеттік сатып алу бөлімінің басшысы"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "variant"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 61,
+      "name": "Аналитик ЭРОБ",
+      "category": "admin",
+      "fields": {
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Аналитик ЭРОБ"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": null
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "variant"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 62,
+      "name": "Директор",
+      "category": "leaders",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Директор"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Директор"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "директоры"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 63,
+      "name": "Заведующий аптекой",
+      "category": "leaders",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Дәріхана меңгерушісі"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Заведующий аптекой"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "дәріхана меңгерушісі"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 64,
+      "name": "Заведующий гинекологическим отделением",
+      "category": "leaders",
+      "fields": {
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Заведующий гинекологическим отделением"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": null
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "variant"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 65,
+      "name": "Заведующий диспансерным отделением",
+      "category": "leaders",
+      "fields": {
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Заведующий диспансерным отделением"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": null
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "variant"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 66,
+      "name": "Заведующий инсультным отделением",
+      "category": "leaders",
+      "fields": {
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Заведующий инсультным отделением"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": null
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "variant"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 67,
+      "name": "Заведующий отделением амбулаторной хирургии",
+      "category": "leaders",
+      "fields": {
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Заведующий отделением амбулаторной хирургии"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": null
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "variant"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 68,
+      "name": "Заведующий отделением опухолей головы и шеи",
+      "category": "leaders",
+      "fields": {
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Заведующий отделением опухолей головы и шеи"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": null
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "variant"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 69,
+      "name": "Заведующий отделением радиологии",
+      "category": "leaders",
+      "fields": {
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Заведующий отделением радиологии"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": null
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "variant"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 70,
+      "name": "Заведующий отделением реабилитации",
+      "category": "leaders",
+      "fields": {
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Заведующий отделением реабилитации"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": null
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "variant"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 71,
+      "name": "Заведующий отделением химиотерапии 1",
+      "category": "leaders",
+      "fields": {
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Заведующий отделением химиотерапии 1"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": null
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "variant"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 72,
+      "name": "Заведующий отделением химиотерапии 2",
+      "category": "leaders",
+      "fields": {
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Заведующий отделением химиотерапии 2"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": null
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "variant"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 73,
+      "name": "Заведующий паллиативным отделением",
+      "category": "leaders",
+      "fields": {
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Заведующий паллиативным отделением"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": null
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "variant"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 74,
+      "name": "Заведующий хирургическим отделением 1",
+      "category": "leaders",
+      "fields": {
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Заведующий хирургическим отделением 1"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": null
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "variant"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 75,
+      "name": "Заведующий хирургическим отделением 2",
+      "category": "leaders",
+      "fields": {
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Заведующий хирургическим отделением 2"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": null
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "variant"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 76,
+      "name": "зам главного бухгалтера",
+      "category": "leaders",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Бас бухгалтердің орынбасары"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "зам главного бухгалтера"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "бас бухгалтердің орынбасары"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "variant"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 78,
+      "name": "Зам по диспансеру и внутр экспертизе",
+      "category": "leaders",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Диспансер және ішкі сараптама жөніндегі орынбасар"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Зам по диспансеру и внутр экспертизе"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "диспансер және ішкі сараптама жөніндегі орынбасары"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "variant"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 79,
+      "name": "Зам по лечебной работе",
+      "category": "leaders",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Емдеу жұмысы жөніндегі орынбасар"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Зам по лечебной работе"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "емдеу жұмысы жөніндегі орынбасары"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "variant"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 80,
+      "name": "Зам по стратегии",
+      "category": "leaders",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Стратегия жөніндегі орынбасар"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Зам по стратегии"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "стратегия жөніндегі орынбасары"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "variant"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 81,
+      "name": "зам рук-ля отдела статистики",
+      "category": "leaders",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Статистика бөлімі басшысының орынбасары"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "зам рук-ля отдела статистики"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "статистика бөлімі басшысының орынбасары"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "variant"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 82,
+      "name": "медстатистик по вводу в ЭРОБ",
+      "category": "medical",
+      "fields": {
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "медстатистик по вводу в ЭРОБ"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": null
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 83,
+      "name": "медстатистик по выводу из ЭРОБ",
+      "category": "medical",
+      "fields": {
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "медстатистик по выводу из ЭРОБ"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": null
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 84,
+      "name": "Руководитель",
+      "category": "leaders",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Басшы"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Руководитель"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "басшысы"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 85,
+      "name": "Руководитель ОВЭиПД",
+      "category": "leaders",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "ОВЭиПД басшысы"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Руководитель ОВЭиПД"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "ОВЭиПД басшысы"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 86,
+      "name": "Руководитель отдела кадров",
+      "category": "leaders",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Кадрлар бөлімінің басшысы"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Руководитель отдела кадров"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "кадрлар бөлімінің басшысы"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 87,
+      "name": "Руководитель отдела статистики",
+      "category": "leaders",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Статистика бөлімінің басшысы"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Руководитель отдела статистики"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "статистика бөлімінің басшысы"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 88,
+      "name": "Руководитель приемного отделения",
+      "category": "leaders",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Қабылдау бөлімшесінің басшысы"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Руководитель приемного отделения"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "қабылдау бөлімшесінің басшысы"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 89,
+      "name": "Старший экономист",
+      "category": "admin",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Аға экономист"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Старший экономист"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "аға экономисті"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 90,
+      "name": "экономист1",
+      "category": "admin",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Экономист"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "экономист1"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "экономисті"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "search_synonym"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 91,
+      "name": "экономист2",
+      "category": "admin",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Экономист"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "экономист2"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "экономисті"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "search_synonym"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 92,
+      "name": "экономист3",
+      "category": "admin",
+      "fields": {
+        "name_kk": {
+          "before": null,
+          "before_column_exists": true,
+          "after": "Экономист"
+        },
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "экономист3"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "экономисті"
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "search_synonym"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 93,
+      "name": "эксперт ОВЭиПД амбулаторный",
+      "category": "medical",
+      "fields": {
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "эксперт ОВЭиПД амбулаторный"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": null
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "variant"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 94,
+      "name": "эксперт ОВЭиПД госпитальный",
+      "category": "medical",
+      "fields": {
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "эксперт ОВЭиПД госпитальный"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": null
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "variant"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 95,
+      "name": "эксперт ОВЭиПД по регистрации жалоб",
+      "category": "medical",
+      "fields": {
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "эксперт ОВЭиПД по регистрации жалоб"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": null
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "variant"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 96,
+      "name": "эксперт ОВЭиПД по улаживанию жалоб",
+      "category": "medical",
+      "fields": {
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "эксперт ОВЭиПД по улаживанию жалоб"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": null
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "variant"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 97,
+      "name": "Эксперт по внутреннему обучению и аттестации",
+      "category": "admin",
+      "fields": {
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Эксперт по внутреннему обучению и аттестации"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": null
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 99,
+      "name": "Заместитель директора по административным вопросам",
+      "category": "leaders",
+      "fields": {
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Заместитель директора по административным вопросам"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": null
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 100,
+      "name": "Менеджер УЧР",
+      "category": "admin",
+      "fields": {
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Менеджер УЧР"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": null
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 101,
+      "name": "секретарь-референт",
+      "category": "admin",
+      "fields": {
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "секретарь-референт"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": null
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 102,
+      "name": "Переводчик казахского языка",
+      "category": "admin",
+      "fields": {
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Переводчик казахского языка"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": null
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 104,
+      "name": "Заведующий отделением",
+      "category": "other",
+      "fields": {
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Заведующий отделением"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": null
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 105,
+      "name": "Медицинский статистик",
+      "category": "medical",
+      "fields": {
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Медицинский статистик"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": null
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 106,
+      "name": "Заведующий ОТ и ТБ",
+      "category": "leaders",
+      "fields": {
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Заведующий ОТ и ТБ"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": null
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 107,
+      "name": "Санитар по транспортировке пациентов",
+      "category": "medical",
+      "fields": {
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Санитар по транспортировке пациентов"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": null
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 108,
+      "name": "Врач-эксперт",
+      "category": "medical",
+      "fields": {
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Врач-эксперт"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": null
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 109,
+      "name": "Руководитель административно-хозяйственной службы",
+      "category": "leaders",
+      "fields": {
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Руководитель административно-хозяйственной службы"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": null
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 110,
+      "name": "Буфетчица",
+      "category": "technical",
+      "fields": {
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Буфетчица"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": null
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 111,
+      "name": "Бухгалтер-экономист",
+      "category": "admin",
+      "fields": {
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Бухгалтер-экономист"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": null
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 112,
+      "name": "Руководитель отдела",
+      "category": "leaders",
+      "fields": {
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Руководитель отдела"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": null
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 113,
+      "name": "Старший ординатор",
+      "category": "medical",
+      "fields": {
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Старший ординатор"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": null
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 114,
+      "name": "Комплаенс-офицер",
+      "category": "admin",
+      "fields": {
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Комплаенс-офицер"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": null
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    },
+    {
+      "position_id": 115,
+      "name": "Главный инженер",
+      "category": "technical",
+      "fields": {
+        "document_nominative_ru": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "Главный инженер"
+        },
+        "document_possessive_kk": {
+          "before": null,
+          "before_column_exists": false,
+          "after": null
+        },
+        "translation_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "document_form_status": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "needs_review"
+        },
+        "record_kind": {
+          "before": null,
+          "before_column_exists": false,
+          "after": "standalone"
+        },
+        "revision": {
+          "before": null,
+          "before_column_exists": false,
+          "after": 1
+        }
+      }
+    }
+  ],
+  "aliases_after": [
+    {
+      "alias_id": 2,
+      "alias_text": "сестра хозяйка",
+      "position_id": 44,
+      "normalized_alias": "сестра хозяйка"
+    }
+  ],
+  "counts": {
+    "name_kk": 73,
+    "document_nominative_ru": 111,
+    "document_possessive_kk": 73,
+    "positions": 111,
+    "changed_existing_name_kk": 72,
+    "translation_confirmed": 0,
+    "translation_needs_review": 111,
+    "document_form_confirmed": 0,
+    "document_form_needs_review": 111
+  },
+  "record_kind_counts": {
+    "standalone": 76,
+    "variant": 31,
+    "search_synonym": 4
+  },
+  "ids_names_categories_and_protected_records_unchanged": true,
+  "protected_fingerprints": {
+    "employees": {
+      "count": 3,
+      "sha256": "9174d55cc81d3495af70aa86569fd47c4d246857ec01d484a72d375cd258f148"
+    },
+    "person_assignments": {
+      "count": 3,
+      "sha256": "7a9068554b234257bb1c0d2fa04fd93e682ff932a8028c7ea44cf0c10d8ba1e5"
+    },
+    "personnel_orders": {
+      "count": 1,
+      "sha256": "15f4102aa7abb6698dff535291ea6d53385392909ebeaab05968fc54aab369e0"
+    },
+    "personnel_order_items": {
+      "count": 1,
+      "sha256": "d7c724d8d469d09fb2cee9e4f6cec232464d463e0ba979f51cb95b4bd9fbe442"
+    }
+  },
+  "downgrade_refused": "Position directory rollback requires an explicit data-preserving plan",
+  "downgrade_refusal_preserves_state": true,
+  "post_commit_scoped_backup_restore_exact": true,
+  "temporary_databases": [
+    "corpsite_posdir_662e4cae2c9f4b5fa6d611c748a95c16_test",
+    "corpsite_posdir_f600346097414fa0aa40526db46f2136_test",
+    "corpsite_posdir_b9d66751ffcd4f25aa1188d628b8ec06_test"
+  ],
+  "plan_recalculated": false,
+  "temporary_databases_removed": true
+}

@@ -1,0 +1,112 @@
+﻿position_id;name_ru;category_unchanged;job_code;name_kk_before;name_kk_after;document_nominative_ru_after;document_possessive_kk_after;translation_status_after;document_form_status_after;record_kind_after;revision_after
+1;Архивариус;admin;ARCHIVIST;;Мұрағатшы;Архивариус;мұрағатшысы;needs_review;needs_review;standalone;1
+2;Аудитор;admin;AUDITOR;;Аудитор;Аудитор;аудиторы;needs_review;needs_review;standalone;1
+3;Бухгалтер;admin;ACCOUNTANT;;Бухгалтер;Бухгалтер;бухгалтері;needs_review;needs_review;standalone;1
+4;Бухгалтер-кассир;admin;ACCOUNTANT_CASHIER;;Бухгалтер-кассир;Бухгалтер-кассир;бухгалтер-кассирі;needs_review;needs_review;standalone;1
+5;Водитель;technical;DRIVER;;Жүргізуші;Водитель;жүргізушісі;needs_review;needs_review;standalone;1
+6;Врач;medical;PHYSICIAN;;Дәрігер;Врач;дәрігері;needs_review;needs_review;standalone;1
+7;Главная медсестра;medical;CHIEF_NURSE;;Бас мейіргер;Главная медсестра;бас мейіргері;needs_review;needs_review;standalone;1
+8;Главный бухгалтер;admin;ACC_HEAD;;Бас бухгалтер;Главный бухгалтер;бас бухгалтері;needs_review;needs_review;standalone;1
+9;Дворник;technical;YARD_CLEANER;;Аула сыпырушы;Дворник;аула сыпырушысы;needs_review;needs_review;standalone;1
+10;Дезинфектор;technical;DISINFECTOR;;Дезинфектор;Дезинфектор;дезинфекторы;needs_review;needs_review;standalone;1
+11;Диетсестра;medical;DIET_NURSE;;Диеталық мейіргер;Диетсестра;диеталық мейіргері;needs_review;needs_review;variant;1
+12;Заведующая прачечной;leaders;LAUNDRY_HEAD;;Кір жуу орнының меңгерушісі;Заведующая прачечной;кір жуу орнының меңгерушісі;needs_review;needs_review;standalone;1
+13;Заведующий складом;leaders;WAREHOUSE_HEAD;;Қойма меңгерушісі;Заведующий складом;қойма меңгерушісі;needs_review;needs_review;standalone;1
+14;Зам директора;leaders;DEPUTY_DIRECTOR;;Директордың орынбасары;Зам директора;директордың орынбасары;needs_review;needs_review;variant;1
+16;Инженер;technical;ENGINEER;;Инженер;Инженер;инженері;needs_review;needs_review;standalone;1
+17;Инженер-мед.физик;technical;MEDICAL_PHYSICIST_ENGINEER;;Инженер-медицина физигі;Инженер-мед.физик;инженер-медицина физигі;needs_review;needs_review;variant;1
+18;Кассир;admin;CASHIER;;Кассир;Кассир;кассирі;needs_review;needs_review;standalone;1
+19;Комендант;technical;FACILITY_SUPERVISOR;;Комендант;Комендант;коменданты;needs_review;needs_review;standalone;1
+20;Курьер;technical;COURIER;;Курьер;Курьер;курьері;needs_review;needs_review;standalone;1
+21;Кухрабочий;technical;KITCHEN_WORKER;;Асүй жұмысшысы;Кухрабочий;асүй жұмысшысы;needs_review;needs_review;variant;1
+22;Лаборант;medical;LAB_ASSISTANT;;Зертханашы;Лаборант;зертханашысы;needs_review;needs_review;standalone;1
+23;Лифтер;technical;LIFT_OPERATOR;;Лифтші;Лифтер;лифтшісі;needs_review;needs_review;standalone;1
+24;Машинист по стирке белья;other;LAUNDRY_MACHINE_OPERATOR;;Кір жуу машинисі;Машинист по стирке белья;кір жуу машинисі;needs_review;needs_review;standalone;1
+25;Медбрат;medical;NURSE;;Мейіргер;Медбрат;мейіргері;needs_review;needs_review;variant;1
+26;медрегистратор;medical;MEDICAL_REGISTRAR;;Медициналық тіркеуші;медрегистратор;медициналық тіркеушісі;needs_review;needs_review;standalone;1
+27;Медсестра;medical;NURSE;;Мейіргер;Медсестра;мейіргері;needs_review;needs_review;variant;1
+28;Медстатистик;medical;MEDICAL_STATISTICIAN;;Медициналық статистик;Медстатистик;медициналық статистигі;needs_review;needs_review;search_synonym;1
+29;Менеджер;admin;MANAGER;;Менеджер;Менеджер;менеджері;needs_review;needs_review;standalone;1
+30;Монтажник;technical;INSTALLER;;Монтажшы;Монтажник;монтажшысы;needs_review;needs_review;standalone;1
+31;Начальник отдела;leaders;DEPARTMENT_CHIEF;;Бөлім бастығы;Начальник отдела;бөлім бастығы;needs_review;needs_review;standalone;1
+32;Оператор;admin;OPERATOR;;Оператор;Оператор;операторы;needs_review;needs_review;standalone;1
+33;Переводчик;admin;TRANSLATOR;;Аудармашы;Переводчик;аудармашысы;needs_review;needs_review;standalone;1
+34;Плотник;technical;CARPENTER;;Ағаш ұстасы;Плотник;ағаш ұстасы;needs_review;needs_review;standalone;1
+35;Повар;technical;COOK;;Аспаз;Повар;аспазы;needs_review;needs_review;standalone;1
+36;Провизор;medical;PROVISOR;;Провизор;Провизор;провизоры;needs_review;needs_review;standalone;1
+37;Психолог;medical;PSYCHOLOGIST;;Психолог;Психолог;психологі;needs_review;needs_review;standalone;1
+38;Рабочий;technical;WORKER;;Жұмысшы;Рабочий;жұмысшысы;needs_review;needs_review;standalone;1
+39;Руков-ль службы химиотерапии;medical;CHEMOTHERAPY_SERVICE_HEAD;;Химиотерапия қызметінің басшысы;Руков-ль службы химиотерапии;химиотерапия қызметінің басшысы;needs_review;needs_review;variant;1
+40;Руководитель хозяйственной службы;leaders;HOUSEKEEPING_SERVICE_HEAD;;Шаруашылық қызметінің басшысы;Руководитель хозяйственной службы;шаруашылық қызметінің басшысы;needs_review;needs_review;standalone;1
+41;Санитар;medical;SANITARY_WORKER;;Санитар;Санитар;санитары;needs_review;needs_review;standalone;1
+42;Санитарка;medical;SANITARY_WORKER_FEMALE;;Санитар;Санитарка;санитары;needs_review;needs_review;standalone;1
+43;Санитарка-буфетчица;medical;SANITARY_BUFFET_WORKER;;Санитар-буфетші;Санитарка-буфетчица;санитар-буфетшісі;needs_review;needs_review;standalone;1
+44;сестра-хозяйка;technical;SISTER_HOUSEKEEPER;шаруа бикесі;шаруа бикесі;сестра-хозяйка;шаруа бикесі;needs_review;needs_review;standalone;1
+45;системный администратор;technical;SYSTEM_ADMINISTRATOR;;Жүйелік әкімші;системный администратор;жүйелік әкімшісі;needs_review;needs_review;standalone;1
+46;Слесарь-сантехник;technical;PLUMBER;;Слесарь-сантехник;Слесарь-сантехник;слесарь-сантехнигі;needs_review;needs_review;standalone;1
+47;Социальный работник;other;;;;Социальный работник;;needs_review;needs_review;standalone;1
+48;Специалист;admin;SPECIALIST;;Маман;Специалист;маманы;needs_review;needs_review;standalone;1
+49;Старшая медсестра;medical;SENIOR_NURSE;;Аға мейіргер;Старшая медсестра;аға мейіргері;needs_review;needs_review;standalone;1
+50;Старший лаборант;medical;SENIOR_LAB_ASSISTANT;;Аға зертханашы;Старший лаборант;аға зертханашысы;needs_review;needs_review;standalone;1
+51;Старший системный администратор;technical;SENIOR_SYSTEM_ADMINISTRATOR;;Аға жүйелік әкімші;Старший системный администратор;аға жүйелік әкімшісі;needs_review;needs_review;standalone;1
+52;Техник;other;;;;Техник;;needs_review;needs_review;standalone;1
+53;Уборщик помещений;technical;ROOM_CLEANER;;Үй-жайларды тазалаушы;Уборщик помещений;үй-жайларды тазалаушысы;needs_review;needs_review;standalone;1
+54;Фармацевт;medical;PHARMACIST;;Фармацевт;Фармацевт;фармацевті;needs_review;needs_review;standalone;1
+55;Экономист;admin;ECONOMIST;;Экономист;Экономист;экономисті;needs_review;needs_review;variant;1
+56;Электрик;technical;ELECTRICIAN;;Электрик;Электрик;электригі;needs_review;needs_review;standalone;1
+57;Электромонтер;technical;ELECTRICAL_FITTER;;Электрмонтер;Электромонтер;электрмонтері;needs_review;needs_review;standalone;1
+58;Юрист;admin;LAWYER;;Заңгер;Юрист;заңгері;needs_review;needs_review;standalone;1
+59;Главный экономист;admin;CHIEF_ECONOMIST;;Бас экономист;Главный экономист;бас экономисті;needs_review;needs_review;standalone;1
+60;Руководитель отдела госзакупок;leaders;PROC_HEAD;;Мемлекеттік сатып алу бөлімінің басшысы;Руководитель отдела госзакупок;мемлекеттік сатып алу бөлімінің басшысы;needs_review;needs_review;variant;1
+61;Аналитик ЭРОБ;admin;PHYSICIAN_STATISTICIAN;;;Аналитик ЭРОБ;;needs_review;needs_review;variant;1
+62;Директор;leaders;DIRECTOR;;Директор;Директор;директоры;needs_review;needs_review;standalone;1
+63;Заведующий аптекой;leaders;PHARMACY_HEAD;;Дәріхана меңгерушісі;Заведующий аптекой;дәріхана меңгерушісі;needs_review;needs_review;standalone;1
+64;Заведующий гинекологическим отделением;leaders;CLINICAL_DEPARTMENT_HEAD;;;Заведующий гинекологическим отделением;;needs_review;needs_review;variant;1
+65;Заведующий диспансерным отделением;leaders;CLINICAL_DEPARTMENT_HEAD;;;Заведующий диспансерным отделением;;needs_review;needs_review;variant;1
+66;Заведующий инсультным отделением;leaders;CLINICAL_DEPARTMENT_HEAD;;;Заведующий инсультным отделением;;needs_review;needs_review;variant;1
+67;Заведующий отделением амбулаторной хирургии;leaders;CLINICAL_DEPARTMENT_HEAD;;;Заведующий отделением амбулаторной хирургии;;needs_review;needs_review;variant;1
+68;Заведующий отделением опухолей головы и шеи;leaders;CLINICAL_DEPARTMENT_HEAD;;;Заведующий отделением опухолей головы и шеи;;needs_review;needs_review;variant;1
+69;Заведующий отделением радиологии;leaders;CLINICAL_DEPARTMENT_HEAD;;;Заведующий отделением радиологии;;needs_review;needs_review;variant;1
+70;Заведующий отделением реабилитации;leaders;CLINICAL_DEPARTMENT_HEAD;;;Заведующий отделением реабилитации;;needs_review;needs_review;variant;1
+71;Заведующий отделением химиотерапии 1;leaders;CLINICAL_DEPARTMENT_HEAD;;;Заведующий отделением химиотерапии 1;;needs_review;needs_review;variant;1
+72;Заведующий отделением химиотерапии 2;leaders;CLINICAL_DEPARTMENT_HEAD;;;Заведующий отделением химиотерапии 2;;needs_review;needs_review;variant;1
+73;Заведующий паллиативным отделением;leaders;CLINICAL_DEPARTMENT_HEAD;;;Заведующий паллиативным отделением;;needs_review;needs_review;variant;1
+74;Заведующий хирургическим отделением 1;leaders;CLINICAL_DEPARTMENT_HEAD;;;Заведующий хирургическим отделением 1;;needs_review;needs_review;variant;1
+75;Заведующий хирургическим отделением 2;leaders;CLINICAL_DEPARTMENT_HEAD;;;Заведующий хирургическим отделением 2;;needs_review;needs_review;variant;1
+76;зам главного бухгалтера;leaders;ACC_DEPUTY;;Бас бухгалтердің орынбасары;зам главного бухгалтера;бас бухгалтердің орынбасары;needs_review;needs_review;variant;1
+78;Зам по диспансеру и внутр экспертизе;leaders;DEP_OUTPATIENT_AUDIT;;Диспансер және ішкі сараптама жөніндегі орынбасар;Зам по диспансеру и внутр экспертизе;диспансер және ішкі сараптама жөніндегі орынбасары;needs_review;needs_review;variant;1
+79;Зам по лечебной работе;leaders;DEP_MED;;Емдеу жұмысы жөніндегі орынбасар;Зам по лечебной работе;емдеу жұмысы жөніндегі орынбасары;needs_review;needs_review;variant;1
+80;Зам по стратегии;leaders;DEP_STRATEGY;;Стратегия жөніндегі орынбасар;Зам по стратегии;стратегия жөніндегі орынбасары;needs_review;needs_review;variant;1
+81;зам рук-ля отдела статистики;leaders;STAT_HEAD_DEPUTY;;Статистика бөлімі басшысының орынбасары;зам рук-ля отдела статистики;статистика бөлімі басшысының орынбасары;needs_review;needs_review;variant;1
+82;медстатистик по вводу в ЭРОБ;medical;;;;медстатистик по вводу в ЭРОБ;;needs_review;needs_review;standalone;1
+83;медстатистик по выводу из ЭРОБ;medical;;;;медстатистик по выводу из ЭРОБ;;needs_review;needs_review;standalone;1
+84;Руководитель;leaders;HEAD;;Басшы;Руководитель;басшысы;needs_review;needs_review;standalone;1
+85;Руководитель ОВЭиПД;leaders;QM_HEAD;;ОВЭиПД басшысы;Руководитель ОВЭиПД;ОВЭиПД басшысы;needs_review;needs_review;standalone;1
+86;Руководитель отдела кадров;leaders;HR_HEAD;;Кадрлар бөлімінің басшысы;Руководитель отдела кадров;кадрлар бөлімінің басшысы;needs_review;needs_review;standalone;1
+87;Руководитель отдела статистики;leaders;STAT_HEAD;;Статистика бөлімінің басшысы;Руководитель отдела статистики;статистика бөлімінің басшысы;needs_review;needs_review;standalone;1
+88;Руководитель приемного отделения;leaders;ADMISSION_HEAD;;Қабылдау бөлімшесінің басшысы;Руководитель приемного отделения;қабылдау бөлімшесінің басшысы;needs_review;needs_review;standalone;1
+89;Старший экономист;admin;SENIOR_ECONOMIST;;Аға экономист;Старший экономист;аға экономисті;needs_review;needs_review;standalone;1
+90;экономист1;admin;ECONOMIST;;Экономист;экономист1;экономисті;needs_review;needs_review;search_synonym;1
+91;экономист2;admin;ECONOMIST;;Экономист;экономист2;экономисті;needs_review;needs_review;search_synonym;1
+92;экономист3;admin;ECONOMIST;;Экономист;экономист3;экономисті;needs_review;needs_review;search_synonym;1
+93;эксперт ОВЭиПД амбулаторный;medical;EXPERT_PHYSICIAN;;;эксперт ОВЭиПД амбулаторный;;needs_review;needs_review;variant;1
+94;эксперт ОВЭиПД госпитальный;medical;EXPERT_PHYSICIAN;;;эксперт ОВЭиПД госпитальный;;needs_review;needs_review;variant;1
+95;эксперт ОВЭиПД по регистрации жалоб;medical;EXPERT_PHYSICIAN;;;эксперт ОВЭиПД по регистрации жалоб;;needs_review;needs_review;variant;1
+96;эксперт ОВЭиПД по улаживанию жалоб;medical;EXPERT_PHYSICIAN;;;эксперт ОВЭиПД по улаживанию жалоб;;needs_review;needs_review;variant;1
+97;Эксперт по внутреннему обучению и аттестации;admin;;;;Эксперт по внутреннему обучению и аттестации;;needs_review;needs_review;standalone;1
+99;Заместитель директора по административным вопросам;leaders;;;;Заместитель директора по административным вопросам;;needs_review;needs_review;standalone;1
+100;Менеджер УЧР;admin;;;;Менеджер УЧР;;needs_review;needs_review;standalone;1
+101;секретарь-референт;admin;;;;секретарь-референт;;needs_review;needs_review;standalone;1
+102;Переводчик казахского языка;admin;;;;Переводчик казахского языка;;needs_review;needs_review;standalone;1
+104;Заведующий отделением;other;;;;Заведующий отделением;;needs_review;needs_review;standalone;1
+105;Медицинский статистик;medical;;;;Медицинский статистик;;needs_review;needs_review;standalone;1
+106;Заведующий ОТ и ТБ;leaders;;;;Заведующий ОТ и ТБ;;needs_review;needs_review;standalone;1
+107;Санитар по транспортировке пациентов;medical;;;;Санитар по транспортировке пациентов;;needs_review;needs_review;standalone;1
+108;Врач-эксперт;medical;;;;Врач-эксперт;;needs_review;needs_review;standalone;1
+109;Руководитель административно-хозяйственной службы;leaders;;;;Руководитель административно-хозяйственной службы;;needs_review;needs_review;standalone;1
+110;Буфетчица;technical;;;;Буфетчица;;needs_review;needs_review;standalone;1
+111;Бухгалтер-экономист;admin;;;;Бухгалтер-экономист;;needs_review;needs_review;standalone;1
+112;Руководитель отдела;leaders;;;;Руководитель отдела;;needs_review;needs_review;standalone;1
+113;Старший ординатор;medical;;;;Старший ординатор;;needs_review;needs_review;standalone;1
+114;Комплаенс-офицер;admin;;;;Комплаенс-офицер;;needs_review;needs_review;standalone;1
+115;Главный инженер;technical;;;;Главный инженер;;needs_review;needs_review;standalone;1

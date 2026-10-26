@@ -6,7 +6,7 @@ from tests.test_personnel_order_print_titles_migration_isolated import fresh_dat
 
 
 def test_positions_migration_edit_reopen_alias_and_transaction_rollback(fresh_database):
-    from app.db.position_directory_migration import upgrade
+    from app.db.position_directory_review_migration import upgrade
     from app.directory.positions_routes import PositionUpsert
     from app.services.position_directory_service import save_details, get_position, resolve_existing_name
     with fresh_database.begin() as c:
