@@ -1,0 +1,2982 @@
+{
+  "format": "personnel-dictionaries-readonly-snapshot-v1",
+  "time_utc": "2026-10-26T06:53:54.271884+00:00",
+  "release_path": "/opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98",
+  "commands": {
+    "sha": {
+      "returncode": 0,
+      "stdout": "12985ba17bc6b794fcf03733c95f423b0a720b98\n",
+      "stderr": ""
+    },
+    "services": {
+      "returncode": 0,
+      "stdout": "MainPID=448941\nWorkingDirectory=/opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98\nId=corpsite-backend.service\nActiveState=active\n\nMainPID=448947\nWorkingDirectory=/opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/corpsite-ui\nId=corpsite-frontend.service\nActiveState=active\n",
+      "stderr": ""
+    },
+    "alembic_current": {
+      "returncode": 0,
+      "stdout": "podup001 (head)\n",
+      "stderr": ""
+    },
+    "alembic_heads": {
+      "returncode": 0,
+      "stdout": "podup001 (personnel_settings) (head)\n",
+      "stderr": ""
+    },
+    "alembic_history": {
+      "returncode": 0,
+      "stdout": "Rev: podup001 (head)\nParent: hrjobmerge001\nBranch names: personnel_settings\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/podup001_active_order_header_uniqueness.py\n\n    Align header uniqueness with dated, non-deleted personnel orders.\n\nRev: hrjobmerge001 (mergepoint)\nMerges: hrrecall001, jobcat001\nBranch names: personnel_settings\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/hrjobmerge001_personnel_templates_and_job_catalog.py\n\n    Join the independently reviewed personnel templates and profession catalog branches.\n\nRev: hrrecall001\nParent: hrtpl001\nBranch names: personnel_settings\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/hrrecall001_annual_leave_recall_drafts.py\n\n    Allow annual-leave recall drafts and atomic retyping of unused templates.\n\nRev: hrtpl001\nParent: hrlang001\nBranch names: personnel_settings\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/hrtpl001_independent_personnel_templates.py\n\n    Independent personnel templates, preserving all existing version identities.\n\nRev: hrlang001\nParent: orgkk001\nBranch names: personnel_settings\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/hrlang001_personnel_section_language.py\n\n    Shared personnel section language; no document data changes.\n\nRev: jobcat001\nParent: poskk001\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/jobcat001_job_positions_catalog.py\n\n    Canonical job catalog and legacy lookup, without reassignment or data import.\n\nRev: poskk001\nParent: orgkk001\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/poskk001_add_position_code_and_kazakh_name.py\n\n    Add an optional Kazakh name to positions.\n    \n    Revision ID: poskk001\n    Revises: orgkk001\n\nRev: orgkk001 (branchpoint)\nParent: pojson019\nBranches into: hrlang001, poskk001\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/orgkk001_add_org_unit_kazakh_name_fields.py\n\n    Add optional Kazakh org-unit name and document-form fields.\n    \n    Revision ID: orgkk001\n    Revises: pojson019\n\nRev: pojson019\nParent: pojson018\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/pojson019_privileged_physical_personnel_order_delete.py\n\n    Permit a transaction-local, privileged physical personnel-order cleanup.\n\nRev: pojson018\nParent: pojson017\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/pojson018_personnel_order_soft_delete.py\n\n    Keep deleted DRAFT personnel orders as immutable audit evidence.\n    \n    Revision ID: pojson018\n    Revises: pojson017\n\nRev: pojson017\nParent: pojson016\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/pojson017_personnel_order_draft_deletion_audit.py\n\n    Preserve immutable evidence for safe personnel-order draft deletion.\n    \n    Revision ID: pojson017\n    Revises: pojson016\n\nRev: pojson016\nParent: pojson015\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/pojson016_technical_personnel_order_cleanup_batches.py\n\n    Add immutable batch audit correlation for technical-order cleanup.\n    \n    Revision ID: pojson016\n    Revises: pojson015\n\nRev: pojson015\nParent: pojson014\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/pojson015_technical_personnel_order_cleanup.py\n\n    Add an immutable audit sink for the narrow technical-order cleanup handler.\n    \n    Revision ID: pojson015\n    Revises: pojson014\n\nRev: pojson014\nParent: pojson013\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/pojson014_template_publication_and_applications.py\n\n    Publish personnel templates and retain order-template application history.\n    \n    Revision ID: pojson014\n    Revises: pojson013\n\nRev: pojson013\nParent: pojson012\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/pojson013_personnel_order_template_drafts.py\n\n    Add draft versions for the first editable personnel-order template.\n    \n    Revision ID: pojson013\n    Revises: pojson012\n\nRev: pojson012\nParent: pojson011\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/pojson012_repair_childcare_return_event_check.py\n\n    Repair the employee-event CHECK for childcare-return order events.\n    \n    Revision ID: pojson012\n    Revises: pojson011\n\nRev: pojson011\nParent: pojson010\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/pojson011_childcare_return_event.py\n\n    Allow applied childcare-return personnel-order events.\n    \n    Revision ID: pojson011\n    Revises: pojson010\n\nRev: pojson010\nParent: pojson009\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/pojson010_manual_personnel_order_draft.py\n\n    Allow explicit manual personnel-order drafts.\n\nRev: pojson009\nParent: pojson008\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/pojson009_document_item_correction.py\n\n    Typed personnel-order document item correction.\n\nRev: pojson008\nParent: pojson007\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/pojson008_document_header_correction.py\n\n    Typed personnel-order document header correction.\n\nRev: pojson007\nParent: pojson006\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/pojson007_personnel_order_document_review.py\n\n    Append-only personnel-order document review state.\n\nRev: pojson006\nParent: pojson005\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/pojson006_personnel_order_acknowledgements.py\n\n    Append-only acknowledgement events for personnel orders.\n\nRev: pojson005\nParent: pojson004\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/pojson005_childcare_leave_grant.py\n\n    Allow the distinct childcare-leave grant personnel-order type.\n    \n    The code follows the committed pojson chain and changes only check\n    constraints; it never rewrites existing orders or editorial blocks.\n\nRev: pojson004\nParent: pojson003\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/pojson004_return_from_childcare_leave.py\n\n    Allow the return-from-childcare-leave personnel-order type.\n\nRev: pojson003\nParent: pojson002\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/pojson003_supplementary_pay_item_type.py\n\n    Allow supplementary-pay draft items.\n\nRev: pojson002\nParent: pojson001\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/pojson002_supplementary_pay_header_type.py\n\n    Allow supplementary-pay draft headers after structured storage.\n\nRev: pojson001\nParent: hdc001checklist\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/pojson001_structured_personnel_order_storage.py\n\n    Add common structured storage to personnel order headers.\n    \n    The field is intentionally nullable-free only through its empty JSON default;\n    existing order_number and order_date values remain nullable for legacy drafts.\n\nRev: hdc001checklist\nParent: ua004telegrambindcodes\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/hdc001_hiring_document_checklist.py\n\n    Store the current editable hiring document checklist.\n\nRev: ua004telegrambindcodes\nParent: ua003telegramrecovery\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/ua004telegrambindcodes_persistent_bind_codes.py\n\n    Persist one-time Telegram bind codes across backend processes.\n    \n    Revision ID: ua004telegrambindcodes\n    Revises: ua003telegramrecovery\n\nRev: ua003telegramrecovery\nParent: ua002accessadmin\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/ua003telegramrecovery_telegram_password_recovery.py\n\n    Telegram password recovery request storage.\n    \n    Revision ID: ua003telegramrecovery\n    Revises: ua002accessadmin\n\nRev: ua002accessadmin\nParent: adm001canonicalroles\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/ua002_user_access_admin_permission.py\n\n    WP-ACCESS-002: seed the explicit user-access administration permission.\n    \n    Revision ID: ua002accessadmin\n    Revises: adm001canonicalroles\n    \n    This continues the canonical administrative-role head.  The independent data\n    exchange head remains deliberately unmerged.  The migration creates only the\n    permission catalogue row: it grants USER_ACCESS_ADMIN to no role and no user.\n\nRev: adm001canonicalroles\nParent: qmt001trainingexpert\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/adm001_canonical_administrative_platform_roles.py\n\n    Seed missing canonical administrative Platform Roles without permissions.\n    \n    Revision ID: adm001canonicalroles\n    Revises: qmt001trainingexpert\n\nRev: qmt001trainingexpert\nParent: emp001employee\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/qmt001_training_expert_platform_role.py\n\n    Add the neutral QM training and attestation expert Platform Role.\n    \n    Revision ID: qmt001trainingexpert\n    Revises: emp001employee\n\nRev: emp001employee\nParent: aec001activecard\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/emp001_employee_platform_role.py\n\n    Add the neutral EMPLOYEE Platform Role.\n    \n    Revision ID: emp001employee\n    Revises: aec001activecard\n\nRev: aec001activecard\nParent: per002eventscope\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/aec001_active_employee_card_audit_fingerprint.py\n\n    Restore immutable Person-link journal fingerprint on databases created by old ADR-065 DDL.\n\nRev: per002eventscope\nParent: per001eventsread\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/per002_personnel_event_visibility.py\n\n    Separate event-only organisational scope from personnel-card visibility.\n\nRev: per001eventsread\nParent: pce001cardedit\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/per001_personnel_events_read.py\n\n    Add the narrow read-only personnel event journal permission.\n\nRev: pce001cardedit\nParent: ppr005qnotedetails01\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/pce001_personnel_card_edit.py\n\n    Person-rooted personnel-card correction permission and contacts.\n\nRev: ppr005qnotedetails01\nParent: ppr005pcategoryfix01\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/ppr005q_note_fact_details.py\n\n    Add editable pension details and append-only fact tombstones.\n    \n    The original import row remains the source of the human-readable note.  This\n    migration only extends the canonical, versioned status-fact model used by the\n    PPR card.\n\nRev: ppr005pcategoryfix01\nParent: ppr005ocategory01\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/ppr005pcategoryfix01_repair_category_constraint.py\n\n    Repair deployments where PostgreSQL retained its autogenerated CHECK name.\n\nRev: ppr005ocategory01\nParent: ppr005nimportiinidx01\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/ppr005ocategory01_qualification_category_section.py\n\n    Add persisted qualification-category migration-status section.\n\nRev: ppr005nimportiinidx01\nParent: ppr005madditionalfix01\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/ppr005nimportiinidx01_projection_import_iin_index.py\n\n    Index deterministic import-card IIN lookup used by status projection.\n\nRev: ppr005madditionalfix01\nParent: ppr005ladditional01\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/ppr005madditionalfix01_repair_note_section_constraint.py\n\n    Repair already-stamped Note-section constraint deployments.\n\nRev: ppr005ladditional01\nParent: ppr005kimport01\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/ppr005ladditional01_note_section_projection.py\n\n    Add persisted Note section to the migration-status projection.\n\nRev: ppr005kimport01\nParent: ppr005jcanon01\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/ppr005kimport01_import_profile_projection_provenance.py\n\n    Persist selected import-profile provenance for canonical status evaluation.\n\nRev: ppr005jcanon01\nParent: ppr005iadd01\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/ppr005jcanon01_canonical_stage0_cohort.py\n\n    Allow Stage 0 cohorts sourced directly from canonical HR relations.\n    \n    Import cohorts retain their mandatory import-batch/row provenance.  Canonical\n    cohorts use the explicit CANONICAL_HR source and therefore have no invented\n    import batch or row.\n\nRev: ppr005iadd01\nParent: iq2a1b2c3d4\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/ppr005iadd01_person_status_facts.py\n\n    Append-only disability and pension facts from HR-import notes.\n    \n    The migration is schema-only.  Processing the current control-list batch is\n    performed explicitly by the importer service, never as a migration side\n    effect.\n\nRev: iq2a1b2c3d4\nParent: ppr005hdept01\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/iq2a1b2c3d4_hr_import_identity_quality_foundation.py\n\n    IQ-2 identity-quality state and immutable review events (schema only).\n\nRev: ppr005hdept01\nParent: ppr005gfull01\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/ppr005hdept01_hr_control_list_department_targets.py\n\n    Seed HR control-list department targets by stable organizational codes.\n    \n    Revision ID: ppr005hdept01\n    Revises: ppr005gfull01\n\nRev: ppr005gfull01\nParent: ppr005fevent01\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/ppr005gfull01_wp_ppr_mig_005g_full_section_projection.py\n\n    WP-PPR-MIG-005G-A full ten-section persisted projection catalog.\n    \n    The upgrade adds only safe status rows for existing active-universe projection\n    members.  It neither reads source payloads nor copies personnel values.\n\nRev: ppr005fevent01\nParent: ppr005drepair01\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/ppr005fevent01_wp_ppr_mig_005f_a_event_outbox.py\n\n    WP-PPR-MIG-005F-A immutable correction events and targeted projection outbox.\n\nRev: ppr005drepair01\nParent: ppr005cread01\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/ppr005drepair01_restore_missing_ppr_schema.py\n\n    Repair a historically stamped-but-missing PPR schema prefix.\n    \n    Some local databases were stamped at ``ppr005cread01`` after the PPR\n    revisions had been skipped outside Alembic.  A later normal upgrade then fails\n    at ``ppr005fevent01`` because its foreign keys refer to a table which the\n    stamped prefix says already exists.  This revision is deliberately placed\n    between 005C and 005F: healthy databases are a no-op, while the known all-or-\n    nothing missing prefix is restored before any dependent migration is run.\n    \n    It never changes ``alembic_version`` itself and never deletes or recreates an\n    existing table.  A partial prefix is rejected rather than guessed at.\n\nRev: ppr005cread01\nParent: ppr005bproj01\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/ppr005cread01_wp_ppr_mig_005c_status_read.py\n\n    WP-PPR-MIG-005C report-read permission; HR_HEAD default only.\n\nRev: ppr005bproj01\nParent: ppr3trainingsnap01\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/ppr005bproj01_wp_ppr_mig_005b_status_projection.py\n\n    WP-PPR-MIG-005B safe persisted migration-status read model.\n    \n    No backfill is performed here: a caller must explicitly create/rebuild a universe.\n\nRev: ppr3trainingsnap01\nParent: ppr3training001\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/s3t5v6w7x8y9_ppr_stage3_training_candidate_snapshot.py\n\n    Require an immutable structured TrainingCandidate snapshot for Stage 3.\n\nRev: ppr3training001\nParent: s2e2f3g4h5i6\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/s3t4u5v6w7x8_ppr_stage3_training_envelope.py\n\n    Stage 3 training extension of the shared PPR stage envelope.\n\nRev: s2e2f3g4h5i6\nParent: s2e1d2u3c4a5\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/s2e2f3g4h5i6_enable_pmf_education_domain.py\n\n    Enable the existing PMF education domain for approved Stage 2.\n    \n    The migration is deliberately an activation only: it neither creates PMF\n    objects nor writes canonical education data.\n\nRev: s2e1d2u3c4a5\nParent: s1g0e1n2r3a4\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/s2e1d2u3c4a5_ppr_stage2_education_envelope.py\n\n    Stage 2 education thin envelope over PMF drafts.\n\nRev: s1g0e1n2r3a4\nParent: s0p0r0e0v0f0\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/s1g0e1n2r3a4_stage1_general_draft_runs.py\n\n    Stage 1 general-information draft run persistence.\n\nRev: s0p0r0e0v0f0\nParent: m1n2o3p4q5r6\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/s0p0r0e0v0f0_ppr_stage0_cohort_preview_freeze.py\n\n    Stage 0 PPR cohort PREVIEW/FREEZE persistence and RBAC.\n\nRev: m1n2o3p4q5r6\nParent: td006afnd601\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/m1n2o3p4q5r6_adr065_person_link_operations.py\n\n    ADR-065 first slice: immutable Person link operation journal.\n\nRev: td006afnd601\nParent: td005exec501\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/td006afnd601_wp_td_006a_system_identity_foundation.py\n\n    WP-TD-006A: test system identity deletion foundation (no execution API).\n    \n    Revision ID: td006afnd601\n    Revises: td005exec501\n\nRev: td005exec501\nParent: td005audit401\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/td005exec501_wp_td_005_applicant_execution.py\n\n    WP-TD-005 stage 5: transactional applicant-only execution state contract.\n    \n    Revision ID: td005exec501\n    Revises: td005audit401\n\nRev: td005audit401\nParent: td005fp3v101\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/td005audit401_wp_td_005_execute_audit.py\n\n    WP-TD-005 stage 4: execute permission gate and append-only audit contract.\n    \n    Revision ID: td005audit401\n    Revises: td005fp3v101\n\nRev: td005fp3v101\nParent: td005tomb201\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/td005fp3v101_wp_td_005_fingerprint_v2.py\n\n    WP-TD-005 stage 3: provenance state and versioned relationship fingerprint.\n    \n    Revision ID: td005fp3v101\n    Revises: td005tomb201\n\nRev: td005tomb201\nParent: td005m1v2a01\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/td005tomb201_wp_td_005_pii_free_tombstones.py\n\n    WP-TD-005 stage 2: PII-free append-only tombstones.\n    \n    Revision ID: td005tomb201\n    Revises: td005m1v2a01\n\nRev: td005m1v2a01\nParent: b1c2d3e4f5a6\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/td005m1v2a01_wp_td_005_manifest_v2.py\n\n    WP-TD-005 stage 1: PERSON-root applicant manifest v2.\n    \n    Revision ID: td005m1v2a01\n    Revises: b1c2d3e4f5a6\n\nRev: b1c2d3e4f5a6\nParent: a0b1c2d3e4f5\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/b1c2d3e4f5a6_wp_td_002d_relationship_lookup_indexes.py\n\n    WP-TD-002D: indexes for batched relationship lookup predicates.\n    \n    Revision ID: b1c2d3e4f5a6\n    Revises: a0b1c2d3e4f5\n\nRev: a0b1c2d3e4f5\nParent: z9a0b1c2d3e4\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/a0b1c2d3e4f5_wp_td_002c_recursive_projection_guard.py\n\n    WP-TD-002C: recursive PII-key guard for immutable result projections.\n    \n    Revision ID: a0b1c2d3e4f5\n    Revises: z9a0b1c2d3e4\n\nRev: z9a0b1c2d3e4\nParent: y8z9a0b1c2d3\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/z9a0b1c2d3e4_wp_td_002b_foundation_review_closure.py\n\n    WP-TD-002B: immutable command result projection.\n    \n    Revision ID: z9a0b1c2d3e4\n    Revises: y8z9a0b1c2d3\n\nRev: y8z9a0b1c2d3\nParent: x7y8z9a0b1c2\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/y8z9a0b1c2d3_wp_td_002_test_personnel_deletion_foundation.py\n\n    WP-TD-002: test personnel deletion approval foundation (no deletion).\n    \n    Revision ID: y8z9a0b1c2d3\n    Revises: x7y8z9a0b1c2\n\nRev: x7y8z9a0b1c2\nParent: w6x7y8z9a0b1\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/x7y8z9a0b1c2_wp_cl_003_control_list_export_audit.py\n\n    WP-CL-003: register the control-list export audit event.\n    \n    Revision ID: x7y8z9a0b1c2\n    Revises: w6x7y8z9a0b1\n\nRev: w6x7y8z9a0b1\nParent: v5w6x7y8z9a\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/w6x7y8z9a0b1_wp_cl_002_control_list_export_permission.py\n\n    WP-CL-002: register the control-list bulk-export permission.\n\nRev: v5w6x7y8z9a\nParent: u4v5w6x7y8z\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/v5w6x7y8z9a_wp_po_002_stage_2d_archive_review.py\n\n    WP-PO-002 Stage 2D: single-row archive review.\n\nRev: u4v5w6x7y8z\nParent: t3u4v5w6x7y\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/u4v5w6x7y8z_wp_po_002_stage_2a_archive_import_staging.py\n\n    WP-PO-002 Stage 2A — operational order archive import staging.\n    \n    Revision ID: u4v5w6x7y8z\n    Revises: t3u4v5w6x7y\n\nRev: t3u4v5w6x7y\nParent: s2t3u4v5w6x\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/t3u4v5w6x7y_reference_positions_org_units.py\n\n    Seed personnel positions and organizational units safely.\n    \n    Revision ID: t3u4v5w6x7y\n    Revises: s2t3u4v5w6x\n\nRev: s2t3u4v5w6x\nParent: r1s2t3u4v5w6\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/s2t3u4v5w6x_seed_org_units_general_it_transfuse.py\n\n    seed GENERAL, IT and TRANSFUSE organizational units\n    \n    Revision ID: s2t3u4v5w6x\n    Revises: r1s2t3u4v5w6\n\nRev: r1s2t3u4v5w6\nParent: p1q2r3s4t5u6\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/r1s2t3u4v5w6_leave_order_header_types.py\n\n    allow leave types as personnel order headers\n    \n    Revision ID: r1s2t3u4v5w6\n    Revises: p1q2r3s4t5u6\n\nRev: p1q2r3s4t5u6\nParent: o1p2q3r4s5t6\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/p1q2r3s4t5u6_oserova_hr_reg_enrollment_grant.py\n\n    Seed ordinary HR platform role and Oserova's personal enrollment grant.\n    \n    This is deliberately a USER-targeted grant.  HR_reg remains a neutral\n    platform role and does not grant HR_ENROLLMENT_MANAGER to its other users.\n\nRev: o1p2q3r4s5t6\nParent: n1o2p3q4r5s6\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/o1p2q3r4s5t6_personnel_order_annual_leave_events.py\n\n    allow annual-leave events linked to personnel order items\n    \n    Revision ID: o1p2q3r4s5t6\n    Revises: n1o2p3q4r5s6\n\nRev: n1o2p3q4r5s6\nParent: m0n1o2p3q4r5\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/n1o2p3q4r5s6_repair_personnel_order_evidence_scopes.py\n\n    Repair missing ADR-065 personnel-order evidence scopes.\n    \n    Revision ID: n1o2p3q4r5s6\n    Revises: m0n1o2p3q4r5\n\nRev: m0n1o2p3q4r5\nParent: k8l9m0n1o2p3\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/m0n1o2p3q4r5_leave_draft_order_item_types.py\n\n    allow minimal leave draft item types\n    \n    Revision ID: m0n1o2p3q4r5\n    Revises: k8l9m0n1o2p3\n\nRev: k8l9m0n1o2p3\nParent: l9m0n1o2p3q4\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/k8l9m0n1o2p3_employee_termination_verification.py\n\n    Add verification-aware employee termination records.\n    \n    Revision ID: k8l9m0n1o2p3\n    Revises: l9m0n1o2p3q4\n\nRev: l9m0n1o2p3q4\nParent: j7k8l9m0n1o2\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/l9m0n1o2p3q4_adr065_preflight_schema_dependencies.py\n\n    ADR-065 preflight schema dependencies.\n    \n    Revision ID: l9m0n1o2p3q4\n    Revises: j7k8l9m0n1o2\n\nRev: j7k8l9m0n1o2\nParent: i6j7k8l9m0n1\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/j7k8l9m0n1o2_adr046_f2_allowed_position_audit_events.py\n\n    Register ADR-046 F2 allowed-position security audit event types.\n    \n    Revision ID: j7k8l9m0n1o2\n    Revises: i6j7k8l9m0n1\n\nRev: i6j7k8l9m0n1\nParent: h5c6d7e8f9a0\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/i6j7k8l9m0n1_hr_head_incoming_info_register_grant.py\n\n    Grant HR_HEAD the separate Incoming Information registration permission.\n\nRev: h5c6d7e8f9a0\nParent: g4b5c6d7e8f9\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/h5c6d7e8f9a0_hr_head_incoming_info_read_grant_correction.py\n\n    Correct an existing HR_HEAD Incoming Information read grant by role code.\n    \n    This is a one-time data correction for populated installations.  A clean\n    database has neither the historical HR_HEAD role nor an audit grantor, so there\n    is nothing to correct and the migration must be a no-op in that case.\n\nRev: g4b5c6d7e8f9\nParent: f3a4b5c6d7e8\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/g4b5c6d7e8f9_hr_head_incoming_info_read_grant.py\n\n    Grant HR_HEAD minimal read-only access to Incoming Information.\n\nRev: f3a4b5c6d7e8\nParent: e2f3a4b5c6d7\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/f3a4b5c6d7e8_wp_ii_003_review_fixes.py\n\n    WP-II-003 — Incoming Information review fixes: control fields and restricted bypass.\n\nRev: e2f3a4b5c6d7\nParent: d1e2f3a4b5c6\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/e2f3a4b5c6d7_wp_ii_002_workflow_fsm.py\n\n    WP-II-002 — Incoming Information workflow FSM foundation fix and schema.\n\nRev: d1e2f3a4b5c6\nParent: c0d1e2f3a4b5\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/d1e2f3a4b5c6_wp_ii_001_foundation.py\n\n    WP-II-001 — Incoming Information foundation schema, seed, permissions.\n\nRev: c0d1e2f3a4b5\nParent: a9b0c1d2e3f4\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/c0d1e2f3a4b5_adr061_001b_person_photo_schema_foundation.py\n\n    WP-ADR061-001B: canonical person photo schema foundation (ADR-061 rev.3).\n    \n    Revision ID: c0d1e2f3a4b5\n    Revises: a9b0c1d2e3f4\n\nRev: a9b0c1d2e3f4\nParent: q8r9s0t1u2v3\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/a9b0c1d2e3f4_employee_hard_delete_audit_event.py\n\n    Register EMPLOYEE_HARD_DELETED security audit event type.\n    \n    Revision ID: a9b0c1d2e3f4\n    Revises: q8r9s0t1u2v3\n\nRev: q8r9s0t1u2v3\nParent: p7q8r9s0t1u2\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/q8r9s0t1u2v3_wp_ppr_card_coordination_003_reconciliation_decisions.py\n\n    WP-PPR-CARD-COORDINATION-003: reconciliation decision foundation.\n    \n    Revision ID: q8r9s0t1u2v3\n    Revises: p7q8r9s0t1u2\n\nRev: p7q8r9s0t1u2\nParent: o6p7q8r9s0t1\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/p7q8r9s0t1u2_wp_ver_003_employment_revision_link.py\n\n    WP-VER-003 — employment_episode pending revision link + task identity.\n    \n    Revision ID: p7q8r9s0t1u2\n    Revises: o6p7q8r9s0t1\n\nRev: o6p7q8r9s0t1\nParent: n5o6p7q8r9s0\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/o6p7q8r9s0t1_wp_ver_002_personnel_verification_foundation.py\n\n    WP-VER-002 — personnel verification foundation (ADR-060).\n    \n    Revision ID: o6p7q8r9s0t1\n    Revises: n5o6p7q8r9s0\n\nRev: n5o6p7q8r9s0\nParent: m4n5o6p7q8r9\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/n5o6p7q8r9s0_ppr_additional_profile.py\n\n    PPR additional profile JSON on personnel_record_metadata.\n\nRev: m4n5o6p7q8r9\nParent: l3m4n5o6p7q8\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/m4n5o6p7q8r9_wp_ppr_intake_on_behalf_edit_audit.py\n\n    Add intake_edited_on_behalf lifecycle audit action.\n\nRev: l3m4n5o6p7q8\nParent: j1k2l3m4n5o6\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/l3m4n5o6p7q8_wp_tg_001_person_telegram_identity.py\n\n    WP-TG-001: Person-level Telegram identity schema (ADR-TG-001).\n    \n    Revision ID: l3m4n5o6p7q8\n    Revises: j1k2l3m4n5o6\n\nRev: j1k2l3m4n5o6\nParent: i0j1k2l3m4n5\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/j1k2l3m4n5o6_personnel_intake_link_token_ciphertext.py\n\n    personnel intake link token ciphertext for HR recovery\n    \n    Revision ID: j1k2l3m4n5o6\n    Revises: i0j1k2l3m4n5\n    Create Date: 2026-07-20\n\nRev: i0j1k2l3m4n5\nParent: h9i0j1k2l3m4\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/i0j1k2l3m4n5_hr_import_diff_removal_decisions.py\n\n    hr_import_diff_removals — operator decisions restore | confirm_removal.\n\nRev: h9i0j1k2l3m4\nParent: g8h9i0j1k2l3\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/h9i0j1k2l3m4_hr_initial_baseline_source_lifecycle.py\n\n    Lifecycle columns for initial baseline source selections + MRD source_batch_id placeholder.\n    \n    Revision ID: h9i0j1k2l3m4\n    Revises: g8h9i0j1k2l3\n\nRev: g8h9i0j1k2l3\nParent: f7a8b9c0d1e2\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/g8h9i0j1k2l3_hr_initial_baseline_source_selection.py\n\n    Persist selected import batch per report period for initial baseline formation.\n    \n    Revision ID: g8h9i0j1k2l3\n    Revises: f7a8b9c0d1e2\n\nRev: f7a8b9c0d1e2\nParent: e6f7a8b9c0d1\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/f7a8b9c0d1e2_wp_mrd_003_command_idempotency.py\n\n    WP-MRD-003 — command_id idempotency store + CREATE version event type.\n    \n    Revision ID: f7a8b9c0d1e2\n    Revises: e6f7a8b9c0d1\n\nRev: e6f7a8b9c0d1\nParent: d5e6f7a8b9c0\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/e6f7a8b9c0d1_wp_mrd_001_monthly_reference_schema.py\n\n    WP-MRD-001 — Monthly Reference Dataset schema foundation (ADR-058).\n    \n    Revision ID: e6f7a8b9c0d1\n    Revises: d5e6f7a8b9c0\n\nRev: d5e6f7a8b9c0\nParent: c4d5e6f7a8b9\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/d5e6f7a8b9c0_hr_import_review_completed_audit_event.py\n\n    Register HR_IMPORT_REVIEW_COMPLETED security audit event type.\n    \n    Revision ID: d5e6f7a8b9c0\n    Revises: c4d5e6f7a8b9\n\nRev: c4d5e6f7a8b9\nParent: b3c4d5e6f7a8\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/c4d5e6f7a8b9_hr_baseline_published_at_columns.py\n\n    Rename baseline promoted_* columns to published_* (ADR-045).\n    \n    Revision ID: c4d5e6f7a8b9\n    Revises: b3c4d5e6f7a8\n\nRev: b3c4d5e6f7a8\nParent: a1b2c3d4e5f7\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/b3c4d5e6f7a8_hr_baseline_publication_origin.py\n\n    HR Baseline + PublicationOrigin — replace canonical snapshot lifecycle.\n    \n    Revision ID: b3c4d5e6f7a8\n    Revises: a1b2c3d4e5f7\n\nRev: a1b2c3d4e5f7\nParent: z5a6b7c8d9e0f1\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/a1b2c3d4e5f7_hr_import_control_list_storage.py\n\n    HR import control list persistent storage and business import codes.\n    \n    Revision ID: a1b2c3d4e5f7\n    Revises: z5a6b7c8d9e0f1\n    Create Date: 2026-07-19 08:15:00.000000\n\nRev: z5a6b7c8d9e0f1\nParent: y4z5a6b7c8d9e0\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/z5a6b7c8d9e0f1_wp_cl_012_apply_execution_schema.py\n\n    WP-CL-012: control list apply execution journal schema.\n    \n    Revision ID: z5a6b7c8d9e0f1\n    Revises: y4z5a6b7c8d9e0\n    Create Date: 2026-07-18 00:10:00.000000\n    \n    Persistent apply execution state + idempotency journal.\n    No canonical PPR/Employment mutations in this migration.\n\nRev: y4z5a6b7c8d9e0\nParent: x3y4z5a6b7c8\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/y4z5a6b7c8d9e0_wp_cl_003_mapping_profiles.py\n\n    WP-CL-003: control list mapping profiles.\n    \n    Revision ID: y4z5a6b7c8d9e0\n    Revises: x3y4z5a6b7c8\n    Create Date: 2026-07-17 22:55:00.000000\n    \n    ADR-057 / WP-CL-003: configurable mapping profiles (profile → sheet → column).\n    Schema only — no profile application, candidates, apply, or PPR mutations.\n\nRev: x3y4z5a6b7c8\nParent: w2x3y4z5a6b7\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/x3y4z5a6b7c8_wp_cl_002_staging_schema.py\n\n    WP-CL-002: control list import staging schema.\n    \n    Revision ID: x3y4z5a6b7c8\n    Revises: w2x3y4z5a6b7\n    Create Date: 2026-07-17 20:35:00.000000\n    \n    ADR-057 / WP-CL-002: raw workbook staging (run → sheet → row → cell).\n    Schema only — no mapping, parsing, apply, or PPR mutations.\n\nRev: w2x3y4z5a6b7\nParent: v1w2x3y4z5a6\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/w2x3y4z5a6b7_wp_onboarding_002_tasks_notifications.py\n\n    WP-ONBOARDING-002: onboarding tasks, notifications, audit, attachments.\n    \n    Revision ID: w2x3y4z5a6b7\n    Revises: v1w2x3y4z5a6\n\nRev: v1w2x3y4z5a6\nParent: u1v2w3x4y5z6\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/v1w2x3y4z5a6_wp_onboarding_001_foundation.py\n\n    WP-ONBOARDING-001: employee onboarding foundation — onboarding + checklist.\n    \n    Revision ID: v1w2x3y4z5a6\n    Revises: u1v2w3x4y5z6\n\nRev: u1v2w3x4y5z6\nParent: t0u1v2w3x4y5\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/u1v2w3x4y5z6_wp_ppr_applicant_004_lifecycle_archive.py\n\n    WP-PPR-APPLICANT-004: lifecycle archive — expired status, closed_at, lifecycle audit.\n    \n    Revision ID: u1v2w3x4y5z6\n    Revises: t0u1v2w3x4y5\n\nRev: t0u1v2w3x4y5\nParent: s9t0u1v2w3x4\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/t0u1v2w3x4y5_wp_ppr_applicant_002_director_resolution.py\n\n    WP-PPR-APPLICANT-002: director resolution audit + applicant workflow statuses.\n    \n    Revision ID: t0u1v2w3x4y5\n    Revises: s9t0u1v2w3x4\n\nRev: s9t0u1v2w3x4\nParent: r8s9t0u1v2w3\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/s9t0u1v2w3x4_wp_ppr_intake_002_review_and_transfer.py\n\n    WP-PPR-INTAKE-002: intake review, transfer audit, review_completed status.\n    \n    Revision ID: s9t0u1v2w3x4\n    Revises: r8s9t0u1v2w3\n\nRev: r8s9t0u1v2w3\nParent: q7r8s9t0u1v2\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/r8s9t0u1v2w3_wp_ppr_intake_001_links_and_drafts.py\n\n    WP-PPR-INTAKE-001: personnel intake links and drafts.\n    \n    Revision ID: r8s9t0u1v2w3\n    Revises: q7r8s9t0u1v2\n\nRev: q7r8s9t0u1v2\nParent: p6q7r8s9t0u1\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/q7r8s9t0u1v2_wp_ppr_applicant_001b_personnel_applications.py\n\n    WP-PPR-APPLICANT-001B: personnel_applications table foundation.\n    \n    Revision ID: q7r8s9t0u1v2\n    Revises: p6q7r8s9t0u1\n\nRev: p6q7r8s9t0u1\nParent: o5p6q7r8s9t0\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/p6q7r8s9t0u1_wp_pr_027_person_military_service.py\n\n    WP-PR-027: person_military_service table for PPR-MILITARY section.\n    \n    Revision ID: p6q7r8s9t0u1\n    Revises: o5p6q7r8s9t0\n\nRev: o5p6q7r8s9t0\nParent: n4o5p6q7r8s9\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/o5p6q7r8s9t0_wp_pr_013_person_external_employment.py\n\n    WP-PR-013: person_external_employment table for PPR-EMPLOYMENT-BIOGRAPHY.\n    \n    Revision ID: o5p6q7r8s9t0\n    Revises: n4o5p6q7r8s9\n\nRev: n4o5p6q7r8s9\nParent: m3n4o5p6q7r8\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/n4o5p6q7r8s9_wp_pr_p4_001_a_person_relatives.py\n\n    WP-PR-P4-001-A: person_relatives table for PPR-FAMILY section.\n    \n    Revision ID: n4o5p6q7r8s9\n    Revises: m3n4o5p6q7r8\n\nRev: m3n4o5p6q7r8\nParent: l2m3n4o5p6q7\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/m3n4o5p6q7r8_ppr_candidate_intended_employment.py\n\n    PPR candidate intended employment columns on personnel_record_metadata.\n    \n    Revision ID: m3n4o5p6q7r8\n    Revises: l2m3n4o5p6q7\n\nRev: l2m3n4o5p6q7\nParent: k1l2m3n4o5p6\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/l2m3n4o5p6q7_ppr_r5_command_idempotency.py\n\n    PPR R5 — command_id idempotency store for application write path.\n    \n    Additive table; no backfill. Safe downgrade drops table only.\n    \n    Revision ID: l2m3n4o5p6q7\n    Revises: k1l2m3n4o5p6\n\nRev: k1l2m3n4o5p6\nParent: j0k1l2m3n4o5\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/k1l2m3n4o5p6_ppr_r3_nullable_personnel_record_events_domain_code.py\n\n    PPR R3 — allow NULL domain_code on personnel_record_events for canonical PPR events.\n    \n    Canonical envelope/lifecycle/merge/admin events are not PMF migration domains.\n    Legacy PMF writers continue to supply domain_code; FK to personnel_migration_domains\n    is preserved for non-null values.\n    \n    Revision ID: k1l2m3n4o5p6\n    Revises: j0k1l2m3n4o5\n\nRev: j0k1l2m3n4o5\nParent: i9j0k1l2m3n4\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/j0k1l2m3n4o5_ppr_r1_personnel_record_metadata.py\n\n    PPR R1 — personnel_record_metadata envelope table (minimal lifecycle/version).\n    \n    See docs/architecture/WP-PR-010-persistence-model-and-repository-contracts.md and\n    docs/architecture/WP-PR-004-ppr-lifecycle-and-state-machine.md.\n    \n    Revision ID: j0k1l2m3n4o5\n    Revises: i9j0k1l2m3n4\n\nRev: i9j0k1l2m3n4\nParent: h8i9j0k1l2m3\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/i9j0k1l2m3n4_adr046_f1_org_unit_allowed_positions_schema.py\n\n    ADR-046 F1 — org_unit_allowed_positions schema (allowed positions foundation).\n    \n    Engineering schema only. Does not seed HR pilot links or mutate employees.\n    \n    Revision ID: i9j0k1l2m3n4\n    Revises: h8i9j0k1l2m3\n\nRev: h8i9j0k1l2m3\nParent: d4e5f6a7b8c9\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/h8i9j0k1l2m3_org_units_admin_audit_events.py\n\n    Sysadmin org_units CRUD — register ORG_UNIT_* security audit event types.\n    \n    Revision ID: h8i9j0k1l2m3\n    Revises: d4e5f6a7b8c9\n\nRev: d4e5f6a7b8c9\nParent: c3d4e5f6a7b8\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/d4e5f6a7b8c9_oo_imp_005c_signing_command.py\n\n    OO-IMP-005C — Signing command (READY_FOR_SIGNATURE → SIGNED).\n\nRev: c3d4e5f6a7b8\nParent: b2c3d4e5f6a7\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/c3d4e5f6a7b8_oo_imp_005b_lifecycle_schema_foundation.py\n\n    OO-IMP-005B — Lifecycle and schema foundation (PUBLISHED + header metadata).\n\nRev: b2c3d4e5f6a7\nParent: a1b2c3d4e5f6\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/b2c3d4e5f6a7_oo_sec_001_leadership_oo_read_grants.py\n\n    OO-SEC-001 — Leadership Workspace Read Policy: ROLE grants for OPERATIONAL_ORDERS_INTAKE_READ.\n    \n    Mirrors ADR-045 / WP-PO-LC-DEL-004 pattern: access_grants.target_type = ROLE.\n    Only roles in the approved allowlist at migration time receive grants.\n    \n    Keep _APPROVED_ROLE_CODES in sync with\n    app.security.platform_role_classification.LEADERSHIP_PLATFORM_ROLE_CODES.\n\nRev: a1b2c3d4e5f6\nParent: z0a1b2c3d4e5\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/a1b2c3d4e5f6_oo_imp_004_ready_for_signature.py\n\n    OO-IMP-004 — Document lifecycle CREATED → READY_FOR_SIGNATURE.\n\nRev: z0a1b2c3d4e5\nParent: y9z0a1b2c3d4\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/z0a1b2c3d4e5_oo_imp_003b_workspace_freeze_drift.py\n\n    OO-IMP-003B — Workspace freeze, fingerprint drift detection and revision advisory.\n\nRev: y9z0a1b2c3d4\nParent: x8y9z0a1b2c3\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/y9z0a1b2c3d4_oo_imp_003_official_draft_package.py\n\n    OO-IMP-003 — Official draft package and document aggregate creation.\n\nRev: x8y9z0a1b2c3\nParent: w7x8y9z0a1b2\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/x8y9z0a1b2c3_oo_imp_002_content_confirmation_translation.py\n\n    OO-IMP-002 — Content confirmation and translation workflow.\n\nRev: w7x8y9z0a1b2\nParent: v6w7x8y9z0a1\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/w7x8y9z0a1b2_oo_imp_001_submitted_text_intake.py\n\n    OO-IMP-001 — Operational orders submitted-text intake foundation.\n\nRev: v6w7x8y9z0a1\nParent: u5v6w7x8y9z0\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/v6w7x8y9z0a1_wp_po_lc_del_005_archive_restore_grants.py\n\n    WP-PO-LC-DEL-005 — bind archive/restore permissions to HR_HEAD operational contour.\n\nRev: u5v6w7x8y9z0\nParent: t4u5v6w7x8y9\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/u5v6w7x8y9z0_wp_po_lc_del_004_cancel_grants.py\n\n    WP-PO-LC-DEL-004 — bind cancel permissions to HR_HEAD operational contour.\n\nRev: t4u5v6w7x8y9\nParent: s3t4u5v6w7x8\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/t4u5v6w7x8y9_wp_po_lc_del_003_lifecycle_audit_foundation.py\n\n    WP-PO-LC-DEL-003 — Personnel order lifecycle audit and permission foundation.\n    \n    Adds nullable lifecycle foundation columns on personnel_orders, creates\n    personnel_order_lifecycle_audit (append-only), backfills void_kind for VOIDED\n    orders, and seeds PERSONNEL_ORDERS_* access_roles (not wired to enforcement).\n\nRev: s3t4u5v6w7x8\nParent: r2s3t4u5v6w7\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/s3t4u5v6w7x8_wp_po_edit_002_editorial_persistence.py\n\n    WP-PO-EDIT-002 — Editorial persistence (normalized block-row model).\n    \n    Creates:\n      - personnel_order_editorial_blocks (order-level title/preamble/closing)\n      - personnel_order_item_editorial_blocks (item-level body/basis)\n      - personnel_order_item_bases (structured basis facts, 1:1 with item)\n    \n    Extends security_audit_log.chk_sal_event_type with editorial event types.\n    \n    Does NOT modify personnel_order_localized_texts.\n\nRev: r2s3t4u5v6w7\nParent: q1r2s3t4u5w6\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/r2s3t4u5v6w7_wp_po_008_nullable_order_registration_fields.py\n\n    WP-PO-008 — Allow nullable registration fields on personnel_orders drafts.\n    \n    Paper First process: order_number and order_date come from the paper journal and\n    may be filled after DRAFT creation. Registration still requires both fields\n    (enforced in personnel_orders_command_service._validate_registerable_order).\n\nRev: q1r2s3t4u5w6\nParent: p0q1r2s3t4u5\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/q1r2s3t4u5w6_pmf_1_personnel_migration_schema.py\n\n    PMF-1 — Personnel Migration Framework schema foundation.\n    \n    Creates personnel_migration_domains, personnel_migration_runs,\n    personnel_migration_items, personnel_record_events, person_education,\n    person_training; seeds disabled education domain plugin.\n    \n    See docs/adr/ADR-PMF-001-personnel-migration-framework.md and\n    docs/adr/ADR-EDU-001-employee-education-migration-architecture.md.\n\nRev: p0q1r2s3t4u5\nParent: o9p0q1r2s3t4\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/p0q1r2s3t4u5_wp_po_003_personnel_orders_foundation.py\n\n    WP-PO-003 — Personnel orders storage foundation.\n    \n    Creates personnel_orders, personnel_order_items, personnel_order_localized_texts,\n    personnel_order_attachments, personnel_order_prints; adds employee_events.order_id\n    and employee_events.order_item_id FK columns.\n    \n    MVP order types: HIRE, TRANSFER, TERMINATION, CONCURRENT_DUTY_START, CONCURRENT_DUTY_END.\n\nRev: o9p0q1r2s3t4\nParent: n8o9p0q1r2s3\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/o9p0q1r2s3t4_adr045_hr_head_enrollment_role_grant.py\n\n    ADR-045 — HR_HEAD directory role gets HR_ENROLLMENT_MANAGER via ROLE grant.\n    \n    Mirrors production DEP_ADMIN pattern (ADR-042): operational HR contour follows\n    public.roles.code, not per-user grants.\n\nRev: n8o9p0q1r2s3\nParent: m7n8o9p0q1r2\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/n8o9p0q1r2s3_adr053_phase2_6_permission_template_binding_backfill.py\n\n    ADR-053 Phase 2.6a — apply position-contour rules to permission_template.access_role_id.\n    \n    Idempotent backfill mechanism only. No-op when permission_template_contour_rule is empty.\n    Re-run after Phase 2.6b ops inserts approved contour rules (see OPS-030).\n    \n    Revision ID: n8o9p0q1r2s3\n    Revises: m7n8o9p0q1r2\n\nRev: m7n8o9p0q1r2\nParent: l6m7n8o9p0q1\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/m7n8o9p0q1r2_adr053_phase2_6_permission_template_binding_schema.py\n\n    ADR-053 Phase 2.6a — Permission Template binding schema (access_role_id + contour rules).\n    \n    Engineering support only. Does not populate contour rules or template bindings.\n    Production binding completion is Phase 2.6b (ops; ADR-053 AC3 Pending).\n    \n    Revision ID: m7n8o9p0q1r2\n    Revises: l6m7n8o9p0q1\n\nRev: l6m7n8o9p0q1\nParent: k5l6m7n8o9p0\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/l6m7n8o9p0q1_adr050_phase2_2_position_cabinet_backfill.py\n\n    ADR-050 Phase 2.2 — idempotent backfill legacy staffing pairs → Position + Cabinet + Template + mapping.\n    \n    Revision ID: l6m7n8o9p0q1\n    Revises: k5l6m7n8o9p0\n\nRev: k5l6m7n8o9p0\nParent: j9k0l1m2n3o4\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/k5l6m7n8o9p0_adr050_phase2_1_position_cabinet_schema.py\n\n    ADR-050 Phase 2.1 — org-unique Position, Position Cabinet, Permission Template, legacy mapping.\n    \n    Revision ID: k5l6m7n8o9p0\n    Revises: j9k0l1m2n3o4\n\nRev: j9k0l1m2n3o4\nParent: i8j9k0l1m2n3\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/j9k0l1m2n3o4_regular_tasks_archived_at.py\n\n    Add archived_at to regular_tasks for template lifecycle.\n    \n    Revision ID: j9k0l1m2n3o4\n    Revises: i8j9k0l1m2n3\n\nRev: i8j9k0l1m2n3\nParent: h7i8j9k0l1m2\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/i8j9k0l1m2n3_adr042_role_targeted_access_grants.py\n\n    ADR-042 — allow ROLE target_type on access_grants.\n    \n    Revision ID: i8j9k0l1m2n3\n    Revises: h7i8j9k0l1m2\n\nRev: h7i8j9k0l1m2\nParent: g6b7c8d9e0f1\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/h7i8j9k0l1m2_adr039_phase_3i_enroll_from_import.py\n\n    ADR-039 Phase 3I — EMPLOYEE_ENROLLED_FROM_IMPORT audit event types.\n    \n    Revision ID: h7i8j9k0l1m2\n    Revises: g6b7c8d9e0f1\n\nRev: g6b7c8d9e0f1\nParent: f5a6b7c8d9e0\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/g6b7c8d9e0f1_adr044_r2_5d_rollback_audit_event.py\n\n    ADR-044 R2.5d — register USER_EMPLOYEE_LINK_ROLLED_BACK audit event.\n    \n    Revision ID: g6b7c8d9e0f1\n    Revises: f5a6b7c8d9e0\n\nRev: f5a6b7c8d9e0\nParent: e4f5a6b7c8d9\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/f5a6b7c8d9e0_adr044_r2_5b_operations_schema.py\n\n    ADR-044 R2.5b — user linkage operations journal schema extensions (DDL only).\n    \n    Revision ID: f5a6b7c8d9e0\n    Revises: e4f5a6b7c8d9\n\nRev: e4f5a6b7c8d9\nParent: c2d3e4f5a6b7\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/e4f5a6b7c8d9_adr044_r2_4a_user_linkage_execute_schema.py\n\n    ADR-044 R2.4a — user linkage execute journal schema (no linkage writes).\n    \n    Revision ID: e4f5a6b7c8d9\n    Revises: c2d3e4f5a6b7\n\nRev: c2d3e4f5a6b7\nParent: b0c1d2e3f4a5\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/c2d3e4f5a6b7_adr044_r2_3_user_linkage_review_schema.py\n\n    ADR-044 R2.3 — user linkage review decision audit (no linkage writes).\n    \n    Revision ID: c2d3e4f5a6b7\n    Revises: b0c1d2e3f4a5\n\nRev: b0c1d2e3f4a5\nParent: a0b1c2d3e4f6\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/b0c1d2e3f4a5_adr042_phase_e1_personnel_visibility.py\n\n    ADR-042 Phase E1 — personnel visibility scope assignments.\n    \n    Revision ID: b0c1d2e3f4a5\n    Revises: a0b1c2d3e4f6\n\nRev: a0b1c2d3e4f6\nParent: z8a9b0c1d2e3\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/a0b1c2d3e4f6_deps_group_foundation.py\n\n    deps_group foundation — reference table, canonical seed, org_units FK.\n    \n    Revision ID: a0b1c2d3e4f6\n    Revises: z8a9b0c1d2e3\n\nRev: z8a9b0c1d2e3\nParent: y7z8a9b0c1d2\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/z8a9b0c1d2e3_adr044_b2_reconciliation_schema.py\n\n    ADR-044 B2 — identity reconciliation run journal (R1a execute).\n    \n    Revision ID: z8a9b0c1d2e3\n    Revises: y7z8a9b0c1d2\n\nRev: y7z8a9b0c1d2\nParent: x6y7z8a9b0c1\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/y7z8a9b0c1d2_adr043_phase_c3_lifecycle_runs_schema.py\n\n    ADR-043 Phase C3 — personnel lifecycle run journal.\n    \n    Revision ID: y7z8a9b0c1d2\n    Revises: x6y7z8a9b0c1\n\nRev: x6y7z8a9b0c1\nParent: w5x6y7z8a9b0\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/x6y7z8a9b0c1_adr043_phase_b2_personnel_lifecycle_schema.py\n\n    ADR-043 Phase B2 — personnel lifecycle DDL, stewardship seed, alters.\n    \n    Revision ID: x6y7z8a9b0c1\n    Revises: w5x6y7z8a9b0\n\nRev: w5x6y7z8a9b0\nParent: v4w5x6y7z8a9\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/w5x6y7z8a9b0_adr042_phase_b5_access_roles_seed.py\n\n    ADR-042 Phase B5 — idempotent access_roles seed (SECURITY_AUDITOR).\n\nRev: v4w5x6y7z8a9\nParent: u3v4w5x6y7z8\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/v4w5x6y7z8a9_adr042_phase_b2_3_backfill.py\n\n    ADR-042 Phase B2.3 — idempotent backfill employees → persons → assignments → links.\n    \n    Revision ID: v4w5x6y7z8a9\n    Revises: u3v4w5x6y7z8\n\nRev: u3v4w5x6y7z8\nParent: t2u3v4w5x6y7\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/u3v4w5x6y7z8_adr042_phase_b2_1_schema.py\n\n    ADR-042 Phase B2.1 — persons, assignments, enrollment, access, audit DDL.\n    \n    Revision ID: u3v4w5x6y7z8\n    Revises: t2u3v4w5x6y7\n\nRev: t2u3v4w5x6y7\nParent: s1t2u3v4w5x6\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/t2u3v4w5x6y7_adr039_promotion_specialty_policy.py\n\n    ADR-039/037 — relax QUALIFICATION_CATEGORY specialty requirement for import promotion.\n    \n    Revision ID: t2u3v4w5x6y7\n    Revises: s1t2u3v4w5x6\n\nRev: s1t2u3v4w5x6\nParent: r0s1t2u3v4w5\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/s1t2u3v4w5x6_adr040_phase_f_hr_change_events_schema.py\n\n    ADR-040 Phase F — materialized HR change events between canonical snapshots.\n    \n    Revision ID: s1t2u3v4w5x6\n    Revises: r0s1t2u3v4w5\n\nRev: r0s1t2u3v4w5\nParent: q9r0s1t2u3v4\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/r0s1t2u3v4w5_adr040_phase_b_monthly_diff_schema.py\n\n    ADR-040 Phase B — monthly diff columns and REMOVED entry storage.\n    \n    Revision ID: r0s1t2u3v4w5\n    Revises: q9r0s1t2u3v4\n\nRev: q9r0s1t2u3v4\nParent: p8q9r0s1t2u3\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/q9r0s1t2u3v4_adr040_phase_a_canonical_snapshot_schema.py\n\n    ADR-040 Phase A — canonical HR snapshot schema.\n    \n    Revision ID: q9r0s1t2u3v4\n    Revises: p8q9r0s1t2u3\n\nRev: p8q9r0s1t2u3\nParent: o7p8q9r0s1t2\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/p8q9r0s1t2u3_adr039_phase_3f3_normalized_record_review_override.py\n\n    ADR-039 Phase 3F.3 — normalized record review override layer.\n    \n    Revision ID: p8q9r0s1t2u3\n    Revises: o7p8q9r0s1t2\n\nRev: o7p8q9r0s1t2\nParent: n7a8b9c0d1e2\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/o7p8q9r0s1t2_adr039_phase_3f_qualification_category_document_type.py\n\n    ADR-039 Phase 3F — QUALIFICATION_CATEGORY document type seed.\n    \n    Revision ID: o7p8q9r0s1t2\n    Revises: n7a8b9c0d1e2\n\nRev: n7a8b9c0d1e2\nParent: m6f7a8b9c0d1\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/n7a8b9c0d1e2_adr039_phase_3b_training_normalization_schema.py\n\n    ADR-039 Phase 3B — training normalization schema (staging + requirements + provenance).\n    \n    Revision ID: n7a8b9c0d1e2\n    Revises: m6f7a8b9c0d1\n    Create Date: 2026-06-18\n    \n    DDL only: training_hour_requirements, hr_import_normalized_records,\n    employee_documents provenance columns, indexes, FKs, CHECK constraints.\n\nRev: m6f7a8b9c0d1\nParent: l5e6f7a8b9c0\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/m6f7a8b9c0d1_adr038_phase_d3_sync_audit_log.py\n\n    ADR-038 Phase D.3 — HR sync audit log (export/preview/apply history).\n    \n    Revision ID: m6f7a8b9c0d1\n    Revises: l5e6f7a8b9c0\n    Create Date: 2026-06-18\n\nRev: l5e6f7a8b9c0\nParent: k4d5e6f7a8b9\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/l5e6f7a8b9c0_adr038_phase_a1_import_integrity.py\n\n    ADR-038 Phase A.1 — import provenance and audit columns on employee overrides.\n    \n    Revision ID: l5e6f7a8b9c0\n    Revises: k4d5e6f7a8b9\n    Create Date: 2026-06-17\n\nRev: k4d5e6f7a8b9\nParent: j3c4d5e6f7a8\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/k4d5e6f7a8b9_adr038_phase_a_employee_profile_overrides.py\n\n    ADR-038 Phase A — employee-level import profile overrides (persist across imports).\n    \n    Revision ID: k4d5e6f7a8b9\n    Revises: j3c4d5e6f7a8\n    Create Date: 2026-06-17\n\nRev: j3c4d5e6f7a8\nParent: i2b3c4d5e6f7\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/j3c4d5e6f7a8_hr_import_education_profile_staging.py\n\n    HR import Phase 2F.3 — education profile staging overrides.\n    \n    Revision ID: j3c4d5e6f7a8\n    Revises: i2b3c4d5e6f7\n    Create Date: 2026-06-16\n\nRev: i2b3c4d5e6f7\nParent: h1a2b3c4d5e6\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/i2b3c4d5e6f7_hr_import_ai_extraction_drafts.py\n\n    HR import Phase 2F.2 — AI extraction drafts for review staging.\n    \n    Revision ID: i2b3c4d5e6f7\n    Revises: h1a2b3c4d5e6\n    Create Date: 2026-06-16\n\nRev: h1a2b3c4d5e6\nParent: g4c1d2e3f4a5\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/h1a2b3c4d5e6_hr_import_department_recoding.py\n\n    HR Import Phase 2F — department_recoding lookup table.\n    \n    Revision ID: h1a2b3c4d5e6\n    Revises: g4c1d2e3f4a5\n    Create Date: 2026-06-16\n\nRev: g4c1d2e3f4a5\nParent: f3a9b2c4d5e6\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/g4c1d2e3f4a5_hr_import_candidate_source_field.py\n\n    Add source_field to hr_import_document_candidates.\n    \n    Revision ID: g4c1d2e3f4a5\n    Revises: f3a9b2c4d5e6\n    Create Date: 2026-06-16\n\nRev: f3a9b2c4d5e6\nParent: e2c4f8a1b3d5\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/f3a9b2c4d5e6_hr_import_document_kind_education.py\n\n    Allow education document_kind on hr_import_document_candidates.\n    \n    Revision ID: f3a9b2c4d5e6\n    Revises: e2c4f8a1b3d5\n    Create Date: 2026-06-16\n\nRev: e2c4f8a1b3d5\nParent: d3e4f5a6b7c8\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/e2c4f8a1b3d5_hr_import_phase_2c_document_candidates.py\n\n    HR import Phase 2C — extend document candidates for training normalization.\n    \n    Revision ID: e2c4f8a1b3d5\n    Revises: d3e4f5a6b7c8\n    Create Date: 2026-06-16\n\nRev: d3e4f5a6b7c8\nParent: c1a8f92e4b03\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/d3e4f5a6b7c8_hr_import_phase_2b_match_not_processed.py\n\n    hr import phase 2b match not processed\n    \n    Revision ID: d3e4f5a6b7c8\n    Revises: c1a8f92e4b03\n    Create Date: 2026-06-16 20:00:00.000000\n    \n    ADR-038 Phase 2B: allow NOT_PROCESSED match_status before match engine runs.\n\nRev: c1a8f92e4b03\nParent: f2b3c4d5e6a7\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/c1a8f92e4b03_hr_import_identity_staging_phase_2a.py\n\n    hr import identity and staging phase 2a\n    \n    Revision ID: c1a8f92e4b03\n    Revises: f2b3c4d5e6a7\n    Create Date: 2026-06-16 18:00:00.000000\n    \n    ADR-038 Phase 2A: employee_identities, hr_import_* staging,\n    org_unit_aliases, position_aliases. Schema only — no seeds.\n\nRev: f2b3c4d5e6a7\nParent: d9e8f71a2b05\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/f2b3c4d5e6a7_add_employee_documents_phase_1b_training_hours.py\n\n    add employee documents phase 1b training hours\n    \n    Revision ID: f2b3c4d5e6a7\n    Revises: d9e8f71a2b05\n    Create Date: 2026-06-16 14:00:00.000000\n    \n    ADR-037 Phase 1B: hours column, tracks_hours seed, aggregation index.\n\nRev: d9e8f71a2b05\nParent: c7f3d92a1e04\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/d9e8f71a2b05_add_employee_documents_phase_1a.py\n\n    add employee documents registry phase 1a\n    \n    Revision ID: d9e8f71a2b05\n    Revises: c7f3d92a1e04\n    Create Date: 2026-06-16 12:00:00.000000\n    \n    ADR-037 Phase 1A: medical_specialty_groups, medical_specialties,\n    document_types, document_kinds, employee_documents (production registry).\n\nRev: c7f3d92a1e04\nParent: e4a1c92b7d10\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/c7f3d92a1e04_hr_events_phase_1a.py\n\n    hr events phase 1a schema\n    \n    Revision ID: c7f3d92a1e04\n    Revises: e4a1c92b7d10\n    Create Date: 2026-06-15 12:00:00.000000\n    \n    ADR-036 Phase 1A Step 1: employee_events event_class, lifecycle_status, metadata;\n    extend event_type for POSITION_CHANGE and RATE_CHANGE.\n\nRev: e4a1c92b7d10\nParent: b5e2a81d4c03\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/e4a1c92b7d10_add_professional_documents_demo.py\n\n    add professional documents demo (bridge stub)\n    \n    Revision ID: e4a1c92b7d10\n    Revises: b5e2a81d4c03\n    Create Date: 2026-06-13\n    \n    Bridge revision for environments where the ADR-034 demo migration was already\n    applied before it was removed from the Alembic chain (commit 6e0f320).\n    \n    The original migration created certificate_types / employee_certificates and\n    DEMO seed data. That demo schema is now local-only and managed by\n    scripts/local_demo/adr034_* — not by Alembic.\n    \n    This no-op stub restores Alembic continuity so later revisions can run.\n\nRev: b5e2a81d4c03\nParent: c3d8e12a5f01\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/b5e2a81d4c03_add_employee_events.py\n\n    add employee_events table\n    \n    Revision ID: b5e2a81d4c03\n    Revises: c3d8e12a5f01\n    Create Date: 2026-06-12 10:00:00.000000\n    \n    ADR-032 Phase 3b-2: append-only personnel event table for transfer/correction history.\n\nRev: c3d8e12a5f01\nParent: f8c2a91b4e10\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/c3d8e12a5f01_add_users_employee_id.py\n\n    add users employee_id link\n    \n    Revision ID: c3d8e12a5f01\n    Revises: f8c2a91b4e10\n    Create Date: 2026-06-10 08:00:00.000000\n\nRev: f8c2a91b4e10\nParent: a7c4e1f903de\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/f8c2a91b4e10_add_directory_contacts_and_positions_category.py\n\n    add directory contacts table and positions category\n    \n    Revision ID: f8c2a91b4e10\n    Revises: a7c4e1f903de\n    Create Date: 2026-06-09 07:30:00.000000\n\nRev: a7c4e1f903de\nParent: d668fb72f5f7\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/a7c4e1f903de_merge_heads_and_task_event_type.py\n\n    merge alembic heads; ensure task_event_type enum on restored DBs\n    \n    Revision ID: a7c4e1f903de\n    Revises: d668fb72f5f7\n    Create Date: 2026-06-08\n    \n    Repairs VPS databases where alembic skipped 9d9d8a6c2a11 (file had no .py suffix).\n    write_task_audit() casts event_type to ::task_event_type; without the enum POST /report returns 500.\n\nRev: d668fb72f5f7\nParent: 74c285340058\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/d668fb72f5f7_add_group_id_to_org_units.py\n\n    add group_id to org_units\n    \n    Revision ID: d668fb72f5f7\n    Revises: 74c285340058\n    Create Date: 2026-06-07 09:22:28.245816\n\nRev: 74c285340058\nParent: 9d9d8a6c2a11\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/74c285340058_adhoc_tasks_contract.py\n\n    adhoc tasks contract\n    \n    Revision ID: 74c285340058\n    Revises: b17f7f69c7d5\n    Create Date: 2026-03-06 23:24:54.579245\n\nRev: 9d9d8a6c2a11\nParent: b17f7f69c7d5\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/9d9d8a6c2a11_seed_task_statuses_and_task_event_type.py\n\n    seed task statuses and task_event_type enum\n    \n    Revision ID: 9d9d8a6c2a11\n    Revises: b17f7f69c7d5\n    Create Date: 2026-02-27 00:00:00.000000\n\nRev: b17f7f69c7d5\nParent: 02b0d99063cd\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/b17f7f69c7d5_add_assignment_scope_t_enum.py\n\n    add assignment_scope_t enum\n\nRev: 02b0d99063cd\nParent: <base>\nPath: /opt/projects/corpsite/releases/12985ba17bc6b794fcf03733c95f423b0a720b98/alembic/versions/02b0d99063cd_baseline.py\n\n    baseline\n    \n    Revision ID: 02b0d99063cd\n    Revises:\n    Create Date: 2026-02-22 14:33:16.675671\n\n",
+      "stderr": ""
+    }
+  },
+  "migration_graph": [
+    {
+      "revision": "a0b1c2d3e4f5",
+      "down_revision": "z9a0b1c2d3e4",
+      "file": "a0b1c2d3e4f5_wp_td_002c_recursive_projection_guard.py",
+      "sha256": "0b88f936550f4264acc033b6d6fbfb01591b6a4dde4f9a322a9edcb53707c476"
+    },
+    {
+      "revision": "a0b1c2d3e4f6",
+      "down_revision": "z8a9b0c1d2e3",
+      "file": "a0b1c2d3e4f6_deps_group_foundation.py",
+      "sha256": "fba0329d81ed5275119efd3582c68955f87c0a9de93adfbef6ce6e017095c044"
+    },
+    {
+      "revision": "a1b2c3d4e5f6",
+      "down_revision": "z0a1b2c3d4e5",
+      "file": "a1b2c3d4e5f6_oo_imp_004_ready_for_signature.py",
+      "sha256": "5c0a1a67903d233e7312f5d40d9d719769d66e1f72e603a8617910e7af18479b"
+    },
+    {
+      "revision": "a9b0c1d2e3f4",
+      "down_revision": "q8r9s0t1u2v3",
+      "file": "a9b0c1d2e3f4_employee_hard_delete_audit_event.py",
+      "sha256": "50ba36cb85e3e6484f0930006312acdc49ca51e9989fc1fbcb39537cd5f27bf5"
+    },
+    {
+      "revision": "adm001canonicalroles",
+      "down_revision": "qmt001trainingexpert",
+      "file": "adm001_canonical_administrative_platform_roles.py",
+      "sha256": "ee352794d621a560f2896077a640d8fdcca501fb5d40a233ef391b6a5083d987"
+    },
+    {
+      "revision": "aec001activecard",
+      "down_revision": "per002eventscope",
+      "file": "aec001_active_employee_card_audit_fingerprint.py",
+      "sha256": "5fe24b5fc5f492c62b662f6b236587352bd652869e5d5b18e9b905ae2a60ecdc"
+    },
+    {
+      "revision": "b0c1d2e3f4a5",
+      "down_revision": "a0b1c2d3e4f6",
+      "file": "b0c1d2e3f4a5_adr042_phase_e1_personnel_visibility.py",
+      "sha256": "06cb0ea9d7f9584c74104687faac680416c110de1127996c4712385186e302c1"
+    },
+    {
+      "revision": "b17f7f69c7d5",
+      "down_revision": "02b0d99063cd",
+      "file": "b17f7f69c7d5_add_assignment_scope_t_enum.py",
+      "sha256": "d5452bb2893f6edde48d720d232d89c450bed0d05ed7c6f20762466190bfd8b8"
+    },
+    {
+      "revision": "b1c2d3e4f5a6",
+      "down_revision": "a0b1c2d3e4f5",
+      "file": "b1c2d3e4f5a6_wp_td_002d_relationship_lookup_indexes.py",
+      "sha256": "454e1ac3abc5ee9779b41a7d4d46be1ef46d789a9b1ab45e4fdbe4a9f47d9c56"
+    },
+    {
+      "revision": "b2c3d4e5f6a7",
+      "down_revision": "a1b2c3d4e5f6",
+      "file": "b2c3d4e5f6a7_oo_sec_001_leadership_oo_read_grants.py",
+      "sha256": "4b1a7206e027da2bf0d5ba9465094b2bee7c806dd2d001696f7ad7b181fbdc49"
+    },
+    {
+      "revision": "b3c4d5e6f7a8",
+      "down_revision": "a1b2c3d4e5f7",
+      "file": "b3c4d5e6f7a8_hr_baseline_publication_origin.py",
+      "sha256": "f7484fde6f9bb45d2af630c0be61f635e9b10642c417e55ab0b8c5acc29098bb"
+    },
+    {
+      "revision": "c0d1e2f3a4b5",
+      "down_revision": "a9b0c1d2e3f4",
+      "file": "c0d1e2f3a4b5_adr061_001b_person_photo_schema_foundation.py",
+      "sha256": "0be90aa66a64eadf270d77b510b0f34b83674e0af792c39d327edc7c49d525c7"
+    },
+    {
+      "revision": "c2d3e4f5a6b7",
+      "down_revision": "b0c1d2e3f4a5",
+      "file": "c2d3e4f5a6b7_adr044_r2_3_user_linkage_review_schema.py",
+      "sha256": "75fa6d046eed9e7b599d915fa7ff39c092f0af73be5d5a75b95da8ee177a860e"
+    },
+    {
+      "revision": "c3d4e5f6a7b8",
+      "down_revision": "b2c3d4e5f6a7",
+      "file": "c3d4e5f6a7b8_oo_imp_005b_lifecycle_schema_foundation.py",
+      "sha256": "e172fd94284cffdc54caae2af581a0db81efc32466b3d5d16f78ff9cbf1998d6"
+    },
+    {
+      "revision": "c4d5e6f7a8b9",
+      "down_revision": "b3c4d5e6f7a8",
+      "file": "c4d5e6f7a8b9_hr_baseline_published_at_columns.py",
+      "sha256": "9e769c707f923438a66141fa6a3153d64f943c05b5bc8053b9b1db243a724a73"
+    },
+    {
+      "revision": "d1e2f3a4b5c6",
+      "down_revision": "c0d1e2f3a4b5",
+      "file": "d1e2f3a4b5c6_wp_ii_001_foundation.py",
+      "sha256": "27e18013db2c3626613aa38a0350f28b6643f4e5ba9074fa66dcf2988b228eaa"
+    },
+    {
+      "revision": "d4e5f6a7b8c9",
+      "down_revision": "c3d4e5f6a7b8",
+      "file": "d4e5f6a7b8c9_oo_imp_005c_signing_command.py",
+      "sha256": "0d8f135d7d8ade8372a2fe33b9f86f59400ec77b0dbcd261c09d7fe404a7f1b9"
+    },
+    {
+      "revision": "d5e6f7a8b9c0",
+      "down_revision": "c4d5e6f7a8b9",
+      "file": "d5e6f7a8b9c0_hr_import_review_completed_audit_event.py",
+      "sha256": "d17c60fafd381d43506196dd4bd37e3fb37e30bafaa9688adef686c4f4f3f609"
+    },
+    {
+      "revision": "e2c4f8a1b3d5",
+      "down_revision": "d3e4f5a6b7c8",
+      "file": "e2c4f8a1b3d5_hr_import_phase_2c_document_candidates.py",
+      "sha256": "5004c1db052aed9bbc352bc63ec83da11410f4d9cdf5b5443676127011765e05"
+    },
+    {
+      "revision": "e2f3a4b5c6d7",
+      "down_revision": "d1e2f3a4b5c6",
+      "file": "e2f3a4b5c6d7_wp_ii_002_workflow_fsm.py",
+      "sha256": "a77adf0f4d2e2b7409c94b53222914965ddaec76e604ce5356982df00eaa8b50"
+    },
+    {
+      "revision": "e4f5a6b7c8d9",
+      "down_revision": "c2d3e4f5a6b7",
+      "file": "e4f5a6b7c8d9_adr044_r2_4a_user_linkage_execute_schema.py",
+      "sha256": "5a2105e2cd9e9be4a78a2f5a779692d01dfd9b57397bc8f7689dad63fd57100c"
+    },
+    {
+      "revision": "e6f7a8b9c0d1",
+      "down_revision": "d5e6f7a8b9c0",
+      "file": "e6f7a8b9c0d1_wp_mrd_001_monthly_reference_schema.py",
+      "sha256": "ec19637d33ae0b46629b8d3a9e20b82b67ba867b54f520abff3ff438271fd71a"
+    },
+    {
+      "revision": "emp001employee",
+      "down_revision": "aec001activecard",
+      "file": "emp001_employee_platform_role.py",
+      "sha256": "c8445df6647ccb83cf2bc4f821cbdbbc25c4ef43851a2253670a69736111f676"
+    },
+    {
+      "revision": "f3a4b5c6d7e8",
+      "down_revision": "e2f3a4b5c6d7",
+      "file": "f3a4b5c6d7e8_wp_ii_003_review_fixes.py",
+      "sha256": "9918aadb7b5ff50afc4a0ac0bc982edbfe0eb93202f9b905985616507ce62088"
+    },
+    {
+      "revision": "f3a9b2c4d5e6",
+      "down_revision": "e2c4f8a1b3d5",
+      "file": "f3a9b2c4d5e6_hr_import_document_kind_education.py",
+      "sha256": "c9ea18b50b96ed1c12987d2c59c0dbfe178a922cf9dd7fe148314492865a5c86"
+    },
+    {
+      "revision": "f5a6b7c8d9e0",
+      "down_revision": "e4f5a6b7c8d9",
+      "file": "f5a6b7c8d9e0_adr044_r2_5b_operations_schema.py",
+      "sha256": "115fcdc8d4f9a582fdf1379576b87c8a899ccc859c93b445ce814501392c3161"
+    },
+    {
+      "revision": "f7a8b9c0d1e2",
+      "down_revision": "e6f7a8b9c0d1",
+      "file": "f7a8b9c0d1e2_wp_mrd_003_command_idempotency.py",
+      "sha256": "b870262cec89c6602e2ba809607179b82dbace357b776db32b433ab490e34632"
+    },
+    {
+      "revision": "g4b5c6d7e8f9",
+      "down_revision": "f3a4b5c6d7e8",
+      "file": "g4b5c6d7e8f9_hr_head_incoming_info_read_grant.py",
+      "sha256": "200f9cfb3fd1627dbd76189e0566682394f5dd5c33f475cec174cc74990d10f4"
+    },
+    {
+      "revision": "g4c1d2e3f4a5",
+      "down_revision": "f3a9b2c4d5e6",
+      "file": "g4c1d2e3f4a5_hr_import_candidate_source_field.py",
+      "sha256": "e96f03e9bbe6cd42fe973c701a893db3541c4e3e7f39ed0369031f2e4c94e9cb"
+    },
+    {
+      "revision": "g6b7c8d9e0f1",
+      "down_revision": "f5a6b7c8d9e0",
+      "file": "g6b7c8d9e0f1_adr044_r2_5d_rollback_audit_event.py",
+      "sha256": "0d315ef48bebbeee3ce9cfff96c44a55cb2210d3e4a5d43262ffded4e9d0b43c"
+    },
+    {
+      "revision": "g8h9i0j1k2l3",
+      "down_revision": "f7a8b9c0d1e2",
+      "file": "g8h9i0j1k2l3_hr_initial_baseline_source_selection.py",
+      "sha256": "9e2064b2cc714444524f8c862ddd67501203f9a34ce6159a6f2fe4ff7874129b"
+    },
+    {
+      "revision": "h1a2b3c4d5e6",
+      "down_revision": "g4c1d2e3f4a5",
+      "file": "h1a2b3c4d5e6_hr_import_department_recoding.py",
+      "sha256": "75438f3f0f8bd4f7fcb11803d4807781a78bab7f09c165f722f0e2d2135bb90c"
+    },
+    {
+      "revision": "h5c6d7e8f9a0",
+      "down_revision": "g4b5c6d7e8f9",
+      "file": "h5c6d7e8f9a0_hr_head_incoming_info_read_grant_correction.py",
+      "sha256": "770a9aaaeb6083fcc7caf5e369620b39b381edc1918b9f52917f714cf7c5ebb1"
+    },
+    {
+      "revision": "h7i8j9k0l1m2",
+      "down_revision": "g6b7c8d9e0f1",
+      "file": "h7i8j9k0l1m2_adr039_phase_3i_enroll_from_import.py",
+      "sha256": "50fd551aec8faebf881235c71c7e83930b6e6ff9f215d4130812ce9f06b8e44b"
+    },
+    {
+      "revision": "h8i9j0k1l2m3",
+      "down_revision": "d4e5f6a7b8c9",
+      "file": "h8i9j0k1l2m3_org_units_admin_audit_events.py",
+      "sha256": "91032f90c40d936dffd5d9ce80c3e8197086489cc67df2613c65524b0241dd36"
+    },
+    {
+      "revision": "h9i0j1k2l3m4",
+      "down_revision": "g8h9i0j1k2l3",
+      "file": "h9i0j1k2l3m4_hr_initial_baseline_source_lifecycle.py",
+      "sha256": "7be2508cc3f7c3ae021759ac73dd221a55890371c216b29dc0342a72d10468de"
+    },
+    {
+      "revision": "hdc001checklist",
+      "down_revision": "ua004telegrambindcodes",
+      "file": "hdc001_hiring_document_checklist.py",
+      "sha256": "996c1c83677cdb548956dac0338062551b3912b93fb4f9de58bdd039ed5d8abe"
+    },
+    {
+      "revision": "hrjobmerge001",
+      "down_revision": [
+        "hrrecall001",
+        "jobcat001"
+      ],
+      "file": "hrjobmerge001_personnel_templates_and_job_catalog.py",
+      "sha256": "693c07a83491f03b4828531f238a287a8678d8b4221eebd30df6420e333b6785"
+    },
+    {
+      "revision": "hrlang001",
+      "down_revision": "orgkk001",
+      "file": "hrlang001_personnel_section_language.py",
+      "sha256": "c8c9ecbbb912c9beb5bc15a9ca0699c5e99164cbeed4ccf5100c5e0d68071d8c"
+    },
+    {
+      "revision": "hrrecall001",
+      "down_revision": "hrtpl001",
+      "file": "hrrecall001_annual_leave_recall_drafts.py",
+      "sha256": "fc4fec7bc5aa273131892dba1b7c9e885c245c305fe8f4d2cdc9ad093f6703a7"
+    },
+    {
+      "revision": "hrtpl001",
+      "down_revision": "hrlang001",
+      "file": "hrtpl001_independent_personnel_templates.py",
+      "sha256": "7bec22341ae8de3bf3a0052270d85a83a1e94ff81c80ae4b1765585db46f645a"
+    },
+    {
+      "revision": "i0j1k2l3m4n5",
+      "down_revision": "h9i0j1k2l3m4",
+      "file": "i0j1k2l3m4n5_hr_import_diff_removal_decisions.py",
+      "sha256": "9c2ade1822d730fd796120972ac12937af4051af74e8df541acbf94664c2fe10"
+    },
+    {
+      "revision": "i2b3c4d5e6f7",
+      "down_revision": "h1a2b3c4d5e6",
+      "file": "i2b3c4d5e6f7_hr_import_ai_extraction_drafts.py",
+      "sha256": "6ef23eff52c9e66dc79d44031c67027505326a9c888ec1fe4e07f4f3605b3b10"
+    },
+    {
+      "revision": "i6j7k8l9m0n1",
+      "down_revision": "h5c6d7e8f9a0",
+      "file": "i6j7k8l9m0n1_hr_head_incoming_info_register_grant.py",
+      "sha256": "cfc3080a17906ee7adf0b06d07cdbe99e3ff0025f6808f9d701896f7a0043bcd"
+    },
+    {
+      "revision": "i8j9k0l1m2n3",
+      "down_revision": "h7i8j9k0l1m2",
+      "file": "i8j9k0l1m2n3_adr042_role_targeted_access_grants.py",
+      "sha256": "d67116f5537329668b6a85ac595492baf5e12eaa42ef3109db7d88318b342f61"
+    },
+    {
+      "revision": "i9j0k1l2m3n4",
+      "down_revision": "h8i9j0k1l2m3",
+      "file": "i9j0k1l2m3n4_adr046_f1_org_unit_allowed_positions_schema.py",
+      "sha256": "700e84801df755876ab55625f139c1aa900d7479b67e75ba9ee919976c6940a7"
+    },
+    {
+      "revision": "iq2a1b2c3d4",
+      "down_revision": "ppr005hdept01",
+      "file": "iq2a1b2c3d4_hr_import_identity_quality_foundation.py",
+      "sha256": "8418515732f28c005d651104c98375e179ef0e89fbb3c4d2739bd80d419a7fc8"
+    },
+    {
+      "revision": "j0k1l2m3n4o5",
+      "down_revision": "i9j0k1l2m3n4",
+      "file": "j0k1l2m3n4o5_ppr_r1_personnel_record_metadata.py",
+      "sha256": "77cf3e9dda416fbd30bc173173e7f46ca3e3ff50c9cfb866d767e89a3be55863"
+    },
+    {
+      "revision": "j1k2l3m4n5o6",
+      "down_revision": "i0j1k2l3m4n5",
+      "file": "j1k2l3m4n5o6_personnel_intake_link_token_ciphertext.py",
+      "sha256": "4131a7931bcc6ff41ce3ee1ac794a1a91d51363567d5b55187f471db4db482a5"
+    },
+    {
+      "revision": "j3c4d5e6f7a8",
+      "down_revision": "i2b3c4d5e6f7",
+      "file": "j3c4d5e6f7a8_hr_import_education_profile_staging.py",
+      "sha256": "b1c748590fcad79dc1efe7e9cc45b6c10ac72098b61c9520d16b54c80a541411"
+    },
+    {
+      "revision": "j7k8l9m0n1o2",
+      "down_revision": "i6j7k8l9m0n1",
+      "file": "j7k8l9m0n1o2_adr046_f2_allowed_position_audit_events.py",
+      "sha256": "14330a5f9403c118d61d7b3fd43c912d242fb00d32c58a6c86f9ea6dbffb3d24"
+    },
+    {
+      "revision": "j9k0l1m2n3o4",
+      "down_revision": "i8j9k0l1m2n3",
+      "file": "j9k0l1m2n3o4_regular_tasks_archived_at.py",
+      "sha256": "bfbab4edd623c53e0e6e69064e74198af9c16a7b6ea3eb670f5d7888baa24755"
+    },
+    {
+      "revision": "jobcat001",
+      "down_revision": "poskk001",
+      "file": "jobcat001_job_positions_catalog.py",
+      "sha256": "59113729172d6c868280fb7986a7997eafae839e74ba946db220aa50336481e2"
+    },
+    {
+      "revision": "k1l2m3n4o5p6",
+      "down_revision": "j0k1l2m3n4o5",
+      "file": "k1l2m3n4o5p6_ppr_r3_nullable_personnel_record_events_domain_code.py",
+      "sha256": "5805296ed89c0ec0318acb6aa7db38776d93459ffe1feb2407f5c1909e7c589f"
+    },
+    {
+      "revision": "k4d5e6f7a8b9",
+      "down_revision": "j3c4d5e6f7a8",
+      "file": "k4d5e6f7a8b9_adr038_phase_a_employee_profile_overrides.py",
+      "sha256": "490a63890346f4d6914ddefa75a1d5f196ffb618fc10c81370604a76fc4a6fcd"
+    },
+    {
+      "revision": "k5l6m7n8o9p0",
+      "down_revision": "j9k0l1m2n3o4",
+      "file": "k5l6m7n8o9p0_adr050_phase2_1_position_cabinet_schema.py",
+      "sha256": "f178e9cec40d699f377df69081337680ff87b1da0158cafd3abe348d1ecb8080"
+    },
+    {
+      "revision": "k8l9m0n1o2p3",
+      "down_revision": "l9m0n1o2p3q4",
+      "file": "k8l9m0n1o2p3_employee_termination_verification.py",
+      "sha256": "6594050e71a433551fc80044f51218992519f4c49d0a56af180db055e0cfccfd"
+    },
+    {
+      "revision": "l2m3n4o5p6q7",
+      "down_revision": "k1l2m3n4o5p6",
+      "file": "l2m3n4o5p6q7_ppr_r5_command_idempotency.py",
+      "sha256": "0928b813d3be804ed98ebe73b4622c495d8fee126a8bbba07c71ef87b1ce2f76"
+    },
+    {
+      "revision": "l3m4n5o6p7q8",
+      "down_revision": "j1k2l3m4n5o6",
+      "file": "l3m4n5o6p7q8_wp_tg_001_person_telegram_identity.py",
+      "sha256": "e06b480212d1e45e0891eefd076b1b4395a0f65f878212f3f9df20fc9eae3a66"
+    },
+    {
+      "revision": "l5e6f7a8b9c0",
+      "down_revision": "k4d5e6f7a8b9",
+      "file": "l5e6f7a8b9c0_adr038_phase_a1_import_integrity.py",
+      "sha256": "15272e37fe04801d5a21f9f7e8e6e0cad64b72473f2ccbd2b4aa7265748473ea"
+    },
+    {
+      "revision": "l6m7n8o9p0q1",
+      "down_revision": "k5l6m7n8o9p0",
+      "file": "l6m7n8o9p0q1_adr050_phase2_2_position_cabinet_backfill.py",
+      "sha256": "4ed9289fb53659c66f1f7eea992bce215996648a3789aaa68cd9f56629b4a3a0"
+    },
+    {
+      "revision": "l9m0n1o2p3q4",
+      "down_revision": "j7k8l9m0n1o2",
+      "file": "l9m0n1o2p3q4_adr065_preflight_schema_dependencies.py",
+      "sha256": "f29d4a5e6a7b19e5c333c956b2f6175c58234136e25a904749bd30394ebffcbb"
+    },
+    {
+      "revision": "m0n1o2p3q4r5",
+      "down_revision": "k8l9m0n1o2p3",
+      "file": "m0n1o2p3q4r5_leave_draft_order_item_types.py",
+      "sha256": "4f8ee6d5f7ff7e8b0c0d12d64842032dcac578f063a3f5971ba7ba7b96462e6b"
+    },
+    {
+      "revision": "m1n2o3p4q5r6",
+      "down_revision": "td006afnd601",
+      "file": "m1n2o3p4q5r6_adr065_person_link_operations.py",
+      "sha256": "311e802c7e408a9bae678da78e287d94915143de94f3473769376844d973ccba"
+    },
+    {
+      "revision": "m3n4o5p6q7r8",
+      "down_revision": "l2m3n4o5p6q7",
+      "file": "m3n4o5p6q7r8_ppr_candidate_intended_employment.py",
+      "sha256": "8c906723ea20dd15b8d7333545f35df26ed58d1dcf2caa299791b006c9125bcf"
+    },
+    {
+      "revision": "m4n5o6p7q8r9",
+      "down_revision": "l3m4n5o6p7q8",
+      "file": "m4n5o6p7q8r9_wp_ppr_intake_on_behalf_edit_audit.py",
+      "sha256": "394ea42c7b4171fe0b59931e3e51eb840a823f487d3ac5d245e14dddae46168a"
+    },
+    {
+      "revision": "m6f7a8b9c0d1",
+      "down_revision": "l5e6f7a8b9c0",
+      "file": "m6f7a8b9c0d1_adr038_phase_d3_sync_audit_log.py",
+      "sha256": "4cd37354e2070096abfe83d3cad7feb441decaa5bb3caa40c38dc20f55174b3b"
+    },
+    {
+      "revision": "m7n8o9p0q1r2",
+      "down_revision": "l6m7n8o9p0q1",
+      "file": "m7n8o9p0q1r2_adr053_phase2_6_permission_template_binding_schema.py",
+      "sha256": "c5a9ac2c068291ec493c45e9cdb2b7f70938ddc9f502cb876573b8b8b5d4e1ba"
+    },
+    {
+      "revision": "n1o2p3q4r5s6",
+      "down_revision": "m0n1o2p3q4r5",
+      "file": "n1o2p3q4r5s6_repair_personnel_order_evidence_scopes.py",
+      "sha256": "fa6869d82140ef3eed1eeeaec4ad9e84247b407cf9cf4525a8244ade4cea7ca7"
+    },
+    {
+      "revision": "n4o5p6q7r8s9",
+      "down_revision": "m3n4o5p6q7r8",
+      "file": "n4o5p6q7r8s9_wp_pr_p4_001_a_person_relatives.py",
+      "sha256": "7a28a7b0916a28224871c82d192645b70cc588734f5cdd274e72de0401058050"
+    },
+    {
+      "revision": "n5o6p7q8r9s0",
+      "down_revision": "m4n5o6p7q8r9",
+      "file": "n5o6p7q8r9s0_ppr_additional_profile.py",
+      "sha256": "e460a31ac630e57738cf36b1ea45c2549e304035649aa4028fd86e8d4b0e390e"
+    },
+    {
+      "revision": "n7a8b9c0d1e2",
+      "down_revision": "m6f7a8b9c0d1",
+      "file": "n7a8b9c0d1e2_adr039_phase_3b_training_normalization_schema.py",
+      "sha256": "a1227b98686b0effa70f752c8a731a3cd9f1097a66a030e9e1b9b1c70f609c1d"
+    },
+    {
+      "revision": "n8o9p0q1r2s3",
+      "down_revision": "m7n8o9p0q1r2",
+      "file": "n8o9p0q1r2s3_adr053_phase2_6_permission_template_binding_backfill.py",
+      "sha256": "430235e37cedbb6b132846666d49d7cf2f8c551edc7726a348763b041cf68061"
+    },
+    {
+      "revision": "o1p2q3r4s5t6",
+      "down_revision": "n1o2p3q4r5s6",
+      "file": "o1p2q3r4s5t6_personnel_order_annual_leave_events.py",
+      "sha256": "d7b1e905f432e53b93eb68757f38b02bd6c3dc94a004e17eb63e9caad3cde238"
+    },
+    {
+      "revision": "o5p6q7r8s9t0",
+      "down_revision": "n4o5p6q7r8s9",
+      "file": "o5p6q7r8s9t0_wp_pr_013_person_external_employment.py",
+      "sha256": "e8167f973450d9b891a8ed65fe1066a63e320fa7eef2fe3f3dc2c6d21c4d2621"
+    },
+    {
+      "revision": "o6p7q8r9s0t1",
+      "down_revision": "n5o6p7q8r9s0",
+      "file": "o6p7q8r9s0t1_wp_ver_002_personnel_verification_foundation.py",
+      "sha256": "507324f20566ca823dafd7ef4f978b1b119cb00df97e6d74f40efb0720b8e89e"
+    },
+    {
+      "revision": "o7p8q9r0s1t2",
+      "down_revision": "n7a8b9c0d1e2",
+      "file": "o7p8q9r0s1t2_adr039_phase_3f_qualification_category_document_type.py",
+      "sha256": "937b6781d765e802680c96cee351da5d04cf5f26a0f5f182148d38ebf3fcf4e9"
+    },
+    {
+      "revision": "o9p0q1r2s3t4",
+      "down_revision": "n8o9p0q1r2s3",
+      "file": "o9p0q1r2s3t4_adr045_hr_head_enrollment_role_grant.py",
+      "sha256": "d605fd1bef5682398305d84c7f051f9552be37ab9826c7a1082a23536d97aa8a"
+    },
+    {
+      "revision": "orgkk001",
+      "down_revision": "pojson019",
+      "file": "orgkk001_add_org_unit_kazakh_name_fields.py",
+      "sha256": "5fd39c61cfa11c6d55e07bf9aa01b42b1f07e49f5fae8a06111927da4a071580"
+    },
+    {
+      "revision": "p0q1r2s3t4u5",
+      "down_revision": "o9p0q1r2s3t4",
+      "file": "p0q1r2s3t4u5_wp_po_003_personnel_orders_foundation.py",
+      "sha256": "b3853ce07c20cda881c6f0741ce1c7f0ae6c84771fe7f080d8ea58b97ef9aa1c"
+    },
+    {
+      "revision": "p1q2r3s4t5u6",
+      "down_revision": "o1p2q3r4s5t6",
+      "file": "p1q2r3s4t5u6_oserova_hr_reg_enrollment_grant.py",
+      "sha256": "3849ecfe852ae545babcdd33f2a5af537ab045c77e811f958b69b2248f4bc7f2"
+    },
+    {
+      "revision": "p6q7r8s9t0u1",
+      "down_revision": "o5p6q7r8s9t0",
+      "file": "p6q7r8s9t0u1_wp_pr_027_person_military_service.py",
+      "sha256": "e10eb18f34b7b719192cf70640915b00e41985e79b5d264f6d63fc3245109c96"
+    },
+    {
+      "revision": "p7q8r9s0t1u2",
+      "down_revision": "o6p7q8r9s0t1",
+      "file": "p7q8r9s0t1u2_wp_ver_003_employment_revision_link.py",
+      "sha256": "7e8fb05be1027ac84cfed7f597d38759a8f3a97a794012a29631509109e22173"
+    },
+    {
+      "revision": "p8q9r0s1t2u3",
+      "down_revision": "o7p8q9r0s1t2",
+      "file": "p8q9r0s1t2u3_adr039_phase_3f3_normalized_record_review_override.py",
+      "sha256": "6337a78004e4a41c7129034e391fc06b773471f8f2835f706bb97c74d73a1b54"
+    },
+    {
+      "revision": "pce001cardedit",
+      "down_revision": "ppr005qnotedetails01",
+      "file": "pce001_personnel_card_edit.py",
+      "sha256": "fcecfd53bde2b55112acc25c636599d98c164b2a660868969eb1d9790e0fb41d"
+    },
+    {
+      "revision": "per001eventsread",
+      "down_revision": "pce001cardedit",
+      "file": "per001_personnel_events_read.py",
+      "sha256": "2130da3cd5636c7e715ee7e4f678616740f27179b4249622c6fd0de7de7f16a4"
+    },
+    {
+      "revision": "per002eventscope",
+      "down_revision": "per001eventsread",
+      "file": "per002_personnel_event_visibility.py",
+      "sha256": "3730815b9a97cbda8a664d639bf2c48df107950034883ddd17b1e5e92a845061"
+    },
+    {
+      "revision": "podup001",
+      "down_revision": "hrjobmerge001",
+      "file": "podup001_active_order_header_uniqueness.py",
+      "sha256": "a01a4d4cc191acc333c7b65db742f73262aab470fad2805677ba32d30085879c"
+    },
+    {
+      "revision": "pojson001",
+      "down_revision": "hdc001checklist",
+      "file": "pojson001_structured_personnel_order_storage.py",
+      "sha256": "f01f6bea26676084d0e78bd81d325a6afe153a796c9044aded33f1f4a01f75e2"
+    },
+    {
+      "revision": "pojson002",
+      "down_revision": "pojson001",
+      "file": "pojson002_supplementary_pay_header_type.py",
+      "sha256": "089d2cae7d667a0c50fb975b6b6df2bedb3b33d80c47b793edaa6e763d38d925"
+    },
+    {
+      "revision": "pojson003",
+      "down_revision": "pojson002",
+      "file": "pojson003_supplementary_pay_item_type.py",
+      "sha256": "51e1705d08b9b19d5e78c87027ec24d6d9d17c995fb7504d0c0218487043d321"
+    },
+    {
+      "revision": "pojson004",
+      "down_revision": "pojson003",
+      "file": "pojson004_return_from_childcare_leave.py",
+      "sha256": "0d89e4cd29dfe0c049503997a173e8267c7fdee7c4a07957438e2789fdb829fb"
+    },
+    {
+      "revision": "pojson005",
+      "down_revision": "pojson004",
+      "file": "pojson005_childcare_leave_grant.py",
+      "sha256": "78d3fd406d2feba5b76bb377be3ead25f7875cf5e71d21f1948853473df4b371"
+    },
+    {
+      "revision": "pojson006",
+      "down_revision": "pojson005",
+      "file": "pojson006_personnel_order_acknowledgements.py",
+      "sha256": "38cba412872b09d12e21e403f6a34a454b99b9b5d0541d29143fa509acbbc797"
+    },
+    {
+      "revision": "pojson007",
+      "down_revision": "pojson006",
+      "file": "pojson007_personnel_order_document_review.py",
+      "sha256": "8db404cdd10ffd9ed517c452d75841254b990eee47a8b32af07fbe4af15cf590"
+    },
+    {
+      "revision": "pojson008",
+      "down_revision": "pojson007",
+      "file": "pojson008_document_header_correction.py",
+      "sha256": "c718602d0de0cb8dcc602eeee2bfdfe07f97331bea9cd07817b6a99b775bdac4"
+    },
+    {
+      "revision": "pojson009",
+      "down_revision": "pojson008",
+      "file": "pojson009_document_item_correction.py",
+      "sha256": "ac56ac70aa885c3c0479400b8602b0bb4877fe649c5b04ebf4a93bf42bb2a570"
+    },
+    {
+      "revision": "pojson010",
+      "down_revision": "pojson009",
+      "file": "pojson010_manual_personnel_order_draft.py",
+      "sha256": "b284a26c5ff7f0a1161a37eb160d4a1798388e5f0ddb9c0e3f744abfbae9b9b5"
+    },
+    {
+      "revision": "pojson011",
+      "down_revision": "pojson010",
+      "file": "pojson011_childcare_return_event.py",
+      "sha256": "2db8b46fe53c0b3f94997441dbf0fb460a831db85d4a3a40db489ac076ee904c"
+    },
+    {
+      "revision": "pojson012",
+      "down_revision": "pojson011",
+      "file": "pojson012_repair_childcare_return_event_check.py",
+      "sha256": "6a5bbf75751dc0cbd59ce9a3df4df8a246b3e51dcfb4217152844fdec5950bba"
+    },
+    {
+      "revision": "pojson013",
+      "down_revision": "pojson012",
+      "file": "pojson013_personnel_order_template_drafts.py",
+      "sha256": "877b0b180e6c7cb4b6ffe942b1348c3280182b614493f02926ab03ca17351dcb"
+    },
+    {
+      "revision": "pojson014",
+      "down_revision": "pojson013",
+      "file": "pojson014_template_publication_and_applications.py",
+      "sha256": "fac384d14b40a8bebe20b9ad672c238b197337b3e670ca34e47b01c0fa956c4b"
+    },
+    {
+      "revision": "pojson015",
+      "down_revision": "pojson014",
+      "file": "pojson015_technical_personnel_order_cleanup.py",
+      "sha256": "526e569df871d89e69ca4efb3a30179aadeb76d7f4de537bd5532f1624a753b0"
+    },
+    {
+      "revision": "pojson016",
+      "down_revision": "pojson015",
+      "file": "pojson016_technical_personnel_order_cleanup_batches.py",
+      "sha256": "3ea78774fca2752f4117e38588a0a4e742e3610a6196a7474f3e1f4c37dad8af"
+    },
+    {
+      "revision": "pojson017",
+      "down_revision": "pojson016",
+      "file": "pojson017_personnel_order_draft_deletion_audit.py",
+      "sha256": "31db63892abc7c73f085263c5e69a7b3ef4d84378695abf1da140cd3dc468b58"
+    },
+    {
+      "revision": "pojson018",
+      "down_revision": "pojson017",
+      "file": "pojson018_personnel_order_soft_delete.py",
+      "sha256": "da7aabeb2179f45d3add02ec9127e38ac1d43412e045113c402e2a53c17e0391"
+    },
+    {
+      "revision": "pojson019",
+      "down_revision": "pojson018",
+      "file": "pojson019_privileged_physical_personnel_order_delete.py",
+      "sha256": "2655adcd80547e592a3ae05337f58994cceba4984a50f19a9d4299142fe4a021"
+    },
+    {
+      "revision": "poskk001",
+      "down_revision": "orgkk001",
+      "file": "poskk001_add_position_code_and_kazakh_name.py",
+      "sha256": "e1fe8b20d5aa509537025216ce4a2dac03cacae50d5623a05bf67c6b483619a2"
+    },
+    {
+      "revision": "ppr005bproj01",
+      "down_revision": "ppr3trainingsnap01",
+      "file": "ppr005bproj01_wp_ppr_mig_005b_status_projection.py",
+      "sha256": "0b9df96b50b50e0775a8a4733ea2ecf821d78193805d366a6309f891c9d560f7"
+    },
+    {
+      "revision": "ppr005cread01",
+      "down_revision": "ppr005bproj01",
+      "file": "ppr005cread01_wp_ppr_mig_005c_status_read.py",
+      "sha256": "f90a5befc44c439a9d3dce5dbfb49fdc5c5782cb15b2aea2465634f1e832b7f0"
+    },
+    {
+      "revision": "ppr005drepair01",
+      "down_revision": "ppr005cread01",
+      "file": "ppr005drepair01_restore_missing_ppr_schema.py",
+      "sha256": "2bd15f0ddaa4730398d08471ff87ca4d62eea0ede55e079a78465dfc3c5d36ff"
+    },
+    {
+      "revision": "ppr005fevent01",
+      "down_revision": "ppr005drepair01",
+      "file": "ppr005fevent01_wp_ppr_mig_005f_a_event_outbox.py",
+      "sha256": "a6a7d595b107f2b118892494af80c66771115d3301a806f361216c97cb132e6c"
+    },
+    {
+      "revision": "ppr005gfull01",
+      "down_revision": "ppr005fevent01",
+      "file": "ppr005gfull01_wp_ppr_mig_005g_full_section_projection.py",
+      "sha256": "bed97d2c65c4374a7bec25b02d493056af8f56903c9a4ae1edbb30341f92e03e"
+    },
+    {
+      "revision": "ppr005hdept01",
+      "down_revision": "ppr005gfull01",
+      "file": "ppr005hdept01_hr_control_list_department_targets.py",
+      "sha256": "30bab19bdcad3dffa314c0a2c7f84c292e3ddf0a37251cdb969df44abca3e89d"
+    },
+    {
+      "revision": "ppr005iadd01",
+      "down_revision": "iq2a1b2c3d4",
+      "file": "ppr005iadd01_person_status_facts.py",
+      "sha256": "daf35fcfb158ef445e88b229bbf8c616114116fdb392f4881e28a53e4b7e3721"
+    },
+    {
+      "revision": "ppr005jcanon01",
+      "down_revision": "ppr005iadd01",
+      "file": "ppr005jcanon01_canonical_stage0_cohort.py",
+      "sha256": "acd5ca73e334b4f91a190bb3b70a1138c61afd3badfb4bcdde48cf47321ea25d"
+    },
+    {
+      "revision": "ppr005kimport01",
+      "down_revision": "ppr005jcanon01",
+      "file": "ppr005kimport01_import_profile_projection_provenance.py",
+      "sha256": "5aaed9a9bc2ccb36473156196ef2b1ef205cd17de3a55858b46b33ce2aa3beb8"
+    },
+    {
+      "revision": "ppr005ladditional01",
+      "down_revision": "ppr005kimport01",
+      "file": "ppr005ladditional01_note_section_projection.py",
+      "sha256": "a80acfdb7efad725af84a8e89a4f1e594f536b56b8b0627a6442dcff98e43d1e"
+    },
+    {
+      "revision": "ppr005madditionalfix01",
+      "down_revision": "ppr005ladditional01",
+      "file": "ppr005madditionalfix01_repair_note_section_constraint.py",
+      "sha256": "bfb8fa13618995d5aae37625d769b0e722049ea5d870296b0a827c3d11df687a"
+    },
+    {
+      "revision": "ppr005nimportiinidx01",
+      "down_revision": "ppr005madditionalfix01",
+      "file": "ppr005nimportiinidx01_projection_import_iin_index.py",
+      "sha256": "8aa861b0167f276b03b022726c8910e055736d8b2350759e2f5ee1dc54cd3ee3"
+    },
+    {
+      "revision": "ppr005ocategory01",
+      "down_revision": "ppr005nimportiinidx01",
+      "file": "ppr005ocategory01_qualification_category_section.py",
+      "sha256": "7e422c47577e266efb64fa08ced54e3c12c2e7cbd685dee38c71547690085afe"
+    },
+    {
+      "revision": "ppr005pcategoryfix01",
+      "down_revision": "ppr005ocategory01",
+      "file": "ppr005pcategoryfix01_repair_category_constraint.py",
+      "sha256": "2f83566f27edc1efa22a2068e9cf408ac1d2d34f7296720ba2b5af9c8b0f6220"
+    },
+    {
+      "revision": "ppr005qnotedetails01",
+      "down_revision": "ppr005pcategoryfix01",
+      "file": "ppr005q_note_fact_details.py",
+      "sha256": "56aae93ff89d5a00e2d34c4f466e9bc6e15b8dcc0834c9fad5fd7d246e9062e6"
+    },
+    {
+      "revision": "q1r2s3t4u5w6",
+      "down_revision": "p0q1r2s3t4u5",
+      "file": "q1r2s3t4u5w6_pmf_1_personnel_migration_schema.py",
+      "sha256": "d36daea23431964da5960c67e41fc0c624fde13539dbb286d4c19849b54a2a39"
+    },
+    {
+      "revision": "q7r8s9t0u1v2",
+      "down_revision": "p6q7r8s9t0u1",
+      "file": "q7r8s9t0u1v2_wp_ppr_applicant_001b_personnel_applications.py",
+      "sha256": "2cd82a29c40580c5d2e6faf4276992c7dab9b51ef3191bc2f819fec8e7b721ca"
+    },
+    {
+      "revision": "q8r9s0t1u2v3",
+      "down_revision": "p7q8r9s0t1u2",
+      "file": "q8r9s0t1u2v3_wp_ppr_card_coordination_003_reconciliation_decisions.py",
+      "sha256": "5808da3410cbbb1e4243603bc0063892fea8c83546541053da2bf9a78589f3e4"
+    },
+    {
+      "revision": "q9r0s1t2u3v4",
+      "down_revision": "p8q9r0s1t2u3",
+      "file": "q9r0s1t2u3v4_adr040_phase_a_canonical_snapshot_schema.py",
+      "sha256": "21931f6c787aeb4673a48031986866f12873f53e9e17a0e0b62770993c15f575"
+    },
+    {
+      "revision": "qmt001trainingexpert",
+      "down_revision": "emp001employee",
+      "file": "qmt001_training_expert_platform_role.py",
+      "sha256": "679c8d6e9328c44e2b12b4a746f75091502f7843f76dc1cfa9ce8dfdf203f4a4"
+    },
+    {
+      "revision": "r0s1t2u3v4w5",
+      "down_revision": "q9r0s1t2u3v4",
+      "file": "r0s1t2u3v4w5_adr040_phase_b_monthly_diff_schema.py",
+      "sha256": "7e66acb4c665d7dc25bf77c9e45c702a6e8fb5ea108d8719b43810c8b5c5bb8a"
+    },
+    {
+      "revision": "r1s2t3u4v5w6",
+      "down_revision": "p1q2r3s4t5u6",
+      "file": "r1s2t3u4v5w6_leave_order_header_types.py",
+      "sha256": "50a4c346239280def1fcd9024212b8985df7d4ec16aa9336b51fe261a8b6afc8"
+    },
+    {
+      "revision": "r2s3t4u5v6w7",
+      "down_revision": "q1r2s3t4u5w6",
+      "file": "r2s3t4u5v6w7_wp_po_008_nullable_order_registration_fields.py",
+      "sha256": "1205131620f92a86fa2d384058fc528d26417895ef34cdca715991e3f47edfef"
+    },
+    {
+      "revision": "r8s9t0u1v2w3",
+      "down_revision": "q7r8s9t0u1v2",
+      "file": "r8s9t0u1v2w3_wp_ppr_intake_001_links_and_drafts.py",
+      "sha256": "faa72be6707926c5fec0ea3229c01f3eab7b3a3e071f7feb5bf2669c989b32eb"
+    },
+    {
+      "revision": "s0p0r0e0v0f0",
+      "down_revision": "m1n2o3p4q5r6",
+      "file": "s0p0r0e0v0f0_ppr_stage0_cohort_preview_freeze.py",
+      "sha256": "86e5f4cc7ef57b63dd9a373fa2b87608f509bba8dfb6e951a873f14223b15489"
+    },
+    {
+      "revision": "s1g0e1n2r3a4",
+      "down_revision": "s0p0r0e0v0f0",
+      "file": "s1g0e1n2r3a4_stage1_general_draft_runs.py",
+      "sha256": "26c0915528393b9033e138cbb000d3753870bfe40dfece0c60a6d63b5c21e855"
+    },
+    {
+      "revision": "s1t2u3v4w5x6",
+      "down_revision": "r0s1t2u3v4w5",
+      "file": "s1t2u3v4w5x6_adr040_phase_f_hr_change_events_schema.py",
+      "sha256": "e05972737cd965f007a00596ab98af174ede1a8ba74a3bb1294ff5229a74ca68"
+    },
+    {
+      "revision": "s2e1d2u3c4a5",
+      "down_revision": "s1g0e1n2r3a4",
+      "file": "s2e1d2u3c4a5_ppr_stage2_education_envelope.py",
+      "sha256": "07128da18b854fa4701a6ca599aea384ac7b75972b4e373aa6d251b948ea0af4"
+    },
+    {
+      "revision": "s2e2f3g4h5i6",
+      "down_revision": "s2e1d2u3c4a5",
+      "file": "s2e2f3g4h5i6_enable_pmf_education_domain.py",
+      "sha256": "5ad08db1efdcc9df6ba7ea0c865a32353599872fe1732ee4607d81c8e8ab007f"
+    },
+    {
+      "revision": "s2t3u4v5w6x",
+      "down_revision": "r1s2t3u4v5w6",
+      "file": "s2t3u4v5w6x_seed_org_units_general_it_transfuse.py",
+      "sha256": "99b15a5edd5c38f5e783389932d81734f85c5294842b12117c2025abc00e4f54"
+    },
+    {
+      "revision": "ppr3training001",
+      "down_revision": "s2e2f3g4h5i6",
+      "file": "s3t4u5v6w7x8_ppr_stage3_training_envelope.py",
+      "sha256": "ad2aaf446b99045d6f3bf9852656a295cbc58d0df8075919324ad02107ffe9ce"
+    },
+    {
+      "revision": "s3t4u5v6w7x8",
+      "down_revision": "r2s3t4u5v6w7",
+      "file": "s3t4u5v6w7x8_wp_po_edit_002_editorial_persistence.py",
+      "sha256": "f47f16c943fbb7601a7e6979396d94357ea95ffcf0c3592c1aa118ce7f01cbff"
+    },
+    {
+      "revision": "ppr3trainingsnap01",
+      "down_revision": "ppr3training001",
+      "file": "s3t5v6w7x8y9_ppr_stage3_training_candidate_snapshot.py",
+      "sha256": "a236860cbacc2b34ef50d83026ceaf7c90b20e0b29eb7ef25849a510350cc0b9"
+    },
+    {
+      "revision": "s9t0u1v2w3x4",
+      "down_revision": "r8s9t0u1v2w3",
+      "file": "s9t0u1v2w3x4_wp_ppr_intake_002_review_and_transfer.py",
+      "sha256": "d66d56d9c3c6be2b7a4eb9406551d5cf88c08af4dccfc82c7e295cb6083c5c1e"
+    },
+    {
+      "revision": "t0u1v2w3x4y5",
+      "down_revision": "s9t0u1v2w3x4",
+      "file": "t0u1v2w3x4y5_wp_ppr_applicant_002_director_resolution.py",
+      "sha256": "464d4296d3dae4066a9844a0f4d7d85e5d145fa50a2a16adca5f593f810ad89f"
+    },
+    {
+      "revision": "t2u3v4w5x6y7",
+      "down_revision": "s1t2u3v4w5x6",
+      "file": "t2u3v4w5x6y7_adr039_promotion_specialty_policy.py",
+      "sha256": "9ba253543395f81d320f209e0a12f3ecacead1301c9b8262724ca3fa06a0012f"
+    },
+    {
+      "revision": "t3u4v5w6x7y",
+      "down_revision": "s2t3u4v5w6x",
+      "file": "t3u4v5w6x7y_reference_positions_org_units.py",
+      "sha256": "0d1f0507b5e12d578d789be20422351223958f884ab9d014bc55bf62622ec9fb"
+    },
+    {
+      "revision": "t4u5v6w7x8y9",
+      "down_revision": "s3t4u5v6w7x8",
+      "file": "t4u5v6w7x8y9_wp_po_lc_del_003_lifecycle_audit_foundation.py",
+      "sha256": "74697aeed375704e4738fd1f884fe982534f7bf35728ddfa5f760dab3ee6c08c"
+    },
+    {
+      "revision": "td005audit401",
+      "down_revision": "td005fp3v101",
+      "file": "td005audit401_wp_td_005_execute_audit.py",
+      "sha256": "7c782f8b9b510e32d06ad01561ca110768cf33db30b5906e736c25324f734658"
+    },
+    {
+      "revision": "td005exec501",
+      "down_revision": "td005audit401",
+      "file": "td005exec501_wp_td_005_applicant_execution.py",
+      "sha256": "936efc18f7f3d378f148b43ae9c1da3e1df1b41ec5adf88abb05441a2f876749"
+    },
+    {
+      "revision": "td005fp3v101",
+      "down_revision": "td005tomb201",
+      "file": "td005fp3v101_wp_td_005_fingerprint_v2.py",
+      "sha256": "0b87692fdea7372c9de5e5fb3adde708c86842ec53de0cb95e83ca10cf631420"
+    },
+    {
+      "revision": "td005m1v2a01",
+      "down_revision": "b1c2d3e4f5a6",
+      "file": "td005m1v2a01_wp_td_005_manifest_v2.py",
+      "sha256": "7a1d0ae981dc7f0902b617f89624e5b079300b607a7e49715cbe7226184042aa"
+    },
+    {
+      "revision": "td005tomb201",
+      "down_revision": "td005m1v2a01",
+      "file": "td005tomb201_wp_td_005_pii_free_tombstones.py",
+      "sha256": "2f1ac3b07eb0bdd012038cdb0d2f907100fbb7f0787b28638d267d206a40d5e5"
+    },
+    {
+      "revision": "td006afnd601",
+      "down_revision": "td005exec501",
+      "file": "td006afnd601_wp_td_006a_system_identity_foundation.py",
+      "sha256": "7f05f1be816f9271e7af2a28886ed105667a0bc763c3b245439d9fcb412a39c1"
+    },
+    {
+      "revision": "u1v2w3x4y5z6",
+      "down_revision": "t0u1v2w3x4y5",
+      "file": "u1v2w3x4y5z6_wp_ppr_applicant_004_lifecycle_archive.py",
+      "sha256": "9bd9dea582de2cfe1db6fc287698b0c3ebced9c38456f07bdf7ff357f4bb6936"
+    },
+    {
+      "revision": "u3v4w5x6y7z8",
+      "down_revision": "t2u3v4w5x6y7",
+      "file": "u3v4w5x6y7z8_adr042_phase_b2_1_schema.py",
+      "sha256": "6acd37a922c84f1ac9f12e9c84259dd97b42f218a868d8f12baefb0d41fb3c6e"
+    },
+    {
+      "revision": "u4v5w6x7y8z",
+      "down_revision": "t3u4v5w6x7y",
+      "file": "u4v5w6x7y8z_wp_po_002_stage_2a_archive_import_staging.py",
+      "sha256": "3ff9d9f7b3eec7f1d1e48de244b03631fba2aa7f5a53ef99126520d541ed185e"
+    },
+    {
+      "revision": "u5v6w7x8y9z0",
+      "down_revision": "t4u5v6w7x8y9",
+      "file": "u5v6w7x8y9z0_wp_po_lc_del_004_cancel_grants.py",
+      "sha256": "9368e7f3741d31b6392fcf258279fe465be69b8d9300dabafa5dbaf9da658b12"
+    },
+    {
+      "revision": "ua002accessadmin",
+      "down_revision": "adm001canonicalroles",
+      "file": "ua002_user_access_admin_permission.py",
+      "sha256": "828bd616dd769c4954e37beb4b5570ecb2cc79fccf425bac9cf19a3f1c59aaf3"
+    },
+    {
+      "revision": "ua003telegramrecovery",
+      "down_revision": "ua002accessadmin",
+      "file": "ua003telegramrecovery_telegram_password_recovery.py",
+      "sha256": "002c1f1961675a859b08ec2867ed178a479a8746efd2b0496306702dddd09cdc"
+    },
+    {
+      "revision": "ua004telegrambindcodes",
+      "down_revision": "ua003telegramrecovery",
+      "file": "ua004telegrambindcodes_persistent_bind_codes.py",
+      "sha256": "886a715a3aab44b3a87475424211d65d3a8e5af696952afa850adf28526ed3fa"
+    },
+    {
+      "revision": "v1w2x3y4z5a6",
+      "down_revision": "u1v2w3x4y5z6",
+      "file": "v1w2x3y4z5a6_wp_onboarding_001_foundation.py",
+      "sha256": "9e36ebb97fe5ae5124b37b4ea9d2c85ad4a7449374dc3eca84f3700758057608"
+    },
+    {
+      "revision": "v4w5x6y7z8a9",
+      "down_revision": "u3v4w5x6y7z8",
+      "file": "v4w5x6y7z8a9_adr042_phase_b2_3_backfill.py",
+      "sha256": "57d00d7247b268b0151c30efcd34bf3632c6b4dfb95d452609e581d527cde36a"
+    },
+    {
+      "revision": "v5w6x7y8z9a",
+      "down_revision": "u4v5w6x7y8z",
+      "file": "v5w6x7y8z9a_wp_po_002_stage_2d_archive_review.py",
+      "sha256": "af704feebe6a4a1a9bdbadf6430307f3ebcf15ada4f34c46e3d158dee99630e4"
+    },
+    {
+      "revision": "v6w7x8y9z0a1",
+      "down_revision": "u5v6w7x8y9z0",
+      "file": "v6w7x8y9z0a1_wp_po_lc_del_005_archive_restore_grants.py",
+      "sha256": "7692e25c3767d756697e348d9131d25f91fd39ab295cbf50b94f136d45710166"
+    },
+    {
+      "revision": "w2x3y4z5a6b7",
+      "down_revision": "v1w2x3y4z5a6",
+      "file": "w2x3y4z5a6b7_wp_onboarding_002_tasks_notifications.py",
+      "sha256": "6782ed01b2dfc135c21ce3fec80544df7c2d670fd602e9d1e676dd6d0d2085c0"
+    },
+    {
+      "revision": "w5x6y7z8a9b0",
+      "down_revision": "v4w5x6y7z8a9",
+      "file": "w5x6y7z8a9b0_adr042_phase_b5_access_roles_seed.py",
+      "sha256": "4d194e77973028c978ccebff8ffd70d827f3d1d5d47cddb42ae100be1b72bd4f"
+    },
+    {
+      "revision": "w6x7y8z9a0b1",
+      "down_revision": "v5w6x7y8z9a",
+      "file": "w6x7y8z9a0b1_wp_cl_002_control_list_export_permission.py",
+      "sha256": "15aeff367c8fae94eb44fcc2949999a05080d70a62332566d43bb31884f9120c"
+    },
+    {
+      "revision": "w7x8y9z0a1b2",
+      "down_revision": "v6w7x8y9z0a1",
+      "file": "w7x8y9z0a1b2_oo_imp_001_submitted_text_intake.py",
+      "sha256": "66aa6d998096d51b4bc4f876fa4ac08cdd11d4a0ff20f030638cecae7215994d"
+    },
+    {
+      "revision": "x6y7z8a9b0c1",
+      "down_revision": "w5x6y7z8a9b0",
+      "file": "x6y7z8a9b0c1_adr043_phase_b2_personnel_lifecycle_schema.py",
+      "sha256": "91b0c2ba5a028672ddc15b4d5410e45aebe06295f74a8f258a83c0a4c78042ea"
+    },
+    {
+      "revision": "x7y8z9a0b1c2",
+      "down_revision": "w6x7y8z9a0b1",
+      "file": "x7y8z9a0b1c2_wp_cl_003_control_list_export_audit.py",
+      "sha256": "0bf7330e0e9871439cec86aca046fba75955282fec1ff619068e2df7b8b103e4"
+    },
+    {
+      "revision": "x8y9z0a1b2c3",
+      "down_revision": "w7x8y9z0a1b2",
+      "file": "x8y9z0a1b2c3_oo_imp_002_content_confirmation_translation.py",
+      "sha256": "2df6cdc9ce8f47662471af3fa344d8b655d9ec709db8317dc6ad2ff74dd50205"
+    },
+    {
+      "revision": "y7z8a9b0c1d2",
+      "down_revision": "x6y7z8a9b0c1",
+      "file": "y7z8a9b0c1d2_adr043_phase_c3_lifecycle_runs_schema.py",
+      "sha256": "c2bfb7ff16a5fff24bba4577bceba93de8728f3b4381487d19e847eaba2da5b1"
+    },
+    {
+      "revision": "y8z9a0b1c2d3",
+      "down_revision": "x7y8z9a0b1c2",
+      "file": "y8z9a0b1c2d3_wp_td_002_test_personnel_deletion_foundation.py",
+      "sha256": "9e4a0a80fb41eed54fcd31a7969a8931bfcf9de757a7d9ca3da542b07ea812a0"
+    },
+    {
+      "revision": "y9z0a1b2c3d4",
+      "down_revision": "x8y9z0a1b2c3",
+      "file": "y9z0a1b2c3d4_oo_imp_003_official_draft_package.py",
+      "sha256": "b1406240a143cd1f9798619296b9ce9aae0d10c582a5ad4ecee8e7b435dd6aa2"
+    },
+    {
+      "revision": "z0a1b2c3d4e5",
+      "down_revision": "y9z0a1b2c3d4",
+      "file": "z0a1b2c3d4e5_oo_imp_003b_workspace_freeze_drift.py",
+      "sha256": "3b393c70e7c78efdc476de4316b141e2389eaff06784cf8e8887bc2973e34005"
+    },
+    {
+      "revision": "z8a9b0c1d2e3",
+      "down_revision": "y7z8a9b0c1d2",
+      "file": "z8a9b0c1d2e3_adr044_b2_reconciliation_schema.py",
+      "sha256": "d59a154650d0daeeaf3a517bb1e2b3dcaa39707e5f907fa4174c43ae42a689e4"
+    },
+    {
+      "revision": "z9a0b1c2d3e4",
+      "down_revision": "y8z9a0b1c2d3",
+      "file": "z9a0b1c2d3e4_wp_td_002b_foundation_review_closure.py",
+      "sha256": "9b4447416cd09625d7474104827d3cbcf0fdb2a122293634fdcf7230b15e7934"
+    }
+  ],
+  "dictionaries": {
+    "positions": {
+      "exists": true,
+      "count": 111,
+      "rows": [
+        {
+          "name": "Аналитик ЭРОБ",
+          "name_kk": null,
+          "category": "admin",
+          "position_id": 61
+        },
+        {
+          "name": "Архивариус",
+          "name_kk": null,
+          "category": "admin",
+          "position_id": 1
+        },
+        {
+          "name": "Аудитор",
+          "name_kk": null,
+          "category": "admin",
+          "position_id": 2
+        },
+        {
+          "name": "Буфетчица",
+          "name_kk": null,
+          "category": "technical",
+          "position_id": 110
+        },
+        {
+          "name": "Бухгалтер",
+          "name_kk": null,
+          "category": "admin",
+          "position_id": 3
+        },
+        {
+          "name": "Бухгалтер-кассир",
+          "name_kk": null,
+          "category": "admin",
+          "position_id": 4
+        },
+        {
+          "name": "Бухгалтер-экономист",
+          "name_kk": null,
+          "category": "admin",
+          "position_id": 111
+        },
+        {
+          "name": "Водитель",
+          "name_kk": null,
+          "category": "technical",
+          "position_id": 5
+        },
+        {
+          "name": "Врач",
+          "name_kk": null,
+          "category": "medical",
+          "position_id": 6
+        },
+        {
+          "name": "Врач-эксперт",
+          "name_kk": null,
+          "category": "medical",
+          "position_id": 108
+        },
+        {
+          "name": "Главная медсестра",
+          "name_kk": null,
+          "category": "medical",
+          "position_id": 7
+        },
+        {
+          "name": "Главный бухгалтер",
+          "name_kk": null,
+          "category": "admin",
+          "position_id": 8
+        },
+        {
+          "name": "Главный инженер",
+          "name_kk": null,
+          "category": "technical",
+          "position_id": 115
+        },
+        {
+          "name": "Главный экономист",
+          "name_kk": null,
+          "category": "admin",
+          "position_id": 59
+        },
+        {
+          "name": "Дворник",
+          "name_kk": null,
+          "category": "technical",
+          "position_id": 9
+        },
+        {
+          "name": "Дезинфектор",
+          "name_kk": null,
+          "category": "technical",
+          "position_id": 10
+        },
+        {
+          "name": "Диетсестра",
+          "name_kk": null,
+          "category": "medical",
+          "position_id": 11
+        },
+        {
+          "name": "Директор",
+          "name_kk": null,
+          "category": "leaders",
+          "position_id": 62
+        },
+        {
+          "name": "Заведующая прачечной",
+          "name_kk": null,
+          "category": "leaders",
+          "position_id": 12
+        },
+        {
+          "name": "Заведующий аптекой",
+          "name_kk": null,
+          "category": "leaders",
+          "position_id": 63
+        },
+        {
+          "name": "Заведующий гинекологическим отделением",
+          "name_kk": null,
+          "category": "leaders",
+          "position_id": 64
+        },
+        {
+          "name": "Заведующий диспансерным отделением",
+          "name_kk": null,
+          "category": "leaders",
+          "position_id": 65
+        },
+        {
+          "name": "Заведующий инсультным отделением",
+          "name_kk": null,
+          "category": "leaders",
+          "position_id": 66
+        },
+        {
+          "name": "Заведующий отделением",
+          "name_kk": null,
+          "category": "other",
+          "position_id": 104
+        },
+        {
+          "name": "Заведующий отделением амбулаторной хирургии",
+          "name_kk": null,
+          "category": "leaders",
+          "position_id": 67
+        },
+        {
+          "name": "Заведующий отделением опухолей головы и шеи",
+          "name_kk": null,
+          "category": "leaders",
+          "position_id": 68
+        },
+        {
+          "name": "Заведующий отделением радиологии",
+          "name_kk": null,
+          "category": "leaders",
+          "position_id": 69
+        },
+        {
+          "name": "Заведующий отделением реабилитации",
+          "name_kk": null,
+          "category": "leaders",
+          "position_id": 70
+        },
+        {
+          "name": "Заведующий отделением химиотерапии 1",
+          "name_kk": null,
+          "category": "leaders",
+          "position_id": 71
+        },
+        {
+          "name": "Заведующий отделением химиотерапии 2",
+          "name_kk": null,
+          "category": "leaders",
+          "position_id": 72
+        },
+        {
+          "name": "Заведующий ОТ и ТБ",
+          "name_kk": null,
+          "category": "leaders",
+          "position_id": 106
+        },
+        {
+          "name": "Заведующий паллиативным отделением",
+          "name_kk": null,
+          "category": "leaders",
+          "position_id": 73
+        },
+        {
+          "name": "Заведующий складом",
+          "name_kk": null,
+          "category": "leaders",
+          "position_id": 13
+        },
+        {
+          "name": "Заведующий хирургическим отделением 1",
+          "name_kk": null,
+          "category": "leaders",
+          "position_id": 74
+        },
+        {
+          "name": "Заведующий хирургическим отделением 2",
+          "name_kk": null,
+          "category": "leaders",
+          "position_id": 75
+        },
+        {
+          "name": "зам главного бухгалтера",
+          "name_kk": null,
+          "category": "leaders",
+          "position_id": 76
+        },
+        {
+          "name": "Зам директора",
+          "name_kk": null,
+          "category": "leaders",
+          "position_id": 14
+        },
+        {
+          "name": "Заместитель директора по административным вопросам",
+          "name_kk": null,
+          "category": "leaders",
+          "position_id": 99
+        },
+        {
+          "name": "Зам по диспансеру и внутр экспертизе",
+          "name_kk": null,
+          "category": "leaders",
+          "position_id": 78
+        },
+        {
+          "name": "Зам по лечебной работе",
+          "name_kk": null,
+          "category": "leaders",
+          "position_id": 79
+        },
+        {
+          "name": "Зам по стратегии",
+          "name_kk": null,
+          "category": "leaders",
+          "position_id": 80
+        },
+        {
+          "name": "зам рук-ля отдела статистики",
+          "name_kk": null,
+          "category": "leaders",
+          "position_id": 81
+        },
+        {
+          "name": "Инженер",
+          "name_kk": null,
+          "category": "technical",
+          "position_id": 16
+        },
+        {
+          "name": "Инженер-мед.физик",
+          "name_kk": null,
+          "category": "technical",
+          "position_id": 17
+        },
+        {
+          "name": "Кассир",
+          "name_kk": null,
+          "category": "admin",
+          "position_id": 18
+        },
+        {
+          "name": "Комендант",
+          "name_kk": null,
+          "category": "technical",
+          "position_id": 19
+        },
+        {
+          "name": "Комплаенс-офицер",
+          "name_kk": null,
+          "category": "admin",
+          "position_id": 114
+        },
+        {
+          "name": "Курьер",
+          "name_kk": null,
+          "category": "technical",
+          "position_id": 20
+        },
+        {
+          "name": "Кухрабочий",
+          "name_kk": null,
+          "category": "technical",
+          "position_id": 21
+        },
+        {
+          "name": "Лаборант",
+          "name_kk": null,
+          "category": "medical",
+          "position_id": 22
+        },
+        {
+          "name": "Лифтер",
+          "name_kk": null,
+          "category": "technical",
+          "position_id": 23
+        },
+        {
+          "name": "Машинист по стирке белья",
+          "name_kk": null,
+          "category": "other",
+          "position_id": 24
+        },
+        {
+          "name": "Медбрат",
+          "name_kk": null,
+          "category": "medical",
+          "position_id": 25
+        },
+        {
+          "name": "Медицинский статистик",
+          "name_kk": null,
+          "category": "medical",
+          "position_id": 105
+        },
+        {
+          "name": "медрегистратор",
+          "name_kk": null,
+          "category": "medical",
+          "position_id": 26
+        },
+        {
+          "name": "Медсестра",
+          "name_kk": null,
+          "category": "medical",
+          "position_id": 27
+        },
+        {
+          "name": "Медстатистик",
+          "name_kk": null,
+          "category": "medical",
+          "position_id": 28
+        },
+        {
+          "name": "медстатистик по вводу в ЭРОБ",
+          "name_kk": null,
+          "category": "medical",
+          "position_id": 82
+        },
+        {
+          "name": "медстатистик по выводу из ЭРОБ",
+          "name_kk": null,
+          "category": "medical",
+          "position_id": 83
+        },
+        {
+          "name": "Менеджер",
+          "name_kk": null,
+          "category": "admin",
+          "position_id": 29
+        },
+        {
+          "name": "Менеджер УЧР",
+          "name_kk": null,
+          "category": "admin",
+          "position_id": 100
+        },
+        {
+          "name": "Монтажник",
+          "name_kk": null,
+          "category": "technical",
+          "position_id": 30
+        },
+        {
+          "name": "Начальник отдела",
+          "name_kk": null,
+          "category": "leaders",
+          "position_id": 31
+        },
+        {
+          "name": "Оператор",
+          "name_kk": null,
+          "category": "admin",
+          "position_id": 32
+        },
+        {
+          "name": "Переводчик",
+          "name_kk": null,
+          "category": "admin",
+          "position_id": 33
+        },
+        {
+          "name": "Переводчик казахского языка",
+          "name_kk": null,
+          "category": "admin",
+          "position_id": 102
+        },
+        {
+          "name": "Плотник",
+          "name_kk": null,
+          "category": "technical",
+          "position_id": 34
+        },
+        {
+          "name": "Повар",
+          "name_kk": null,
+          "category": "technical",
+          "position_id": 35
+        },
+        {
+          "name": "Провизор",
+          "name_kk": null,
+          "category": "medical",
+          "position_id": 36
+        },
+        {
+          "name": "Психолог",
+          "name_kk": null,
+          "category": "medical",
+          "position_id": 37
+        },
+        {
+          "name": "Рабочий",
+          "name_kk": null,
+          "category": "technical",
+          "position_id": 38
+        },
+        {
+          "name": "Руков-ль службы химиотерапии",
+          "name_kk": null,
+          "category": "medical",
+          "position_id": 39
+        },
+        {
+          "name": "Руководитель",
+          "name_kk": null,
+          "category": "leaders",
+          "position_id": 84
+        },
+        {
+          "name": "Руководитель административно-хозяйственной службы",
+          "name_kk": null,
+          "category": "leaders",
+          "position_id": 109
+        },
+        {
+          "name": "Руководитель ОВЭиПД",
+          "name_kk": null,
+          "category": "leaders",
+          "position_id": 85
+        },
+        {
+          "name": "Руководитель отдела",
+          "name_kk": null,
+          "category": "leaders",
+          "position_id": 112
+        },
+        {
+          "name": "Руководитель отдела госзакупок",
+          "name_kk": null,
+          "category": "leaders",
+          "position_id": 60
+        },
+        {
+          "name": "Руководитель отдела кадров",
+          "name_kk": null,
+          "category": "leaders",
+          "position_id": 86
+        },
+        {
+          "name": "Руководитель отдела статистики",
+          "name_kk": null,
+          "category": "leaders",
+          "position_id": 87
+        },
+        {
+          "name": "Руководитель приемного отделения",
+          "name_kk": null,
+          "category": "leaders",
+          "position_id": 88
+        },
+        {
+          "name": "Руководитель хозяйственной службы",
+          "name_kk": null,
+          "category": "leaders",
+          "position_id": 40
+        },
+        {
+          "name": "Санитар",
+          "name_kk": null,
+          "category": "medical",
+          "position_id": 41
+        },
+        {
+          "name": "Санитарка",
+          "name_kk": null,
+          "category": "medical",
+          "position_id": 42
+        },
+        {
+          "name": "Санитарка-буфетчица",
+          "name_kk": null,
+          "category": "medical",
+          "position_id": 43
+        },
+        {
+          "name": "Санитар по транспортировке пациентов",
+          "name_kk": null,
+          "category": "medical",
+          "position_id": 107
+        },
+        {
+          "name": "секретарь-референт",
+          "name_kk": null,
+          "category": "admin",
+          "position_id": 101
+        },
+        {
+          "name": "сестра-хозяйка",
+          "name_kk": "шаруа бикесі",
+          "category": "technical",
+          "position_id": 44
+        },
+        {
+          "name": "системный администратор",
+          "name_kk": null,
+          "category": "technical",
+          "position_id": 45
+        },
+        {
+          "name": "Слесарь-сантехник",
+          "name_kk": null,
+          "category": "technical",
+          "position_id": 46
+        },
+        {
+          "name": "Социальный работник",
+          "name_kk": null,
+          "category": "other",
+          "position_id": 47
+        },
+        {
+          "name": "Специалист",
+          "name_kk": null,
+          "category": "admin",
+          "position_id": 48
+        },
+        {
+          "name": "Старшая медсестра",
+          "name_kk": null,
+          "category": "medical",
+          "position_id": 49
+        },
+        {
+          "name": "Старший лаборант",
+          "name_kk": null,
+          "category": "medical",
+          "position_id": 50
+        },
+        {
+          "name": "Старший ординатор",
+          "name_kk": null,
+          "category": "medical",
+          "position_id": 113
+        },
+        {
+          "name": "Старший системный администратор",
+          "name_kk": null,
+          "category": "technical",
+          "position_id": 51
+        },
+        {
+          "name": "Старший экономист",
+          "name_kk": null,
+          "category": "admin",
+          "position_id": 89
+        },
+        {
+          "name": "Техник",
+          "name_kk": null,
+          "category": "other",
+          "position_id": 52
+        },
+        {
+          "name": "Уборщик помещений",
+          "name_kk": null,
+          "category": "technical",
+          "position_id": 53
+        },
+        {
+          "name": "Фармацевт",
+          "name_kk": null,
+          "category": "medical",
+          "position_id": 54
+        },
+        {
+          "name": "экономист1",
+          "name_kk": null,
+          "category": "admin",
+          "position_id": 90
+        },
+        {
+          "name": "экономист2",
+          "name_kk": null,
+          "category": "admin",
+          "position_id": 91
+        },
+        {
+          "name": "экономист3",
+          "name_kk": null,
+          "category": "admin",
+          "position_id": 92
+        },
+        {
+          "name": "Экономист",
+          "name_kk": null,
+          "category": "admin",
+          "position_id": 55
+        },
+        {
+          "name": "эксперт ОВЭиПД амбулаторный",
+          "name_kk": null,
+          "category": "medical",
+          "position_id": 93
+        },
+        {
+          "name": "эксперт ОВЭиПД госпитальный",
+          "name_kk": null,
+          "category": "medical",
+          "position_id": 94
+        },
+        {
+          "name": "эксперт ОВЭиПД по регистрации жалоб",
+          "name_kk": null,
+          "category": "medical",
+          "position_id": 95
+        },
+        {
+          "name": "эксперт ОВЭиПД по улаживанию жалоб",
+          "name_kk": null,
+          "category": "medical",
+          "position_id": 96
+        },
+        {
+          "name": "Эксперт по внутреннему обучению и аттестации",
+          "name_kk": null,
+          "category": "admin",
+          "position_id": 97
+        },
+        {
+          "name": "Электрик",
+          "name_kk": null,
+          "category": "technical",
+          "position_id": 56
+        },
+        {
+          "name": "Электромонтер",
+          "name_kk": null,
+          "category": "technical",
+          "position_id": 57
+        },
+        {
+          "name": "Юрист",
+          "name_kk": null,
+          "category": "admin",
+          "position_id": 58
+        }
+      ]
+    },
+    "position_aliases": {
+      "exists": true,
+      "count": 0,
+      "rows": []
+    },
+    "position_job_catalog": {
+      "exists": true,
+      "count": 90,
+      "rows": [
+        {
+          "job_code": "ACC_DEPUTY",
+          "position_id": 76
+        },
+        {
+          "job_code": "ACC_HEAD",
+          "position_id": 8
+        },
+        {
+          "job_code": "ACCOUNTANT_CASHIER",
+          "position_id": 4
+        },
+        {
+          "job_code": "ACCOUNTANT",
+          "position_id": 3
+        },
+        {
+          "job_code": "ADMISSION_HEAD",
+          "position_id": 88
+        },
+        {
+          "job_code": "ARCHIVIST",
+          "position_id": 1
+        },
+        {
+          "job_code": "AUDITOR",
+          "position_id": 2
+        },
+        {
+          "job_code": "CARPENTER",
+          "position_id": 34
+        },
+        {
+          "job_code": "CASHIER",
+          "position_id": 18
+        },
+        {
+          "job_code": "CHEMOTHERAPY_SERVICE_HEAD",
+          "position_id": 39
+        },
+        {
+          "job_code": "CHIEF_ECONOMIST",
+          "position_id": 59
+        },
+        {
+          "job_code": "CHIEF_NURSE",
+          "position_id": 7
+        },
+        {
+          "job_code": "CLINICAL_DEPARTMENT_HEAD",
+          "position_id": 64
+        },
+        {
+          "job_code": "CLINICAL_DEPARTMENT_HEAD",
+          "position_id": 65
+        },
+        {
+          "job_code": "CLINICAL_DEPARTMENT_HEAD",
+          "position_id": 66
+        },
+        {
+          "job_code": "CLINICAL_DEPARTMENT_HEAD",
+          "position_id": 67
+        },
+        {
+          "job_code": "CLINICAL_DEPARTMENT_HEAD",
+          "position_id": 68
+        },
+        {
+          "job_code": "CLINICAL_DEPARTMENT_HEAD",
+          "position_id": 69
+        },
+        {
+          "job_code": "CLINICAL_DEPARTMENT_HEAD",
+          "position_id": 70
+        },
+        {
+          "job_code": "CLINICAL_DEPARTMENT_HEAD",
+          "position_id": 71
+        },
+        {
+          "job_code": "CLINICAL_DEPARTMENT_HEAD",
+          "position_id": 72
+        },
+        {
+          "job_code": "CLINICAL_DEPARTMENT_HEAD",
+          "position_id": 73
+        },
+        {
+          "job_code": "CLINICAL_DEPARTMENT_HEAD",
+          "position_id": 74
+        },
+        {
+          "job_code": "CLINICAL_DEPARTMENT_HEAD",
+          "position_id": 75
+        },
+        {
+          "job_code": "COOK",
+          "position_id": 35
+        },
+        {
+          "job_code": "COURIER",
+          "position_id": 20
+        },
+        {
+          "job_code": "DEPARTMENT_CHIEF",
+          "position_id": 31
+        },
+        {
+          "job_code": "DEP_MED",
+          "position_id": 79
+        },
+        {
+          "job_code": "DEP_OUTPATIENT_AUDIT",
+          "position_id": 78
+        },
+        {
+          "job_code": "DEP_STRATEGY",
+          "position_id": 80
+        },
+        {
+          "job_code": "DEPUTY_DIRECTOR",
+          "position_id": 14
+        },
+        {
+          "job_code": "DIET_NURSE",
+          "position_id": 11
+        },
+        {
+          "job_code": "DIRECTOR",
+          "position_id": 62
+        },
+        {
+          "job_code": "DISINFECTOR",
+          "position_id": 10
+        },
+        {
+          "job_code": "DRIVER",
+          "position_id": 5
+        },
+        {
+          "job_code": "ECONOMIST",
+          "position_id": 55
+        },
+        {
+          "job_code": "ECONOMIST",
+          "position_id": 90
+        },
+        {
+          "job_code": "ECONOMIST",
+          "position_id": 91
+        },
+        {
+          "job_code": "ECONOMIST",
+          "position_id": 92
+        },
+        {
+          "job_code": "ELECTRICAL_FITTER",
+          "position_id": 57
+        },
+        {
+          "job_code": "ELECTRICIAN",
+          "position_id": 56
+        },
+        {
+          "job_code": "ENGINEER",
+          "position_id": 16
+        },
+        {
+          "job_code": "EXPERT_PHYSICIAN",
+          "position_id": 93
+        },
+        {
+          "job_code": "EXPERT_PHYSICIAN",
+          "position_id": 94
+        },
+        {
+          "job_code": "EXPERT_PHYSICIAN",
+          "position_id": 95
+        },
+        {
+          "job_code": "EXPERT_PHYSICIAN",
+          "position_id": 96
+        },
+        {
+          "job_code": "FACILITY_SUPERVISOR",
+          "position_id": 19
+        },
+        {
+          "job_code": "HEAD",
+          "position_id": 84
+        },
+        {
+          "job_code": "HOUSEKEEPING_SERVICE_HEAD",
+          "position_id": 40
+        },
+        {
+          "job_code": "HR_HEAD",
+          "position_id": 86
+        },
+        {
+          "job_code": "INSTALLER",
+          "position_id": 30
+        },
+        {
+          "job_code": "KITCHEN_WORKER",
+          "position_id": 21
+        },
+        {
+          "job_code": "LAB_ASSISTANT",
+          "position_id": 22
+        },
+        {
+          "job_code": "LAUNDRY_HEAD",
+          "position_id": 12
+        },
+        {
+          "job_code": "LAUNDRY_MACHINE_OPERATOR",
+          "position_id": 24
+        },
+        {
+          "job_code": "LAWYER",
+          "position_id": 58
+        },
+        {
+          "job_code": "LIFT_OPERATOR",
+          "position_id": 23
+        },
+        {
+          "job_code": "MANAGER",
+          "position_id": 29
+        },
+        {
+          "job_code": "MEDICAL_PHYSICIST_ENGINEER",
+          "position_id": 17
+        },
+        {
+          "job_code": "MEDICAL_REGISTRAR",
+          "position_id": 26
+        },
+        {
+          "job_code": "MEDICAL_STATISTICIAN",
+          "position_id": 28
+        },
+        {
+          "job_code": "NURSE",
+          "position_id": 25
+        },
+        {
+          "job_code": "NURSE",
+          "position_id": 27
+        },
+        {
+          "job_code": "OPERATOR",
+          "position_id": 32
+        },
+        {
+          "job_code": "PHARMACIST",
+          "position_id": 54
+        },
+        {
+          "job_code": "PHARMACY_HEAD",
+          "position_id": 63
+        },
+        {
+          "job_code": "PHYSICIAN",
+          "position_id": 6
+        },
+        {
+          "job_code": "PHYSICIAN_STATISTICIAN",
+          "position_id": 61
+        },
+        {
+          "job_code": "PLUMBER",
+          "position_id": 46
+        },
+        {
+          "job_code": "PROC_HEAD",
+          "position_id": 60
+        },
+        {
+          "job_code": "PROVISOR",
+          "position_id": 36
+        },
+        {
+          "job_code": "PSYCHOLOGIST",
+          "position_id": 37
+        },
+        {
+          "job_code": "QM_HEAD",
+          "position_id": 85
+        },
+        {
+          "job_code": "ROOM_CLEANER",
+          "position_id": 53
+        },
+        {
+          "job_code": "SANITARY_BUFFET_WORKER",
+          "position_id": 43
+        },
+        {
+          "job_code": "SANITARY_WORKER_FEMALE",
+          "position_id": 42
+        },
+        {
+          "job_code": "SANITARY_WORKER",
+          "position_id": 41
+        },
+        {
+          "job_code": "SENIOR_ECONOMIST",
+          "position_id": 89
+        },
+        {
+          "job_code": "SENIOR_LAB_ASSISTANT",
+          "position_id": 50
+        },
+        {
+          "job_code": "SENIOR_NURSE",
+          "position_id": 49
+        },
+        {
+          "job_code": "SENIOR_SYSTEM_ADMINISTRATOR",
+          "position_id": 51
+        },
+        {
+          "job_code": "SISTER_HOUSEKEEPER",
+          "position_id": 44
+        },
+        {
+          "job_code": "SPECIALIST",
+          "position_id": 48
+        },
+        {
+          "job_code": "STAT_HEAD_DEPUTY",
+          "position_id": 81
+        },
+        {
+          "job_code": "STAT_HEAD",
+          "position_id": 87
+        },
+        {
+          "job_code": "SYSTEM_ADMINISTRATOR",
+          "position_id": 45
+        },
+        {
+          "job_code": "TRANSLATOR",
+          "position_id": 33
+        },
+        {
+          "job_code": "WAREHOUSE_HEAD",
+          "position_id": 13
+        },
+        {
+          "job_code": "WORKER",
+          "position_id": 38
+        },
+        {
+          "job_code": "YARD_CLEANER",
+          "position_id": 9
+        }
+      ]
+    },
+    "job_positions_catalog": {
+      "exists": true,
+      "count": 88,
+      "rows": [
+        {
+          "job_code": "ACC_DEPUTY",
+          "job_namekk": "Бас бухгалтердің орынбасары",
+          "job_nameru": "Заместитель главного бухгалтера",
+          "job_namekk_doc": "бас бухгалтердің орынбасары"
+        },
+        {
+          "job_code": "ACC_HEAD",
+          "job_namekk": "Бас бухгалтер",
+          "job_nameru": "Главный бухгалтер",
+          "job_namekk_doc": "бас бухгалтері"
+        },
+        {
+          "job_code": "ACCOUNTANT_CASHIER",
+          "job_namekk": "Бухгалтер-кассир",
+          "job_nameru": "Бухгалтер-кассир",
+          "job_namekk_doc": "бухгалтер-кассирі"
+        },
+        {
+          "job_code": "ACCOUNTANT_ECONOMIST",
+          "job_namekk": "Бухгалтер-экономист",
+          "job_nameru": "Бухгалтер-экономист",
+          "job_namekk_doc": "бухгалтер-экономисті"
+        },
+        {
+          "job_code": "ACCOUNTANT",
+          "job_namekk": "Бухгалтер",
+          "job_nameru": "Бухгалтер",
+          "job_namekk_doc": "бухгалтері"
+        },
+        {
+          "job_code": "ADMIN_HOUSEKEEPING_SERVICE_HEAD",
+          "job_namekk": "Әкімшілік-шаруашылық қызметінің басшысы",
+          "job_nameru": "Руководитель административно-хозяйственной службы",
+          "job_namekk_doc": "әкімшілік-шаруашылық қызметінің басшысы"
+        },
+        {
+          "job_code": "ADMISSION_HEAD",
+          "job_namekk": "Қабылдау бөлімшесінің басшысы",
+          "job_nameru": "Руководитель приемного отделения",
+          "job_namekk_doc": "қабылдау бөлімшесінің басшысы"
+        },
+        {
+          "job_code": "ARCHIVIST",
+          "job_namekk": "Мұрағатшы",
+          "job_nameru": "Архивариус",
+          "job_namekk_doc": "мұрағатшысы"
+        },
+        {
+          "job_code": "AUDITOR",
+          "job_namekk": "Аудитор",
+          "job_nameru": "Аудитор",
+          "job_namekk_doc": "аудиторы"
+        },
+        {
+          "job_code": "BUFFET_WORKER",
+          "job_namekk": "Буфетші",
+          "job_nameru": "Буфетчица",
+          "job_namekk_doc": "буфетшісі"
+        },
+        {
+          "job_code": "CARPENTER",
+          "job_namekk": "Ағаш ұстасы",
+          "job_nameru": "Плотник",
+          "job_namekk_doc": "ағаш ұстасы"
+        },
+        {
+          "job_code": "CASHIER",
+          "job_namekk": "Кассир",
+          "job_nameru": "Кассир",
+          "job_namekk_doc": "кассирі"
+        },
+        {
+          "job_code": "CHEMOTHERAPY_SERVICE_HEAD",
+          "job_namekk": "Химиотерапия қызметінің басшысы",
+          "job_nameru": "Руководитель службы химиотерапии",
+          "job_namekk_doc": "химиотерапия қызметінің басшысы"
+        },
+        {
+          "job_code": "CHIEF_ECONOMIST",
+          "job_namekk": "Бас экономист",
+          "job_nameru": "Главный экономист",
+          "job_namekk_doc": "бас экономисті"
+        },
+        {
+          "job_code": "CHIEF_ENGINEER",
+          "job_namekk": "Бас инженер",
+          "job_nameru": "Главный инженер",
+          "job_namekk_doc": "бас инженері"
+        },
+        {
+          "job_code": "CHIEF_NURSE",
+          "job_namekk": "Бас мейіргер",
+          "job_nameru": "Главная медсестра",
+          "job_namekk_doc": "бас мейіргері"
+        },
+        {
+          "job_code": "CLINICAL_DEPARTMENT_HEAD",
+          "job_namekk": "Клиникалық бөлімше меңгерушісі",
+          "job_nameru": "Заведующий клиническим отделением",
+          "job_namekk_doc": "клиникалық бөлімшесінің меңгерушісі"
+        },
+        {
+          "job_code": "COMPLIANCE_OFFICER",
+          "job_namekk": "Комплаенс-офицер",
+          "job_nameru": "Комплаенс-офицер",
+          "job_namekk_doc": "комплаенс-офицері"
+        },
+        {
+          "job_code": "COOK",
+          "job_namekk": "Аспаз",
+          "job_nameru": "Повар",
+          "job_namekk_doc": "аспазы"
+        },
+        {
+          "job_code": "COURIER",
+          "job_namekk": "Курьер",
+          "job_nameru": "Курьер",
+          "job_namekk_doc": "курьері"
+        },
+        {
+          "job_code": "DEP_ADMIN",
+          "job_namekk": "Әкімшілік мәселелер жөніндегі орынбасар",
+          "job_nameru": "Заместитель по административным вопросам",
+          "job_namekk_doc": "әкімшілік мәселелер жөніндегі орынбасары"
+        },
+        {
+          "job_code": "DEPARTMENT_CHIEF",
+          "job_namekk": "Бөлім бастығы",
+          "job_nameru": "Начальник отдела",
+          "job_namekk_doc": "бөлім бастығы"
+        },
+        {
+          "job_code": "DEPARTMENT_HEAD_UNSPECIFIED",
+          "job_namekk": "Бөлімше меңгерушісі",
+          "job_nameru": "Заведующий отделением",
+          "job_namekk_doc": "бөлімше меңгерушісі"
+        },
+        {
+          "job_code": "DEPARTMENT_MANAGER",
+          "job_namekk": "Бөлім басшысы",
+          "job_nameru": "Руководитель отдела",
+          "job_namekk_doc": "бөлім басшысы"
+        },
+        {
+          "job_code": "DEP_MED",
+          "job_namekk": "Емдеу жұмысы жөніндегі орынбасар",
+          "job_nameru": "Заместитель по лечебной работе",
+          "job_namekk_doc": "емдеу жұмысы жөніндегі орынбасары"
+        },
+        {
+          "job_code": "DEP_OUTPATIENT_AUDIT",
+          "job_namekk": "Диспансер және ішкі сараптама жөніндегі орынбасар",
+          "job_nameru": "Заместитель по диспансеру и внутренней экспертизе",
+          "job_namekk_doc": "диспансер және ішкі сараптама жөніндегі орынбасары"
+        },
+        {
+          "job_code": "DEP_STRATEGY",
+          "job_namekk": "Стратегия жөніндегі орынбасар",
+          "job_nameru": "Заместитель по стратегии",
+          "job_namekk_doc": "стратегия жөніндегі орынбасары"
+        },
+        {
+          "job_code": "DEPUTY_DIRECTOR",
+          "job_namekk": "Директордың орынбасары",
+          "job_nameru": "Заместитель директора",
+          "job_namekk_doc": "директордың орынбасары"
+        },
+        {
+          "job_code": "DIET_NURSE",
+          "job_namekk": "Диеталық мейіргер",
+          "job_nameru": "Диетическая медсестра",
+          "job_namekk_doc": "диеталық мейіргері"
+        },
+        {
+          "job_code": "DIRECTOR",
+          "job_namekk": "Директор",
+          "job_nameru": "Директор",
+          "job_namekk_doc": "директоры"
+        },
+        {
+          "job_code": "DISINFECTOR",
+          "job_namekk": "Дезинфектор",
+          "job_nameru": "Дезинфектор",
+          "job_namekk_doc": "дезинфекторы"
+        },
+        {
+          "job_code": "DRIVER",
+          "job_namekk": "Жүргізуші",
+          "job_nameru": "Водитель",
+          "job_namekk_doc": "жүргізушісі"
+        },
+        {
+          "job_code": "ECONOMIST",
+          "job_namekk": "Экономист",
+          "job_nameru": "Экономист",
+          "job_namekk_doc": "экономисті"
+        },
+        {
+          "job_code": "ELECTRICAL_FITTER",
+          "job_namekk": "Электрмонтер",
+          "job_nameru": "Электромонтер",
+          "job_namekk_doc": "электрмонтері"
+        },
+        {
+          "job_code": "ELECTRICIAN",
+          "job_namekk": "Электрик",
+          "job_nameru": "Электрик",
+          "job_namekk_doc": "электригі"
+        },
+        {
+          "job_code": "ENGINEER",
+          "job_namekk": "Инженер",
+          "job_nameru": "Инженер",
+          "job_namekk_doc": "инженері"
+        },
+        {
+          "job_code": "EXPERT_PHYSICIAN",
+          "job_namekk": "Дәрігер-сарапшы",
+          "job_nameru": "Врач-эксперт",
+          "job_namekk_doc": "дәрігер-сарапшысы"
+        },
+        {
+          "job_code": "FACILITY_SUPERVISOR",
+          "job_namekk": "Комендант",
+          "job_nameru": "Комендант",
+          "job_namekk_doc": "коменданты"
+        },
+        {
+          "job_code": "HEAD",
+          "job_namekk": "Басшы",
+          "job_nameru": "Руководитель",
+          "job_namekk_doc": "басшысы"
+        },
+        {
+          "job_code": "HOUSEKEEPING_SERVICE_HEAD",
+          "job_namekk": "Шаруашылық қызметінің басшысы",
+          "job_nameru": "Руководитель хозяйственной службы",
+          "job_namekk_doc": "шаруашылық қызметінің басшысы"
+        },
+        {
+          "job_code": "HR_HEAD",
+          "job_namekk": "Кадрлар бөлімінің басшысы",
+          "job_nameru": "Руководитель отдела кадров",
+          "job_namekk_doc": "кадрлар бөлімінің басшысы"
+        },
+        {
+          "job_code": "HR_MANAGER",
+          "job_namekk": "Адам ресурстарын басқару менеджері",
+          "job_nameru": "Менеджер по управлению человеческими ресурсами",
+          "job_namekk_doc": "адам ресурстарын басқару менеджері"
+        },
+        {
+          "job_code": "INSTALLER",
+          "job_namekk": "Монтажшы",
+          "job_nameru": "Монтажник",
+          "job_namekk_doc": "монтажшысы"
+        },
+        {
+          "job_code": "KAZAKH_TRANSLATOR",
+          "job_namekk": "Қазақ тілі аудармашысы",
+          "job_nameru": "Переводчик казахского языка",
+          "job_namekk_doc": "қазақ тілі аудармашысы"
+        },
+        {
+          "job_code": "KITCHEN_WORKER",
+          "job_namekk": "Асүй жұмысшысы",
+          "job_nameru": "Рабочий кухни",
+          "job_namekk_doc": "асүй жұмысшысы"
+        },
+        {
+          "job_code": "LAB_ASSISTANT",
+          "job_namekk": "Зертханашы",
+          "job_nameru": "Лаборант",
+          "job_namekk_doc": "зертханашысы"
+        },
+        {
+          "job_code": "LAUNDRY_HEAD",
+          "job_namekk": "Кір жуу орнының меңгерушісі",
+          "job_nameru": "Заведующая прачечной",
+          "job_namekk_doc": "кір жуу орнының меңгерушісі"
+        },
+        {
+          "job_code": "LAUNDRY_MACHINE_OPERATOR",
+          "job_namekk": "Кір жуу машинисі",
+          "job_nameru": "Машинист по стирке белья",
+          "job_namekk_doc": "кір жуу машинисі"
+        },
+        {
+          "job_code": "LAWYER",
+          "job_namekk": "Заңгер",
+          "job_nameru": "Юрист",
+          "job_namekk_doc": "заңгері"
+        },
+        {
+          "job_code": "LIFT_OPERATOR",
+          "job_namekk": "Лифтші",
+          "job_nameru": "Лифтер",
+          "job_namekk_doc": "лифтшісі"
+        },
+        {
+          "job_code": "MANAGER",
+          "job_namekk": "Менеджер",
+          "job_nameru": "Менеджер",
+          "job_namekk_doc": "менеджері"
+        },
+        {
+          "job_code": "MEDICAL_PHYSICIST_ENGINEER",
+          "job_namekk": "Инженер-медицина физигі",
+          "job_nameru": "Инженер — медицинский физик",
+          "job_namekk_doc": "инженер-медицина физигі"
+        },
+        {
+          "job_code": "MEDICAL_REGISTRAR",
+          "job_namekk": "Медициналық тіркеуші",
+          "job_nameru": "медрегистратор",
+          "job_namekk_doc": "медициналық тіркеушісі"
+        },
+        {
+          "job_code": "MEDICAL_STATISTICIAN",
+          "job_namekk": "Медициналық статистик",
+          "job_nameru": "Медицинский статистик",
+          "job_namekk_doc": "медициналық статистигі"
+        },
+        {
+          "job_code": "NURSE",
+          "job_namekk": "Мейіргер",
+          "job_nameru": "Медсестра",
+          "job_namekk_doc": "мейіргері"
+        },
+        {
+          "job_code": "OCCUPATIONAL_SAFETY_HEAD",
+          "job_namekk": "Еңбекті қорғау және қауіпсіздік техникасы жөніндегі меңгеруші",
+          "job_nameru": "Заведующий по охране труда и технике безопасности",
+          "job_namekk_doc": "еңбекті қорғау және қауіпсіздік техникасы жөніндегі меңгерушісі"
+        },
+        {
+          "job_code": "OPERATOR",
+          "job_namekk": "Оператор",
+          "job_nameru": "Оператор",
+          "job_namekk_doc": "операторы"
+        },
+        {
+          "job_code": "PATIENT_TRANSPORT_SANITARY_WORKER",
+          "job_namekk": "Пациенттерді тасымалдау жөніндегі санитар",
+          "job_nameru": "Санитар по транспортировке пациентов",
+          "job_namekk_doc": "пациенттерді тасымалдау жөніндегі санитары"
+        },
+        {
+          "job_code": "PHARMACIST",
+          "job_namekk": "Фармацевт",
+          "job_nameru": "Фармацевт",
+          "job_namekk_doc": "фармацевті"
+        },
+        {
+          "job_code": "PHARMACY_HEAD",
+          "job_namekk": "Дәріхана меңгерушісі",
+          "job_nameru": "Заведующий аптекой",
+          "job_namekk_doc": "дәріхана меңгерушісі"
+        },
+        {
+          "job_code": "PHYSICIAN",
+          "job_namekk": "Дәрігер",
+          "job_nameru": "Врач",
+          "job_namekk_doc": "дәрігері"
+        },
+        {
+          "job_code": "PHYSICIAN_STATISTICIAN",
+          "job_namekk": "Дәрігер-статистик",
+          "job_nameru": "Врач-статистик",
+          "job_namekk_doc": "дәрігер-статистигі"
+        },
+        {
+          "job_code": "PLUMBER",
+          "job_namekk": "Слесарь-сантехник",
+          "job_nameru": "Слесарь-сантехник",
+          "job_namekk_doc": "слесарь-сантехнигі"
+        },
+        {
+          "job_code": "PROC_HEAD",
+          "job_namekk": "Мемлекеттік сатып алу бөлімінің басшысы",
+          "job_nameru": "Руководитель отдела государственных закупок",
+          "job_namekk_doc": "мемлекеттік сатып алу бөлімінің басшысы"
+        },
+        {
+          "job_code": "PROVISOR",
+          "job_namekk": "Провизор",
+          "job_nameru": "Провизор",
+          "job_namekk_doc": "провизоры"
+        },
+        {
+          "job_code": "PSYCHOLOGIST",
+          "job_namekk": "Психолог",
+          "job_nameru": "Психолог",
+          "job_namekk_doc": "психологі"
+        },
+        {
+          "job_code": "QM_HEAD",
+          "job_namekk": "ОВЭиПД басшысы",
+          "job_nameru": "Руководитель ОВЭиПД",
+          "job_namekk_doc": "ОВЭиПД басшысы"
+        },
+        {
+          "job_code": "ROOM_CLEANER",
+          "job_namekk": "Үй-жайларды тазалаушы",
+          "job_nameru": "Уборщик помещений",
+          "job_namekk_doc": "үй-жайларды тазалаушысы"
+        },
+        {
+          "job_code": "SANITARY_BUFFET_WORKER",
+          "job_namekk": "Санитар-буфетші",
+          "job_nameru": "Санитарка-буфетчица",
+          "job_namekk_doc": "санитар-буфетшісі"
+        },
+        {
+          "job_code": "SANITARY_WORKER_FEMALE",
+          "job_namekk": "Санитар",
+          "job_nameru": "Санитарка",
+          "job_namekk_doc": "санитары"
+        },
+        {
+          "job_code": "SANITARY_WORKER",
+          "job_namekk": "Санитар",
+          "job_nameru": "Санитар",
+          "job_namekk_doc": "санитары"
+        },
+        {
+          "job_code": "SECRETARY_REFERENT",
+          "job_namekk": "Хатшы-референт",
+          "job_nameru": "секретарь-референт",
+          "job_namekk_doc": "хатшы-референті"
+        },
+        {
+          "job_code": "SENIOR_ECONOMIST",
+          "job_namekk": "Аға экономист",
+          "job_nameru": "Старший экономист",
+          "job_namekk_doc": "аға экономисті"
+        },
+        {
+          "job_code": "SENIOR_LAB_ASSISTANT",
+          "job_namekk": "Аға зертханашы",
+          "job_nameru": "Старший лаборант",
+          "job_namekk_doc": "аға зертханашысы"
+        },
+        {
+          "job_code": "SENIOR_NURSE",
+          "job_namekk": "Аға мейіргер",
+          "job_nameru": "Старшая медсестра",
+          "job_namekk_doc": "аға мейіргері"
+        },
+        {
+          "job_code": "SENIOR_RESIDENT_PHYSICIAN",
+          "job_namekk": "Аға ординатор",
+          "job_nameru": "Старший ординатор",
+          "job_namekk_doc": "аға ординаторы"
+        },
+        {
+          "job_code": "SENIOR_SYSTEM_ADMINISTRATOR",
+          "job_namekk": "Аға жүйелік әкімші",
+          "job_nameru": "Старший системный администратор",
+          "job_namekk_doc": "аға жүйелік әкімшісі"
+        },
+        {
+          "job_code": "SISTER_HOUSEKEEPER",
+          "job_namekk": "шаруа бикесі",
+          "job_nameru": "сестра-хозяйка",
+          "job_namekk_doc": "шаруа бикесі"
+        },
+        {
+          "job_code": "SOCIAL_WORKER",
+          "job_namekk": "Әлеуметтік қызметкер",
+          "job_nameru": "Социальный работник",
+          "job_namekk_doc": "әлеуметтік қызметкері"
+        },
+        {
+          "job_code": "SPECIALIST",
+          "job_namekk": "Маман",
+          "job_nameru": "Специалист",
+          "job_namekk_doc": "маманы"
+        },
+        {
+          "job_code": "STAT_HEAD_DEPUTY",
+          "job_namekk": "Статистика бөлімі басшысының орынбасары",
+          "job_nameru": "Заместитель руководителя отдела статистики",
+          "job_namekk_doc": "статистика бөлімі басшысының орынбасары"
+        },
+        {
+          "job_code": "STAT_HEAD",
+          "job_namekk": "Статистика бөлімінің басшысы",
+          "job_nameru": "Руководитель отдела статистики",
+          "job_namekk_doc": "статистика бөлімінің басшысы"
+        },
+        {
+          "job_code": "SYSTEM_ADMINISTRATOR",
+          "job_namekk": "Жүйелік әкімші",
+          "job_nameru": "системный администратор",
+          "job_namekk_doc": "жүйелік әкімшісі"
+        },
+        {
+          "job_code": "TECHNICIAN",
+          "job_namekk": "Техник",
+          "job_nameru": "Техник",
+          "job_namekk_doc": "технигі"
+        },
+        {
+          "job_code": "TRANSLATOR",
+          "job_namekk": "Аудармашы",
+          "job_nameru": "Переводчик",
+          "job_namekk_doc": "аудармашысы"
+        },
+        {
+          "job_code": "WAREHOUSE_HEAD",
+          "job_namekk": "Қойма меңгерушісі",
+          "job_nameru": "Заведующий складом",
+          "job_namekk_doc": "қойма меңгерушісі"
+        },
+        {
+          "job_code": "WORKER",
+          "job_namekk": "Жұмысшы",
+          "job_nameru": "Рабочий",
+          "job_namekk_doc": "жұмысшысы"
+        },
+        {
+          "job_code": "YARD_CLEANER",
+          "job_namekk": "Аула сыпырушы",
+          "job_nameru": "Дворник",
+          "job_namekk_doc": "аула сыпырушысы"
+        }
+      ]
+    },
+    "medical_specialties": {
+      "exists": true,
+      "count": 6,
+      "rows": [
+        {
+          "code": "GENERAL",
+          "name": "Медицинская сестра",
+          "group_id": 2,
+          "is_active": true,
+          "created_at": "2026-06-16T03:19:11.897714+00:00",
+          "medical_specialty_id": 6
+        },
+        {
+          "code": "GYNECOLOGY",
+          "name": "Врач-акушер-гинеколог",
+          "group_id": 1,
+          "is_active": true,
+          "created_at": "2026-06-16T03:19:11.897714+00:00",
+          "medical_specialty_id": 1
+        },
+        {
+          "code": "ONCOLOGY",
+          "name": "Врач-онколог",
+          "group_id": 1,
+          "is_active": true,
+          "created_at": "2026-06-16T03:19:11.897714+00:00",
+          "medical_specialty_id": 4
+        },
+        {
+          "code": "OR",
+          "name": "Операционная медсестра",
+          "group_id": 2,
+          "is_active": true,
+          "created_at": "2026-06-16T03:19:11.897714+00:00",
+          "medical_specialty_id": 5
+        },
+        {
+          "code": "SURGERY",
+          "name": "Врач-хирург",
+          "group_id": 1,
+          "is_active": true,
+          "created_at": "2026-06-16T03:19:11.897714+00:00",
+          "medical_specialty_id": 3
+        },
+        {
+          "code": "THERAPY",
+          "name": "Врач-терапевт",
+          "group_id": 1,
+          "is_active": true,
+          "created_at": "2026-06-16T03:19:11.897714+00:00",
+          "medical_specialty_id": 2
+        }
+      ]
+    },
+    "medical_specialty_groups": {
+      "exists": true,
+      "count": 2,
+      "rows": [
+        {
+          "code": "DOCTOR",
+          "name": "Врачи",
+          "group_id": 1,
+          "is_active": true,
+          "created_at": "2026-06-16T03:19:11.897714+00:00"
+        },
+        {
+          "code": "NURSE",
+          "name": "Средний медицинский персонал",
+          "group_id": 2,
+          "is_active": true,
+          "created_at": "2026-06-16T03:19:11.897714+00:00"
+        }
+      ]
+    }
+  },
+  "transaction_read_only": "on",
+  "database_revision": [
+    "podup001"
+  ],
+  "dictionary_columns": [
+    {
+      "table_name": "job_positions_catalog",
+      "column_name": "job_code",
+      "data_type": "text"
+    },
+    {
+      "table_name": "job_positions_catalog",
+      "column_name": "job_nameru",
+      "data_type": "text"
+    },
+    {
+      "table_name": "job_positions_catalog",
+      "column_name": "job_namekk",
+      "data_type": "text"
+    },
+    {
+      "table_name": "job_positions_catalog",
+      "column_name": "job_namekk_doc",
+      "data_type": "text"
+    },
+    {
+      "table_name": "medical_specialties",
+      "column_name": "medical_specialty_id",
+      "data_type": "bigint"
+    },
+    {
+      "table_name": "medical_specialties",
+      "column_name": "group_id",
+      "data_type": "bigint"
+    },
+    {
+      "table_name": "medical_specialties",
+      "column_name": "code",
+      "data_type": "text"
+    },
+    {
+      "table_name": "medical_specialties",
+      "column_name": "name",
+      "data_type": "text"
+    },
+    {
+      "table_name": "medical_specialties",
+      "column_name": "is_active",
+      "data_type": "boolean"
+    },
+    {
+      "table_name": "medical_specialties",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone"
+    },
+    {
+      "table_name": "medical_specialty_groups",
+      "column_name": "group_id",
+      "data_type": "bigint"
+    },
+    {
+      "table_name": "medical_specialty_groups",
+      "column_name": "code",
+      "data_type": "text"
+    },
+    {
+      "table_name": "medical_specialty_groups",
+      "column_name": "name",
+      "data_type": "text"
+    },
+    {
+      "table_name": "medical_specialty_groups",
+      "column_name": "is_active",
+      "data_type": "boolean"
+    },
+    {
+      "table_name": "medical_specialty_groups",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone"
+    },
+    {
+      "table_name": "personnel_order_template_versions",
+      "column_name": "template_version_id",
+      "data_type": "bigint"
+    },
+    {
+      "table_name": "personnel_order_template_versions",
+      "column_name": "item_type_code",
+      "data_type": "text"
+    },
+    {
+      "table_name": "personnel_order_template_versions",
+      "column_name": "version_number",
+      "data_type": "integer"
+    },
+    {
+      "table_name": "personnel_order_template_versions",
+      "column_name": "status",
+      "data_type": "text"
+    },
+    {
+      "table_name": "personnel_order_template_versions",
+      "column_name": "revision",
+      "data_type": "integer"
+    },
+    {
+      "table_name": "personnel_order_template_versions",
+      "column_name": "title_ru",
+      "data_type": "text"
+    },
+    {
+      "table_name": "personnel_order_template_versions",
+      "column_name": "title_kk",
+      "data_type": "text"
+    },
+    {
+      "table_name": "personnel_order_template_versions",
+      "column_name": "preamble_ru",
+      "data_type": "text"
+    },
+    {
+      "table_name": "personnel_order_template_versions",
+      "column_name": "preamble_kk",
+      "data_type": "text"
+    },
+    {
+      "table_name": "personnel_order_template_versions",
+      "column_name": "body_template_ru",
+      "data_type": "text"
+    },
+    {
+      "table_name": "personnel_order_template_versions",
+      "column_name": "body_template_kk",
+      "data_type": "text"
+    },
+    {
+      "table_name": "personnel_order_template_versions",
+      "column_name": "basis_template_ru",
+      "data_type": "text"
+    },
+    {
+      "table_name": "personnel_order_template_versions",
+      "column_name": "basis_template_kk",
+      "data_type": "text"
+    },
+    {
+      "table_name": "personnel_order_template_versions",
+      "column_name": "based_on_built_in",
+      "data_type": "boolean"
+    },
+    {
+      "table_name": "personnel_order_template_versions",
+      "column_name": "created_by_user_id",
+      "data_type": "bigint"
+    },
+    {
+      "table_name": "personnel_order_template_versions",
+      "column_name": "created_at",
+      "data_type": "timestamp with time zone"
+    },
+    {
+      "table_name": "personnel_order_template_versions",
+      "column_name": "updated_by_user_id",
+      "data_type": "bigint"
+    },
+    {
+      "table_name": "personnel_order_template_versions",
+      "column_name": "updated_at",
+      "data_type": "timestamp with time zone"
+    },
+    {
+      "table_name": "personnel_order_template_versions",
+      "column_name": "published_at",
+      "data_type": "timestamp with time zone"
+    },
+    {
+      "table_name": "personnel_order_template_versions",
+      "column_name": "published_by_user_id",
+      "data_type": "bigint"
+    },
+    {
+      "table_name": "personnel_order_template_versions",
+      "column_name": "template_id",
+      "data_type": "bigint"
+    },
+    {
+      "table_name": "position_aliases",
+      "column_name": "alias_id",
+      "data_type": "bigint"
+    },
+    {
+      "table_name": "position_aliases",
+      "column_name": "position_id",
+      "data_type": "bigint"
+    },
+    {
+      "table_name": "position_aliases",
+      "column_name": "alias_text",
+      "data_type": "text"
+    },
+    {
+      "table_name": "position_aliases",
+      "column_name": "normalized_alias",
+      "data_type": "text"
+    },
+    {
+      "table_name": "position_job_catalog",
+      "column_name": "position_id",
+      "data_type": "integer"
+    },
+    {
+      "table_name": "position_job_catalog",
+      "column_name": "job_code",
+      "data_type": "text"
+    },
+    {
+      "table_name": "positions",
+      "column_name": "position_id",
+      "data_type": "bigint"
+    },
+    {
+      "table_name": "positions",
+      "column_name": "name",
+      "data_type": "text"
+    },
+    {
+      "table_name": "positions",
+      "column_name": "category",
+      "data_type": "text"
+    },
+    {
+      "table_name": "positions",
+      "column_name": "name_kk",
+      "data_type": "text"
+    }
+  ]
+}
