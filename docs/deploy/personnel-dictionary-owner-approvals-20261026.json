@@ -1,0 +1,39 @@
+{
+  "format": "personnel-dictionary-owner-approvals-v1",
+  "position_category_decisions": [
+    {
+      "approval_id": "owner-social-worker-other-20261026",
+      "authority": "Решение владельца данных в текущем задании",
+      "source_key": {"name": "Социальный работник", "category": "medical"},
+      "target_category": "other",
+      "required_job_code": "SOCIAL_WORKER",
+      "require_existing_target": true,
+      "preserve_existing_target_id": true,
+      "note": "Использовать существующую production-должность в категории other; не создавать дубль medical. Исходную инвентаризацию не менять."
+    },
+    {
+      "approval_id": "owner-laundry-technical-20261026",
+      "authority": "Решение владельца данных в текущем задании",
+      "source_key": {"name": "Машинист по стирке белья", "category": "technical"},
+      "existing_key": {"name": "Машинист по стирке белья", "category": "other"},
+      "expected_target_position_id": 24,
+      "target_category": "technical",
+      "required_job_code": "LAUNDRY_MACHINE_OPERATOR",
+      "require_existing_target": true,
+      "preserve_existing_target_id": true,
+      "note": "Изменить категорию существующей записи other → technical, сохранив ID 24 и существующую связь LAUNDRY_MACHINE_OPERATOR. Не создавать новую должность и не менять назначения сотрудников."
+    },
+    {
+      "approval_id": "owner-technician-technical-20261026",
+      "authority": "Решение владельца данных в текущем задании",
+      "source_key": {"name": "Техник", "category": "technical"},
+      "existing_key": {"name": "Техник", "category": "other"},
+      "expected_target_position_id": 52,
+      "target_category": "technical",
+      "required_job_code": "TECHNICIAN",
+      "require_existing_target": true,
+      "preserve_existing_target_id": true,
+      "note": "Изменить категорию существующей записи other → technical, сохранив ID 52; добавить только связь TECHNICIAN. Не создавать новую должность и не менять назначения сотрудников."
+    }
+  ]
+}
