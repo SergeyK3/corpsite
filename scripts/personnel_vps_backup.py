@@ -16,6 +16,7 @@ from sqlalchemy import create_engine,text
 from sqlalchemy.engine import make_url
 
 BACKUPS=Path('/opt/projects/corpsite/backups')
+SCHEMA_SIGNATURE_POLICY='check-literal-varchar-array-to-text-v2'
 
 
 def server_path(path):
@@ -57,16 +58,82 @@ def sequence_states(conn):
     return states
 
 
+def _sql_tokens(sql):
+    """Keep quoted SQL opaque; positions allow a surgical, fail-closed rewrite."""
+    result=[];i=0
+    while i<len(sql):
+        if sql[i].isspace():i+=1;continue
+        start=i
+        escaped=sql[i:i+2].lower()=="e'"
+        if sql[i] in "'\"" or escaped:
+            if escaped:i+=1
+            quote=sql[i];i+=1
+            while i<len(sql):
+                if escaped and sql[i]=='\\':i+=2;continue
+                if sql[i]==quote:
+                    i+=1
+                    if i<len(sql) and sql[i]==quote:i+=1;continue
+                    break
+                i+=1
+            else:return []
+        elif sql.startswith('--',i):
+            end=sql.find('\n',i);i=len(sql) if end<0 else end
+        elif sql.startswith('/*',i):
+            depth=1;i+=2
+            while i<len(sql) and depth:
+                if sql.startswith('/*',i):depth+=1;i+=2
+                elif sql.startswith('*/',i):depth-=1;i+=2
+                else:i+=1
+            if depth:return []
+        elif sql[i]=='$' and (tag:=re.match(r'\$(?:[A-Za-z_][A-Za-z_0-9]*)?\$',sql[i:])):
+            end=sql.find(tag[0],i+len(tag[0]))
+            if end<0:return []
+            i=end+len(tag[0])
+        elif sql.startswith('::',i):i+=2
+        elif word:=re.match(r'[A-Za-z_\u0080-\uffff][A-Za-z_0-9$\u0080-\uffff]*',sql[i:]):i+=len(word[0])
+        else:i+=1
+        result.append((sql[start:i],start,i))
+    return result
+
+
+def canonical_check_definition(sql):
+    """Only distribute an unbounded varchar literal-array -> text[] cast.
+
+    PostgreSQL may deparse this binary-compatible coercion either on the array
+    or on every element after dump/restore. Values, order and every surrounding
+    operator/condition remain byte-for-byte unchanged. Typmods, arbitrary casts,
+    expressions, NULL elements and other SQL are deliberately not rewritten.
+    """
+    tokens=_sql_tokens(sql);values=[item[0] for item in tokens];edits=[];i=0
+    while i<len(values):
+        if values[i:i+3]!=['(','ARRAY','[']:i+=1;continue
+        start_index=i;j=i+3;literals=[];matched=False
+        while j+3<len(values):
+            literal=values[j]
+            if not literal.startswith("'") or values[j+1:j+4]!=['::','character','varying']:break
+            literals.append(literal);j+=4
+            if j<len(values) and values[j]==',':j+=1;continue
+            if values[j:j+6]==[']',')','::','text','[',']']:
+                replacement='ARRAY['+', '.join('('+v+'::character varying)::text' for v in literals)+']'
+                edits.append((tokens[i][1],tokens[j+5][2],replacement));i=j+6;matched=True
+            break
+        if not matched:i=start_index+1
+    for start,end,replacement in reversed(edits):sql=sql[:start]+replacement+sql[end:]
+    return sql
+
+
 def schema_signature(conn):
     """Compare restored schema without putting schema definitions into reports."""
     queries=[
         "SELECT table_name,column_name,data_type,column_default,is_nullable FROM information_schema.columns WHERE table_schema='public' ORDER BY table_name,ordinal_position",
-        "SELECT conrelid::regclass::text,conname,pg_get_constraintdef(oid) FROM pg_constraint WHERE connamespace='public'::regnamespace ORDER BY conrelid::regclass::text,conname",
+        "SELECT conrelid::regclass::text,conname,pg_get_constraintdef(oid),contype,convalidated,connoinherit FROM pg_constraint WHERE connamespace='public'::regnamespace ORDER BY conrelid::regclass::text,conname",
         "SELECT tablename,indexname,indexdef FROM pg_indexes WHERE schemaname='public' ORDER BY tablename,indexname",
         "SELECT tgname,pg_get_triggerdef(oid) FROM pg_trigger WHERE NOT tgisinternal ORDER BY tgrelid::regclass::text,tgname",
         "SELECT viewname,definition FROM pg_views WHERE schemaname='public' ORDER BY viewname",
     ]
     rows=[[list(row) for row in conn.exec_driver_sql(sql)] for sql in queries]
+    for row in rows[1]:
+        if row[3]=='c':row[2]=canonical_check_definition(row[2])
     return hashlib.sha256(json.dumps(rows,sort_keys=True,default=str).encode()).hexdigest()
 
 
@@ -96,7 +163,7 @@ def main():
             if locale['provider']!='c':raise RuntimeError('ICU locale requires a separately reviewed CREATE DATABASE command')
         subprocess.run(['pg_restore','--list',str(output)],stdout=subprocess.DEVNULL,check=True)
         db.dispose()
-        manifest={'backup':str(output),'bytes':output.stat().st_size,'sha256':sha256(output),'revision':revision,'table_digests':digests,'sequences':sequences,'schema_signature':schema,'database_locale':locale,'server_local_only':True}
+        manifest={'backup':str(output),'bytes':output.stat().st_size,'sha256':sha256(output),'revision':revision,'table_digests':digests,'sequences':sequences,'schema_signature':schema,'schema_signature_policy':SCHEMA_SIGNATURE_POLICY,'database_locale':locale,'server_local_only':True}
         output.with_suffix(output.suffix+'.manifest.json').write_text(json.dumps(manifest,indent=2),encoding='utf-8')
         print(json.dumps({k:manifest[k] for k in ('backup','bytes','sha256','revision','server_local_only')} | {'verified_table_count':len(digests)}));return
     if args.action=='recovery-env':
@@ -111,6 +178,8 @@ def main():
     if sha256(backup)!=manifest['sha256']:raise RuntimeError('Backup checksum mismatch')
     subprocess.run(['pg_restore','--list',str(backup)],stdout=subprocess.DEVNULL,check=True)
     if args.action=='verify':print('Backup checksum and archive list verified');return
+    if manifest.get('schema_signature_policy')!=SCHEMA_SIGNATURE_POLICY:
+        raise RuntimeError('Backup schema-signature policy differs; retain the matching verifier or create a fresh backup')
     if not re.fullmatch(r'corpsite_(release_verify|recovery)_[a-z0-9_]{1,35}',args.database or '') or args.database==url.database:
         raise RuntimeError('Restore is allowed only into a new verification/recovery DB')
     admin=create_engine(url.set(database='postgres'),isolation_level='AUTOCOMMIT',hide_parameters=True)
@@ -128,7 +197,8 @@ def main():
         if table_digests(conn)!=manifest['table_digests']:raise RuntimeError('Restored table counts/digests differ from backup')
         if sequence_states(conn)!=manifest['sequences']:raise RuntimeError('Restored identity/serial counters differ from backup')
         if schema_signature(conn)!=manifest['schema_signature']:raise RuntimeError('Restored schema/constraints/indexes/triggers/views differ from backup')
-    restored.dispose();print(json.dumps({'restored_database':args.database,'revision':revisions,'backup_verified':True}))
+        check_count=conn.exec_driver_sql("SELECT count(*) FROM pg_constraint WHERE connamespace='public'::regnamespace AND contype='c'").scalar_one()
+    restored.dispose();print(json.dumps({'restored_database':args.database,'revision':revisions,'backup_verified':True,'schema_verified':True,'data_tables_verified':len(manifest['table_digests']),'sequences_verified':len(manifest['sequences']),'check_constraints_verified':check_count,'schema_signature_policy':SCHEMA_SIGNATURE_POLICY}))
 
 
 if __name__=='__main__':main()

@@ -1,0 +1,71 @@
+Исправление сравнения CHECK и проверка свежего backup, 26.10.2026
+
+Выпуск остаётся на паузе. Production SHA 12985ba17bc6b794fcf03733c95f423b0a720b98,
+Alembic podup001. Код приложения не переключался, миграции и перенос
+справочников не запускались. Верификатор запускался отдельно из staging.
+
+ОГРАНИЧЕНИЕ И СЕМАНТИКА
+Таблица public.personnel_section_settings, ограничение
+personnel_section_settings_language_check.
+Исходно:
+CHECK (((language)::text = ANY ((ARRAY['kk'::character varying, 'ru'::character varying])::text[])))
+После pg_restore:
+CHECK (((language)::text = ANY (ARRAY[('kk'::character varying)::text, ('ru'::character varying)::text])))
+Оба варианта разрешают kk, ru и NULL (обычная семантика CHECK). Приведение
+varchar без ограничения длины к text не меняет содержимое констант. Приведение
+массивом или по элементам сохраняет те же значения и порядок. Пустая строка,
+другие значения и пробел после kk не принимаются обоими условиями.
+
+ИСПРАВЛЕНИЕ
+Нормализуется исключительно выражение (ARRAY[строковые константы::character
+varying, ...])::text[] в массив с приведением каждого элемента к text.
+Лексический разбор оставляет строки, quoted identifiers, dollar-quoted строки
+и комментарии непрозрачными. Остальная часть CHECK сохраняется посимвольно.
+Не удаляются CHECK, операторы, значения, приведения типов или ограничения длины.
+Произвольные выражения, NULL-элементы и другие виды cast не нормализуются.
+Сравнение схемы по-прежнему включает все ограничения, колонки, индексы,
+триггеры, представления; дополнительно учитываются contype/convalidated/connoinherit.
+Проверки данных всех таблиц, счётчиков и Alembic revision сохранены.
+Версия подписи указана в manifest: check-literal-varchar-array-to-text-v2.
+Старые manifest не переписываются; для них нужен соответствующий верификатор.
+
+ТЕСТЫ
+23 passed, без пропусков: unit-тесты сравнения, изолированный pg_dump/pg_restore
+с CHECK и проверки безопасного исполнителя. Эквивалентные формы дают одну
+подпись схемы; изменение списка допустимых значений в восстановленной тестовой
+БД даёт другую подпись при полностью неизменных данных. Отрицательные случаи:
+смена литерала, ANY/ALL, =/<>, NOT VALID, NO INHERIT, typmod, другой тип и NULL.
+Для воспроизведения legacy deparser в тесте подменяется только возвращаемое
+текстовое определение одного CHECK; pg_catalog не изменяется.
+Команда pytest с отдельным loopback TEST_DATABASE_URL и guard DATABASE_URL:
+python -m pytest --noconftest -o addopts= -p no:cacheprovider --tb=short -q tests/test_personnel_backup_check_comparison.py tests/test_personnel_vps_backup_isolated.py tests/test_personnel_dictionary_release_executor.py
+
+НОВЫЙ BACKUP И ВОССТАНОВЛЕНИЕ НА VPS
+/opt/projects/corpsite/backups/personnel-check-fix-20261026100753/fresh.dump
+Размер: 5 043 583 байта.
+SHA256: aa270c21ec08751cd64762f59f6aa3581088e7c112f4b5291699574a729abfd4.
+Проверочная БД: corpsite_release_verify_check_20261026100753.
+Дамп остался на VPS и не скачивался на компьютер. На время создания backup
+писатели остановлены, затем ранее активные сервисы возвращены. Проверочная
+БД не используется приложением. Восстановление проверялось по manifest того
+же экспортированного REPEATABLE READ snapshot, а не по меняющейся живой БД.
+Результат: backup_verified=true, schema_verified=true; данные 229 таблиц,
+192 последовательности, все 644 CHECK и прочие объекты схемы совпали.
+Отдельно подтверждено совпадение нормализованного конкретного CHECK.
+Полный серверный отчёт без персональных строк: рядом verification-report.json.
+Верификатор: /opt/projects/corpsite/staging/personnel-backup-check-fix-20261026-6eb38603/personnel_vps_backup.py
+SHA256 верификатора: 3fbc4ac7cd86be6522790d7122a9a50e9ecabe56f065607038011d459ec53542.
+
+ПРЕЖНЯЯ КОПИЯ СОХРАНЕНА
+/opt/projects/corpsite/backups/personnel-20261026094028/before-schema.dump
+SHA256 df0a429ff86fc3fa34a207d47448668f7a17b2ab39460e6c03247e446c75d85e
+не изменился. Старые дамп, manifest и проверочная БД не удалялись.
+
+СОСТОЯНИЕ ПОСЛЕ ПРОВЕРКИ
+Backend/frontend/бот/regular-tasks.timer/healthcheck.timer активны.
+Backend /health, frontend /login, публичный /login — HTTP 200.
+Пакет 82cfa4ff не изменялся и не пересобирался: следующая попытка выпуска
+должна использовать исправленный верификатор из нового коммита/пакета.
+Если после этой копии появились новые записи, перед будущими миграциями нужен
+новый backup. Миграции, переключение кода и перенос требуют возобновления
+выпуска; в этом задании они не выполнялись.

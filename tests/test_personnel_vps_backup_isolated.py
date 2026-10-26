@@ -49,6 +49,9 @@ def test_backup_verify_restore_and_recovery_env(fresh_database,tmp_path,monkeypa
     with fresh_database.begin() as conn:
         conn.exec_driver_sql("CREATE TABLE alembic_version(version_num text PRIMARY KEY); INSERT INTO alembic_version VALUES('podup001')")
         conn.exec_driver_sql("CREATE TABLE synthetic_rows(id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,value text); INSERT INTO synthetic_rows(value) VALUES('synthetic only'),(NULL)")
+        from tests.test_personnel_backup_check_comparison import ORIGINAL
+        conn.exec_driver_sql('CREATE TABLE personnel_section_settings(language varchar CONSTRAINT personnel_section_settings_language_check '+ORIGINAL+')')
+        conn.exec_driver_sql("INSERT INTO personnel_section_settings VALUES('kk'),('ru'),(NULL)")
     env=tmp_path/'synthetic.env'
     env.write_text('DATABASE_URL='+url.render_as_string(hide_password=False)+'\nOTHER=keep\n',encoding='utf-8')
     backup=tmp_path/'synthetic.dump'
@@ -63,8 +66,34 @@ def test_backup_verify_restore_and_recovery_env(fresh_database,tmp_path,monkeypa
         invoke('backup','--output',backup)
         manifest=json.loads(backup.with_suffix('.dump.manifest.json').read_text())
         assert manifest['revision']==['podup001'] and manifest['table_digests']['synthetic_rows']['count']==2
+        assert manifest['schema_signature_policy']==helper.SCHEMA_SIGNATURE_POLICY
+        from tests.test_personnel_backup_check_comparison import ORIGINAL,RESTORED
+        with fresh_database.connect() as conn:
+            # Emulate only the legacy deparser spelling from the incident;
+            # never inject/modify PostgreSQL catalog trees to reproduce it.
+            class LegacyDecompiler:
+                def exec_driver_sql(self,sql):
+                    rows=[list(row) for row in conn.exec_driver_sql(sql)]
+                    if 'pg_get_constraintdef(oid)' in sql:
+                        row=next(row for row in rows if row[1]=='personnel_section_settings_language_check')
+                        assert row[2]==RESTORED
+                        row[2]=ORIGINAL
+                    return rows
+            assert helper.schema_signature(LegacyDecompiler())==manifest['schema_signature']
+            assert conn.exec_driver_sql("SELECT bool_and((v = ANY ((ARRAY['kk'::varchar,'ru'::varchar])::text[])) IS NOT DISTINCT FROM (v = ANY (ARRAY[('kk'::varchar)::text,('ru'::varchar)::text]))) FROM (VALUES ('kk'::text),('ru'),('en'),(''),(NULL),('қазақ'),('kk ')) x(v)").scalar()
         invoke('verify','--backup',backup)
         invoke('restore-copy','--backup',backup,'--database',restored_name)
+        restored=create_engine(url.set(database=restored_name),hide_parameters=True)
+        try:
+            with restored.connect() as conn:assert helper.schema_signature(conn)==manifest['schema_signature']
+            with restored.begin() as conn:
+                conn.exec_driver_sql('ALTER TABLE personnel_section_settings DROP CONSTRAINT personnel_section_settings_language_check')
+                changed=RESTORED.replace("('ru'::character varying)::text","('ru'::character varying)::text, ('en'::character varying)::text")
+                conn.exec_driver_sql('ALTER TABLE personnel_section_settings ADD CONSTRAINT personnel_section_settings_language_check '+changed)
+            with restored.connect() as conn:
+                assert helper.table_digests(conn)==manifest['table_digests']
+                assert helper.schema_signature(conn)!=manifest['schema_signature']
+        finally:restored.dispose()
         with pytest.raises(RuntimeError,match='already exists'):
             invoke('restore-copy','--backup',backup,'--database',restored_name)
         recovered=tmp_path/'recovered.env'
