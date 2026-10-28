@@ -1,5 +1,6 @@
-import QualificationCategoryTemplatePreview from "../qualification-category-draft/QualificationCategoryTemplatePreview";
 "use client";
+
+import QualificationCategoryTemplatePreview from "../qualification-category-draft/QualificationCategoryTemplatePreview";
 import { usePersonnelSectionLanguage, localizedPersonnelTitle } from "@/app/directory/personnel/_lib/personnelSectionLanguage";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
