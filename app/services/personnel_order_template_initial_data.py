@@ -121,3 +121,6 @@ INITIAL_TEXTS_BY_TYPE['LEAVE.ANNUAL.RECALL'] = RECALL_TEXTS
 # Keep the built-in identity and surrounding text; only the directives change.
 from app.services.personnel_order_concurrent_end_contract import BODY_RU as CESSATION_RU, BODY_KK as CESSATION_KK
 INITIAL_TEXTS_BY_TYPE["CONCURRENT_DUTY_END"].update(body_template_ru=CESSATION_RU, body_template_kk=CESSATION_KK)
+
+from app.services.personnel_order_category_contract import TYPE as CATEGORY_TYPE, TEXTS as CATEGORY_TEXTS
+INITIAL_TEXTS_BY_TYPE[CATEGORY_TYPE] = dict(CATEGORY_TEXTS)

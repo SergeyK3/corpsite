@@ -266,7 +266,11 @@ def _validate(values: Mapping[str, str], item_type_code: str = EDITABLE_TYPE, *,
         from app.services.personnel_order_replacement_contract import validate_bodies
         try: validate_bodies(values)
         except ValueError as exc: raise TemplateDraftError("TEMPLATE_VARIABLE_REQUIRED", str(exc)) from exc
-    for field, required in spec.required_variables.items():
+    requirements = spec.required_variables
+    if item_type_code == 'QUALIFICATION_CATEGORY':
+        from app.services.personnel_order_category_classifier_contract import required_variables
+        requirements = required_variables(values, requirements)
+    for field, required in requirements.items():
         absent = [code for code in required if f"{{{{{code}}}}}" not in values[field]]
         if absent:
             raise TemplateDraftError("TEMPLATE_VARIABLE_REQUIRED", f"В {field} отсутствуют обязательные переменные: {', '.join(absent)}")
@@ -424,6 +428,16 @@ def preview_draft(item_type_code: str, values: Mapping[str, str]) -> dict[str, A
     }
     for locale, overrides in spec.preview_context.items():
         locale_samples[locale].update(overrides)
+    if item_type_code == 'QUALIFICATION_CATEGORY':
+        from app.services.personnel_order_category_classifier_contract import CONTRACT, is_classifier_template, classifier_values
+        if is_classifier_template(values):
+            from copy import deepcopy
+            from app.services.personnel_order_category_contract import SAMPLE
+            sample = deepcopy(SAMPLE)
+            sample.update(contract=CONTRACT, effective_date='2026-06-11', basis='TEST основание')
+            sample['qualification_category'] = {'code': 4, 'name_ru': 'Высшая категория', 'name_kk': 'Жоғары санат', 'assigned_at': '2026-06-11'}
+            for locale in locale_samples:
+                locale_samples[locale].update(classifier_values(sample))
     if item_type_code == "CONCURRENT_DUTY_START":
         from app.services.personnel_order_service_area_contract import enabled as area_enabled,preview_context as area_context
         from app.services.personnel_order_replacement_contract import variant, preview_context, optional_placement

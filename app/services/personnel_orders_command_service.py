@@ -16,9 +16,8 @@ from app.db.models.personnel_orders import (
     ITEM_STATUS_ACTIVE,
     LOCALE_KK,
     LOCALE_RU,
-    MVP_HEADER_ORDER_TYPE_CODES,
-    MVP_ITEM_TYPE_CODES,
-    RECONSTRUCTION_DRAFT_ITEM_TYPE_CODES,
+    PERSONNEL_ORDER_HEADER_TYPE_CODES,
+    PERSONNEL_ORDER_ITEM_TYPE_CODES,
     LEAVE_DRAFT_ITEM_TYPE_CODES,
     ORDER_STATUS_DRAFT,
     ORDER_STATUS_READY_FOR_SIGNATURE,
@@ -101,14 +100,14 @@ def _require_available() -> None:
 
 def _normalize_header_type(order_type_code: str) -> str:
     normalized = str(order_type_code or "").strip().upper()
-    if normalized not in MVP_HEADER_ORDER_TYPE_CODES:
+    if normalized not in PERSONNEL_ORDER_HEADER_TYPE_CODES:
         raise PersonnelOrderValidationError(f"Invalid order_type_code: {order_type_code}")
     return normalized
 
 
 def _normalize_item_type(item_type_code: str) -> str:
     normalized = str(item_type_code or "").strip().upper()
-    if normalized not in MVP_ITEM_TYPE_CODES + LEAVE_DRAFT_ITEM_TYPE_CODES + RECONSTRUCTION_DRAFT_ITEM_TYPE_CODES:
+    if normalized not in PERSONNEL_ORDER_ITEM_TYPE_CODES:
         raise PersonnelOrderValidationError(f"Invalid item_type_code: {item_type_code}")
     if normalized in LEAVE_DRAFT_ITEM_TYPE_CODES:
         definition = get_event_def(normalized)
@@ -1078,6 +1077,14 @@ def update_personnel_order_item(
         merged_employee_id = updates.get("employee_id", current_item.get("employee_id"))
         merged_payload_raw = payload if payload is not None else current_item.get("payload")
         merged_payload = merged_payload_raw if isinstance(merged_payload_raw, dict) else {}
+        if str(merged_type) == "QUALIFICATION_CATEGORY":
+            from app.services.personnel_order_category_contract import prepare_category_payload
+            current_date = conn.execute(text("SELECT effective_date FROM personnel_order_items WHERE item_id=:id"), {"id":item_id}).scalar_one()
+            try:
+                merged_payload = prepare_category_payload(conn,merged_payload,merged_employee_id,updates.get("effective_date",current_date),current_item.get("payload"))
+            except ValueError as exc:
+                raise PersonnelOrderValidationError(str(exc)) from exc
+            updates["payload"] = json.dumps(merged_payload,ensure_ascii=False)
         template = None
         if template_version_id is not None:
             template = conn.execute(text("SELECT * FROM personnel_order_template_versions WHERE template_version_id=:id AND item_type_code=:code AND status='PUBLISHED' FOR SHARE"), {"id": template_version_id, "code": merged_type}).mappings().first()
@@ -1085,12 +1092,13 @@ def update_personnel_order_item(
                 raise PersonnelOrderValidationError("Выбранная опубликованная версия шаблона недоступна или не соответствует типу пункта.")
             from app.services.personnel_order_manual_draft_service import prepare_manual_item_payload
             current_date = conn.execute(text("SELECT effective_date FROM personnel_order_items WHERE item_id=:id"), {"id": item_id}).scalar_one()
-            merged_payload = prepare_manual_item_payload(conn, item_type_code=merged_type, employee_id=merged_employee_id, effective_date=updates.get("effective_date", current_date), period_start=period_start, period_end=period_end, item_payload=merged_payload, template_version_id=template_version_id)
+            if str(merged_type) != "QUALIFICATION_CATEGORY":
+                merged_payload = prepare_manual_item_payload(conn, item_type_code=merged_type, employee_id=merged_employee_id, effective_date=updates.get("effective_date", current_date), period_start=period_start, period_end=period_end, item_payload=merged_payload, template_version_id=template_version_id)
             updates["payload"] = json.dumps(merged_payload, ensure_ascii=False)
         elif str(merged_type) != str(current_item["item_type_code"]):
             raise PersonnelOrderValidationError("При изменении типа пункта выберите опубликованный шаблон.")
-        elif (merged_type in {"TRANSFER", "CONCURRENT_DUTY_START"}
-              and isinstance(merged_payload.get("transfer" if merged_type == "TRANSFER" else "concurrent"), dict)):
+        elif (merged_type == "QUALIFICATION_CATEGORY" or (merged_type in {"TRANSFER", "CONCURRENT_DUTY_START"}
+              and isinstance(merged_payload.get("transfer" if merged_type == "TRANSFER" else "concurrent"), dict))):
             # Saving a bound point must refresh its text even when the user
             # keeps its exact template. Never select a current default here.
             bound_order = conn.execute(text("SELECT * FROM personnel_orders WHERE order_id=:id"), {"id": order_id}).mappings().one()

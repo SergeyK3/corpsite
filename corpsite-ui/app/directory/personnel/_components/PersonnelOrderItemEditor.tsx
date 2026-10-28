@@ -1,4 +1,7 @@
 "use client";
+import PersonnelOrderCategoryFields from "./PersonnelOrderCategoryFields";
+import {resolvePersonnelDocumentContext,refreshCategoryDocumentContext} from "../_lib/personnelOrderDocumentContext";
+import {emptyCategoryOrderDraft as emptyCategoryDraft,categoryDraftErrors,categoryOrderDraftFromRecord} from "../_lib/qualificationCategoryDraft";
 import PersonnelOrderAllowancePercent from "./PersonnelOrderAllowancePercent";
 import { allowancePercentError } from "../_lib/personnelOrderAllowancePercent";
 
@@ -558,6 +561,7 @@ export default function PersonnelOrderItemEditor({
     // into a new item.
     setPayloadDraft((prev) => ({
       ...prev,
+      category_document:itemTypeCode === "QUALIFICATION_CATEGORY" ? {...emptyCategoryDraft(),employee_id:option.employee_id,source_employee_name:option.full_name,qualification_category:prev.category_document?.qualification_category??emptyCategoryDraft().qualification_category,effective_date:prev.category_document?.effective_date||""} : prev.category_document,
       org_unit_document_genitive_kk: "",
       position_document_possessive_kk: "",
       position_document_nominative_ru: "",
@@ -577,6 +581,7 @@ export default function PersonnelOrderItemEditor({
       if (selectionRevision !== employeeSelectionRevision.current) return;
       const selected = employeeDtoToSearchOption(details);
       const positionForms = resolvePersonnelOrderDocumentForms(details.position, details);
+      if(itemTypeCode === "QUALIFICATION_CATEGORY")setPayloadDraft(previous=>({...previous,category_document:refreshCategoryDocumentContext(previous.category_document??emptyCategoryDraft(),resolvePersonnelDocumentContext(details))}));
       const assignmentUnit = details.has_current_assignment === false ? null : details.org_unit;
       const storedOrgUnitGenitive = String(assignmentUnit?.document_genitive_kk || "").trim();
       const automaticOrgUnitGenitive = calculateKazakhOrgUnitGenitive(assignmentUnit?.name_kk);
@@ -698,6 +703,7 @@ export default function PersonnelOrderItemEditor({
       savedEmployeeId == null && allowsPendingNewEmployee(normalizedUiType),
     );
     setEffectiveDate(persistedEffectiveDate(item));
+    if (normalizedUiType === "QUALIFICATION_CATEGORY" && draft.category_document) draft.category_document = categoryOrderDraftFromRecord(draft.category_document, persistedEffectiveDate(item));
     setPayloadDraft(draft);
     savedFormSignature.current = JSON.stringify({ itemTypeCode: normalizedUiType, employeeId: item.employee_id ? String(item.employee_id) : "", effectiveDate: persistedEffectiveDate(item), payloadDraft: draft });
     setTerminationReasonSuggested(suggestedReason);
@@ -832,6 +838,10 @@ export default function PersonnelOrderItemEditor({
     if (disabled) return false;
     if (formDisclosure.current) formDisclosure.current.open = true;
     setError(null);
+    if(itemTypeCode === "QUALIFICATION_CATEGORY"){
+      const errors=categoryDraftErrors(payloadDraft.category_document || emptyCategoryDraft());
+      if(errors.length){setError(errors.join(" "));return false;}
+    }
     if (itemTypeCode === "SUPPLEMENTARY_PAY" && (payloadDraft.allowance || payloadDraft.allowance_percent !== undefined)) {
       const percentError = allowancePercentError(payloadDraft.allowance_percent || "");
       if (percentError) { setError(percentError); return false; }
@@ -925,7 +935,7 @@ export default function PersonnelOrderItemEditor({
         ...(backendType === "CONCURRENT_DUTY_START" && payloadDraft.concurrent_template_version_id ? {template_version_id: payloadDraft.concurrent_template_version_id} : {}),
         item_type_code: backendType,
         employee_id: resolvedEmployeeId,
-        effective_date: isLeave ? leaveStart : effectiveDate || null,
+        effective_date: backendType === "QUALIFICATION_CATEGORY" ? payloadDraft.category_document?.effective_date : isLeave ? leaveStart : effectiveDate || null,
         period_start: isLeave ? leaveStart : null,
         period_end: isLeave ? leaveEnd : null,
         payload,
@@ -1280,6 +1290,10 @@ export default function PersonnelOrderItemEditor({
   }
 
   function renderAdditionalSection() {
+    if(itemTypeCode === "QUALIFICATION_CATEGORY"){
+      const value=payloadDraft.category_document ?? {...emptyCategoryDraft(),employee_id:Number(employeeId)||null,source_employee_name:employeeQuery};
+      return <PersonnelOrderCategoryFields value={value} disabled={disabled||saving} onChange={next=>{setPayloadDraft(previous=>({...previous,category_document:next}));setEffectiveDate(next.effective_date||"");}}/>;
+    }
     if (itemTypeCode === "SUPPLEMENTARY_PAY") {
       return <PersonnelOrderAllowancePercent key={editingItemId ?? "new"} value={payloadDraft.allowance_percent ?? ""}
         onChange={value=>setPayloadDraft(previous=>({...previous,allowance_percent:value}))} inputClassName={FIELD_INPUT_CLASS}/>;

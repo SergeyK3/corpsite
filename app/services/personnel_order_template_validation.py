@@ -29,7 +29,11 @@ def validate_template_texts(item_type_code: str, values: Mapping[str, str]) -> N
         unknown = {match.group(1) for match in _TOKEN.finditer(value)} - variables
         if unknown:
             raise TemplateValidationError("Unknown variable: " + ", ".join(sorted(unknown)))
-    for field, required in spec.required_variables.items():
+    requirements = spec.required_variables
+    if item_type_code == 'QUALIFICATION_CATEGORY':
+        from app.services.personnel_order_category_classifier_contract import required_variables
+        requirements = required_variables(values, requirements)
+    for field, required in requirements.items():
         absent = [code for code in required if f"{{{{{code}}}}}" not in values[field]]
         if absent:
             raise TemplateValidationError(f"Required variable absent from {field}: {', '.join(absent)}")

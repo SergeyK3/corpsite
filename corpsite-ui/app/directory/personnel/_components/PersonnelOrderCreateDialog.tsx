@@ -1,4 +1,7 @@
 "use client";
+import PersonnelOrderCategoryFields from "./PersonnelOrderCategoryFields";
+import {resolvePersonnelDocumentContext,refreshCategoryDocumentContext,type PersonnelDocumentContext} from "../_lib/personnelOrderDocumentContext";
+import {emptyCategoryOrderDraft as emptyCategoryDraft,categoryDraftErrors,categoryOrderPayload} from "../_lib/qualificationCategoryDraft";
 import PersonnelOrderAllowancePercent from "./PersonnelOrderAllowancePercent";
 import { allowancePercentError } from "../_lib/personnelOrderAllowancePercent";
 
@@ -252,6 +255,17 @@ export default function PersonnelOrderCreateDialog({
   const [selectingEmployee,setSelectingEmployee]=React.useState(false);
   const [employeeSearchError,setEmployeeSearchError]=React.useState("");
   const [employeeSearchFinished,setEmployeeSearchFinished]=React.useState(false);
+  const categoryOrder = type === "QUALIFICATION_CATEGORY";
+  const [categoryDoc,setCategoryDoc] = React.useState(emptyCategoryDraft);
+  const previousCategoryContext=React.useRef<PersonnelDocumentContext|null>(null);
+  const categoryContext=React.useMemo(()=>resolvePersonnelDocumentContext(employee,undefined,selectedOrgUnit??undefined),[employee,selectedOrgUnit]);
+  React.useEffect(()=>{
+    const previous=previousCategoryContext.current;previousCategoryContext.current=categoryContext;
+    setCategoryDoc(current=>refreshCategoryDocumentContext(current,categoryContext,previous));
+  },[categoryContext]);
+  function updateCategoryDocument(next:typeof categoryDoc) {
+    setCategoryDoc(next);setEffective(next.effective_date||"");
+  }
   const unpaid = type === "LEAVE.UNPAID.GRANT";
   const childcare = type === "LEAVE.CHILDCARE.GRANT";
   const periodLeave = unpaid || childcare;
@@ -300,6 +314,7 @@ export default function PersonnelOrderCreateDialog({
   missing(!resolvedTitle, "Название приказа не загружено.", "Бұйрық атауы жүктелмеді.");
   missing(!employee?.id, "Выберите сотрудника из списка кандидатов.", "Қызметкерді үміткерлер тізімінен таңдаңыз.");
 
+  if(categoryOrder)blockedReasons.push(...categoryDraftErrors(categoryDoc));
   if (periodLeave) {
     missing(!start, "Укажите дату начала отпуска.", "Демалыстың басталу күнін көрсетіңіз.");
     missing(!end, "Укажите дату окончания отпуска.", "Демалыстың аяқталу күнін көрсетіңіз.");
@@ -657,7 +672,7 @@ export default function PersonnelOrderCreateDialog({
         effective_date: periodLeave ? start : effective,
         period_start: periodLeave ? start : null,
         period_end: periodLeave ? end : null,
-        item_payload: simpleAllowance ? {allowance_recipient:allowanceRecipient,allowance:{percent:Number(replacementFields.allowance_percent),basis_type:'RECIPIENT_BASE_SALARY',employee_dative_ru:kk.employee_full_name_dative_ru,employee_dative_kk:kk.employee_full_name_dative_kk,basis_ru:simpleAllowanceBasis.basis_ru,basis_kk:simpleAllowanceBasis.basis_kk}} : replacementMode ? {...(serviceArea?{allowance_recipient:allowanceRecipient}:{}),concurrent:{...transferFields,rate:replacementMode==="RATE" || (workAllowance && transferFields.rate.trim())?Number(String(transferFields.rate || "").replace(",", ".")):undefined,total_rate:replacementMode==="RATE" || workAllowance?Number(String(transferFields.total_rate || "").replace(",", ".")):undefined,employee_dative_ru:kk.employee_full_name_dative_ru,employee_dative_kk:kk.employee_full_name_dative_kk},replacement:{...(workAllowance?{allowance_percent:replacementFields.allowance_percent,allowance_basis_ru:replacementFields.allowance_basis_ru,allowance_basis_kk:replacementFields.allowance_basis_kk}:replacementFields),...(serviceArea?{allowance_basis_type:'RECIPIENT_BASE_SALARY'}:{}),mode:replacementMode}} : cessation ? {concurrent:{...transferFields,rate:Number(String(transferFields.rate || "").replace(",", ".")),remaining_rate:Number(String(transferFields.remaining_rate || "").replace(",", ".")),employee_genitive_ru:kk.employee_full_name_genitive_ru,employee_ablative_kk:ablativeKk}} : concurrent ? {concurrent:{...transferFields,rate:Number(String(transferFields.rate || "").replace(",", ".")),total_rate:Number(String(transferFields.total_rate || "").replace(",", ".")),employee_dative_ru:kk.employee_full_name_dative_ru,employee_dative_kk:kk.employee_full_name_dative_kk}} : transfer ? { transfer: { ...transferFields, rate: Number(String(transferFields.rate || "").replace(",", ".")) }, document_forms_ru: { employee_full_name_accusative_ru: kk.employee_full_name_accusative_ru } } : recall ? {...recallFields,source_employee_name:recallName} : periodLeave
+        item_payload: categoryOrder ? categoryOrderPayload(categoryDoc) : simpleAllowance ? {allowance_recipient:allowanceRecipient,allowance:{percent:Number(replacementFields.allowance_percent),basis_type:'RECIPIENT_BASE_SALARY',employee_dative_ru:kk.employee_full_name_dative_ru,employee_dative_kk:kk.employee_full_name_dative_kk,basis_ru:simpleAllowanceBasis.basis_ru,basis_kk:simpleAllowanceBasis.basis_kk}} : replacementMode ? {...(serviceArea?{allowance_recipient:allowanceRecipient}:{}),concurrent:{...transferFields,rate:replacementMode==="RATE" || (workAllowance && transferFields.rate.trim())?Number(String(transferFields.rate || "").replace(",", ".")):undefined,total_rate:replacementMode==="RATE" || workAllowance?Number(String(transferFields.total_rate || "").replace(",", ".")):undefined,employee_dative_ru:kk.employee_full_name_dative_ru,employee_dative_kk:kk.employee_full_name_dative_kk},replacement:{...(workAllowance?{allowance_percent:replacementFields.allowance_percent,allowance_basis_ru:replacementFields.allowance_basis_ru,allowance_basis_kk:replacementFields.allowance_basis_kk}:replacementFields),...(serviceArea?{allowance_basis_type:'RECIPIENT_BASE_SALARY'}:{}),mode:replacementMode}} : cessation ? {concurrent:{...transferFields,rate:Number(String(transferFields.rate || "").replace(",", ".")),remaining_rate:Number(String(transferFields.remaining_rate || "").replace(",", ".")),employee_genitive_ru:kk.employee_full_name_genitive_ru,employee_ablative_kk:ablativeKk}} : concurrent ? {concurrent:{...transferFields,rate:Number(String(transferFields.rate || "").replace(",", ".")),total_rate:Number(String(transferFields.total_rate || "").replace(",", ".")),employee_dative_ru:kk.employee_full_name_dative_ru,employee_dative_kk:kk.employee_full_name_dative_kk}} : transfer ? { transfer: { ...transferFields, rate: Number(String(transferFields.rate || "").replace(",", ".")) }, document_forms_ru: { employee_full_name_accusative_ru: kk.employee_full_name_accusative_ru } } : recall ? {...recallFields,source_employee_name:recallName} : periodLeave
           ? {
               ...(childcare ? { leave_start: start, leave_end: end, leave_days: days } : { leave: { period_type: start === end ? "SINGLE_DAY" : "CONTINUOUS_RANGE", start, end, days } }),
               document_forms_kk: {
@@ -812,6 +827,7 @@ export default function PersonnelOrderCreateDialog({
             {publishedTitleError ? <p role="alert" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-900/70 dark:bg-amber-950/40 dark:text-amber-100">{publishedTitleError}</p> : null}
             {type ? <>
               <div className="space-y-1 text-sm font-medium leading-5 text-zinc-800 dark:text-zinc-100"><span>Сотрудник</span>{selectedEmployee}</div>
+              {categoryOrder ? <PersonnelOrderCategoryFields value={categoryDoc} disabled={busy} onChange={updateCategoryDocument}/> : null}
               {periodLeave ? <>
               <Field label="Дата начала"><input aria-label="Дата начала" type="date" required value={start} onChange={(event) => { setStart(event.target.value); setEnd(event.target.value); }} className={inputClassName} /></Field>
               <Field label="Дата окончания"><input aria-label="Дата окончания" type="date" required value={end} onChange={(event) => setEnd(event.target.value)} className={inputClassName} /></Field>
@@ -823,7 +839,7 @@ export default function PersonnelOrderCreateDialog({
                 <p className="text-xs">Дата выдачи свидетельства — не дата рождения ребёнка. Дата окончания отпуска вводится отдельно.</p>
                 <Field label="ФИО сотрудника в родительном падеже (RU)"><input required value={kk.employee_full_name_genitive_ru} onChange={e=>{ ruGenitiveEdited.current = true; setKk(previous=>({...previous, employee_full_name_genitive_ru:e.target.value})); }} className={inputClassName} /></Field>
               </> : null}
-              </> : <Field label="Дата действия"><input aria-label="Дата действия" type="date" required value={effective} onChange={(event) => setEffective(event.target.value)} className={inputClassName} /></Field>}
+              </> : categoryOrder ? null : <Field label="Дата действия"><input aria-label="Дата действия" type="date" required value={effective} onChange={(event) => setEffective(event.target.value)} className={inputClassName} /></Field>}
             </> : null}
               {employee && cessation ? <section className="space-y-3 sm:col-span-2">
                 {employee.additional_assignments?.length ? <Field label="Прекращаемое дополнительное назначение"><select aria-label="Прекращаемое дополнительное назначение" className={inputClassName} value={transferFields.assignment_id || ""} onChange={e=>{
@@ -844,7 +860,7 @@ export default function PersonnelOrderCreateDialog({
               {employee && (transfer || concurrent) ? <PersonnelOrderTransferFields value={transferFields} onChange={setTransferFields} orgUnits={orgUnitOptions} disabled={busy} mode={cessation ? "cessation" : concurrent ? "concurrent" : "transfer"} showRates={replacementMode!=="PAY"} rateOptional={workAllowance} documentFormsKK={Boolean(replacementMode)} autoCaseForms={serviceArea} autoGenitiveForms={concurrent && !cessation && !serviceArea} afterDepartment={transfer || concurrent && !cessation && !replacementMode ? <PersonnelOrderMedicalSpecialtyPicker value={medicalSpecialty} onChange={setMedicalSpecialty} disabled={busy}/> : undefined} /> : null}
               {employee && (concurrent || simpleAllowance) && !cessation ? <section className="space-y-3 sm:col-span-2"><p className="text-xs">Проверьте предложенные формы ФИО в дательном падеже; их можно уточнить вручную.</p>{([['employee_full_name_dative_ru','ФИО в дательном падеже (RU)'],['employee_full_name_dative_kk','ФИО в дательном падеже (KK)']] as const).map(([key,label])=><Field key={key} label={label}><input aria-label={label} value={kk[key]} onChange={e=>{editedEmployeeDatives.current.add(key);setKk(current=>({...current,[key]:e.target.value}));}} className={inputClassName}/></Field>)}</section> : null}
               {employee && replacementMode ? <PersonnelOrderReplacementFields value={replacementFields} onChange={setReplacementFields} orgUnits={orgUnitOptions} mode={replacementMode} start={effective} fixedAllowance={optionalPlacement} serviceArea={serviceArea}/> : null}
-              {employee && !recall && !transfer && !concurrent && !simpleAllowance ? <details open={formsExpanded} onToggle={(event) => setFormsExpanded(event.currentTarget.open)} className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-700" data-testid="personnel-order-text-forms">
+              {employee && !categoryOrder && !recall && !transfer && !concurrent && !simpleAllowance ? <details open={formsExpanded} onToggle={(event) => setFormsExpanded(event.currentTarget.open)} className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-700" data-testid="personnel-order-text-forms">
                 <summary className="cursor-pointer text-sm font-medium">{formsComplete ? "Формы для текста приказа заполнены автоматически" : "Формы для текста приказа"}</summary>
               {periodLeave && missingFormLabels.length ? <p role="alert" className="mt-2 text-sm text-amber-800">Необходимо заполнить: {missingFormLabels.join(", ")}.</p> : null}
               {!kk.position_document_possessive_kk.trim() ? <p className="text-xs text-amber-700">В справочнике должности нет казахского названия или сохранённой документной формы. Заполните КК-должность вручную.</p> : <p className="text-xs text-zinc-500">Документные формы редактируемые; рассчитанную форму из названия справочника проверьте.</p>}

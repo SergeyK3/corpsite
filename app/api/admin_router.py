@@ -7,6 +7,7 @@ from typing import Annotated, Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.api.admin_schemas import (
+    PersonnelCategorySamplePreview,
     AccessGrantCreate,
     AccessGrantResponse,
     AccessRoleRefResponse,
@@ -653,3 +654,12 @@ def admin_get_telegram_health(
 ) -> Dict[str, Any]:
     """Aggregated Telegram delivery diagnostics for sysadmin (OPS-026.2)."""
     return get_telegram_health(channel=channel, window_hours=window_hours)
+
+
+@router.post("/personnel-order-templates/QUALIFICATION_CATEGORY/draft/sample-preview")
+def admin_category_sample_preview(body: PersonnelCategorySamplePreview, template_id: int = Query(..., ge=1), _admin: Dict[str, Any] = Depends(require_sysadmin_api)):
+    from app.services.personnel_order_category_preview import preview_saved_category
+    try:
+        return preview_saved_category(template_id, body.expected_template_version_id, body.expected_revision, body.sample)
+    except TemplateDraftError as exc:
+        raise _template_draft_error(exc) from exc

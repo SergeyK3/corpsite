@@ -3,6 +3,7 @@
  * titles in a dialog; PUBLISHED content may override these values.
  */
 export const PERSONNEL_ORDER_CANONICAL_TITLES: Record<string, { ru: string; kk: string }> = {
+  QUALIFICATION_CATEGORY: {ru:"Об изменении квалификационной категории",kk:"Біліктілік санатын өзгерту туралы"},
   HIRE: { ru: "О приёме на работу", kk: "Жұмысқа қабылдау туралы" },
   TRANSFER: { ru: "О переводе", kk: "Ауыстыру туралы" },
   TERMINATION: { ru: "Об увольнении", kk: "Еңбек шартын бұзу туралы" },

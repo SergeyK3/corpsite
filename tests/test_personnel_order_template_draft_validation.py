@@ -25,6 +25,7 @@ def _initial_texts(item_type_code: str = EDITABLE_TYPE) -> dict[str, str]:
 
 def test_readable_initial_texts_match_the_ten_type_golden_snapshot() -> None:
     expected_hashes = {
+        "QUALIFICATION_CATEGORY": "0e702977533e16b6b0ecc14f919d0d546d79791a9f911ecdc935054ed45c9585",
         "LEAVE.ANNUAL.RECALL": "bbddeb517479b8b78555e58b95b1f083ee9e00e47b759630cf42465ca054bedb",
         "HIRE": "96444278a247538672dfb544559359d08cc3b54e0de182d2d3fb0617320658fa",
         "TRANSFER": "3a6d711e7484839479a98697da7e91a6a2f27b5fab315ad38c3f295722005995",

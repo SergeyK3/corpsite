@@ -50,7 +50,13 @@ from app.services.personnel_order_concurrent_contract import VARIABLES as CONCUR
 
 from app.services.personnel_order_recall_contract import VARIABLES as RECALL_VARIABLES, REQUIRED_VARIABLES as RECALL_REQUIRED
 
+from app.services.personnel_order_category_contract import TYPE as CATEGORY_TYPE, VARIABLES as CATEGORY_VARIABLES, REQUIRED as CATEGORY_REQUIRED, PREVIEW as CATEGORY_PREVIEW
+from app.services.personnel_order_category_classifier_contract import VARIABLES as CLASSIFIER_VARIABLES
+
+TEMPLATE_ONLY_TYPES = set()
+
 PERSONNEL_ORDER_TEMPLATE_SPECS = {
+    CATEGORY_TYPE: _spec(CATEGORY_TYPE, CATEGORY_VARIABLES + CLASSIFIER_VARIABLES, required=CATEGORY_REQUIRED, preview=CATEGORY_PREVIEW),
     'LEAVE.ANNUAL.RECALL': _spec('LEAVE.ANNUAL.RECALL', RECALL_VARIABLES, required=RECALL_REQUIRED, preview={'ru': {'effective_date': '[[Дата отзыва]]'}, 'kk': {'effective_date': '[[Шақырту күні]]'}}),
     "HIRE": _spec("HIRE", _COMMON), "TRANSFER": _spec("TRANSFER", _COMMON + ("employee.full_name_dative_ru", "employee.full_name_accusative_ru")),
     "TERMINATION": _spec("TERMINATION", ("employee.full_name", "position.title_ru", "position.title_kk", "org_unit.title_ru", "org_unit.title_kk", "effective_date", "effective_date_local", "termination.reason", "termination.unused_leave_days", "basis"), preview={"ru": {"effective_date": "[[Дата увольнения]]", "effective_date_local": "[[Дата увольнения]]"}, "kk": {"effective_date": "[[Жұмыстан босату күні]]", "effective_date_local": "[[Жұмыстан босату күні]]"}}),
@@ -77,7 +83,7 @@ def get_personnel_order_template_spec(item_type_code: str) -> PersonnelOrderTemp
     except KeyError as exc: raise ValueError("TEMPLATE_EDITOR_NOT_AVAILABLE") from exc
 
 def assert_personnel_order_template_specs() -> None:
-    expected = set(PERSONNEL_ORDER_ITEM_TYPE_CODES) - {ORDER_TYPE_COMPOSITE}
+    expected = (set(PERSONNEL_ORDER_ITEM_TYPE_CODES) - {ORDER_TYPE_COMPOSITE}) | TEMPLATE_ONLY_TYPES
     assert set(PERSONNEL_ORDER_TEMPLATE_SPECS) == expected
     assert set(CATALOG_PROJECTIONS) == expected
     projection_keys = {

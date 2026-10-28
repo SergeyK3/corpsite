@@ -354,3 +354,12 @@ CATALOG_PROJECTIONS['LEAVE.ANNUAL.RECALL'] = {
     'notes': 'Текст черновика и применение шаблона. Пересчёт отпуска и кадровые события не поддерживаются.',
     'pilot_detail': None, 'template_detail': None,
 }
+
+from app.services.personnel_order_category_contract import TYPE as CATEGORY_TYPE, TEXTS as CATEGORY_TEXTS
+from app.services.personnel_order_category_classifier_contract import REQUIRED_ORDER_FIELDS, ORDER_NOTES
+CATALOG_PROJECTIONS[CATEGORY_TYPE] = dict(
+    title_ru=CATEGORY_TEXTS['title_ru'], title_kk=CATEGORY_TEXTS['title_kk'], source='BUILT_IN',
+    support_level='PARTIAL', supported_locales=['ru','kk'], uses_specialized_generator=False,
+    is_pilot=False, editor_available=True, required_fields=list(REQUIRED_ORDER_FIELDS),
+    notes=ORDER_NOTES,
+    pilot_detail=None, template_detail=None)

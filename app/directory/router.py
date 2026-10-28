@@ -21,6 +21,7 @@ from .users_routes import router as users_router
 from .working_contacts_routes import router as working_contacts_router
 from .personnel_demo_routes import router as personnel_demo_router
 from .employee_documents_routes import router as employee_documents_router
+from .medical_qualification_categories_routes import router as medical_qualification_categories_router
 from .personnel_orders_routes import router as personnel_orders_router
 from .personnel_applications_routes import router as personnel_applications_router
 from .personnel_intake_routes import router as personnel_intake_router
@@ -61,6 +62,7 @@ router.include_router(users_router)
 router.include_router(working_contacts_router)
 router.include_router(personnel_demo_router)
 router.include_router(employee_documents_router)
+router.include_router(medical_qualification_categories_router)
 router.include_router(personnel_orders_router)
 router.include_router(personnel_applications_router)
 router.include_router(hiring_document_checklist_router)

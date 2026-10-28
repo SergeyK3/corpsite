@@ -329,6 +329,14 @@ it.each(PERSONNEL_ORDER_CREATE_TYPE_OPTIONS.map(option => option.value))("offers
     expect(screen.queryByTestId('personnel-order-text-forms')).not.toBeInTheDocument();
     return;
   }
+  if (type === "QUALIFICATION_CATEGORY") {
+    expect(screen.getByTestId('order-category-fields')).toBeInTheDocument();
+    await waitFor(()=>expect(screen.getByLabelText('Подразделение RU')).toHaveValue(employeeDetail.org_unit.name));
+    fireEvent.change(screen.getByLabelText('Должность в родительном падеже RU'),{target:{value:'врача каталога'}});
+    expect(screen.getByLabelText('Должность в родительном падеже RU')).toHaveValue('врача каталога');
+    expect(screen.queryByTestId('personnel-order-text-forms')).not.toBeInTheDocument();
+    return;
+  }
   expect(screen.getByLabelText("Должность в тексте приказа (RU)")).toHaveValue("Врач каталога");
   expect(screen.getByLabelText("Должность в тексте приказа (KK)")).toHaveValue("дәрігері каталога");
   fireEvent.change(screen.getByLabelText("Должность в тексте приказа (KK)"), { target: { value: "Ручная форма" } });

@@ -26,6 +26,8 @@ APPROVED_VARIANT_PRINT_TITLES = {
 
 
 def initial_print_titles(item_type_code, internal_name_ru=None):
+    if item_type_code == 'QUALIFICATION_CATEGORY':
+        return {'print_title_ru':'Об изменении квалификационной категории','print_title_kk':'Біліктілік санатын өзгерту туралы'}
     approved = APPROVED_VARIANT_PRINT_TITLES.get((item_type_code, internal_name_ru))
     if approved is not None:
         return dict(approved)

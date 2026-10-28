@@ -14,16 +14,18 @@ def test_catalog_is_registry_backed_and_safe():
     assert "COMPOSITE" not in codes
     pilot = next(item for item in items if item["type_code"] == "RETURN_FROM_CHILDCARE_LEAVE")
     assert pilot["is_pilot"] is True and pilot["support_level"] == "SUPPORTED"
-    assert all(set(item) == {"type_code", "title_ru", "title_kk", "source", "support_level", "supported_locales", "uses_specialized_generator", "is_pilot", "editor_available", "allowed_variables", "required_variables", "required_fields", "notes", "pilot_detail", "template_detail"} for item in items)
+    base_keys={"type_code", "title_ru", "title_kk", "source", "support_level", "supported_locales", "uses_specialized_generator", "is_pilot", "editor_available", "allowed_variables", "required_variables", "required_fields", "notes", "pilot_detail", "template_detail"}
+    assert all(set(item) == base_keys | ({"optional_fields","computed_fields","formalization_warning"} if item['type_code']=='QUALIFICATION_CATEGORY' else set()) for item in items)
     assert all(item["allowed_variables"] == list(get_personnel_order_template_spec(item["type_code"]).allowed_variables) for item in items)
-    assert all(item["required_variables"] == {field: list(codes) for field, codes in get_personnel_order_template_spec(item["type_code"]).required_variables.items()} for item in items)
+    from app.services.personnel_order_category_classifier_contract import REQUIRED as CLASSIFIER_REQUIRED
+    assert all(item["required_variables"] == {field: list(codes) for field, codes in (CLASSIFIER_REQUIRED if item['type_code']=='QUALIFICATION_CATEGORY' else get_personnel_order_template_spec(item["type_code"]).required_variables).items()} for item in items)
     assert {item["type_code"] for item in items if item["editor_available"]} == codes
 
 
 def test_catalog_projections_match_the_migrated_golden_snapshot_for_all_types():
     assert_personnel_order_template_specs()
     actual = {
-        item["type_code"]: {key: value for key, value in item.items() if key not in {"type_code", "allowed_variables", "required_variables"}}
+        item["type_code"]: {key: value for key, value in item.items() if key not in {"type_code", "allowed_variables", "required_variables", "optional_fields", "computed_fields", "formalization_warning"}}
         for item in list_personnel_order_template_catalog()
     }
     assert actual == CATALOG_PROJECTIONS

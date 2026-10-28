@@ -1,3 +1,4 @@
+import QualificationCategoryTemplatePreview from "../qualification-category-draft/QualificationCategoryTemplatePreview";
 "use client";
 import { usePersonnelSectionLanguage, localizedPersonnelTitle } from "@/app/directory/personnel/_lib/personnelSectionLanguage";
 
@@ -244,6 +245,7 @@ function DraftEditor({ editor, published, onSaved, onPublished, variables, requi
   const [saving, setSaving] = useState(false);
   const [previewing, setPreviewing] = useState(false);
   const [previewSaved, setPreviewSaved] = useState(false);
+  const [categoryPreviewRefresh, setCategoryPreviewRefresh] = useState(0);
   const [reloading, setReloading] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const editorRef = useRef<HTMLElement | null>(null);
@@ -307,6 +309,11 @@ function DraftEditor({ editor, published, onSaved, onPublished, variables, requi
   };
   const isWorkingCopy = editor.kind === "WORKING_COPY";
   const serverDraft = editor.kind === "DRAFT" ? editor.draft : null;
+  const useEditorValuesPreview = savedDraft.item_type_code === "QUALIFICATION_CATEGORY"
+    && savedDraft.template_id === 42 && serverDraft?.template_version_id === 56;
+  const hideOrderPreview = savedDraft.item_type_code === "QUALIFICATION_CATEGORY" && savedDraft.template_id === 42 && !useEditorValuesPreview;
+  const useStandardPreview = savedDraft.item_type_code !== "QUALIFICATION_CATEGORY"
+    || useEditorValuesPreview || (savedDraft.template_id === 42 && serverDraft?.template_version_id === 55);
   const isInitialWorkingCopy = isWorkingCopy && editor.workingCopy.base.source === "INITIAL";
   const isDirty = !textMatches(values, savedDraft);
   const differsFromPublished = serverDraft != null && published != null && !textMatches(serverDraft, published);
@@ -314,19 +321,31 @@ function DraftEditor({ editor, published, onSaved, onPublished, variables, requi
   const incompatible = Object.entries(values).flatMap(([field, value]) => {
     const tokens = [...(value || '').matchAll(/\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g)].map(match => match[1]);
     const unknown = [...new Set(tokens.filter(code => !variables.includes(code)))];
-    const missing = (requiredVariables?.[field as keyof PersonnelOrderTemplateDraftText] ?? []).filter(code => !tokens.includes(code));
+    const classifierDraft = savedDraft.item_type_code === "QUALIFICATION_CATEGORY" && values.body_template_ru.includes("medical_specialty.clause_ru");
+    const requirements = (requiredVariables?.[field as keyof PersonnelOrderTemplateDraftText] ?? []).flatMap(code => {
+      if (!classifierDraft) return [code];
+      if (code === "qualification_category.category_code_ru" || code === "qualification_category.category_code_kk") return [];
+      if (code === "medical_specialty.name_ru") return ["medical_specialty.clause_ru"];
+      if (code === "medical_specialty.name_kk") return ["medical_specialty.clause_kk"];
+      return [code];
+    });
+    const missing = requirements.filter(code => !tokens.includes(code));
     return unknown.length || missing.length ? [{ field, unknown, missing }] : [];
   });
   const replacementMode = /\{\{\s*replacement\.term\s*\}\}/.test(values.body_template_ru) ? (/\{\{\s*allowance\.percent\s*\}\}/.test(values.body_template_ru) ? "PAY" : "RATE") : null;
   const canPublish = incompatible.length === 0 && serverDraft != null && !publishing && !isDirty && (published == null || differsFromPublished);
   const showPreview = () => {
+    if (!useStandardPreview) {
+      setCategoryPreviewRefresh(n => n + 1);
+      return;
+    }
     const request = ++previewRequest.current;
     const submittedValues = editableDraftText(values);
     setError("");
     setNotice("");
     setPreview(null);
     setPreviewing(true);
-    const useSaved = Boolean(serverDraft?.template_id && !isDirty);
+    const useSaved = !useEditorValuesPreview && Boolean(serverDraft?.template_id && !isDirty);
     setPreviewSaved(useSaved);
     void (useSaved ? previewSavedPersonnelOrderTemplateDraft(serverDraft!) : previewPersonnelOrderTemplateDraft(savedDraft.item_type_code, submittedValues))
       .then((result) => { if (request === previewRequest.current) setPreview(result.previews); })
@@ -359,6 +378,7 @@ function DraftEditor({ editor, published, onSaved, onPublished, variables, requi
         onSaved(next);
         setValues(savedValues);
         setNotice("Черновик сохранён");
+        if (hideOrderPreview || useEditorValuesPreview) { setPreview(null); return; }
         setPreviewSaved(true);
         const request = ++previewRequest.current;
         return (next.template_id ? previewSavedPersonnelOrderTemplateDraft(next) : previewPersonnelOrderTemplateDraft(next.item_type_code, savedValues))
@@ -448,7 +468,7 @@ function DraftEditor({ editor, published, onSaved, onPublished, variables, requi
 
       <p className="mt-3 text-xs" data-testid="template-editor-allowed-variables">Разрешённые переменные: {variables.join(", ")}.</p>
       <div className="mt-4 flex items-center gap-2 overflow-x-auto whitespace-nowrap border-t border-zinc-200 pt-3 dark:border-zinc-800" data-testid="template-draft-actions">
-        <button type="button" onClick={showPreview} disabled={previewing} className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-800 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800">{previewing ? "Формирование…" : "Предварительный просмотр"}</button>
+        {!hideOrderPreview && <button type="button" onClick={showPreview} disabled={previewing} className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-800 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800">{previewing ? "Формирование…" : "Предварительный просмотр"}</button>}
         <button type="button" onClick={save} disabled={!canSave} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-500 dark:text-zinc-950 dark:hover:bg-blue-400">{saving ? "Сохранение…" : "Сохранить черновик"}</button>
         <button type="button" onClick={() => onRemove(sectionLanguage === "kk" ? values.title_kk : values.title_ru)} disabled={saving || publishing} className="shrink-0 rounded-lg border border-red-600 px-3 py-2 text-sm font-semibold text-red-700">Удалить шаблон</button>
         <button type="button" onClick={publish} disabled={!canPublish} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">{publishing ? "Публикация…" : "Опубликовать версию"}</button>
@@ -458,11 +478,12 @@ function DraftEditor({ editor, published, onSaved, onPublished, variables, requi
         {notice ? <p role="status" className="text-sm text-emerald-700">{notice}</p> : null}
       </div>
       {serverDraft && published && !differsFromPublished && !isDirty ? <p className="mt-3 text-sm text-amber-700">Черновик полностью совпадает с опубликованной версией и не может быть опубликован</p> : null}
+      {!hideOrderPreview && !useStandardPreview ? <QualificationCategoryTemplatePreview values={values} refresh={categoryPreviewRefresh} /> : null}
       {serverDraft && replacementMode && !isDirty ? <PersonnelReplacementPreviewForm draft={serverDraft} mode={replacementMode} onPreview={result=>{setPreview(result.previews);setPreviewSaved(true);setError("");}}/> : null}
-      {preview ? <p className="mt-3 text-sm" data-testid="template-preview-origin">{previewSaved
+      {!hideOrderPreview && preview && useStandardPreview ? <p className="mt-3 text-sm" data-testid="template-preview-origin">{previewSaved
         ? (sectionLanguage === "kk" ? "Сақталған жобаны алдын ала қарау" : "Просмотр сохранённого черновика")
         : (sectionLanguage === "kk" ? "Сақталмаған өзгерістерді алдын ала қарау" : "Просмотр несохранённых изменений")}</p> : null}
-      {preview ? <div ref={previewRef} data-testid="template-draft-preview" data-preview-source={previewSaved ? "SAVED_DRAFT" : "EDITOR_VALUES"} data-template-id={previewSaved ? savedDraft.template_id : undefined} data-template-version-id={previewSaved ? serverDraft?.template_version_id : undefined} data-revision={previewSaved ? serverDraft?.revision : undefined} className="mt-4 grid gap-3 md:grid-cols-2">{(["ru", "kk"] as const).map((locale) => <article key={locale}><b>{locale.toUpperCase()}</b><p>{preview[locale].title}</p><p>{preview[locale].preamble}</p><p className="text-center">{preview[locale].directive}</p><p className="whitespace-pre-wrap">{preview[locale].body}</p><p>{preview[locale].basis}</p>{!replacementMode ? <PreviewFooter locale={locale} itemTypeCode={savedDraft.item_type_code} /> : null}</article>)}</div> : null}
+      {!hideOrderPreview && preview && useStandardPreview ? <div ref={previewRef} data-testid="template-draft-preview" data-preview-source={previewSaved ? "SAVED_DRAFT" : "EDITOR_VALUES"} data-template-id={previewSaved ? savedDraft.template_id : undefined} data-template-version-id={previewSaved ? serverDraft?.template_version_id : undefined} data-revision={previewSaved ? serverDraft?.revision : undefined} className="mt-4 grid gap-3 md:grid-cols-2">{(["ru", "kk"] as const).map((locale) => <article key={locale}><b>{locale.toUpperCase()}</b><p>{preview[locale].title}</p><p>{preview[locale].preamble}</p><p className="text-center">{preview[locale].directive}</p><p className="whitespace-pre-wrap">{preview[locale].body}</p><p>{preview[locale].basis}</p>{!replacementMode ? <PreviewFooter locale={locale} itemTypeCode={savedDraft.item_type_code} /> : null}</article>)}</div> : null}
     </section>
   );
 }
@@ -542,11 +563,13 @@ function TemplateDetail({ item, templateId, selectedTemplate, onChanged, onRemov
       {published ? <section className="mt-4 rounded-lg border border-emerald-200 p-3" data-testid="template-published-read-only"><h4 className="font-semibold">Опубликованная версия шаблона</h4><p className="text-sm"><PersonnelTemplateIdentity templateId={templateId} versionId={published.template_version_id} versionNumber={published.version_number} status={published.status} /></p><p className="mt-2 whitespace-pre-wrap text-sm">{localizedPersonnelTitle(published, language)}</p>{draftExists ? <p className="mt-2 text-sm text-amber-700">Имеется черновик следующей версии.</p> : null}</section> : null}
       <p className="mt-1 text-sm">{item.uses_specialized_generator ? "Специализированный генератор" : "Общий fallback"}</p>
       {detail ? <FormalizedTemplateDetail detail={detail} showCatalogPreview={!item.editor_available} /> : <>
-        <p className="mt-3">Обязательные поля: {item.required_fields.join(", ") || "не формализованы"}</p>
+        <p className="mt-3" data-testid="template-required-order-fields">Обязательные поля: {item.required_fields.join(", ") || "не формализованы"}</p>
+        {!!item.optional_fields?.length && <p className="mt-1 text-sm" data-testid="template-optional-order-fields">Необязательные поля: {item.optional_fields.join(", ")}</p>}
+        {!!item.computed_fields?.length && <p className="mt-1 text-sm" data-testid="template-computed-order-fields">Вычисляется автоматически: {item.computed_fields.join(", ")}</p>}
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">{item.notes}</p>
       </>}
 
-      {editor ? <div ref={createdEditorRef} className="scroll-mt-20">{createdDraft ? <p role="status" className="mt-4 text-sm text-emerald-700" data-testid="template-copy-success">{createdDraft.type_changed ? (language === "kk" ? "Үлгінің түрі өзгертілді. Мәтін сақталды." : "Вид шаблона изменён. Тексты сохранены.") : language === "kk" ? `Бөлек жоба «${selectedTemplate?.name_kk || createdDraft.name_kk || createdDraft.title_kk}» жасалды. Бастапқы үлгі сақталды` : `Создан отдельный черновик «${selectedTemplate?.name_ru || createdDraft.name_ru || createdDraft.title_ru}». Исходный шаблон сохранён`}</p> : null}<DraftEditor editor={editor} published={published} onSaved={(next) => { setEditor({ kind: "DRAFT", draft: next }); setServerDraft(next); onChanged?.(next); }} onRemove={name => { setRemovalName(name); setRemoving(true); }} onPublished={next => { setEditor(null); setServerDraft(null); setPublished(next); reloadState(); onChanged?.(next); }} variables={item.allowed_variables} requiredVariables={item.required_variables} warning={item.support_level === "PARTIAL" ? "Шаблон требует дальнейшей предметной формализации; неподтверждённые реквизиты не добавлены." : undefined} /></div> : null}
+      {editor ? <div ref={createdEditorRef} className="scroll-mt-20">{createdDraft ? <p role="status" className="mt-4 text-sm text-emerald-700" data-testid="template-copy-success">{createdDraft.type_changed ? (language === "kk" ? "Үлгінің түрі өзгертілді. Мәтін сақталды." : "Вид шаблона изменён. Тексты сохранены.") : language === "kk" ? `Бөлек жоба «${selectedTemplate?.name_kk || createdDraft.name_kk || createdDraft.title_kk}» жасалды. Бастапқы үлгі сақталды` : `Создан отдельный черновик «${selectedTemplate?.name_ru || createdDraft.name_ru || createdDraft.title_ru}». Исходный шаблон сохранён`}</p> : null}<DraftEditor editor={editor} published={published} onSaved={(next) => { setEditor({ kind: "DRAFT", draft: next }); setServerDraft(next); onChanged?.(next); }} onRemove={name => { setRemovalName(name); setRemoving(true); }} onPublished={next => { setEditor(null); setServerDraft(null); setPublished(next); reloadState(); onChanged?.(next); }} variables={item.allowed_variables} requiredVariables={item.required_variables} warning={item.support_level === "PARTIAL" ? item.formalization_warning || "Шаблон требует дальнейшей предметной формализации; неподтверждённые реквизиты не добавлены." : undefined} /></div> : null}
       {removing ? <PersonnelTemplateRemoveDialog template={persistedTemplate} name={removalName} onClose={() => setRemoving(false)} onRemoved={() => { ++openRequest.current; ++loadRequest.current; setRemoving(false); setEditor(null); setServerDraft(null); setPublished(null); if (persistedTemplate) onRemoved?.(); }} /> : null}
     </aside>
   );

@@ -1,9 +1,11 @@
+import {emptyCategoryOrderDraft as emptyCategoryDraft,categoryOrderPayload,categoryOrderDraftFromRecord,type QualificationCategoryDraft} from "./qualificationCategoryDraft";
 import type {MedicalSpecialtySnapshot} from "../_components/PersonnelOrderMedicalSpecialtyPicker";
 import type { TransferFields } from "../_components/PersonnelOrderTransferFields";
 import type { ReplacementFields } from "../_components/PersonnelOrderReplacementFields";
 import type { PersonnelOrderType } from "./personnelOrderLabels";
 
 export type ItemPayloadDraft = {
+  category_document?: QualificationCategoryDraft;
   transfer?: TransferFields;
   medical_specialty?: MedicalSpecialtySnapshot|null;
   allowance?: Record<string, unknown>;
@@ -87,6 +89,7 @@ export function emptyItemPayloadDraft(): ItemPayloadDraft {
 
 export function itemPayloadDraftFromRecord(payload: Record<string, unknown> | null | undefined): ItemPayloadDraft {
   const source = payload || {};
+  if(source.qualification_category)return {...emptyItemPayloadDraft(),category_document:categoryOrderDraftFromRecord(source as Partial<QualificationCategoryDraft>)};
   const concurrent = source.concurrent && typeof source.concurrent === "object" && !Array.isArray(source.concurrent)
     ? source.concurrent as Record<string, unknown> : undefined;
   const asString = (key: string, fallback = "") =>
@@ -219,6 +222,7 @@ export function buildItemPayload(
   draft: ItemPayloadDraft,
 ): Record<string, unknown> {
   const type = String(itemTypeCode || "").trim().toUpperCase() as PersonnelOrderType;
+  if(type === "QUALIFICATION_CATEGORY") return categoryOrderPayload(draft.category_document || emptyCategoryDraft());
   const payload: Record<string, unknown> = {};
   if (type === "SUPPLEMENTARY_PAY" && (draft.allowance || draft.allowance_percent !== undefined)) {
     payload.allowance = { ...draft.allowance, percent: optionalNumber(draft.allowance_percent) };

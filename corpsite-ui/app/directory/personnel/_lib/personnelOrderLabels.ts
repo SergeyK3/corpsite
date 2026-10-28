@@ -8,6 +8,7 @@ export type PersonnelOrderStatus =
   | "VOIDED";
 
 export type PersonnelOrderType =
+  | "QUALIFICATION_CATEGORY"
   | "HIRE"
   | "RETURN_FROM_CHILDCARE_LEAVE"
   | "TRANSFER"
@@ -30,6 +31,7 @@ export const PERSONNEL_ORDER_STATUSES: readonly PersonnelOrderStatus[] = [
 ] as const;
 
 export const PERSONNEL_ORDER_TYPES: readonly PersonnelOrderType[] = [
+  "QUALIFICATION_CATEGORY",
   "HIRE",
   "RETURN_FROM_CHILDCARE_LEAVE",
   "TRANSFER",
@@ -53,6 +55,7 @@ export const PERSONNEL_ORDER_STATUS_LABELS: Record<PersonnelOrderStatus, string>
 };
 
 export const PERSONNEL_ORDER_TYPE_LABELS: Record<PersonnelOrderType, string> = {
+  QUALIFICATION_CATEGORY: "Изменение квалификационной категории",
   HIRE: "Приём",
   RETURN_FROM_CHILDCARE_LEAVE: "Выход из отпуска по уходу за ребёнком",
   TRANSFER: "Перевод",
@@ -157,6 +160,7 @@ export function personnelOrderTypeBadgeClass(typeCode: string | null | undefined
 }
 
 export const PERSONNEL_ORDER_CREATE_TYPES = [
+  "QUALIFICATION_CATEGORY",
   "HIRE",
   "TRANSFER",
   "TERMINATION",

@@ -104,7 +104,7 @@ function renderItem(
         ...(manual("kk") ? [manual("kk")!] : renderPersonnelOrderPrintItemText(item.context, "kk")),
         ...(manual("ru") ? [manual("ru")!] : renderPersonnelOrderPrintItemText(item.context, "ru")),
       ];
-  const tenure = ["RETURN_FROM_CHILDCARE_LEAVE", "SUPPLEMENTARY_PAY"].includes(item.itemTypeCode)
+  const tenure = ["RETURN_FROM_CHILDCARE_LEAVE", "SUPPLEMENTARY_PAY", "QUALIFICATION_CATEGORY"].includes(item.itemTypeCode)
     ? []
     : language === "kk"
       ? ["Жұмыс өтілі әлі анықталмаған."]
@@ -302,7 +302,7 @@ export function buildPersonnelOrderPrintDocumentHtml(
   model: PersonnelOrderPrintViewModel,
   language: PersonnelOrderPrintLanguage,
 ): string {
-  return `<article class="personnel-order-print-document" data-testid="personnel-order-print-document" data-language="${escapePersonnelOrderPrintHtml(language)}" data-status="${escapePersonnelOrderPrintHtml(model.status)}">
+  return `<article class="personnel-order-print-document" data-testid="personnel-order-print-document"${model.documentTypeCode === "QUALIFICATION_CATEGORY" ? ' data-category-document="true"' : ''} data-language="${escapePersonnelOrderPrintHtml(language)}" data-status="${escapePersonnelOrderPrintHtml(model.status)}">
   ${renderStatusMark(model, language)}
   <div class="personnel-order-print-body">
     ${renderHeader(model, language)}

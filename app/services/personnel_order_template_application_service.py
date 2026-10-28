@@ -75,6 +75,10 @@ def _order(conn:Any,order_id:int):
  return order,list(items),templates
 
 def _values(conn:Any,item:Mapping[str,Any],template:Mapping[str,Any]|None=None):
+ if item["item_type_code"] == "QUALIFICATION_CATEGORY":
+  from app.services.personnel_order_category_contract import category_values
+  try: return category_values(item['payload'] or {}), [], []
+  except ValueError as exc: raise TemplateApplicationError(str(exc)) from exc
  employee=conn.execute(text("SELECT e.full_name,p.name position_name,ou.name org_unit_name FROM public.employees e LEFT JOIN public.positions p ON p.position_id=e.position_id LEFT JOIN public.org_units ou ON ou.unit_id=e.org_unit_id WHERE e.employee_id=:id"),{"id":item["employee_id"]}).mappings().first()
  payload=item["payload"] or {}; posru=_snapshot(payload,"position_name",str((employee or {}).get("position_name") or "")); unitru=_snapshot(payload,"org_unit_name",str((employee or {}).get("org_unit_name") or "")); poskk=_snapshot(payload,"position_name","","kk"); unitkk=_snapshot(payload,"org_unit_name","","kk"); warnings=[]; missing=[]
  if str(item["item_type_code"]) == "LEAVE.ANNUAL.RECALL":
@@ -168,12 +172,18 @@ def _render(template:Mapping[str,Any],values:Mapping[str,str], *, draft_preview:
   from app.services.personnel_order_template_draft_service import _validate
   _validate(texts,str(template["item_type_code"]),require_complete=False)
  else: validate_template_texts(str(template["item_type_code"]),texts)
+ if template.get('item_type_code') == 'QUALIFICATION_CATEGORY':
+  from app.services.personnel_order_category_classifier_contract import classifier_template_texts
+  texts = classifier_template_texts(texts, values)
  from app.services.personnel_order_medical_specialty import specialty_texts
  try: texts=specialty_texts(texts,str(template['item_type_code']),values)
  except ValueError as exc: raise TemplateApplicationError(str(exc)) from exc
  missing=set()
  from app.services.personnel_order_service_area_contract import enabled
  optional_tokens={'replacement.clause','allowance.term'} if enabled(texts) else set()
+ if template.get('item_type_code') == 'QUALIFICATION_CATEGORY':
+  from app.services.personnel_order_category_classifier_contract import is_classifier_template
+  if is_classifier_template(texts): optional_tokens.update({'medical_specialty.clause_ru','medical_specialty.clause_kk'})
  from app.services.personnel_order_work_allowance_contract import enabled as work_enabled
  if work_enabled(texts): optional_tokens.add('concurrent.rate')
  def each(key,value):

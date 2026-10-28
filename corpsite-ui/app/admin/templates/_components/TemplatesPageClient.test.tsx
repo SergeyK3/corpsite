@@ -4,7 +4,7 @@ import TemplatesPageClient from "./TemplatesPageClient";
 import { PersonnelSectionLanguageProvider } from "@/app/directory/personnel/_lib/personnelSectionLanguage";
 import { apiFetchJson } from "@/lib/api";
 import { copyPersonnelTemplate, listPersonnelIndependentTemplates, listPersonnelTemplateVersions, removePersonnelTemplate } from "../_lib/personnelOrderTemplatesApi.client";
-import { createPersonnelOrderTemplateDraft, getPersonnelOrderTemplateDraft, getPersonnelOrderTemplateEditorBase, getPersonnelOrderTemplatePublished, listPersonnelOrderTemplateCatalog, publishPersonnelOrderTemplateDraft, savePersonnelOrderTemplateDraft } from "../_lib/personnelOrderTemplatesApi.client";
+import { createPersonnelOrderTemplateDraft, getPersonnelOrderTemplateDraft, getPersonnelOrderTemplateEditorBase, getPersonnelOrderTemplatePublished, listPersonnelOrderTemplateCatalog, publishPersonnelOrderTemplateDraft, savePersonnelOrderTemplateDraft, previewPersonnelOrderTemplateDraft } from "../_lib/personnelOrderTemplatesApi.client";
 
 let currentSearch = new URLSearchParams("section=personnel-orders&type=TERMINATION");
 const routerPush=vi.hoisted(()=>vi.fn());
@@ -24,6 +24,72 @@ const open = async (label = "Редактировать шаблон") => { awai
 const changeTitle = (value: string) => fireEvent.change(screen.getByLabelText("Заголовок RU"), { target: { value } });
 
 describe("TemplatesPageClient draft lifecycle", () => {
+  it("shows current category requirements, optional specialty, calculated expiry and the actual partial scope", async () => {
+    const type="QUALIFICATION_CATEGORY";
+    const scoped={...draft,template_id:42,template_version_id:56,item_type_code:type};
+    const identity={template_id:42,item_type_code:type,name_ru:"Категория TEST",name_kk:"Санат TEST",is_default:false,draft_version_id:56,template_version_id:55};
+    const required=["Категория из справочника: код 2, 3 или 4","Дата присвоения","Дата начала действия","Падежные формы распорядительного текста"];
+    const warning="PARTIAL: подтверждающий документ и его номер/дата пока задаются текстом основания шаблона.";
+    currentSearch=new URLSearchParams("section=personnel-orders&type=QUALIFICATION_CATEGORY&template_id=42");
+    vi.mocked(listPersonnelOrderTemplateCatalog).mockResolvedValue({items:[{...catalog.items[0],type_code:type,support_level:"PARTIAL",templates:[identity],required_fields:required,optional_fields:["Медицинская специальность"],computed_fields:["Дата окончания: дата присвоения + 5 календарных лет − 1 день"],formalization_warning:warning}]});
+    vi.mocked(listPersonnelIndependentTemplates).mockResolvedValue({items:[identity]});
+    vi.mocked(getPersonnelOrderTemplateDraft).mockResolvedValue(scoped);
+    vi.mocked(getPersonnelOrderTemplatePublished).mockResolvedValue({...scoped,template_version_id:55,status:"PUBLISHED"});
+    setup();await screen.findByTestId("template-draft-editor");
+    const fields=screen.getByTestId("template-required-order-fields");
+    for(const field of required)expect(fields).toHaveTextContent(field);
+    expect(fields).not.toHaveTextContent("Специальность RU/KK");expect(fields).not.toHaveTextContent("Код RU/KK");
+    expect(screen.getByTestId("template-optional-order-fields")).toHaveTextContent("Медицинская специальность");
+    expect(screen.getByTestId("template-computed-order-fields")).toHaveTextContent("5 календарных лет − 1 день");
+    expect(screen.getByText(warning)).toBeVisible();
+    expect(screen.queryByText("Шаблон требует дальнейшей предметной формализации; неподтверждённые реквизиты не добавлены.")).not.toBeInTheDocument();
+    expect(publishPersonnelOrderTemplateDraft).not.toHaveBeenCalled();
+  });
+  it("previews current unsaved RU/KK fields of 42/56 on demand and after reopening without print pages", async () => {
+    const type="QUALIFICATION_CATEGORY";
+    const scoped={...draft,template_id:42,template_version_id:56,item_type_code:type};
+    const identity={template_id:42,item_type_code:type,name_ru:"Категория TEST",name_kk:"Санат TEST",is_default:false,draft_version_id:56,template_version_id:55};
+    currentSearch=new URLSearchParams("section=personnel-orders&type=QUALIFICATION_CATEGORY&template_id=42");
+    vi.mocked(listPersonnelOrderTemplateCatalog).mockResolvedValue({items:[{...catalog.items[0],type_code:type,templates:[identity]}]});
+    vi.mocked(listPersonnelIndependentTemplates).mockResolvedValue({items:[identity]});
+    vi.mocked(getPersonnelOrderTemplateDraft).mockResolvedValue(scoped);
+    vi.mocked(getPersonnelOrderTemplatePublished).mockResolvedValue({...scoped,template_version_id:55,status:"PUBLISHED"});
+    vi.mocked(previewPersonnelOrderTemplateDraft).mockReset().mockImplementation(async (_type,values)=>({previews:{
+      ru:{title:values.title_ru,preamble:values.preamble_ru,directive:"ПРИКАЗЫВАЮ:",body:values.body_template_ru,basis:values.basis_template_ru,footer:""},
+      kk:{title:values.title_kk,preamble:values.preamble_kk,directive:"БҰЙЫРАМЫН:",body:values.body_template_kk,basis:values.basis_template_kk,footer:""},
+    }}));
+    const view=setup();await screen.findByTestId("template-draft-editor");
+    expect(screen.getByLabelText("Распорядительный текст RU")).toHaveValue(scoped.body_template_ru);
+    expect(screen.getByLabelText("Распорядительный текст KK")).toHaveValue(scoped.body_template_kk);
+    expect(screen.getByRole("button",{name:"Предварительный просмотр"})).toBeEnabled();
+    expect(previewPersonnelOrderTemplateDraft).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("template-draft-preview")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button",{name:"Предварительный просмотр"}));
+    await screen.findByTestId("template-draft-preview");
+    expect(previewPersonnelOrderTemplateDraft).toHaveBeenLastCalledWith(type,expect.objectContaining({...texts,title_ru:scoped.title_ru}));
+    for(const [label,key] of [["Заголовок RU","title_ru"],["Заголовок KK","title_kk"],["Преамбула RU","preamble_ru"],["Преамбула KK","preamble_kk"],["Распорядительный текст RU","body_template_ru"],["Распорядительный текст KK","body_template_kk"],["Основание RU","basis_template_ru"],["Основание KK","basis_template_kk"]] as const){
+      fireEvent.change(screen.getByLabelText(label),{target:{value:"UNSAVED "+key}});
+    }
+    expect(screen.queryByTestId("template-draft-preview")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button",{name:"Предварительный просмотр"}));
+    const preview=await screen.findByTestId("template-draft-preview");
+    expect(preview).toHaveAttribute("data-preview-source","EDITOR_VALUES");
+    for(const key of Object.keys(texts))expect(preview).toHaveTextContent("UNSAVED "+key);
+    expect(preview.querySelectorAll(".text-center")).toHaveLength(2);
+    expect(preview).toHaveTextContent("ПРИКАЗЫВАЮ:");expect(preview).toHaveTextContent("БҰЙЫРАМЫН:");
+    expect(savePersonnelOrderTemplateDraft).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button",{name:"Печатный предпросмотр KK/RU"})).not.toBeInTheDocument();
+    expect(screen.queryByTestId("qualification-category-template-preview")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("qualification-category-classifier-draft")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Категория квалификации")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("order-medical-specialty")).not.toBeInTheDocument();
+    expect(publishPersonnelOrderTemplateDraft).not.toHaveBeenCalled();
+    view.unmount();setup();await screen.findByTestId("template-draft-editor");
+    expect(screen.getByLabelText("Распорядительный текст RU")).toHaveValue(scoped.body_template_ru);
+    fireEvent.click(screen.getByRole("button",{name:"Предварительный просмотр"}));
+    await screen.findByTestId("template-draft-preview");
+    expect(previewPersonnelOrderTemplateDraft).toHaveBeenLastCalledWith(type,expect.objectContaining({...texts,title_ru:scoped.title_ru}));
+  });
   it('saves an official print heading independently of the detailed internal name and reports a missing KK heading',async()=>{
     const internal='О совмещении (О замещении на время отпуска как доп ставка)';
     vi.mocked(getPersonnelOrderTemplateDraft).mockResolvedValue({...draft,title_ru:internal,print_title_ru:'О замещении',print_title_kk:null});

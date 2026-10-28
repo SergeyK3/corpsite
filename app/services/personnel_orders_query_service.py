@@ -12,8 +12,8 @@ from sqlalchemy.engine import Connection
 
 from app.db.engine import engine
 from app.db.models.personnel_orders import (
-    MVP_HEADER_ORDER_TYPE_CODES,
-    MVP_ITEM_TYPE_CODES,
+    PERSONNEL_ORDER_HEADER_TYPE_CODES,
+    PERSONNEL_ORDER_ITEM_TYPE_CODES,
     ORDER_STATUSES,
     ORDER_STATUS_VOIDED,
 )
@@ -130,7 +130,7 @@ def _normalize_order_type_filter(order_type_code: Optional[str]) -> Optional[str
     if order_type_code is None:
         return None
     normalized = order_type_code.strip().upper()
-    allowed = set(MVP_HEADER_ORDER_TYPE_CODES) | set(MVP_ITEM_TYPE_CODES)
+    allowed = set(PERSONNEL_ORDER_HEADER_TYPE_CODES) | set(PERSONNEL_ORDER_ITEM_TYPE_CODES)
     if normalized not in allowed:
         raise PersonnelOrderValidationError(f"Invalid order_type_code filter: {order_type_code}")
     return normalized

@@ -22,6 +22,11 @@ def list_personnel_order_template_catalog(*, include_saved_names: bool = False) 
             "allowed_variables": list(spec.allowed_variables),
             "required_variables": {field: list(codes) for field, codes in spec.required_variables.items()},
         })
+        if item_type_code == 'QUALIFICATION_CATEGORY':
+            from app.services.personnel_order_category_classifier_contract import OPTIONAL_ORDER_FIELDS, COMPUTED_ORDER_FIELDS, FORMALIZATION_WARNING, REQUIRED
+            rows[-1].update(optional_fields=list(OPTIONAL_ORDER_FIELDS), computed_fields=list(COMPUTED_ORDER_FIELDS),
+                            formalization_warning=FORMALIZATION_WARNING,
+                            required_variables={field:list(codes) for field,codes in REQUIRED.items()})
     if include_saved_names:
         from sqlalchemy import text
         from app.services.personnel_order_template_draft_service import engine, independent_template_schema_available

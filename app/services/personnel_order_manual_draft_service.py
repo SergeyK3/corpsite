@@ -58,6 +58,12 @@ def _selected_employee_payload(conn: Any, *, employee_id: int, effective_date: d
 
 def prepare_manual_item_payload(conn: Any, *, item_type_code: str, employee_id: Optional[int], effective_date: date, period_start: Optional[date] = None, period_end: Optional[date] = None, item_payload: Optional[Mapping[str, Any]] = None, unresolved_subject: Optional[Mapping[str, Any]] = None, document_subject_context: Optional[Mapping[str, Any]] = None, template_version_id: int | None = None, capabilities: Optional[Mapping[str, Any]] = None) -> dict[str, Any]:
     """Use the same typed contract for the first and subsequent employees."""
+    if item_type_code == "QUALIFICATION_CATEGORY":
+        from app.services.personnel_order_category_contract import prepare_category_payload
+        try:
+            return prepare_category_payload(conn,item_payload,employee_id,effective_date)
+        except ValueError as exc:
+            raise PersonnelOrderValidationError(str(exc)) from exc
     capabilities = capabilities or creation_capabilities(conn, item_type_code)
     if item_type_code == 'LEAVE.ANNUAL.RECALL':
         # Recall uses explicit bilingual document placement, not the

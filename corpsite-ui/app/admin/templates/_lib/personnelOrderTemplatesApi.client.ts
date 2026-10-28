@@ -37,6 +37,9 @@ export type PersonnelOrderTemplateCatalogItem = {
   required_variables?: Partial<Record<keyof PersonnelOrderTemplateDraftText, string[]>>;
   required_fields: string[];
   notes: string;
+  optional_fields?: string[];
+  computed_fields?: string[];
+  formalization_warning?: string | null;
   pilot_detail?: PersonnelOrderTemplatePilotDetail | null;
   template_detail?: PersonnelOrderTemplatePilotDetail | null;
   templates?: Array<Pick<PersonnelIndependentTemplate,"template_id"|"name_ru"|"name_kk"|"is_default"|"template_version_id"|"draft_version_id"|"version_number"|"draft_version_number">> | null;

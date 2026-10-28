@@ -64,6 +64,9 @@ class PersonnelOrderTemplateCatalogItem(BaseModel):
     required_variables: Dict[str, List[str]] = Field(default_factory=dict)
     required_fields: List[str]
     notes: str
+    optional_fields: List[str] = Field(default_factory=list)
+    computed_fields: List[str] = Field(default_factory=list)
+    formalization_warning: Optional[str] = None
     pilot_detail: Optional[PersonnelOrderTemplatePilotDetail] = None
     template_detail: Optional[PersonnelOrderTemplatePilotDetail] = None
     templates: Optional[List[PersonnelTemplateCatalogIdentity]] = None
@@ -360,3 +363,10 @@ class BulkEnrollmentRequest(BaseModel):
 
     queue_ids: List[int] = Field(..., min_length=1)
     comment: Optional[str] = Field(default=None, max_length=2000)
+
+
+class PersonnelCategorySamplePreview(BaseModel):
+    model_config = {"extra": "forbid"}
+    expected_revision: int = Field(..., ge=1)
+    expected_template_version_id: int = Field(..., ge=1)
+    sample: Dict[str, Any]
