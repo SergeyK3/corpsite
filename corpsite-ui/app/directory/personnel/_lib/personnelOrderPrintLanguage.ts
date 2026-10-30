@@ -2,6 +2,10 @@ export const PERSONNEL_ORDER_PRINT_LANGUAGES = ["kk", "ru", "kk-ru"] as const;
 
 export type PersonnelOrderPrintLanguage = (typeof PERSONNEL_ORDER_PRINT_LANGUAGES)[number];
 
+export function personnelOrderPrintLanguagesForType(type?: string): readonly PersonnelOrderPrintLanguage[] {
+  return type === "EDUCATION_INFORMATION_CHANGE" ? ["ru", "kk"] : PERSONNEL_ORDER_PRINT_LANGUAGES;
+}
+
 export const PERSONNEL_ORDER_PRINT_LANGUAGE_DEFAULT: PersonnelOrderPrintLanguage = "ru";
 
 export const PERSONNEL_ORDER_PRINT_LANGUAGE_LABELS: Record<PersonnelOrderPrintLanguage, string> = {

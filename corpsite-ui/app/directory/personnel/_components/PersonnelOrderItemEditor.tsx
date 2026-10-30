@@ -1,4 +1,10 @@
 "use client";
+import PersonnelOrderPersonalDataFields from './PersonnelOrderPersonalDataFields';
+import {emptyPersonalDataDraft,refreshPersonalDataContext,personalDataErrors,personalDataOrderPayload,personalDataDraftFromRecord} from '../_lib/personalDataDraft';
+import PersonnelOrderEducationFields from "./PersonnelOrderEducationFields";
+import {emptyEducationDraft, refreshEducationContext, educationErrors, educationOrderPayload, educationDraftFromRecord} from "../_lib/educationDraft";
+import PersonnelOrderServiceLengthFields from "./PersonnelOrderServiceLengthFields";
+import {emptyServiceLengthDraft, refreshServiceLengthContext, serviceLengthErrors, serviceLengthDraftFromRecord, serviceLengthOrderPayload} from "../_lib/serviceLengthDraft";
 import PersonnelOrderCategoryFields from "./PersonnelOrderCategoryFields";
 import {resolvePersonnelDocumentContext,refreshCategoryDocumentContext} from "../_lib/personnelOrderDocumentContext";
 import {emptyCategoryOrderDraft as emptyCategoryDraft,categoryDraftErrors,categoryOrderDraftFromRecord} from "../_lib/qualificationCategoryDraft";
@@ -90,6 +96,7 @@ type Props = {
   hirePersonId?: number | null;
   basisDocuments?: Array<{ basis_id?: unknown; document_type?: unknown; description?: unknown }>;
   registerPendingSave?: (save: (() => Promise<boolean>) | null) => void;
+  registerSourceEdit?: (edit: ((itemId: number) => void) | null) => void;
 };
 
 const BASIS_TYPE_LABELS: Record<string, string> = {
@@ -298,6 +305,7 @@ export default function PersonnelOrderItemEditor({
   hirePersonId = null,
   basisDocuments = [],
   registerPendingSave,
+  registerSourceEdit,
 }: Props) {
   const defaultItemType = resolveDefaultItemFormTypeForOrder(orderTypeCode);
   const itemTypeOptions = itemFormTypeOptionsForOrder(orderTypeCode);
@@ -356,6 +364,23 @@ export default function PersonnelOrderItemEditor({
   const employeeSelectionRevision = React.useRef(0);
   const automaticEmployeeForms = React.useRef<Record<string, string>>({});
   const manualEmployeeForms = React.useRef(new Set<string>());
+  const documentOrder=['PERSONAL_DATA_CHANGE','EDUCATION_INFORMATION_CHANGE','SERVICE_LENGTH_CHANGE'].includes(itemTypeCode);
+  const [documentEmployee,setDocumentEmployee]=React.useState<import('@/app/directory/employees/_lib/types').EmployeeDTO|null>(null);
+  const previousDocumentContext=React.useRef<import('../_lib/personnelOrderDocumentContext').PersonnelDocumentContext|null>(null);
+  React.useEffect(()=>{
+    if(!documentOrder)return;
+    const id=Number(employeeId);if(!id){setDocumentEmployee(null);return;}
+    let cancelled=false;void getEmployee(String(id)).then(employee=>{if(!cancelled)setDocumentEmployee(employee);});return()=>{cancelled=true;};
+  },[documentOrder,employeeId]);
+  React.useEffect(()=>{
+    if(!documentOrder||!documentEmployee)return;
+    const context=resolvePersonnelDocumentContext(documentEmployee),previous=previousDocumentContext.current;previousDocumentContext.current=context;
+    setPayloadDraft(value=>({...value,
+      ...(itemTypeCode==='PERSONAL_DATA_CHANGE'?{personal_data_document:refreshPersonalDataContext(value.personal_data_document??emptyPersonalDataDraft(),context,previous)}:{}),
+      ...(itemTypeCode==='EDUCATION_INFORMATION_CHANGE'?{education_document:refreshEducationContext(value.education_document??emptyEducationDraft(),context,previous)}:{}),
+      ...(itemTypeCode==='SERVICE_LENGTH_CHANGE'?{service_length_document:refreshServiceLengthContext(value.service_length_document??emptyServiceLengthDraft(),context,previous)}:{}),
+    }));
+  },[documentOrder,documentEmployee,itemTypeCode]);
   function fillConcurrentEmployeeForms(employee: unknown) {
     const next = concurrentEmployeeDatives(employee);
     const previous = automaticEmployeeForms.current;
@@ -561,7 +586,13 @@ export default function PersonnelOrderItemEditor({
     // into a new item.
     setPayloadDraft((prev) => ({
       ...prev,
-      category_document:itemTypeCode === "QUALIFICATION_CATEGORY" ? {...emptyCategoryDraft(),employee_id:option.employee_id,source_employee_name:option.full_name,qualification_category:prev.category_document?.qualification_category??emptyCategoryDraft().qualification_category,effective_date:prev.category_document?.effective_date||""} : prev.category_document,
+      unresolved_subject:undefined,
+      education_document:itemTypeCode === "EDUCATION_INFORMATION_CHANGE" ? {...emptyEducationDraft(),employee_id:option.employee_id,source_employee_name:option.full_name,education:prev.education_document?.education??emptyEducationDraft().education,education_document:prev.education_document?.education_document??emptyEducationDraft().education_document,effective_date:prev.education_document?.effective_date||effectiveDate} : prev.education_document,
+      personal_data_document:itemTypeCode==='PERSONAL_DATA_CHANGE'?{...emptyPersonalDataDraft(),employee_id:option.employee_id,source_employee_name:option.full_name,personal_data:prev.personal_data_document?.personal_data??emptyPersonalDataDraft().personal_data,identity_document:prev.personal_data_document?.identity_document??emptyPersonalDataDraft().identity_document,effective_date:prev.personal_data_document?.effective_date||effectiveDate}:prev.personal_data_document,
+      service_length_document:itemTypeCode === "SERVICE_LENGTH_CHANGE" ? {...emptyServiceLengthDraft(),employee_id:option.employee_id,source_employee_name:option.full_name,service_length:prev.service_length_document?.service_length??emptyServiceLengthDraft().service_length,basis:prev.service_length_document?.basis??emptyServiceLengthDraft().basis,effective_date:prev.service_length_document?.effective_date||effectiveDate} : prev.service_length_document,
+      category_document:itemTypeCode === "QUALIFICATION_CATEGORY" ? {...emptyCategoryDraft(),employee_id:option.employee_id,source_employee_name:option.full_name,qualification_category:prev.category_document?.qualification_category??emptyCategoryDraft().qualification_category} : prev.category_document,
+      assignment_id:undefined,position_translation_status:undefined,position_document_form_status:undefined,person_id:"",
+      allowance:prev.allowance?{...prev.allowance,employee_dative_ru:"",employee_dative_kk:"",basis_ru:"Личное заявление",basis_kk:"Жеке өтініш"}:undefined,
       org_unit_document_genitive_kk: "",
       position_document_possessive_kk: "",
       position_document_nominative_ru: "",
@@ -704,6 +735,9 @@ export default function PersonnelOrderItemEditor({
     );
     setEffectiveDate(persistedEffectiveDate(item));
     if (normalizedUiType === "QUALIFICATION_CATEGORY" && draft.category_document) draft.category_document = categoryOrderDraftFromRecord(draft.category_document, persistedEffectiveDate(item));
+    if (normalizedUiType === "EDUCATION_INFORMATION_CHANGE" && draft.education_document) draft.education_document = educationDraftFromRecord(draft.education_document, persistedEffectiveDate(item));
+    if(normalizedUiType==='PERSONAL_DATA_CHANGE'&&draft.personal_data_document)draft.personal_data_document=personalDataDraftFromRecord(draft.personal_data_document,persistedEffectiveDate(item));
+    if (normalizedUiType === "SERVICE_LENGTH_CHANGE" && draft.service_length_document) draft.service_length_document = serviceLengthDraftFromRecord(draft.service_length_document, persistedEffectiveDate(item));
     setPayloadDraft(draft);
     savedFormSignature.current = JSON.stringify({ itemTypeCode: normalizedUiType, employeeId: item.employee_id ? String(item.employee_id) : "", effectiveDate: persistedEffectiveDate(item), payloadDraft: draft });
     setTerminationReasonSuggested(suggestedReason);
@@ -838,6 +872,18 @@ export default function PersonnelOrderItemEditor({
     if (disabled) return false;
     if (formDisclosure.current) formDisclosure.current.open = true;
     setError(null);
+    if(itemTypeCode==='PERSONAL_DATA_CHANGE'){
+      const errors=personalDataErrors(payloadDraft.personal_data_document||emptyPersonalDataDraft());
+      if(errors.length){setError(errors.join(' '));return false;}
+    }
+    if(itemTypeCode === "EDUCATION_INFORMATION_CHANGE"){
+      const errors=educationErrors(payloadDraft.education_document || emptyEducationDraft());
+      if(errors.length){setError(errors.join(" "));return false;}
+    }
+    if(itemTypeCode === "SERVICE_LENGTH_CHANGE"){
+      const errors=serviceLengthErrors(payloadDraft.service_length_document || emptyServiceLengthDraft());
+      if(errors.length){setError(errors.join(" "));return false;}
+    }
     if(itemTypeCode === "QUALIFICATION_CATEGORY"){
       const errors=categoryDraftErrors(payloadDraft.category_document || emptyCategoryDraft());
       if(errors.length){setError(errors.join(" "));return false;}
@@ -853,7 +899,7 @@ export default function PersonnelOrderItemEditor({
       editingItemSavedEmployeeId != null &&
       Number.isFinite(employeeNumeric) &&
       employeeNumeric === editingItemSavedEmployeeId;
-    const employeeRequiredMessage = savedEmployeeIsUnchanged
+    const employeeRequiredMessage = documentOrder ? null : savedEmployeeIsUnchanged
       ? null
       : requireEmployeeIdForItemType(itemTypeCode, employeeId, {
           pendingNewEmployee: pendingNewEmployee && pendingNewEmployeeAllowed,
@@ -865,7 +911,7 @@ export default function PersonnelOrderItemEditor({
     }
     if (
       !savedEmployeeIsUnchanged &&
-      requiresEmployeeForFormType(itemTypeCode) &&
+      !documentOrder && requiresEmployeeForFormType(itemTypeCode) &&
       !pendingNewEmployee &&
       selectedEmployeeId !== employeeNumeric
     ) {
@@ -935,7 +981,8 @@ export default function PersonnelOrderItemEditor({
         ...(backendType === "CONCURRENT_DUTY_START" && payloadDraft.concurrent_template_version_id ? {template_version_id: payloadDraft.concurrent_template_version_id} : {}),
         item_type_code: backendType,
         employee_id: resolvedEmployeeId,
-        effective_date: backendType === "QUALIFICATION_CATEGORY" ? payloadDraft.category_document?.effective_date : isLeave ? leaveStart : effectiveDate || null,
+        unresolved_subject:backendType==='PERSONAL_DATA_CHANGE'?personalDataOrderPayload(payloadDraft.personal_data_document||emptyPersonalDataDraft()).unresolved_subject:payloadDraft.unresolved_subject,
+        effective_date: backendType === "PERSONAL_DATA_CHANGE" ? payloadDraft.personal_data_document?.effective_date : backendType === "EDUCATION_INFORMATION_CHANGE" ? payloadDraft.education_document?.effective_date : backendType === "SERVICE_LENGTH_CHANGE" ? payloadDraft.service_length_document?.effective_date : backendType === "QUALIFICATION_CATEGORY" ? payloadDraft.category_document?.effective_date : isLeave ? leaveStart : effectiveDate || null,
         period_start: isLeave ? leaveStart : null,
         period_end: isLeave ? leaveEnd : null,
         payload,
@@ -1125,6 +1172,9 @@ export default function PersonnelOrderItemEditor({
   }
 
   function renderEmployeeSection() {
+    if(itemTypeCode==='PERSONAL_DATA_CHANGE'&&payloadDraft.personal_data_document?.subject_mode==='MANUAL')return null;
+    if(itemTypeCode === "EDUCATION_INFORMATION_CHANGE" && payloadDraft.education_document?.subject_mode === "MANUAL") return null;
+    if(itemTypeCode === "SERVICE_LENGTH_CHANGE" && payloadDraft.service_length_document?.subject_mode === "MANUAL") return null;
     if (!formConfig?.employeePicker) return null;
 
     const pendingAllowed = allowsPendingNewEmployee(itemTypeCode);
@@ -1289,7 +1339,53 @@ export default function PersonnelOrderItemEditor({
     return null;
   }
 
+  React.useEffect(() => {
+    if (!registerSourceEdit) return;
+    registerSourceEdit(itemId => {
+      const item = items.find(row => row.item_id === itemId && row.item_status === "ACTIVE");
+      if (disabled || saving || !item) return;
+      void startEdit(item).then(() => window.requestAnimationFrame(() => {
+        const input = formDisclosure.current?.querySelector<HTMLInputElement>('input[aria-label="Должность RU"]');
+        input?.scrollIntoView?.({ block: "center", behavior: "smooth" });
+        input?.focus();
+      }));
+    });
+    return () => registerSourceEdit(null);
+  });
+
   function renderAdditionalSection() {
+    if(itemTypeCode==='PERSONAL_DATA_CHANGE'){
+      const value=payloadDraft.personal_data_document??{...emptyPersonalDataDraft(),employee_id:Number(employeeId)||null,source_employee_name:employeeQuery};
+      return <PersonnelOrderPersonalDataFields value={value} disabled={disabled||saving} orgUnits={orgUnitCatalogOptions} onChange={next=>{
+        if(next.subject_mode!==value.subject_mode){setEmployeeId('');setSelectedEmployeeId(null);setEmployeeQuery('');setDocumentEmployee(null);setCurrentPlacement(null);previousDocumentContext.current=null;manualEmployeeForms.current.clear();}
+        if(next.subject_mode==='MANUAL')setEmployeeQuery(next.source_employee_name);
+        setPayloadDraft(previous=>({...previous,personal_data_document:next,unresolved_subject:personalDataOrderPayload(next).unresolved_subject}));setEffectiveDate(next.effective_date);
+      }}/>;
+    }
+    if(itemTypeCode === "EDUCATION_INFORMATION_CHANGE"){
+      const value=payloadDraft.education_document ?? {...emptyEducationDraft(),employee_id:Number(employeeId)||null,source_employee_name:employeeQuery};
+      return <PersonnelOrderEducationFields value={value} disabled={disabled||saving} onChange={next=>{
+        if(next.subject_mode !== value.subject_mode) {
+          setEmployeeId("");setSelectedEmployeeId(null);setEmployeeQuery("");setDocumentEmployee(null);setCurrentPlacement(null);
+          previousDocumentContext.current=null;manualEmployeeForms.current.clear();
+        }
+        if(next.subject_mode === "MANUAL") setEmployeeQuery(next.source_employee_name);
+        setPayloadDraft(previous=>({...previous,education_document:next,unresolved_subject:educationOrderPayload(next).unresolved_subject}));
+        setEffectiveDate(next.effective_date);
+      }}/>;
+    }
+    if(itemTypeCode === "SERVICE_LENGTH_CHANGE"){
+      const value=payloadDraft.service_length_document ?? {...emptyServiceLengthDraft(),employee_id:Number(employeeId)||null,source_employee_name:employeeQuery};
+      return <PersonnelOrderServiceLengthFields value={value} disabled={disabled||saving} onChange={next=>{
+        if(next.subject_mode !== value.subject_mode) {
+          setEmployeeId("");setSelectedEmployeeId(null);setEmployeeQuery("");setDocumentEmployee(null);setCurrentPlacement(null);
+          previousDocumentContext.current=null;manualEmployeeForms.current.clear();
+        }
+        if(next.subject_mode === "MANUAL") setEmployeeQuery(next.source_employee_name);
+        setPayloadDraft(previous=>({...previous,service_length_document:next,unresolved_subject:serviceLengthOrderPayload(next).unresolved_subject}));
+        setEffectiveDate(next.effective_date);
+      }}/>;
+    }
     if(itemTypeCode === "QUALIFICATION_CATEGORY"){
       const value=payloadDraft.category_document ?? {...emptyCategoryDraft(),employee_id:Number(employeeId)||null,source_employee_name:employeeQuery};
       return <PersonnelOrderCategoryFields value={value} disabled={disabled||saving} onChange={next=>{setPayloadDraft(previous=>({...previous,category_document:next}));setEffectiveDate(next.effective_date||"");}}/>;

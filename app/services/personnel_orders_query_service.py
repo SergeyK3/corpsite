@@ -633,7 +633,7 @@ def get_personnel_order(order_id: int) -> Dict[str, Any]:
                     poi.item_type_code,
                     poi.item_status,
                     poi.employee_id,
-                    e.full_name AS employee_name,
+                    COALESCE(e.full_name, NULLIF(BTRIM(poi.payload ->> 'source_employee_name'), '')) AS employee_name,
                     e.org_unit_id,
                     ou.name AS org_unit_name,
                     poi.effective_date,
@@ -653,6 +653,10 @@ def get_personnel_order(order_id: int) -> Dict[str, Any]:
             ),
             {"order_id": int(order_id)},
         ).mappings().all()
+
+        from app.services.personnel_order_personal_data_contract import with_source_given_names
+        item_rows=[{**row,'payload':with_source_given_names(conn,_parse_payload(row.get('payload')),row.get('employee_id'))}
+                   if row['item_type_code']=='PERSONAL_DATA_CHANGE' else row for row in item_rows]
 
         localized_rows = conn.execute(
             text(

@@ -133,7 +133,7 @@ def generate_editorial(
             item_type_code = str(item["item_type_code"]).strip().upper()
             if item_type_code == "LEAVE.UNPAID.GRANT":
                 unpaid_item_ids.append(int(item["item_id"]))
-            elif item_type_code != ORDER_TYPE_SUPPLEMENTARY_PAY:
+            elif item_type_code not in {ORDER_TYPE_SUPPLEMENTARY_PAY, "PERSONAL_DATA_CHANGE", "SERVICE_LENGTH_CHANGE", "EDUCATION_INFORMATION_CHANGE"}:
                 bases[int(item["item_id"])] = ensure_default_basis(active_conn, item)
 
         # A normalized unpaid-leave basis is canonical.  Do not manufacture a
@@ -244,7 +244,7 @@ def generate_editorial(
             item_ctx = build_item_ctx(item, employee_name)
             basis = bases.get(item_id)
             item_type_code = str(item["item_type_code"]).strip().upper()
-            if basis is None and item_type_code not in {ORDER_TYPE_SUPPLEMENTARY_PAY, "LEAVE.UNPAID.GRANT"}:
+            if basis is None and item_type_code not in {ORDER_TYPE_SUPPLEMENTARY_PAY, "LEAVE.UNPAID.GRANT", "PERSONAL_DATA_CHANGE", "SERVICE_LENGTH_CHANGE", "EDUCATION_INFORMATION_CHANGE"}:
                 if scope and scope.get("item_id") is not None and int(scope["item_id"]) != item_id:
                     continue
                 basis = ensure_default_basis(active_conn, item)

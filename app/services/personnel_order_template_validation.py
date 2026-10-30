@@ -16,7 +16,14 @@ class TemplateValidationError(ValueError):
 
 
 def validate_template_texts(item_type_code: str, values: Mapping[str, str]) -> None:
+    if item_type_code == 'EDUCATION_INFORMATION_CHANGE':
+        from app.services.personnel_order_education_template_contract import bind_editor_texts
+        values = bind_editor_texts(values)
     spec = get_personnel_order_template_spec(item_type_code)
+    if item_type_code == 'PERSONAL_DATA_CHANGE':
+        from app.services.personnel_order_personal_data_contract import validate_placeholders
+        try: validate_placeholders(values)
+        except ValueError as exc: raise TemplateValidationError(str(exc)) from exc
     if set(values) != set(TEXT_FIELDS):
         raise TemplateValidationError("Template must contain exactly eight text fields")
     variables = set(spec.allowed_variables)

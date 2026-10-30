@@ -356,7 +356,26 @@ CATALOG_PROJECTIONS['LEAVE.ANNUAL.RECALL'] = {
 }
 
 from app.services.personnel_order_category_contract import TYPE as CATEGORY_TYPE, TEXTS as CATEGORY_TEXTS
+from app.services.personnel_order_education_template_contract import TYPE as EDUCATION_TYPE, TEXTS as EDUCATION_TEXTS, NOTES as EDUCATION_NOTES, REQUIRED_FIELDS as EDUCATION_FIELDS
+CATALOG_PROJECTIONS[EDUCATION_TYPE] = dict(
+    title_ru=EDUCATION_TEXTS['title_ru'], title_kk=EDUCATION_TEXTS['title_kk'], source='BUILT_IN',
+    support_level='SUPPORTED', supported_locales=['ru', 'kk'], uses_specialized_generator=False,
+    is_pilot=False, editor_available=True, required_fields=list(EDUCATION_FIELDS), notes=EDUCATION_NOTES,
+    pilot_detail=None, template_detail=None)
+from app.services.personnel_order_service_length_contract import TYPE as SERVICE_LENGTH_TYPE, TEXTS as SERVICE_LENGTH_TEXTS, REQUIRED_FIELDS as SERVICE_LENGTH_FIELDS, NOTES as SERVICE_LENGTH_NOTES
+CATALOG_PROJECTIONS[SERVICE_LENGTH_TYPE] = dict(
+    title_ru=SERVICE_LENGTH_TEXTS['title_ru'], title_kk=SERVICE_LENGTH_TEXTS['title_kk'], source='BUILT_IN',
+    support_level='SUPPORTED', supported_locales=['ru', 'kk'], uses_specialized_generator=False,
+    is_pilot=False, editor_available=True, required_fields=list(SERVICE_LENGTH_FIELDS),
+    notes=SERVICE_LENGTH_NOTES,
+    pilot_detail=None, template_detail=None)
 from app.services.personnel_order_category_classifier_contract import REQUIRED_ORDER_FIELDS, ORDER_NOTES
+from app.services.personnel_order_personal_data_contract import TYPE as PERSONAL_DATA_TYPE, TEXTS as PERSONAL_DATA_TEXTS, REQUIRED_FIELDS as PERSONAL_DATA_FIELDS, NOTES as PERSONAL_DATA_NOTES
+CATALOG_PROJECTIONS[PERSONAL_DATA_TYPE] = dict(
+    title_ru=PERSONAL_DATA_TEXTS['title_ru'], title_kk=PERSONAL_DATA_TEXTS['title_kk'], source='BUILT_IN',
+    support_level='SUPPORTED', supported_locales=['ru', 'kk'], uses_specialized_generator=False,
+    is_pilot=False, editor_available=True, required_fields=list(PERSONAL_DATA_FIELDS), notes=PERSONAL_DATA_NOTES,
+    pilot_detail=None, template_detail=None)
 CATALOG_PROJECTIONS[CATEGORY_TYPE] = dict(
     title_ru=CATEGORY_TEXTS['title_ru'], title_kk=CATEGORY_TEXTS['title_kk'], source='BUILT_IN',
     support_level='PARTIAL', supported_locales=['ru','kk'], uses_specialized_generator=False,

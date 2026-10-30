@@ -311,6 +311,7 @@ def _employee_select_sql(emp_rel: str, emp_cols: List[str]) -> Tuple[str, Dict[s
     org_unit_fk = "org_unit_id"
 
     select_parts = [
+        "to_jsonb(e) AS employee_document_source",
         f"e.{emp_id_col} AS e_id",
         (f"e.{fio_col} AS e_fio" if fio_col else "NULL AS e_fio"),
         (f"e.{last_col} AS e_last" if last_col else "NULL AS e_last"),
@@ -330,6 +331,7 @@ def _employee_select_sql(emp_rel: str, emp_cols: List[str]) -> Tuple[str, Dict[s
     # Kazakh document-case rules without rewriting the employee record.
     if "person_id" in set(emp_cols) and ("persons", "table") in _list_relations():
         select_parts += [
+            "to_jsonb(person) AS person_document_source",
             "person.last_name AS person_last_name",
             "person.first_name AS person_first_name",
             "person.middle_name AS person_middle_name",
@@ -425,7 +427,7 @@ def _employee_select_sql(emp_rel: str, emp_cols: List[str]) -> Tuple[str, Dict[s
     select_parts.append(f"{has_current_assignment_expr} AS has_current_assignment")
     if pos_fk and pos_rel and pos_id_col and pos_name_col:
         position_record = "CASE WHEN current_pa.assignment_id IS NOT NULL THEN to_jsonb(current_p) ELSE to_jsonb(p) END" if current_position_available else "to_jsonb(p)"
-        for field in ("name_kk", "document_possessive_kk", "document_nominative_ru"):
+        for field in ("name_kk", "document_possessive_kk", "document_nominative_ru", "document_genitive_ru"):
             select_parts.append(f"NULLIF(BTRIM(({position_record}) ->> '{field}'), '') AS pos_{field}")
         relations = _list_relations()
         if ("position_directory", "view") in relations:
@@ -448,6 +450,7 @@ def _employee_select_sql(emp_rel: str, emp_cols: List[str]) -> Tuple[str, Dict[s
         "ou.name AS org_unit_name",
         "NULLIF(BTRIM(to_jsonb(ou) ->> 'name_kk'), '') AS org_unit_name_kk",
         "NULLIF(BTRIM(to_jsonb(ou) ->> 'document_genitive_kk'), '') AS org_unit_document_genitive_kk",
+        "NULLIF(BTRIM(to_jsonb(ou) ->> 'document_genitive_ru'), '') AS org_unit_document_genitive_ru",
         "ou.code AS org_unit_code",
         "ou.parent_unit_id AS org_unit_parent_unit_id",
         "ou.is_active AS org_unit_is_active",
@@ -497,6 +500,29 @@ def _employee_select_sql(emp_rel: str, emp_cols: List[str]) -> Tuple[str, Dict[s
     }
 
 
+def _employee_document_forms(row: Dict[str, Any], locale: str) -> Dict[str, str]:
+    """Expose explicit saved forms only; never derive a grammatical case."""
+    forms: Dict[str, str] = {}
+    for source_key in ("person_document_source", "employee_document_source"):
+        source = row.get(source_key)
+        if not isinstance(source, dict):
+            continue
+        saved = source.get(f"document_forms_{locale}")
+        name = source.get("name")
+        for case in ("dative", "genitive", "accusative"):
+            key = f"employee_full_name_{case}_{locale}"
+            candidates = ((saved or {}).get(key) if isinstance(saved, dict) else None,
+                          source.get(key), (name or {}).get(f"full_name_{case}_{locale}") if isinstance(name, dict) else None)
+            value = next((v.strip() for v in candidates if isinstance(v, str) and v.strip()), None)
+            if value is not None:
+                forms[key] = value
+        if isinstance(saved, dict):
+            for key, value in saved.items():
+                if key.startswith(("position_document_", "org_unit_document_")) and isinstance(value, str) and value.strip():
+                    forms[key] = value.strip()
+    return forms
+
+
 def _normalize_employee_joined(row: Dict[str, Any], emp_rel: str) -> Dict[str, Any]:
     fio = (str(row.get("e_fio")).strip() if row.get("e_fio") else "").strip()
     if not fio:
@@ -543,6 +569,8 @@ def _normalize_employee_joined(row: Dict[str, Any], emp_rel: str) -> Dict[str, A
         "id": str(row.get("e_id")) if row.get("e_id") is not None else None,
         "person_id": int(row["e_person_id"]) if row.get("e_person_id") is not None else None,
         "has_current_assignment": bool(row.get("has_current_assignment")),
+        "document_forms_ru": _employee_document_forms(row, "ru"),
+        "document_forms_kk": _employee_document_forms(row, "kk"),
         "fio": fio,
         "last_name": row.get("person_last_name") or row.get("e_last"),
         "first_name": row.get("person_first_name") or row.get("e_first"),
@@ -553,6 +581,7 @@ def _normalize_employee_joined(row: Dict[str, Any], emp_rel: str) -> Dict[str, A
             "name_kk": row.get("pos_name_kk"),
             "document_possessive_kk": row.get("pos_document_possessive_kk"),
             "document_nominative_ru": row.get("pos_document_nominative_ru"),
+            "document_genitive_ru": row.get("pos_document_genitive_ru"),
             **{field: row.get(f"pos_{field}") for field in ("job_code", "job_nameru", "job_namekk", "job_namekk_doc")},
             **{field: row.get(f"pos_{field}") for field in ('translation_status','document_form_status','record_kind','family_name_ru')},
         }),
@@ -561,6 +590,7 @@ def _normalize_employee_joined(row: Dict[str, Any], emp_rel: str) -> Dict[str, A
             "name": row.get("org_unit_name"),
             "name_kk": row.get("org_unit_name_kk"),
             "document_genitive_kk": row.get("org_unit_document_genitive_kk"),
+            "document_genitive_ru": row.get("org_unit_document_genitive_ru"),
             "code": row.get("org_unit_code"),
             "parent_unit_id": parent_unit_id,
             "is_active": org_unit_is_active,

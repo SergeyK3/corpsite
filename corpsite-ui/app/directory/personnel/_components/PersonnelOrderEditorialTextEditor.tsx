@@ -46,6 +46,7 @@ type Props = {
   basisDocuments?: Array<{ basis_id?: unknown; document_type?: unknown; description?: unknown; source_text?: unknown }>;
   onOrderChanged?: (detail: PersonnelOrderDetailResponse) => void;
   onEditorialChanged?: (state: PersonnelOrderEditorialState) => void;
+  onEditSourcePosition?: (itemId: number) => void;
   /** Saves the active structured item before text is generated. */
   beforeGenerate?: () => Promise<boolean>;
   /** Parent-owned editorial snapshot, including the response from template apply. */
@@ -183,7 +184,6 @@ function BlockEditor({
   busy,
   onSave,
   onReset,
-  closingAction,
 }: {
   label: string;
   block: PersonnelOrderEditorialBlock | null;
@@ -191,7 +191,6 @@ function BlockEditor({
   busy: boolean;
   onSave: (blockId: number, text: string, revision: number) => Promise<void>;
   onReset: (blockId: number) => Promise<void>;
-  closingAction?: { suppressed: boolean; onToggle: () => Promise<void> };
 }) {
   const [editing, setEditing] = React.useState(false);
   const [draft, setDraft] = React.useState("");
@@ -327,17 +326,6 @@ function BlockEditor({
           >
             Вернуть автоматически сгенерированный текст
           </button>
-          {closingAction ? (
-            <button
-              type="button"
-              onClick={() => void closingAction.onToggle()}
-              disabled={saving || busy}
-              className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm disabled:opacity-40 dark:border-zinc-700"
-              data-testid="personnel-order-editorial-closing-toggle"
-            >
-              {closingAction.suppressed ? "Вернуть в документ" : "Не включать в документ"}
-            </button>
-          ) : null}
         </div>
       ) : null}
     </div>
@@ -352,6 +340,7 @@ export default function PersonnelOrderEditorialTextEditor({
   basisDocuments = [],
   onOrderChanged,
   onEditorialChanged,
+  onEditSourcePosition,
   beforeGenerate,
   editorialState,
   locale,
@@ -460,34 +449,8 @@ export default function PersonnelOrderEditorialTextEditor({
     }
   }
 
-  async function handleClosingToggle() {
-    const closings = (state?.order_blocks || []).filter(
-      (block) => block.block_type === "closing" && (block.locale === "ru" || block.locale === "kk"),
-    );
-    if (closings.length !== 2) return;
-    const suppressed = closings.every((block) => block.override_text === "");
-    setBusy(true);
-    setError(null);
-    setMessage(null);
-    try {
-      let next: PersonnelOrderEditorialState | null = null;
-      for (const block of closings) {
-        next = await patchPersonnelOrderEditorialBlock(orderId, block.block_id, suppressed
-          ? { clear_override: true, expected_revision: block.revision }
-          : { override_text: "", expected_revision: block.revision });
-      }
-      if (next) {
-        setState(next);
-        onEditorialChanged?.(next);
-      }
-    } catch (err) {
-      setError(mapPersonnelOrdersApiError(err, "Не удалось изменить заключительную часть."));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  const sections = buildEditorialDocumentSections(state, items, activeLocale);
+  const sections = buildEditorialDocumentSections(state, items, activeLocale)
+    .filter(section => section.kind !== "order" || section.blockType !== "closing");
 
   return (
     <section data-testid="personnel-order-editorial-editor" data-active-locale={activeLocale} className="space-y-4">
@@ -565,10 +528,6 @@ export default function PersonnelOrderEditorialTextEditor({
         <div className="space-y-6">
           {sections.map((section) => {
             if (section.kind === "order") {
-              const isClosing = section.blockType === "closing";
-              const closingSuppressed = isClosing && (state?.order_blocks || [])
-                .filter((block) => block.block_type === "closing" && (block.locale === "ru" || block.locale === "kk"))
-                .every((block) => block.override_text === "");
               return (
                 <div
                   key={section.key}
@@ -581,20 +540,7 @@ export default function PersonnelOrderEditorialTextEditor({
                     busy={busy}
                     onSave={handleSave}
                     onReset={handleReset}
-                    closingAction={isClosing ? { suppressed: closingSuppressed, onToggle: handleClosingToggle } : undefined}
                   />
-                  {isClosing ? (
-                    <div className="mt-4 space-y-2" data-testid="personnel-order-editorial-requisites">
-                      <h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-                        Реквизиты документа
-                      </h4>
-                      <PersonnelOrderDocumentRequisitesPreview
-                        key={`${order.order_date ?? ""}:${order.signed_by_position ?? ""}:${order.signed_by_name ?? ""}`}
-                        order={order}
-                        locale={activeLocale}
-                      />
-                    </div>
-                  ) : null}
                 </div>
               );
             }
@@ -629,7 +575,13 @@ export default function PersonnelOrderEditorialTextEditor({
                   onSave={handleSave}
                   onReset={handleReset}
                 />
-                <PositionTextOverrideEditor item={items.find((item) => item.item_id === section.orderItemId)!} editable={canWrite} onChanged={onOrderChanged} manualBody={Boolean(section.body?.override_text?.trim())} />
+                {["PERSONAL_DATA_CHANGE","EDUCATION_INFORMATION_CHANGE"].includes(items.find(item => item.item_id === section.orderItemId)?.item_type_code || '') ? (
+                  <div className="space-y-2 rounded-lg border p-3" data-testid="education-source-position-action">
+                    <p className="text-xs text-zinc-500">Редактирование текста пункта меняет только готовую формулировку. Выбранная должность и её формы RU/KK изменяются в исходных данных пункта: «Данные» → «Пункты приказа» → «Редактировать».</p>
+                    {canWrite && onEditSourcePosition && items.find(item=>item.item_id===section.orderItemId)?.item_type_code!=='PERSONAL_DATA_CHANGE' ? <button type="button" className="rounded border px-3 py-1.5 text-sm" onClick={() => onEditSourcePosition(section.orderItemId)}>Изменить исходные данные должности</button> : null}
+                    {section.body?.override_text?.trim() ? <p className="text-xs text-amber-700">Ручной текст пункта имеет приоритет. Чтобы отобразить выбранную должность в тексте, верните автоматически сформированный текст пункта. Основания при этом сохраняются.</p> : null}
+                  </div>
+                ) : <PositionTextOverrideEditor item={items.find((item) => item.item_id === section.orderItemId)!} editable={canWrite} onChanged={onOrderChanged} manualBody={Boolean(section.body?.override_text?.trim())} />}
               </div>
             );
           })}

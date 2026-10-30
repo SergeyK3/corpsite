@@ -400,7 +400,7 @@ export default function PersonnelOrderHeaderEditor({
               {autoPersistNotice}
             </div>
           ) : null}
-          <div className="sm:col-span-2">
+          {order.order_type_code!=='PERSONAL_DATA_CHANGE'?<div className="sm:col-span-2">
             <label className={FIELD_LABEL_CLASS}>Основание</label>
             <input
               value={basisSummary}
@@ -408,7 +408,7 @@ export default function PersonnelOrderHeaderEditor({
               disabled={disabled}
               className={FIELD_INPUT_CLASS}
             />
-          </div>
+          </div>:null}
         </div>
         <div>
           <label className={FIELD_LABEL_CLASS}>Комментарий</label>

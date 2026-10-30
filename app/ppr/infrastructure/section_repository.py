@@ -1141,7 +1141,12 @@ class SqlAlchemySectionReadRepository:
     """Read-only section adapter — does not commit."""
 
     def __init__(self, conn: Connection) -> None:
+        self._conn = conn
         self._store = _SectionStore(conn)
+
+    def education_kind(self, code: str) -> dict | None:
+        from app.services.education_program_kinds_service import lookup
+        return lookup(self._conn,code,lock=True)
 
     def load_active_records(self, person_id: int, section_code: str) -> tuple[SectionRecord, ...]:
         return self._store.load_active_records(person_id, section_code)

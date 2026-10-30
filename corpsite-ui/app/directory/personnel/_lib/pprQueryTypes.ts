@@ -35,6 +35,9 @@ export type PprGeneralResponse = {
 export type PprEducationRecordResponse = {
   record_id: number | null;
   education_kind: string;
+  education_kind_name_ru?: string|null;
+  education_kind_name_kk?: string|null;
+  education_kind_active?: boolean|null;
   institution_type: string | null;
   institution_name: string | null;
   specialty: string | null;

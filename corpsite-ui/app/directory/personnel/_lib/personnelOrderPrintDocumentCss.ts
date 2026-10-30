@@ -3,6 +3,10 @@
  * Layout utilities are scoped under `.personnel-order-print-document` to avoid UI leakage.
  */
 export const PERSONNEL_ORDER_PRINT_DOCUMENT_CSS = `
+.personnel-order-print-document[data-education-document] .personnel-order-print-ack-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .personnel-order-print-document[data-category-document] .personnel-order-print-ack-grid {
   grid-template-columns: minmax(0, 1fr);
 }

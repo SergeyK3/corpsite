@@ -58,6 +58,12 @@ afterEach(() => {
 });
 
 describe("PersonnelOrderHeaderEditor signatory requisites", () => {
+  it.each(['PERSONAL_DATA_CHANGE','EDUCATION_INFORMATION_CHANGE','HIRE'])('hides header basis only for PERSONAL_DATA_CHANGE (%s)',type=>{
+    render(<PersonnelOrderHeaderEditor order={sampleOrder({order_type_code:type,basis_summary:'TEST основание заголовка',signed_by_name:'TEST',signed_by_position:'DIRECTOR'})} onSaved={onSaved}/>);
+    if(type==='PERSONAL_DATA_CHANGE')expect(screen.queryByText('Основание',{exact:true})).not.toBeInTheDocument();
+    else expect(screen.getByText('Основание',{exact:true})).toBeInTheDocument();
+  });
+
   it("keeps signatory edits local and enables the explicit save only when changed", () => {
     const order = sampleOrder({ signed_by_name: "М. Тулеутаев", signed_by_position: "DIRECTOR" });
     render(<PersonnelOrderHeaderEditor order={order} onSaved={onSaved} />);

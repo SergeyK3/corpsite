@@ -5,7 +5,7 @@ import * as React from "react";
 import {
   PERSONNEL_ORDER_PRINT_LANGUAGE_DEFAULT,
   PERSONNEL_ORDER_PRINT_LANGUAGE_LABELS,
-  PERSONNEL_ORDER_PRINT_LANGUAGES,
+  personnelOrderPrintLanguagesForType,
   type PersonnelOrderPrintLanguage,
 } from "../../_lib/personnelOrderPrintLanguage";
 
@@ -17,6 +17,7 @@ type Props = {
   onConfirm: (language: PersonnelOrderPrintLanguage, action: PersonnelOrderPrintDialogAction) => void;
   initialLanguage?: PersonnelOrderPrintLanguage;
   busy?: boolean;
+  documentTypeCode?: string;
 };
 
 export default function PersonnelOrderPrintLanguageDialog({
@@ -25,12 +26,13 @@ export default function PersonnelOrderPrintLanguageDialog({
   onConfirm,
   initialLanguage = PERSONNEL_ORDER_PRINT_LANGUAGE_DEFAULT,
   busy = false,
+  documentTypeCode,
 }: Props) {
   const [language, setLanguage] = React.useState<PersonnelOrderPrintLanguage>(initialLanguage);
 
   React.useEffect(() => {
-    if (open) setLanguage(initialLanguage);
-  }, [open, initialLanguage]);
+    if (open) setLanguage(personnelOrderPrintLanguagesForType(documentTypeCode).includes(initialLanguage) ? initialLanguage : "ru");
+  }, [open, initialLanguage, documentTypeCode]);
 
   if (!open) return null;
 
@@ -54,7 +56,7 @@ export default function PersonnelOrderPrintLanguageDialog({
         <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">Язык документа:</p>
 
         <div className="mt-4 space-y-2">
-          {PERSONNEL_ORDER_PRINT_LANGUAGES.map((value) => (
+          {personnelOrderPrintLanguagesForType(documentTypeCode).map((value) => (
             <label
               key={value}
               className="flex cursor-pointer items-center gap-2 rounded-lg border border-zinc-200 px-3 py-2 text-sm dark:border-zinc-800"

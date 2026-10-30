@@ -10,6 +10,10 @@ from app.ppr.domain.section_models import SectionRecord
 class SectionReadRepository(Protocol):
     """Read-only section access — safe via UnitOfWork.sections."""
 
+    def education_kind(self, code: str) -> dict | None:
+        """Read and lock the program reference in the authoring transaction."""
+        ...
+
     def load_active_records(self, person_id: int, section_code: str) -> tuple[SectionRecord, ...]:
         """All active rows for person + section_code."""
         ...

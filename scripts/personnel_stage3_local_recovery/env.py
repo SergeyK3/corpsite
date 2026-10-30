@@ -13,7 +13,8 @@ if context.get_x_argument(as_dictionary=True).get('approved_local_recovery') != 
     raise RuntimeError('Preparation only. An explicitly authorized recovery/rehearsal must opt in.')
 explicit = context.config.get_main_option('sqlalchemy.url')
 url = make_url(explicit or dotenv_values(root / '.env')['DATABASE_URL'])
-if url.host not in {'localhost', '127.0.0.1', '::1'} or url.database not in {'corpsite', 'corpsite_stage3_rehearsal'}:
+local_test_copy = bool(url.database and url.database.startswith('corpsite_') and url.database.endswith('_test'))
+if url.host not in {'localhost', '127.0.0.1', '::1'} or (url.database not in {'corpsite', 'corpsite_stage3_rehearsal'} and not local_test_copy):
     raise RuntimeError('STOP: only the working local database or its named rehearsal copy is allowed')
 with create_engine(url, isolation_level='REPEATABLE READ').connect() as connection:
     context.configure(connection=connection, target_metadata=None, transactional_ddl=True)

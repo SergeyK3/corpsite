@@ -572,9 +572,8 @@ describe("PersonnelOrderDetailDrawer document tab", () => {
     expect(screen.getByText("Вложения (1)")).toBeInTheDocument();
   });
 
-  it("suppresses and restores both closing blocks without changing the template blocks", async () => {
+  it("hides closing controls while preserving stored closing wording in the document", async () => {
     const before = templateEditorial("new");
-    const suppressed = withClosingSuppressed(before, true);
     const terminationDetail: PersonnelOrderDetailResponse = {
       ...detail,
       order: { ...detail.order, order_type_code: "TERMINATION" },
@@ -592,34 +591,22 @@ describe("PersonnelOrderDetailDrawer document tab", () => {
     };
     vi.mocked(getPersonnelOrder).mockResolvedValue(terminationDetail);
     vi.mocked(getPersonnelOrderEditorial).mockResolvedValueOnce(before);
-    vi.mocked(patchPersonnelOrderEditorialBlock)
-      .mockResolvedValueOnce(withClosingSuppressed(before, false))
-      .mockResolvedValueOnce(suppressed)
-      .mockResolvedValueOnce(withClosingSuppressed(before, true))
-      .mockResolvedValueOnce(before);
-
+    const savedBlocks = JSON.parse(JSON.stringify(before.order_blocks));
     render(<PersonnelOrderDetailDrawer orderId={42} open onClose={vi.fn()} />);
     fireEvent.click(await screen.findByRole("tab", { name: "Данные" }));
+    expect(await screen.findByTestId("personnel-order-editorial-editor")).toBeInTheDocument();
     expect(screen.queryByTestId("personnel-order-closing-control")).not.toBeInTheDocument();
-    expect((await screen.findAllByText("new kk closing")).length).toBeGreaterThan(0);
-    fireEvent.click(screen.getByTestId("personnel-order-editorial-closing-toggle"));
-    await waitFor(() => expect(patchPersonnelOrderEditorialBlock).toHaveBeenCalledTimes(2));
-
+    expect(screen.queryByTestId("personnel-order-editorial-closing-toggle")).not.toBeInTheDocument();
+    expect(screen.queryByText("new kk closing")).not.toBeInTheDocument();
+    expect(patchPersonnelOrderEditorialBlock).not.toHaveBeenCalled();
+    expect(before.order_blocks).toEqual(savedBlocks);
     fireEvent.click(screen.getByRole("tab", { name: "Документ" }));
     const document = await screen.findByTestId("personnel-order-document");
-    expect(document).not.toHaveTextContent("Қосымша өкімдер");
-    expect(document).not.toHaveTextContent("new kk closing");
     expect(document).toHaveTextContent("new kk title");
-    expect(document).toHaveTextContent("new kk preamble");
     expect(document).toHaveTextContent("new kk body");
     expect(document).toHaveTextContent("new kk basis");
-
-    fireEvent.click(screen.getByRole("tab", { name: "Данные" }));
-    fireEvent.click(await screen.findByTestId("personnel-order-editorial-closing-toggle"));
-    await waitFor(() => expect(patchPersonnelOrderEditorialBlock).toHaveBeenCalledTimes(4));
-    fireEvent.click(screen.getByRole("tab", { name: "Документ" }));
-    await waitFor(() => expect(screen.getByTestId("personnel-order-document")).not.toHaveTextContent("Қосымша өкімдер"));
-    expect(screen.getByTestId("personnel-order-document")).toHaveTextContent("new kk closing");
+    expect(document).toHaveTextContent("new kk closing");
+    expect(patchPersonnelOrderEditorialBlock).not.toHaveBeenCalled();
   });
   it("keeps document blockers in data and uses revision for confirm", async () => {
     vi.mocked(getPersonnelOrder).mockResolvedValue(detail);

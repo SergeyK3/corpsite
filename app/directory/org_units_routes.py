@@ -163,6 +163,7 @@ def list_org_units_flat(
                     "name": u.name,
                     "name_kk": u.name_kk,
                     "document_genitive_kk": u.document_genitive_kk,
+                    "document_genitive_ru": u.document_genitive_ru,
                     "code": u.code,
                     "group_id": u.group_id,
                     "is_active": u.is_active,

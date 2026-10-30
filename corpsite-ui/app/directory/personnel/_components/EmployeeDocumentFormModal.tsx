@@ -118,9 +118,16 @@ export default function EmployeeDocumentFormModal({
     [documentTypes, form.document_type_id]
   );
 
+  const effectiveKinds = React.useMemo(() => {
+    const rows = documentKinds.filter(k => k.is_active);
+    if (mode === "edit" && documentRow?.document_kind_id && !rows.some(k => k.document_kind_id === documentRow.document_kind_id)) {
+      rows.push({document_kind_id:documentRow.document_kind_id,code:documentRow.document_kind_code??"",name:documentRow.document_kind_name??"",is_active:false,sort_order:0});
+    }
+    return rows;
+  }, [documentKinds,mode,documentRow]);
   const selectedKind = React.useMemo(
-    () => documentKinds.find((k) => String(k.document_kind_id) === form.document_kind_id) ?? null,
-    [documentKinds, form.document_kind_id]
+    () => effectiveKinds.find((k) => String(k.document_kind_id) === form.document_kind_id) ?? null,
+    [effectiveKinds, form.document_kind_id]
   );
 
   const specialtyRequired = Boolean(selectedType?.requires_medical_specialty);
@@ -560,9 +567,9 @@ export default function EmployeeDocumentFormModal({
                 className={selectClass}
               >
                 <option value="">Выберите вид</option>
-                {documentKinds.map((kind) => (
+                {effectiveKinds.map((kind) => (
                   <option key={kind.document_kind_id} value={String(kind.document_kind_id)}>
-                    {kind.name}
+                    {kind.name}{!kind.is_active ? " (неактивно)" : ""}
                   </option>
                 ))}
               </select>

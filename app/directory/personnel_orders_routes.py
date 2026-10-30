@@ -227,7 +227,11 @@ def get_personnel_order_published_template_title(item_type_code: str, _user: Dic
 def create_manual_personnel_order_draft_route(payload: PersonnelOrderManualDraftCreateIn, user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
     require_personnel_admin_or_403(user)
     try:
-        return call_service(create_manual_draft, created_by=_require_user_id(user), **payload.model_dump(exclude_none=True))
+        values = payload.model_dump(exclude_none=True)
+        if payload.item_type_code in {"PERSONAL_DATA_CHANGE", "SERVICE_LENGTH_CHANGE", "EDUCATION_INFORMATION_CHANGE"} and payload.unresolved_subject is not None:
+            # This document mode deliberately has no employee identifier.
+            values["employee_id"] = None
+        return call_service(create_manual_draft, created_by=_require_user_id(user), **values)
     except PersonnelOrderValidationError as exc:
         raise validation_error_to_http422(exc)
     except PersonnelOrderConflictError as exc:
@@ -560,6 +564,7 @@ def create_personnel_order_item_route(
             order_id=order_id,
             item_type_code=payload.item_type_code,
             employee_id=payload.employee_id,
+            unresolved_subject=payload.unresolved_subject.model_dump() if payload.unresolved_subject is not None else None,
             effective_date=payload.effective_date,
             period_start=payload.period_start,
             period_end=payload.period_end,
@@ -602,6 +607,7 @@ def update_personnel_order_item_route(
             item_id=item_id,
             item_type_code=payload.item_type_code,
             employee_id=payload.employee_id,
+            unresolved_subject=payload.unresolved_subject.model_dump() if payload.unresolved_subject is not None else None,
             effective_date=payload.effective_date,
             period_start=payload.period_start,
             period_end=payload.period_end,

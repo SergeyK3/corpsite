@@ -195,6 +195,73 @@ afterEach(() => {
 });
 
 describe("PersonnelOrderEditorialTextEditor", () => {
+  it('hides the position shortcut only for personal-data orders',async()=>{
+    const personalItems=items.map(item=>({...item,item_type_code:'PERSONAL_DATA_CHANGE'}));
+    const state=sampleState();state.items[0].item_type_code='PERSONAL_DATA_CHANGE';
+    render(<PersonnelOrderEditorialTextEditor orderId={42} order={sampleOrder} items={personalItems} editable editorialState={state} onEditSourcePosition={vi.fn()}/>);
+    await screen.findByText('Текст пункта');
+    expect(screen.queryByRole('button',{name:'Изменить исходные данные должности'})).not.toBeInTheDocument();
+  });
+  it("keeps requisites and source position editing while hiding the education closing", async () => {
+    const educationItems=items.map(item=>({...item,item_type_code:'EDUCATION_INFORMATION_CHANGE'}));
+    const state=sampleState();state.items[0].item_type_code='EDUCATION_INFORMATION_CHANGE';
+    const openSource=vi.fn();
+    render(<PersonnelOrderEditorialTextEditor orderId={42} order={sampleOrder} items={educationItems} editable editorialState={state} onEditSourcePosition={openSource}/>);
+    await screen.findByText('Текст пункта');
+    expect(screen.queryByText('Заключительная часть')).not.toBeInTheDocument();
+    expect(screen.getByTestId('personnel-order-editorial-requisites')).toBeInTheDocument();
+    expect(screen.getByTestId('personnel-order-editorial-block-Негіз (мәтін құжатта)')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button',{name:'Изменить исходные данные должности'}));
+    expect(openSource).toHaveBeenCalledExactlyOnceWith(10);
+    expect(screen.queryByTestId('personnel-order-position-text-override')).not.toBeInTheDocument();
+  });
+
+  it.each(PERSONNEL_ORDER_CREATE_TYPE_OPTIONS.map(option=>option.value))("hides closing display for %s without altering stored blocks", async type => {
+    const educationItems=items.map(item=>({...item,item_type_code:type}));
+    const state=sampleState();
+    const closing=state.order_blocks.find(block=>block.block_type==='closing'&&block.locale==='ru')!;
+    closing.override_text='Сохранённая непустая заключительная часть';
+    const before=JSON.stringify(state);
+    render(<PersonnelOrderEditorialTextEditor orderId={42} order={sampleOrder} items={educationItems} editable editorialState={state}/>);
+    await screen.findByTestId('personnel-order-editorial-requisites');
+    for(const locale of ['kk','ru']){
+      fireEvent.click(screen.getByTestId('personnel-order-editorial-locale-'+locale));
+      expect(screen.queryByText('Заключительная часть')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('personnel-order-editorial-closing-toggle')).not.toBeInTheDocument();
+    }
+    expect(JSON.stringify(state)).toBe(before);
+    expect(patchPersonnelOrderEditorialBlock).not.toHaveBeenCalled();
+  });
+
+  it("saves and restores the existing education basis override exactly in both languages", async () => {
+    const educationItems=items.map(item=>({...item,item_type_code:'EDUCATION_INFORMATION_CHANGE'}));
+    const state=sampleState();
+    vi.mocked(getPersonnelOrderEditorial).mockImplementation(async()=>structuredClone(state));
+    vi.mocked(patchPersonnelOrderEditorialBlock).mockImplementation(async(_id,blockId,body)=>{
+      const block=state.items[0].blocks.find(block=>block.block_id===blockId)!;
+      block.override_text=body.override_text;block.effective_text=body.override_text;block.revision+=1;
+      return structuredClone(state);
+    });
+    let view=render(<PersonnelOrderEditorialTextEditor orderId={42} order={sampleOrder} items={educationItems} editable/>);
+    const basis={kk:'Негіз: Сақталған KK негізі.\nЕкінші жол.',ru:'Основание: Сохранённое RU основание.\nВторая строка.'};
+    for(const locale of ['kk','ru'] as const){
+      fireEvent.click(await screen.findByTestId('personnel-order-editorial-locale-'+locale));
+      const block=screen.getByTestId('personnel-order-editorial-block-'+(locale==='kk'?'Негіз (мәтін құжатта)':'Основание (текст в документе)'));
+      fireEvent.click(within(block).getByTestId('personnel-order-editorial-edit'));
+      fireEvent.change(within(block).getByTestId('personnel-order-editorial-textarea'),{target:{value:basis[locale]}});
+      fireEvent.click(within(block).getByTestId('personnel-order-editorial-save'));
+      await waitFor(()=>expect(within(block).getByTestId('personnel-order-editorial-readonly').textContent).toBe(basis[locale]));
+    }
+    view.unmount();
+    view=render(<PersonnelOrderEditorialTextEditor orderId={42} order={sampleOrder} items={educationItems} editable/>);
+    for(const locale of ['kk','ru'] as const){
+      fireEvent.click(await screen.findByTestId('personnel-order-editorial-locale-'+locale));
+      await waitFor(()=>expect(screen.getByTestId('personnel-order-editorial-block-'+(locale==='kk'?'Негіз (мәтін құжатта)':'Основание (текст в документе)')).textContent).toContain(basis[locale]));
+    }
+    expect(patchPersonnelOrderEditorialBlock).toHaveBeenCalledTimes(2);
+    expect(updatePersonnelOrderItem).not.toHaveBeenCalled();
+  });
+
   it("loads editorial state and shows document structure without technical fields", async () => {
     vi.mocked(getPersonnelOrderEditorial).mockResolvedValue(sampleState());
 

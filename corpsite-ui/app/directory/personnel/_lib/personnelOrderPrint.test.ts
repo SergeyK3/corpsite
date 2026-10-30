@@ -28,6 +28,20 @@ import {
 } from "./personnelOrderPrintViewModel";
 import type { PersonnelOrderDetailResponse } from "./personnelOrdersApi.client";
 
+it.each(['ru','kk','kk-ru'] as const)('prints explicit new personal-data acknowledgement names in %s without old surname',locale=>{
+ const detail=sampleDetail({order_type_code:'PERSONAL_DATA_CHANGE'});detail.items[0].item_type_code='PERSONAL_DATA_CHANGE';
+ detail.items[0].payload={personal_data:{new_full_name_ru:'НЕЛЬЗЯ РАЗБИРАТЬ',new_full_name_kk:'ЖОЛДЫ ТАЛДАМАУ',new_surname_ru:'Новая Двойная',new_given_name_ru:'Юлия',new_surname_kk:'Жаңа Тегі',new_given_name_kk:'Әлия'}};
+ const model=buildPersonnelOrderPrintViewModel(detail);expect(model.acknowledgements[0].personalDataNames).toEqual({ru:'Новая Двойная Ю.',kk:'Ә. Жаңа Тегі'});
+ const html=buildPersonnelOrderPrintDocumentHtml(model,locale);const ack=html.split('data-testid="personnel-order-print-acknowledgement"')[1];
+ expect(ack).not.toContain('Петрова');
+ if(locale!=='kk')expect(ack).toContain('Новая Двойная Ю.');
+ if(locale!=='ru')expect(ack).toContain('Ә. Жаңа Тегі');
+});
+it('leaves the personal-data acknowledgement blank when explicit parts are missing',()=>{
+ const detail=sampleDetail({order_type_code:'PERSONAL_DATA_CHANGE'});detail.items[0].item_type_code='PERSONAL_DATA_CHANGE';detail.items[0].payload={personal_data:{new_full_name_ru:'Новая Анна'}};
+ const html=buildPersonnelOrderPrintDocumentHtml(buildPersonnelOrderPrintViewModel(detail),'ru');const ack=html.split('data-testid="personnel-order-print-acknowledgement"')[1];expect(ack).not.toContain('Петрова');expect(ack).not.toContain('Новая');
+});
+
 it.each(["ru", "kk"] as const)("prints saved supplementary-pay points with their own basis exactly once (%s)", language => {
   const detail = sampleDetail({order_type_code: "SUPPLEMENTARY_PAY", legal_basis_article: null, basis_summary: null});
   detail.items = [25, 50].map((percent, index) => ({...detail.items[0], item_id: index + 1, item_number: index + 1, item_type_code: "SUPPLEMENTARY_PAY", employee_id: index + 7, payload: {allowance: {percent}}}));

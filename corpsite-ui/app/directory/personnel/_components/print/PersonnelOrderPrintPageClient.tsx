@@ -15,6 +15,7 @@ import { loadPersonnelOrderPrintViewModelClient } from "../../_lib/personnelOrde
 import type { PersonnelOrderPrintViewModel } from "../../_lib/personnelOrderPrintViewModel";
 import PersonnelOrderPrintDocument from "./PersonnelOrderPrintDocument";
 import PersonnelOrderPrintToolbar from "./PersonnelOrderPrintToolbar";
+import { educationPrintModel } from "../../_lib/educationPrint";
 
 type Props = {
   orderId: number;
@@ -37,6 +38,11 @@ export default function PersonnelOrderPrintPageClient({ orderId }: Props) {
   const [error, setError] = React.useState<string | null>(null);
   const [pdfBusy, setPdfBusy] = React.useState(false);
   const [pdfError, setPdfError] = React.useState<string | null>(null);
+  const printable = React.useMemo(() => {
+    if (!model) return { model: null, error: null };
+    try { return { model: educationPrintModel(model, language), error: null }; }
+    catch (cause) { return { model: null, error: cause instanceof Error ? cause.message : "Не удалось подготовить печать." }; }
+  }, [model, language]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -84,6 +90,7 @@ export default function PersonnelOrderPrintPageClient({ orderId }: Props) {
           onLanguageChange={handleLanguageChange}
           onOpenPdf={handleOpenPdf}
           pdfBusy={pdfBusy}
+          documentTypeCode={model?.documentTypeCode}
         />
 
         {languageInvalid ? (
@@ -119,9 +126,10 @@ export default function PersonnelOrderPrintPageClient({ orderId }: Props) {
           </div>
         ) : null}
 
-        {model ? (
+        {printable.error ? <p role="alert" className="mb-3 rounded border p-3">{printable.error}</p> : null}
+        {printable.model ? (
           <div className="personnel-order-print-sheet rounded-sm border border-zinc-200 bg-white p-8 shadow-sm dark:border-zinc-700 sm:p-10">
-            <PersonnelOrderPrintDocument model={model} language={language} />
+            <PersonnelOrderPrintDocument model={printable.model} language={language} />
           </div>
         ) : null}
       </div>

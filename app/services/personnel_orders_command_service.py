@@ -769,6 +769,7 @@ def create_personnel_order_item(
     *,
     order_id: int,
     item_type_code: str,
+    unresolved_subject: Optional[Dict[str, Any]] = None,
     employee_id: Optional[int] = None,
     effective_date: Optional[date] = None,
     period_start: Optional[date] = None,
@@ -801,12 +802,13 @@ def create_personnel_order_item(
             if template is None:
                 raise PersonnelOrderValidationError("Выбранная опубликованная версия шаблона недоступна или не соответствует типу пункта.")
             template = dict(template)
-        if employee_id is None:
+        if employee_id is None and not (normalized_type in {"PERSONAL_DATA_CHANGE","SERVICE_LENGTH_CHANGE","EDUCATION_INFORMATION_CHANGE"} and unresolved_subject):
             raise PersonnelOrderValidationError("Выберите сотрудника для нового пункта.")
         if effective_date is None:
             raise PersonnelOrderValidationError("Укажите дату начала действия.")
-        _ensure_employee_exists(conn, employee_id)
-        normalized_payload = prepare_manual_item_payload(conn, item_type_code=normalized_type, employee_id=employee_id, effective_date=effective_date, period_start=period_start, period_end=period_end, item_payload=payload, document_subject_context=document_subject_context, template_version_id=template['template_version_id'])
+        if employee_id is not None:
+            _ensure_employee_exists(conn, employee_id)
+        normalized_payload = prepare_manual_item_payload(conn, item_type_code=normalized_type, employee_id=employee_id, unresolved_subject=unresolved_subject, effective_date=effective_date, period_start=period_start, period_end=period_end, item_payload=payload, document_subject_context=document_subject_context, template_version_id=template['template_version_id'])
         payload_json = json.dumps(normalized_payload, ensure_ascii=False)
 
         from app.services.personnel_order_hire_from_person_service import validate_hire_item_identity
@@ -1008,6 +1010,7 @@ def update_personnel_order_item(
     order_id: int,
     item_id: int,
     item_type_code: Optional[str] = None,
+    unresolved_subject: Optional[Dict[str, Any]] = None,
     employee_id: Optional[int] = None,
     effective_date: Optional[date] = None,
     period_start: Optional[date] = None,
@@ -1024,6 +1027,10 @@ def update_personnel_order_item(
         updates["item_type_code"] = _normalize_item_type(item_type_code)
     if employee_id is not None:
         updates["employee_id"] = int(employee_id)
+    if unresolved_subject is not None:
+        if employee_id is not None:
+            raise PersonnelOrderValidationError("Specify either employee_id or unresolved_subject.")
+        updates["employee_id"] = None
     if effective_date is not None:
         updates["effective_date"] = effective_date
     if period_start is not None:
@@ -1064,7 +1071,7 @@ def update_personnel_order_item(
         current_item = conn.execute(
             text(
                 """
-                SELECT item_type_code, employee_id, payload
+                SELECT item_id, item_number, item_type_code, employee_id, effective_date, period_start, period_end, payload
                 FROM public.personnel_order_items
                 WHERE item_id = :item_id
                   AND order_id = :order_id
@@ -1077,6 +1084,27 @@ def update_personnel_order_item(
         merged_employee_id = updates.get("employee_id", current_item.get("employee_id"))
         merged_payload_raw = payload if payload is not None else current_item.get("payload")
         merged_payload = merged_payload_raw if isinstance(merged_payload_raw, dict) else {}
+        if str(merged_type) == "PERSONAL_DATA_CHANGE":
+            from app.services.personnel_order_personal_data_contract import prepare_personal_data_payload
+            try:merged_payload=prepare_personal_data_payload(conn,merged_payload,merged_employee_id,updates.get("effective_date",current_item.get("effective_date")),unresolved_subject)
+            except ValueError as exc:raise PersonnelOrderValidationError(str(exc)) from exc
+            updates["payload"]=json.dumps(merged_payload,ensure_ascii=False)
+        if str(merged_type) == "EDUCATION_INFORMATION_CHANGE":
+            from app.services.personnel_order_education_template_contract import prepare_education_payload
+            try:
+                merged_payload = prepare_education_payload(conn, merged_payload, merged_employee_id,
+                    updates.get("effective_date", current_item.get("effective_date")), unresolved_subject)
+            except ValueError as exc:
+                raise PersonnelOrderValidationError(str(exc)) from exc
+            updates["payload"] = json.dumps(merged_payload, ensure_ascii=False)
+        if str(merged_type) == "SERVICE_LENGTH_CHANGE":
+            from app.services.personnel_order_service_length_contract import prepare_service_length_payload
+            try:
+                merged_payload = prepare_service_length_payload(conn, merged_payload, merged_employee_id,
+                    updates.get("effective_date", current_item.get("effective_date")), unresolved_subject)
+            except ValueError as exc:
+                raise PersonnelOrderValidationError(str(exc)) from exc
+            updates["payload"] = json.dumps(merged_payload, ensure_ascii=False)
         if str(merged_type) == "QUALIFICATION_CATEGORY":
             from app.services.personnel_order_category_contract import prepare_category_payload
             current_date = conn.execute(text("SELECT effective_date FROM personnel_order_items WHERE item_id=:id"), {"id":item_id}).scalar_one()
@@ -1097,7 +1125,7 @@ def update_personnel_order_item(
             updates["payload"] = json.dumps(merged_payload, ensure_ascii=False)
         elif str(merged_type) != str(current_item["item_type_code"]):
             raise PersonnelOrderValidationError("При изменении типа пункта выберите опубликованный шаблон.")
-        elif (merged_type == "QUALIFICATION_CATEGORY" or (merged_type in {"TRANSFER", "CONCURRENT_DUTY_START"}
+        elif (merged_type in {"PERSONAL_DATA_CHANGE", "QUALIFICATION_CATEGORY", "SERVICE_LENGTH_CHANGE", "EDUCATION_INFORMATION_CHANGE"} or (merged_type in {"TRANSFER", "CONCURRENT_DUTY_START"}
               and isinstance(merged_payload.get("transfer" if merged_type == "TRANSFER" else "concurrent"), dict))):
             # Saving a bound point must refresh its text even when the user
             # keeps its exact template. Never select a current default here.

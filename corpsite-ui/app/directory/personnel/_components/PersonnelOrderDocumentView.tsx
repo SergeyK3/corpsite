@@ -137,9 +137,9 @@ export default function PersonnelOrderDocumentView({
           <div>{printModel.signatory.fio || detail.order.signed_by_name || ""}</div>
         </div>
         <section className="space-y-4" data-testid="personnel-order-document-acknowledgement">
-          {(printModel.acknowledgements.length ? printModel.acknowledgements : [{ employeeId: null, employeeName: null, acknowledgedOn: null }]).map((row, index) => (
+          {(printModel.acknowledgements.length ? printModel.acknowledgements : [{ employeeId: null, employeeName: null, acknowledgedOn: null, personalDataNames: undefined }]).map((row, index) => (
             <div key={`${row.employeeId ?? "unresolved"}-${index}`} className="space-y-1">
-              <p>{language === "kk" ? "Бұйрықпен таныстым:" : "С приказом ознакомлен(а):"} <span className="inline-block min-w-48 border-b border-zinc-500" />&nbsp;&nbsp;{acknowledgementName(row.employeeName, language)}</p>
+              <p>{language === "kk" ? "Бұйрықпен таныстым:" : "С приказом ознакомлен(а):"} <span className="inline-block min-w-48 border-b border-zinc-500" />&nbsp;&nbsp;{row.personalDataNames?row.personalDataNames[language]:acknowledgementName(row.employeeName, language)}</p>
               <p>{acknowledgementDate(row.acknowledgedOn, language)}</p>
             </div>
           ))}

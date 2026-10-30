@@ -126,6 +126,12 @@ const PRIMARY_ADMIN_NAV: NavItem[] = [
   INCOMING_INFORMATION_NAV_ITEM,
 ];
 
+const EDUCATION_DIRECTORY_NAV: NavItem[] = [
+  { href: "/directory/education-levels", title: "Уровни образования" },
+  { href: "/directory/education-program-kinds", title: "Виды программ и подготовки" },
+  { href: "/directory/document-kinds", title: "Виды документов" },
+];
+
 const SECONDARY_DIRECTORY_NAV: NavItem[] = [
   {
     href: "/directory/positions",
@@ -213,6 +219,49 @@ function SidebarNav({ pathname, items }: { pathname: string; items: NavItem[] })
         );
       })}
     </nav>
+  );
+}
+
+function EducationSidebarGroup({ pathname }: { pathname: string }) {
+  const sectionActive = EDUCATION_DIRECTORY_NAV.some((item) => isNavItemActive(pathname, item));
+  const [open, setOpen] = useState(sectionActive);
+
+  return (
+    <div role="group" aria-label="Образование и документы" className="space-y-1">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls="education-directory-links"
+        onClick={() => setOpen((prev) => !prev)}
+        className={[
+          "flex w-full items-center justify-between rounded-lg border px-2.5 py-1 text-left text-sm leading-tight transition",
+          sectionActive
+            ? "border-zinc-400 dark:border-zinc-600 bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-50"
+            : "border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700",
+        ].join(" ")}
+      >
+        <span>Образование …</span>
+        <span aria-hidden="true" className={["text-xs text-zinc-600 dark:text-zinc-400 transition-transform", open ? "rotate-180" : ""].join(" ")}>
+          ▾
+        </span>
+      </button>
+      <div id="education-directory-links" hidden={!open} className="ml-2 space-y-0.5 border-l border-zinc-200 pl-2 dark:border-zinc-800">
+        {EDUCATION_DIRECTORY_NAV.map((item) => (
+          <Link
+            key={item.href}
+            href={item.href}
+            className={[
+              "block rounded-lg px-2.5 py-1 text-sm leading-tight transition",
+              isNavItemActive(pathname, item)
+                ? "bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-50"
+                : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700 hover:text-zinc-900",
+            ].join(" ")}
+          >
+            {item.title}
+          </Link>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -477,6 +526,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-1">
                 <div className="space-y-1">
                   <SidebarNav pathname={pathname} items={sidebarNavItems} />
+                  <EducationSidebarGroup pathname={pathname} />
                   <RareSidebarGroup pathname={pathname} />
                 </div>
               </div>

@@ -1,5 +1,6 @@
 import {personnelOrderPrintTitle} from "./personnelOrderPrintTitle";
 import { withoutAutomaticOrderClosing } from "./personnelOrderClosingText";
+import {personalDataAcknowledgementNames} from './personalDataAcknowledgement';
 import type {
   PersonnelOrderDetailResponse,
   PersonnelOrderEditorialBlock,
@@ -52,7 +53,7 @@ export type PersonnelOrderPrintViewModel = {
     position: LocalizedText | null;
     fio: string | null;
   };
-  acknowledgements: Array<{ employeeId: number | null; employeeName: string | null; acknowledgedOn: string | null }>;
+  acknowledgements: Array<{ employeeId: number | null; employeeName: string | null; acknowledgedOn: string | null; personalDataNames?:{ru:string;kk:string} }>;
   executorName: string;
 };
 
@@ -392,6 +393,7 @@ export function buildPersonnelOrderPrintViewModel(
     acknowledgements.push({
       employeeId: item.employeeId,
       employeeName: item.employeeName,
+      ...(item.itemTypeCode==='PERSONAL_DATA_CHANGE'?{personalDataNames:personalDataAcknowledgementNames(detail.items.find(source=>source.item_id===item.itemId)?.payload)}:{}),
       acknowledgedOn: acknowledgement?.event_type === "CLEARED" ? null : acknowledgement?.acknowledged_on || null,
     });
   }

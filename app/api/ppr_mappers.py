@@ -69,9 +69,16 @@ def _mask_iin(iin: str | None) -> str | None:
 
 
 def _education_record(record: EducationRecord) -> PprEducationRecordResponse:
+    from app.db.engine import engine
+    from app.services.education_program_kinds_service import lookup
+    with engine.connect() as conn:
+        kind = lookup(conn,record.education_kind) or {}
     return PprEducationRecordResponse(
         record_id=record.record_id,
         education_kind=record.education_kind,
+        education_kind_name_ru=kind.get('name_ru'),
+        education_kind_name_kk=kind.get('name_kk'),
+        education_kind_active=kind.get('is_active'),
         institution_type=record.institution_type,
         institution_name=record.institution_name,
         specialty=record.specialty,

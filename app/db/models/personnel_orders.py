@@ -44,6 +44,9 @@ ORDER_TYPE_QUALIFICATION_CATEGORY = "QUALIFICATION_CATEGORY"
 # This draft-only reconstruction code is intentionally separate from the MVP
 # event-producing types.  It has no employee-event or assignment semantics.
 RECONSTRUCTION_DRAFT_ITEM_TYPE_CODES = (
+    "PERSONAL_DATA_CHANGE",
+    "EDUCATION_INFORMATION_CHANGE",
+    "SERVICE_LENGTH_CHANGE",
     ORDER_TYPE_QUALIFICATION_CATEGORY,
     ORDER_TYPE_SUPPLEMENTARY_PAY,
     ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE,
@@ -200,7 +203,7 @@ class PersonnelOrder(Base):
             "order_type_code IN "
             "('HIRE', 'TRANSFER', 'TERMINATION', 'RETURN_FROM_CHILDCARE_LEAVE', 'CONCURRENT_DUTY_START', "
             "'CONCURRENT_DUTY_END', 'COMPOSITE', 'LEAVE.ANNUAL.RECALL', 'LEAVE.ANNUAL.GRANT', "
-            "'LEAVE.UNPAID.GRANT', 'LEAVE.CHILDCARE.GRANT', 'SUPPLEMENTARY_PAY')",
+            "'LEAVE.UNPAID.GRANT', 'LEAVE.CHILDCARE.GRANT', 'SUPPLEMENTARY_PAY', 'SERVICE_LENGTH_CHANGE', 'EDUCATION_INFORMATION_CHANGE', 'PERSONAL_DATA_CHANGE')",
             name="chk_personnel_orders_order_type_code",
         ),
         Index("ix_personnel_orders_status", "status"),
@@ -285,7 +288,7 @@ class PersonnelOrderItem(Base):
             "item_type_code IN "
             "('HIRE', 'TRANSFER', 'TERMINATION', 'RETURN_FROM_CHILDCARE_LEAVE', 'CONCURRENT_DUTY_START', "
             "'CONCURRENT_DUTY_END', 'LEAVE.ANNUAL.RECALL', 'LEAVE.ANNUAL.GRANT', "
-            "'LEAVE.UNPAID.GRANT', 'LEAVE.CHILDCARE.GRANT', 'SUPPLEMENTARY_PAY')",
+            "'LEAVE.UNPAID.GRANT', 'LEAVE.CHILDCARE.GRANT', 'SUPPLEMENTARY_PAY', 'SERVICE_LENGTH_CHANGE', 'EDUCATION_INFORMATION_CHANGE', 'PERSONAL_DATA_CHANGE')",
             name="chk_personnel_order_items_item_type_code",
         ),
         Index("ix_personnel_order_items_order_id", "order_id"),

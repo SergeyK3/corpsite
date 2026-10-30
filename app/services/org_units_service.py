@@ -24,6 +24,7 @@ class OrgUnit:
     is_active: bool
     name_kk: Optional[str] = None
     document_genitive_kk: Optional[str] = None
+    document_genitive_ru: Optional[str] = None
 
 
 class OrgUnitsService:
@@ -465,6 +466,7 @@ class OrgUnitsService:
             SELECT ou.unit_id, ou.parent_unit_id, ou.name,
                    NULLIF(BTRIM(to_jsonb(ou) ->> 'name_kk'), '') AS name_kk,
                    NULLIF(BTRIM(to_jsonb(ou) ->> 'document_genitive_kk'), '') AS document_genitive_kk,
+                   NULLIF(BTRIM(to_jsonb(ou) ->> 'document_genitive_ru'), '') AS document_genitive_ru,
                    ou.code, ou.group_id,
                    COALESCE(ou.is_active, true) AS is_active
             FROM {self._schema}.{self._org_units_table} ou
@@ -489,6 +491,7 @@ class OrgUnitsService:
                     name=str(r["name"]) if r["name"] is not None else "",
                     name_kk=str(r["name_kk"]) if r["name_kk"] is not None else None,
                     document_genitive_kk=str(r["document_genitive_kk"]) if r["document_genitive_kk"] is not None else None,
+                    document_genitive_ru=str(r["document_genitive_ru"]) if r.get("document_genitive_ru") is not None else None,
                     code=str(r["code"]) if r["code"] is not None else None,
                     group_id=int(r["group_id"]) if r.get("group_id") is not None else None,
                     is_active=bool(r["is_active"]),
@@ -503,6 +506,7 @@ class OrgUnitsService:
             SELECT unit_id, parent_unit_id, name,
                    NULLIF(BTRIM(to_jsonb(org_units) ->> 'name_kk'), '') AS name_kk,
                    NULLIF(BTRIM(to_jsonb(org_units) ->> 'document_genitive_kk'), '') AS document_genitive_kk,
+                   NULLIF(BTRIM(to_jsonb(org_units) ->> 'document_genitive_ru'), '') AS document_genitive_ru,
                    code, group_id, COALESCE(is_active, true) AS is_active
             FROM {self._schema}.{self._org_units_table}
             WHERE unit_id = :unit_id
@@ -522,6 +526,7 @@ class OrgUnitsService:
             name=str(r["name"]) if r["name"] is not None else "",
             name_kk=str(r["name_kk"]) if r["name_kk"] is not None else None,
             document_genitive_kk=str(r["document_genitive_kk"]) if r["document_genitive_kk"] is not None else None,
+            document_genitive_ru=str(r["document_genitive_ru"]) if r.get("document_genitive_ru") is not None else None,
             code=str(r["code"]) if r["code"] is not None else None,
             group_id=int(r["group_id"]) if r.get("group_id") is not None else None,
             is_active=bool(r["is_active"]),
@@ -587,6 +592,7 @@ class OrgUnitsService:
                 "name": u.name,
                 "name_kk": u.name_kk,
                 "document_genitive_kk": u.document_genitive_kk,
+                "document_genitive_ru": u.document_genitive_ru,
                 "code": u.code,
                 "group_id": u.group_id,
                 "is_active": bool(u.is_active),
@@ -635,6 +641,7 @@ class OrgUnitsService:
                 "title": u.name,
                 "name_kk": u.name_kk,
                 "document_genitive_kk": u.document_genitive_kk,
+                "document_genitive_ru": u.document_genitive_ru,
                 "code": u.code,
                 "type": "unit",
                 "group_id": u.group_id,

@@ -10,7 +10,6 @@ from sqlalchemy.engine import Connection
 
 from app.db.models.personnel_migration import (
     DOMAIN_CODE_EDUCATION,
-    EDUCATION_KINDS,
     EVENT_TYPE_EDUCATION_MIGRATED,
     EVENT_TYPE_EDUCATION_SUPERSEDED,
     EVENT_TYPE_EDUCATION_VOIDED,
@@ -95,8 +94,11 @@ class EducationMigrationPlugin:
             education_kind = payload.get("education_kind")
             if not education_kind:
                 errors.append("education_kind is required")
-            elif education_kind not in EDUCATION_KINDS:
-                errors.append(f"invalid education_kind: {education_kind!r}")
+            else:
+                from app.services.education_program_kinds_service import lookup
+                entry = lookup(conn, education_kind, lock=True)
+                if entry is None or not entry['is_active']:
+                    errors.append(f"invalid or inactive education_kind: {education_kind!r}")
         elif record_kind == RECORD_KIND_TRAINING:
             training_kind = payload.get("training_kind")
             if not training_kind:

@@ -7,6 +7,7 @@ export type OrgUnitSelectOption = {
   group_id: number | null;
   name_kk?: string | null;
   document_genitive_kk?: string | null;
+  document_genitive_ru?: string | null;
 };
 
 type OrgUnitRow = {
@@ -24,6 +25,7 @@ type OrgUnitRow = {
   groupId?: number | string | null;
   name_kk?: string | null;
   document_genitive_kk?: string | null;
+  document_genitive_ru?: string | null;
   children?: OrgUnitRow[];
 };
 
@@ -34,6 +36,7 @@ type OrgTreeNode = {
   group_id: number | null;
   name_kk?: string | null;
   document_genitive_kk?: string | null;
+  document_genitive_ru?: string | null;
   children: OrgTreeNode[];
 };
 
@@ -74,8 +77,9 @@ function ownGroupId(row: OrgUnitRow | OrgTreeNode): number | null {
   return null;
 }
 
-function formsOf(row: { name_kk?: string | null; document_genitive_kk?: string | null }) {
+function formsOf(row: { name_kk?: string | null; document_genitive_kk?: string | null; document_genitive_ru?: string | null }) {
   return {
+    ...(row.document_genitive_ru != null ? {document_genitive_ru:row.document_genitive_ru} : {}),
     ...(row.name_kk != null ? { name_kk: row.name_kk } : {}),
     ...(row.document_genitive_kk != null ? { document_genitive_kk: row.document_genitive_kk } : {}),
   };

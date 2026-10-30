@@ -13,6 +13,7 @@ import type {
   PersonnelOrderPrintViewModel,
 } from "./personnelOrderPrintViewModel";
 import { normalizePersonnelOrderBasisText } from "./personnelOrderBasisText";
+import { educationPrintModel } from "./educationPrint";
 
 /** Escape text for trusted internal HTML templates (ViewModel → markup). */
 export function escapePersonnelOrderPrintHtml(value: string): string {
@@ -104,7 +105,7 @@ function renderItem(
         ...(manual("kk") ? [manual("kk")!] : renderPersonnelOrderPrintItemText(item.context, "kk")),
         ...(manual("ru") ? [manual("ru")!] : renderPersonnelOrderPrintItemText(item.context, "ru")),
       ];
-  const tenure = ["RETURN_FROM_CHILDCARE_LEAVE", "SUPPLEMENTARY_PAY", "QUALIFICATION_CATEGORY"].includes(item.itemTypeCode)
+  const tenure = ["PERSONAL_DATA_CHANGE", "RETURN_FROM_CHILDCARE_LEAVE", "SUPPLEMENTARY_PAY", "QUALIFICATION_CATEGORY", "SERVICE_LENGTH_CHANGE", "EDUCATION_INFORMATION_CHANGE"].includes(item.itemTypeCode)
     ? []
     : language === "kk"
       ? ["Жұмыс өтілі әлі анықталмаған."]
@@ -136,7 +137,9 @@ function renderItems(
 ): string {
   const dictionaries = printDictionariesForLanguage(language);
   const preambleLines = model.preamble
-    ? resolveLocalizedLines(model.preamble, language).filter((line) => !isOrderVerbLine(line))
+    ? resolveLocalizedLines(model.preamble, language)
+        .map(line => model.documentTypeCode === "SERVICE_LENGTH_CHANGE" ? line.replace(/\s*(?:ПРИКАЗЫВАЮ|БҰЙЫРАМЫН)\s*:\s*$/iu, "").trim() : line)
+        .filter((line) => Boolean(line) && !isOrderVerbLine(line))
     : [];
   const preamble =
     preambleLines.length > 0
@@ -164,6 +167,13 @@ function renderBasis(
   language: PersonnelOrderPrintLanguage,
 ): string {
   if (!model.basis.length) return "";
+  if (model.documentTypeCode === "EDUCATION_INFORMATION_CHANGE") {
+    // ID60 owns its complete RU/KK grounds, including «Негіз:» and punctuation.
+    // Generic print normalization would rename that label and alter the wording.
+    const lines = model.basis.flatMap(entry => resolveLocalizedLines(entry, language));
+    return `<section class="personnel-order-print-block personnel-order-print-basis" data-testid="personnel-order-print-basis">${lines
+      .map(line => `<p>${escapePersonnelOrderPrintHtml(line)}</p>`).join("")}</section>`;
+  }
   const dictionaries = printDictionariesForLanguage(language);
   const rawLines = model.basis.flatMap((entry) => resolveLocalizedLines(entry, language));
   const isChildcareReturn = String(model.documentTypeCode).toUpperCase() === "RETURN_FROM_CHILDCARE_LEAVE";
@@ -252,7 +262,7 @@ function renderAcknowledgement(
 ): string {
   const acknowledgementRows = model.acknowledgements.length
     ? model.acknowledgements
-    : [{ employeeId: null, employeeName: null, acknowledgedOn: null }];
+    : [{ employeeId: null, employeeName: null, acknowledgedOn: null, personalDataNames: undefined }];
   const rows = acknowledgementRows
     .map((row) => {
       const fullName = String(row.employeeName || "").trim();
@@ -266,7 +276,7 @@ function renderAcknowledgement(
       const content = locales.map((locale) => {
         const isKk = locale === "kk";
         const familiarization = isKk ? "Бұйрықпен таныстым:" : "С приказом ознакомлен(а):";
-        const formattedName = isKk ? kkName : ruName;
+        const formattedName = row.personalDataNames ? row.personalDataNames[locale] : isKk ? kkName : ruName;
         const dateLine = date || (isKk ? "«___» ______________ 20___ ж." : "«___» ______________ 20___ г.");
         return `<div class="personnel-order-print-ack-name">${escapePersonnelOrderPrintHtml(familiarization)} ___________________&nbsp;&nbsp;${escapePersonnelOrderPrintHtml(formattedName)}</div>
     <div class="personnel-order-print-ack-date">${escapePersonnelOrderPrintHtml(dateLine)}</div>`;
@@ -302,7 +312,8 @@ export function buildPersonnelOrderPrintDocumentHtml(
   model: PersonnelOrderPrintViewModel,
   language: PersonnelOrderPrintLanguage,
 ): string {
-  return `<article class="personnel-order-print-document" data-testid="personnel-order-print-document"${model.documentTypeCode === "QUALIFICATION_CATEGORY" ? ' data-category-document="true"' : ''} data-language="${escapePersonnelOrderPrintHtml(language)}" data-status="${escapePersonnelOrderPrintHtml(model.status)}">
+  model = educationPrintModel(model, language);
+  return `<article class="personnel-order-print-document" data-testid="personnel-order-print-document"${model.documentTypeCode === "QUALIFICATION_CATEGORY" ? ' data-category-document="true"' : ''}${model.documentTypeCode === "EDUCATION_INFORMATION_CHANGE" ? ' data-education-document="true"' : ''} data-language="${escapePersonnelOrderPrintHtml(language)}" data-status="${escapePersonnelOrderPrintHtml(model.status)}">
   ${renderStatusMark(model, language)}
   <div class="personnel-order-print-body">
     ${renderHeader(model, language)}

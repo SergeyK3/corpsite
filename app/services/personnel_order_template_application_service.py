@@ -75,6 +75,18 @@ def _order(conn:Any,order_id:int):
  return order,list(items),templates
 
 def _values(conn:Any,item:Mapping[str,Any],template:Mapping[str,Any]|None=None):
+ if item["item_type_code"] == "PERSONAL_DATA_CHANGE":
+  from app.services.personnel_order_personal_data_contract import personal_data_values
+  try: return personal_data_values(item['payload'] or {}), [], []
+  except ValueError as exc: raise TemplateApplicationError(str(exc)) from exc
+ if item["item_type_code"] == "EDUCATION_INFORMATION_CHANGE":
+  from app.services.personnel_order_education_template_contract import education_values
+  try: return education_values(item['payload'] or {}), [], []
+  except ValueError as exc: raise TemplateApplicationError(str(exc)) from exc
+ if item["item_type_code"] == "SERVICE_LENGTH_CHANGE":
+  from app.services.personnel_order_service_length_contract import service_length_values
+  try: return service_length_values(item['payload'] or {}), [], []
+  except ValueError as exc: raise TemplateApplicationError(str(exc)) from exc
  if item["item_type_code"] == "QUALIFICATION_CATEGORY":
   from app.services.personnel_order_category_contract import category_values
   try: return category_values(item['payload'] or {}), [], []
@@ -168,6 +180,9 @@ def _render(template:Mapping[str,Any],values:Mapping[str,str], *, draft_preview:
  try: template=printable_template(template,preview=draft_preview or item_only)
  except ValueError as exc: raise TemplateApplicationError(str(exc)) from exc
  texts={k:template[k] for k in _FIELDS}
+ if template.get('item_type_code') == 'EDUCATION_INFORMATION_CHANGE':
+  from app.services.personnel_order_education_template_contract import bind_editor_texts
+  texts = bind_editor_texts(texts)
  if draft_preview:
   from app.services.personnel_order_template_draft_service import _validate
   _validate(texts,str(template["item_type_code"]),require_complete=False)
@@ -181,12 +196,17 @@ def _render(template:Mapping[str,Any],values:Mapping[str,str], *, draft_preview:
  missing=set()
  from app.services.personnel_order_service_area_contract import enabled
  optional_tokens={'replacement.clause','allowance.term'} if enabled(texts) else set()
+ if template.get('item_type_code') == 'EDUCATION_INFORMATION_CHANGE':
+  optional_tokens.update({'education.level_ru', 'education.level_kk', 'education.specialty_ru', 'education.specialty_kk'})
  if template.get('item_type_code') == 'QUALIFICATION_CATEGORY':
   from app.services.personnel_order_category_classifier_contract import is_classifier_template
   if is_classifier_template(texts): optional_tokens.update({'medical_specialty.clause_ru','medical_specialty.clause_kk'})
  from app.services.personnel_order_work_allowance_contract import enabled as work_enabled
  if work_enabled(texts): optional_tokens.add('concurrent.rate')
  def each(key,value):
+  if template.get('item_type_code') == 'PERSONAL_DATA_CHANGE':
+   from app.services.personnel_order_personal_data_contract import adapt_identity_date_clause
+   value = adapt_identity_date_clause(value, values)
   source_text = value
   def repl(match):
    token=match.group(1)
@@ -218,8 +238,10 @@ def _preview(conn,order_id):
  order,items,templates=_order(conn,order_id); template=templates[int(items[0]["item_id"])]; combined=len({t["template_version_id"] for t in templates.values()})>1 or order["order_type_code"]=="COMPOSITE"; item_ids=[int(x["item_id"]) for x in items]; entries=[]
  for item in items:
   item_template=templates[int(item["item_id"])]
-  values,warnings,missing_data=_values(conn,item,item_template)
-  try: rendered=_render(item_template,values,item_only=combined)
+  warnings,missing_data=[],[]
+  try:
+   values,warnings,missing_data=_values(conn,item,item_template)
+   rendered=_render(item_template,values,item_only=combined)
   except TemplateApplicationError as exc:
    missing_data.append(str(exc)); rendered={"body_template_ru":"","body_template_kk":"","basis_template_ru":"","basis_template_kk":""}
   entries.append({"order_item_id":int(item["item_id"]),"item_number":int(item["item_number"]),"template":{key:item_template[key] for key in ("template_version_id","version_number","item_type_code")},"current":{},"proposed":{"body_ru":rendered["body_template_ru"],"body_kk":rendered["body_template_kk"],"basis_ru":rendered["basis_template_ru"],"basis_kk":rendered["basis_template_kk"]},"warnings":warnings,"missing_data":missing_data,"blocked":bool(missing_data)})
@@ -228,6 +250,9 @@ def _preview(conn,order_id):
  overrides=[{"block_id":x["block_id"],"scope":x["scope"],"block_type":str(x["block_type"]).upper(),"language":str(x["locale"]).upper(),"order_item_id":x["order_item_id"]} for x in blocks if (x["override_text"] or "").strip()]
  prior=conn.execute(text("SELECT a.template_application_id application_id,a.template_version_id,t.version_number template_version_number,a.applied_at,a.applied_by_user_id FROM public.personnel_order_template_applications a JOIN public.personnel_order_template_versions t ON t.template_version_id=a.template_version_id WHERE a.order_id=:id ORDER BY a.applied_at DESC,a.template_application_id DESC LIMIT 1"),{"id":order_id}).mappings().first()
  printed=printable_template(template,preview=True)
+ if template['item_type_code'] in {'SERVICE_LENGTH_CHANGE', 'EDUCATION_INFORMATION_CHANGE'} and not entries[0]['blocked']:
+  values, _, _ = _values(conn, items[0], template)
+  printed = _render(template, values)
  result={"available":True,"template":{"template_version_id":template["template_version_id"],"version_number":template["version_number"],"item_type_code":template["item_type_code"]},"has_overrides":bool(overrides),"override_blocks":overrides,"has_prior_application":bool(prior),"last_application":dict(prior) if prior else None,"order_current":{f"{x['locale']}:{x['block_type']}":dict(x) for x in blocks if x["scope"]=="ORDER"},"order_proposed":{k:printed[k] for k in ("title_ru","title_kk","preamble_ru","preamble_kk")},"items":entries,"order_revision":order["document_revision"]}
  if combined:
   from app.services.personnel_order_item_templates import common_order_text

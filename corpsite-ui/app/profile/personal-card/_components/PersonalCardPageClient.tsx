@@ -1,5 +1,6 @@
 "use client";
 
+import {educationKindLabel} from "@/app/directory/personnel/_lib/pprCardPresentation";
 import { useCallback, useEffect, useState } from "react";
 
 import PositionCabinetSectionShell from "@/components/PositionCabinetSectionShell";
@@ -30,7 +31,6 @@ function recordText(record: Record<string, unknown>): string {
   return values[0] ?? "Запись добавлена";
 }
 
-const educationKindLabels: Record<string, string> = { basic: "Основное", internship: "Интернатура", residency: "Резидентура", masters: "Магистратура", phd: "Докторантура", other: "Другое" };
 const institutionTypeLabels: Record<string, string> = { university: "ВУЗ", college: "Колледж", other: "Другое", unknown: "Не указано" };
 
 function textValue(value: unknown): string {
@@ -53,7 +53,7 @@ function EducationRecords({ card }: { card: SelfPersonalCard }) {
     const kind = textValue(record.education_kind);
     const institutionType = textValue(record.institution_type);
     return <article key={`education-${index}`} className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800"><RecordFields fields={[
-      ["Вид образования", educationKindLabels[kind] ?? kind], ["Тип учреждения", institutionTypeLabels[institutionType] ?? institutionType],
+      ["Вид образования", record.education_kind_name_ru ? textValue(record.education_kind_name_ru) : educationKindLabel(kind)], ["Тип учреждения", institutionTypeLabels[institutionType] ?? institutionType],
       ["Учебное заведение", textValue(record.institution_name)], ["Специальность", textValue(record.specialty)],
       ["Квалификация", textValue(record.qualification)], ["Дата начала", dateValue(record.started_at)],
       ["Дата окончания", dateValue(record.completed_at)], ["Номер диплома", textValue(record.diploma_number)],

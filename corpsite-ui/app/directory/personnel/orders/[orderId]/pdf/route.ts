@@ -15,6 +15,7 @@ import {
 } from "../../../_lib/personnelOrderPdfFilename";
 import { getPersonnelOrderPdfRenderer } from "../../../_lib/personnelOrderPdfRenderer";
 import { parsePersonnelOrderPrintLanguage } from "../../../_lib/personnelOrderPrintLanguage";
+import { EducationPrintError } from "../../../_lib/educationPrint";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -129,6 +130,10 @@ export async function GET(request: Request, context: RouteParams) {
     });
   } catch (err) {
     const duration_ms = Date.now() - started;
+    if (err instanceof EducationPrintError) {
+      logPersonnelOrderPdfAudit({ ...auditBase, result: "error", duration_ms, error_code: err.code });
+      return jsonError(422, err.code, err.message);
+    }
     if (err instanceof PersonnelOrderPdfDataError) {
       logPersonnelOrderPdfAudit({
         ...auditBase,

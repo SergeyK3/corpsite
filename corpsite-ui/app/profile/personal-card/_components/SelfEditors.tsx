@@ -1,5 +1,6 @@
 "use client";
 
+import {useEducationProgramKinds,programKindOptions} from "@/app/directory/personnel/_lib/educationProgramKinds";
 import { FormEvent, useEffect, useState } from "react";
 
 import PersonnelDayDateField from "@/lib/PersonnelDayDateField";
@@ -150,11 +151,14 @@ export function ContactsEditor({ onSaved }: EditorProps) {
   </EditorCard>;
 }
 
-const educationKinds = [["basic", "Основное"], ["internship", "Интернатура"], ["residency", "Резидентура"], ["masters", "Магистратура"], ["phd", "Докторантура"], ["other", "Другое"]];
 const institutionTypes = [["university", "ВУЗ"], ["college", "Колледж"], ["other", "Другое"], ["unknown", "Не указано"]];
 
 export function EducationEditor({ onSaved }: EditorProps) {
+  const programKinds=useEducationProgramKinds();
   const draft = useDraft({ education_kind: "basic", institution_type: "university", institution_name: "", specialty: "", qualification: "", started_at: "", completed_at: "", diploma_number: "", document_date: "" });
+  useEffect(()=>{
+    if(!programKinds.loading && programKinds.items.length && !programKinds.items.some(row=>row.is_active && row.code===draft.values.education_kind) && draft.values.education_kind) draft.change("education_kind", "");
+  },[programKinds.loading,programKinds.items,draft.values.education_kind]);
   const labels = { institution_name: "Учебное заведение", specialty: "Специальность", completed_at: "Дата окончания" };
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -168,7 +172,7 @@ export function EducationEditor({ onSaved }: EditorProps) {
     <h2 className="mb-4 text-xl font-semibold text-slate-900">Образование</h2>
     <form onSubmit={submit} className="space-y-4">
       {draft.editing && <div className="grid gap-4 md:grid-cols-2">
-        <label className="block text-base font-medium text-slate-800">Вид образования<select className={selectClassName} value={draft.values.education_kind} onChange={(e) => draft.change("education_kind", e.target.value)}>{educationKinds.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+        <label className="block text-base font-medium text-slate-800">Вид образования<select required className={selectClassName} value={draft.values.education_kind} onChange={(e) => draft.change("education_kind", e.target.value)}><option value="">?? ???????</option>{programKindOptions(programKinds.items).map(({value,label}) => <option key={value} value={value}>{label}</option>)}</select></label>
         <label className="block text-base font-medium text-slate-800">Тип учреждения<select className={selectClassName} value={draft.values.institution_type} onChange={(e) => draft.change("institution_type", e.target.value)}>{institutionTypes.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
         <TextField required label="Учебное заведение" value={draft.values.institution_name} onChange={(value) => draft.change("institution_name", value)} />
         <TextField label="Специальность" value={draft.values.specialty} onChange={(value) => draft.change("specialty", value)} />

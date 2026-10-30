@@ -154,6 +154,9 @@ class PprGeneralResponse(BaseModel):
 class PprEducationRecordResponse(BaseModel):
     record_id: int | None = None
     education_kind: str
+    education_kind_name_ru: str | None = None
+    education_kind_name_kk: str | None = None
+    education_kind_active: bool | None = None
     institution_type: str | None = None
     institution_name: str | None = None
     specialty: str | None = None

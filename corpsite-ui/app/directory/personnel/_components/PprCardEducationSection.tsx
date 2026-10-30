@@ -21,7 +21,7 @@ function EducationRecordCard({ record }: { record: PprEducationRecordResponse })
       <dl className="mt-2 grid gap-1 text-xs text-zinc-600 dark:text-zinc-400 sm:grid-cols-2">
         <div>
           <dt className="inline">Вид: </dt>
-          <dd className="inline">{educationKindLabel(record.education_kind)}</dd>
+          <dd className="inline">{record.education_kind_name_ru || educationKindLabel(record.education_kind)}</dd>
         </div>
         {record.specialty ? (
           <div>

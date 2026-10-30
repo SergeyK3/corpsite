@@ -27,6 +27,8 @@ def list_personnel_order_template_catalog(*, include_saved_names: bool = False) 
             rows[-1].update(optional_fields=list(OPTIONAL_ORDER_FIELDS), computed_fields=list(COMPUTED_ORDER_FIELDS),
                             formalization_warning=FORMALIZATION_WARNING,
                             required_variables={field:list(codes) for field,codes in REQUIRED.items()})
+        if item_type_code == 'SERVICE_LENGTH_CHANGE':
+            rows[-1].update(formalization_warning=None, optional_fields=[], computed_fields=[])
     if include_saved_names:
         from sqlalchemy import text
         from app.services.personnel_order_template_draft_service import engine, independent_template_schema_available

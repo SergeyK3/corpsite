@@ -169,6 +169,7 @@ def _load_document_kind(conn, document_kind_id: int) -> Optional[Dict[str, Any]]
             SELECT document_kind_id, code, name, is_active
             FROM public.document_kinds
             WHERE document_kind_id = :document_kind_id
+            FOR SHARE
             """
         ),
         {"document_kind_id": int(document_kind_id)},
@@ -295,6 +296,7 @@ def _validate_payload(
     file_url: Optional[str],
     lifecycle_status: Optional[str],
     on_create: bool,
+    previous_document_kind_id: Optional[int] = None,
 ) -> Tuple[Dict[str, Any], str, Optional[int]]:
     doc_type = _load_document_type(conn, document_type_id)
     if doc_type is None:
@@ -306,7 +308,7 @@ def _validate_payload(
         doc_kind = _load_document_kind(conn, document_kind_id)
         if doc_kind is None:
             raise EmployeeDocumentValidationError("document_kind_id not found.")
-        if not bool(doc_kind.get("is_active")):
+        if not bool(doc_kind.get("is_active")) and (on_create or document_kind_id != previous_document_kind_id):
             raise EmployeeDocumentValidationError("document_kind is not active.")
 
     status = _validate_lifecycle_for_api(lifecycle_status, on_create=on_create)
@@ -810,6 +812,7 @@ def update_employee_document(
             file_url=merged_file_url,
             lifecycle_status=merged_lifecycle,
             on_create=False,
+            previous_document_kind_id=existing.get("document_kind_id"),
         )
 
         conn.execute(

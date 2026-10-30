@@ -6,6 +6,9 @@ import { PERSONNEL_ORDER_TYPE_LABELS } from "./personnelOrderLabels";
  * RATE_CHANGE is a UI-only alias that persists as backend TRANSFER with to_rate only.
  */
 export type PersonnelOrderItemFormType =
+  | "PERSONAL_DATA_CHANGE"
+  | "EDUCATION_INFORMATION_CHANGE"
+  | "SERVICE_LENGTH_CHANGE"
   | "QUALIFICATION_CATEGORY"
   | "SUPPLEMENTARY_PAY"
   | "TRANSFER"
@@ -87,6 +90,24 @@ function entry(
 }
 
 const REGISTRY: Record<PersonnelOrderItemFormType, ItemFormRegistryEntry> = {
+  PERSONAL_DATA_CHANGE: entry({
+    employeePicker:true,employeePickerActiveOnly:true,employeePickerMode:"required",showCurrentPlacement:true,
+    showTargetPlacement:false,showTargetRate:false,showTerminationReason:false,showConcurrentDutyStartFields:false,
+    showConcurrentDutyEndFields:false,showHirePlacement:false,clearTargetOnEmployeeChange:false,
+    backendItemType:"PERSONAL_DATA_CHANGE",orgPlacementSectionTitle:"",fieldSectionOrder:["item_type","employee","additional"],
+  }),
+  EDUCATION_INFORMATION_CHANGE: entry({
+    employeePicker:true,employeePickerActiveOnly:true,employeePickerMode:"required",showCurrentPlacement:true,
+    showTargetPlacement:false,showTargetRate:false,showTerminationReason:false,showConcurrentDutyStartFields:false,
+    showConcurrentDutyEndFields:false,showHirePlacement:false,clearTargetOnEmployeeChange:false,
+    backendItemType:"EDUCATION_INFORMATION_CHANGE",orgPlacementSectionTitle:"",fieldSectionOrder:["item_type","employee","additional"],
+  }),
+  SERVICE_LENGTH_CHANGE: entry({
+    employeePicker:true,employeePickerActiveOnly:true,employeePickerMode:"required",showCurrentPlacement:true,
+    showTargetPlacement:false,showTargetRate:false,showTerminationReason:false,showConcurrentDutyStartFields:false,
+    showConcurrentDutyEndFields:false,showHirePlacement:false,clearTargetOnEmployeeChange:false,
+    backendItemType:"SERVICE_LENGTH_CHANGE",orgPlacementSectionTitle:"",fieldSectionOrder:["item_type","employee","additional"],
+  }),
   SUPPLEMENTARY_PAY: entry({
     employeePicker: true, employeePickerActiveOnly: true, employeePickerMode: "required",
     showCurrentPlacement: false, showTargetPlacement: false, showTargetRate: false,
@@ -247,6 +268,9 @@ export const PERSONNEL_ORDER_ITEM_FORM_TYPE_OPTIONS: ReadonlyArray<{
   value: PersonnelOrderItemFormType;
   label: string;
 }> = [
+  { value: "PERSONAL_DATA_CHANGE", label: PERSONNEL_ORDER_TYPE_LABELS.PERSONAL_DATA_CHANGE },
+  { value: "EDUCATION_INFORMATION_CHANGE", label: PERSONNEL_ORDER_TYPE_LABELS.EDUCATION_INFORMATION_CHANGE },
+  { value: "SERVICE_LENGTH_CHANGE", label: PERSONNEL_ORDER_TYPE_LABELS.SERVICE_LENGTH_CHANGE },
   { value: "SUPPLEMENTARY_PAY", label: PERSONNEL_ORDER_TYPE_LABELS.SUPPLEMENTARY_PAY },
   { value: "LEAVE.ANNUAL.GRANT", label: "Ежегодный трудовой отпуск" },
   { value: "LEAVE.CHILDCARE.GRANT", label: PERSONNEL_ORDER_TYPE_LABELS["LEAVE.CHILDCARE.GRANT"] },

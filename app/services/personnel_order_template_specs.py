@@ -53,9 +53,15 @@ from app.services.personnel_order_recall_contract import VARIABLES as RECALL_VAR
 from app.services.personnel_order_category_contract import TYPE as CATEGORY_TYPE, VARIABLES as CATEGORY_VARIABLES, REQUIRED as CATEGORY_REQUIRED, PREVIEW as CATEGORY_PREVIEW
 from app.services.personnel_order_category_classifier_contract import VARIABLES as CLASSIFIER_VARIABLES
 
+from app.services.personnel_order_education_template_contract import TYPE as EDUCATION_TYPE, VARIABLES as EDUCATION_VARIABLES, REQUIRED as EDUCATION_REQUIRED, PREVIEW as EDUCATION_PREVIEW
+from app.services.personnel_order_personal_data_contract import TYPE as PERSONAL_DATA_TYPE, VARIABLES as PERSONAL_DATA_VARIABLES, REQUIRED as PERSONAL_DATA_REQUIRED, preview_context as personal_data_preview_context
 TEMPLATE_ONLY_TYPES = set()
+from app.services.personnel_order_service_length_contract import TYPE as SERVICE_LENGTH_TYPE, VARIABLES as SERVICE_LENGTH_VARIABLES, REQUIRED as SERVICE_LENGTH_REQUIRED, PREVIEW as SERVICE_LENGTH_PREVIEW
 
 PERSONNEL_ORDER_TEMPLATE_SPECS = {
+    PERSONAL_DATA_TYPE: _spec(PERSONAL_DATA_TYPE, PERSONAL_DATA_VARIABLES, required=PERSONAL_DATA_REQUIRED, preview=personal_data_preview_context()),
+    EDUCATION_TYPE: _spec(EDUCATION_TYPE, EDUCATION_VARIABLES, required=EDUCATION_REQUIRED, preview=EDUCATION_PREVIEW),
+    SERVICE_LENGTH_TYPE: _spec(SERVICE_LENGTH_TYPE, SERVICE_LENGTH_VARIABLES, required=SERVICE_LENGTH_REQUIRED, preview=SERVICE_LENGTH_PREVIEW),
     CATEGORY_TYPE: _spec(CATEGORY_TYPE, CATEGORY_VARIABLES + CLASSIFIER_VARIABLES, required=CATEGORY_REQUIRED, preview=CATEGORY_PREVIEW),
     'LEAVE.ANNUAL.RECALL': _spec('LEAVE.ANNUAL.RECALL', RECALL_VARIABLES, required=RECALL_REQUIRED, preview={'ru': {'effective_date': '[[Дата отзыва]]'}, 'kk': {'effective_date': '[[Шақырту күні]]'}}),
     "HIRE": _spec("HIRE", _COMMON), "TRANSFER": _spec("TRANSFER", _COMMON + ("employee.full_name_dative_ru", "employee.full_name_accusative_ru")),

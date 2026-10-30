@@ -231,6 +231,39 @@ async function chooseTypeInMenu(type: string) {
   fireEvent.click(screen.getByRole("menuitem", { name: personnelOrderTypeLabel(type, "kk") }));
 }
 
+it("creates SERVICE_LENGTH_CHANGE with manual FIO and explicit RU/KK forms without employee selection", async () => {
+  const variant={template_id:3,template_version_id:3,version_number:1,name_ru:'Об изменении стажа',name_kk:'Жұмыс тәжірибесін өзгерту туралы',title_ru:'Об изменении стажа',title_kk:'Жұмыс тәжірибесін өзгерту туралы',is_default:false};
+  vi.mocked(getPersonnelOrderPublishedVariants).mockImplementation(async code=>({items:code==='SERVICE_LENGTH_CHANGE'?[variant]:[],independent_supported:true,creation_supported:true}));
+  setup();
+  vi.mocked(getPersonnelOrderPublishedTemplateTitle).mockResolvedValue({...variant,item_type_code:'SERVICE_LENGTH_CHANGE'});
+  await chooseTypeInMenu('SERVICE_LENGTH_CHANGE');
+  fireEvent.click(screen.getByRole('radio',{name:'Ввести вручную'}));
+  expect(screen.queryByRole('combobox',{name:'Сотрудник'})).not.toBeInTheDocument();
+  expect(screen.getByLabelText('ФИО в родительном падеже RU')).toHaveValue('');
+  expect(screen.getByLabelText('ФИО в ілік септік KK')).toHaveValue('');
+  for(const [label,value] of [
+    ['Номер приказа','TEST-MANUAL-SUBJECT'],['Дата приказа','2026-10-29'],
+    ['ФИО сотрудника вручную','Ручной Сотрудник'],['ФИО в родительном падеже RU','ФОРМА RU'],['ФИО в ілік септік KK','ҚОЛМЕН KK'],
+    ['Должность в родительном падеже RU','врача'],['Должность в тексте KK','дәрігері'],
+    ['Подразделение в родительном падеже RU','отделения'],['Подразделение в ілік септік KK','бөлімшесінің'],
+    ['Дата начала действия','2026-11-01'],['Новый стаж RU','10 лет'],['Новый стаж KK','10 жыл'],
+    ['Основание RU','Ручное основание'],['Основание KK','Қолмен негіз'],
+  ]) fireEvent.change(screen.getByLabelText(label),{target:{value}});
+  expect(getEmployee).not.toHaveBeenCalled();
+  expect(getEmployees).not.toHaveBeenCalled();
+  vi.mocked(previewPersonnelOrderHeaderDuplicate).mockResolvedValue({blocking:false,warnings:[],candidates:[]});
+  vi.mocked(createManualPersonnelOrderDraft).mockResolvedValue({order_id:123,order_number:'TEST-MANUAL-SUBJECT'} as never);
+  await waitFor(()=>expect(screen.getByRole('button',{name:'Создать приказ'})).toBeEnabled());
+  fireEvent.click(screen.getByRole('button',{name:'Создать приказ'}));
+  await waitFor(()=>expect(createManualPersonnelOrderDraft).toHaveBeenCalledWith(expect.objectContaining({
+    item_type_code:'SERVICE_LENGTH_CHANGE',template_version_id:3,employee_id:null,
+    unresolved_subject:expect.objectContaining({full_name:'Ручной Сотрудник'}),
+    item_payload:expect.objectContaining({subject_mode:'MANUAL',employee_id:null,source_employee_name:'Ручной Сотрудник',
+      document_forms_ru:expect.objectContaining({employee_full_name_genitive_ru:'ФОРМА RU'}),
+      document_forms_kk:expect.objectContaining({employee_full_name_genitive_kk:'ҚОЛМЕН KK'})}),
+  })));
+});
+
 it.each(['25','35','50'])('creates simple supplementary pay through server template 6/version 11 with %s percent and no replacement or rates', async percent=>{
   const variant={template_id:6,template_version_id:11,version_number:1,name_ru:'О дополнительной оплате',name_kk:'Қосымша ақы туралы',title_ru:'О дополнительной оплате',title_kk:'Қосымша ақы туралы',is_default:true};
   vi.mocked(getPersonnelOrderPublishedVariants).mockImplementation(async code=>({items:code==='SUPPLEMENTARY_PAY'?[variant]:[],independent_supported:true}));
@@ -298,6 +331,56 @@ it.each(PERSONNEL_ORDER_CREATE_TYPE_OPTIONS.map(option => option.value))("offers
   vi.mocked(getEmployee).mockResolvedValue({ ...employeeDetail, assignments: [], has_current_assignment: true, position: { ...employee.position, job_code: "PHYSICIAN", job_nameru: "Врач каталога", job_namekk: "Дәрігер", job_namekk_doc: "дәрігері каталога" } });
   await chooseTypeInMenu(type);
   await selectEmployee();
+  if(type==='PERSONAL_DATA_CHANGE'){
+    expect(screen.getByTestId('order-personal-data-fields')).toBeInTheDocument();
+    expect(screen.getByLabelText('Изменяемые персональные данные RU')).toHaveValue('Фамилия');
+    expect(screen.getByLabelText('Изменяемые персональные данные KK')).toHaveValue('Тегі');
+    expect(screen.getByLabelText('Новое ФИО RU')).toHaveValue('');
+    expect(screen.getByLabelText('Новое ФИО KK')).toHaveValue('');
+    expect(screen.getByTestId('personal-data-acknowledgement-fields')).toBeInTheDocument();
+    expect(screen.getByTestId('personal-data-acknowledgement-preview')).toHaveTextContent('заполните новую фамилию RU');
+    fireEvent.change(screen.getByLabelText('Новая фамилия RU'),{target:{value:'Новая Фамилия'}});
+    fireEvent.change(screen.getByLabelText('Новое имя RU'),{target:{value:'Юлия'}});
+    fireEvent.change(screen.getByLabelText('Новая фамилия KK'),{target:{value:'Жаңа Тегі'}});
+    fireEvent.change(screen.getByLabelText('Новое имя KK'),{target:{value:'Әлия'}});
+    expect(screen.getByTestId('personal-data-acknowledgement-preview')).toHaveTextContent('Новая Фамилия Ю.');
+    expect(screen.getByTestId('personal-data-acknowledgement-preview')).toHaveTextContent('Ә. Жаңа Тегі');
+    fireEvent.change(screen.getByLabelText('Новое ФИО RU'),{target:{value:'Новое ФИО TEST RU'}});
+    expect(screen.getByLabelText('Новое ФИО RU')).toHaveValue('Новое ФИО TEST RU');
+    expect(screen.getByLabelText('Новое ФИО KK')).toHaveValue('');
+    expect(screen.getByLabelText('Номер удостоверения личности')).toHaveValue('');
+    expect(screen.queryByTestId('personnel-order-text-forms')).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Должность в родительном падеже RU'),{target:{value:'врача каталога'}});
+    expect(screen.getByLabelText('Должность в родительном падеже RU')).toHaveValue('врача каталога');
+    return;
+  }
+  if (type === "EDUCATION_INFORMATION_CHANGE") {
+    expect(screen.getByTestId('order-education-fields')).toBeInTheDocument();
+    expect(screen.queryByTestId('order-category-fields')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Уровень образования RU')).toHaveValue('');
+    expect(screen.getByLabelText('Специальность KK')).toHaveValue('');
+    expect(screen.getByLabelText('Номер документа')).toHaveValue('');
+    fireEvent.change(screen.getByLabelText('Должность в родительном падеже RU'), {target:{value:'врача каталога'}});
+    expect(screen.getByLabelText('Должность в родительном падеже RU')).toHaveValue('врача каталога');
+    expect(screen.queryByLabelText('Категория квалификации')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Дата окончания категории')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('personnel-order-text-forms')).not.toBeInTheDocument();
+    return;
+  }
+  if (type === "SERVICE_LENGTH_CHANGE") {
+    expect(screen.getByTestId('order-service-length-fields')).toBeInTheDocument();
+    expect(screen.queryByTestId('order-category-fields')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Новый стаж RU')).toHaveValue('');
+    expect(screen.getByLabelText('Новый стаж KK')).toHaveValue('');
+    expect(screen.getByLabelText('Основание RU')).toHaveValue('');
+    expect(screen.getByLabelText('Основание KK')).toHaveValue('');
+    fireEvent.change(screen.getByLabelText('Должность в родительном падеже RU'),{target:{value:'врача каталога'}});
+    expect(screen.getByLabelText('Должность в родительном падеже RU')).toHaveValue('врача каталога');
+    expect(screen.queryByLabelText('Категория квалификации')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Дата окончания категории')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('personnel-order-text-forms')).not.toBeInTheDocument();
+    return;
+  }
   if(type === "LEAVE.ANNUAL.RECALL") {
     expect(screen.getByLabelText("Должность")).toHaveValue("Врач каталога");
     expect(screen.getByLabelText("Лауазым KZ")).toHaveValue("Дәрігер");

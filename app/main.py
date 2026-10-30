@@ -149,6 +149,10 @@ app.include_router(ppr_self_router)
 app.include_router(ppr_self_orders_router)
 app.include_router(ppr_command_router)
 app.include_router(ppr_card_command_router)
+from app.api.education_program_kinds_router import router as education_program_kinds_router
+app.include_router(education_program_kinds_router)
+from app.api.education_document_references_router import router as education_document_references_router
+app.include_router(education_document_references_router)
 app.include_router(personnel_verification_router)
 app.include_router(personnel_intake_public_router)
 app.include_router(personnel_intake_tenure_router)

@@ -1,3 +1,4 @@
+import type {ManualOrderSubject} from "./personnelOrderManualSubject";
 import { buildHeaders } from "@/lib/api";
 import { formatThrownError } from "@/lib/i18n";
 import { resolveApiUrl } from "@/lib/apiBase";
@@ -352,6 +353,7 @@ export type PersonnelOrderSignatoryDefault = {
 };
 
 export type PersonnelOrderItemCreatePayload = {
+  unresolved_subject?: ManualOrderSubject;
   template_version_id?: number;
   document_subject_context?: {org_unit_name?: string | null; position_name?: string | null};
   item_type_code: string;
@@ -364,6 +366,7 @@ export type PersonnelOrderItemCreatePayload = {
 };
 
 export type PersonnelOrderItemUpdatePayload = {
+  unresolved_subject?: ManualOrderSubject;
   template_version_id?: number;
   item_type_code?: string;
   employee_id?: number | null;

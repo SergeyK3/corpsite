@@ -210,10 +210,22 @@ class PersonnelOrderUpdateIn(BaseModel):
     comment: Optional[str] = Field(default=None, max_length=2000)
 
 
+class PersonnelOrderUnresolvedSubjectIn(BaseModel):
+    """Typed, unlinked subject supplied by HR when the employee is not in the directory."""
+
+    model_config = {"extra": "forbid"}
+    full_name: str = Field(..., min_length=1, max_length=300)
+    org_unit_name: str = Field(default="", max_length=300)
+    position_name: str = Field(default="", max_length=300)
+    specialty: str = Field(default="", max_length=300)
+
+
+
 class PersonnelOrderItemCreateIn(BaseModel):
     template_version_id: Optional[int] = Field(default=None, ge=1)
     document_subject_context: Optional[Dict[str, Any]] = None
     item_type_code: str = Field(..., min_length=1, max_length=80)
+    unresolved_subject: Optional[PersonnelOrderUnresolvedSubjectIn] = None
     employee_id: Optional[int] = Field(default=None, ge=1)
     effective_date: Optional[date] = None
     period_start: Optional[date] = None
@@ -227,6 +239,7 @@ class PersonnelOrderItemUpdateIn(BaseModel):
     model_config = {"extra": "forbid"}
 
     item_type_code: Optional[str] = Field(default=None, min_length=1, max_length=80)
+    unresolved_subject: Optional[PersonnelOrderUnresolvedSubjectIn] = None
     employee_id: Optional[int] = Field(default=None, ge=1)
     effective_date: Optional[date] = None
     period_start: Optional[date] = None
@@ -490,14 +503,6 @@ class PersonnelOrderDocumentItemListResponse(BaseModel):
     items: List[PersonnelOrderDocumentItemOut]
 
 
-class PersonnelOrderUnresolvedSubjectIn(BaseModel):
-    """Typed, unlinked subject supplied by HR when the employee is not in the directory."""
-
-    model_config = {"extra": "forbid"}
-    full_name: str = Field(..., min_length=1, max_length=300)
-    org_unit_name: str = Field(..., min_length=1, max_length=300)
-    position_name: str = Field(..., min_length=1, max_length=300)
-    specialty: str = Field(..., min_length=1, max_length=300)
 
 
 class PersonnelOrderManualDraftCreateIn(BaseModel):

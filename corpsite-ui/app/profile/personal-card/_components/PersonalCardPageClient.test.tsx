@@ -2,6 +2,11 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import PersonalCardPageClient from "./PersonalCardPageClient";
+vi.mock("@/app/directory/personnel/_lib/educationProgramKinds", async () => {
+  const actual=await vi.importActual<object>("@/app/directory/personnel/_lib/educationProgramKinds");
+  const {educationProgramKindTestRows}=await import("@/app/directory/personnel/_lib/educationProgramKinds.fixture");
+  return {...actual,useEducationProgramKinds:()=>({items:educationProgramKindTestRows,loading:false,error:""})};
+});
 
 const getMyPersonalCardMock = vi.fn();
 const getMyOperationalAssignmentMock = vi.fn();

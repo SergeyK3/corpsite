@@ -13,19 +13,12 @@ import type {
   PprTrainingRecordResponse,
 } from "../_lib/pprQueryTypes";
 
+import {useEducationProgramKinds,programKindOptions} from "../_lib/educationProgramKinds";
+
 type Section = "education" | "training" | "relatives";
 type RecordValue = PprEducationRecordResponse | PprTrainingRecordResponse | PprRelativeRecordResponse;
 type SelectOption = { value: string; label: string };
 type Field = { key: string; label: string; required?: boolean; type?: "date" | "number"; options?: readonly SelectOption[] };
-
-const EDUCATION_KIND_OPTIONS: readonly SelectOption[] = [
-  { value: "basic", label: "Основное образование" },
-  { value: "internship", label: "Интернатура" },
-  { value: "residency", label: "Резидентура" },
-  { value: "masters", label: "Магистратура" },
-  { value: "phd", label: "Докторантура (PhD)" },
-  { value: "other", label: "Другое" },
-];
 
 const INSTITUTION_TYPE_OPTIONS: readonly SelectOption[] = [
   { value: "university", label: "ВУЗ (университет, академия, институт)" },
@@ -36,7 +29,7 @@ const INSTITUTION_TYPE_OPTIONS: readonly SelectOption[] = [
 
 const FIELDS: Record<Section, Field[]> = {
   education: [
-    { key: "education_kind", label: "Вид образования", required: true, options: EDUCATION_KIND_OPTIONS },
+    { key: "education_kind", label: "Вид образования", required: true, options: [] },
     { key: "institution_type", label: "Тип учреждения", options: INSTITUTION_TYPE_OPTIONS },
     { key: "institution_name", label: "Учебное заведение" },
     { key: "specialty", label: "Специальность" },
@@ -101,6 +94,7 @@ export default function PprCardVersionedSectionEditor({
   active: RecordValue[];
   onSaved: () => void;
 }) {
+  const programKinds=useEducationProgramKinds(section === "education");
   const [editing, setEditing] = React.useState<RecordValue | null | undefined>(undefined);
   const [values, setValues] = React.useState<Record<string, string>>(() => emptyValues(section));
   const [voiding, setVoiding] = React.useState<RecordValue | null>(null);
@@ -149,6 +143,7 @@ export default function PprCardVersionedSectionEditor({
   };
 
   return <div className="mt-3 space-y-3 rounded-lg border border-blue-200 bg-blue-50/50 p-3 dark:border-blue-900 dark:bg-blue-950/20" data-testid={`ppr-${section}-editor`}>
+    {section === "education" && programKinds.error ? <p role="alert">{programKinds.error}</p> : null}
     {error ? <p role="alert" className="text-sm text-red-700 dark:text-red-300">{error}</p> : null}
     {editing === undefined && voiding === null ? <>
       <div className="flex flex-wrap gap-2"><button type="button" className="rounded border px-3 py-1 text-sm" onClick={startCreate}>Добавить запись</button></div>
@@ -157,7 +152,7 @@ export default function PprCardVersionedSectionEditor({
       </div> : null)}
     </> : null}
     {editing !== undefined ? <div className="grid gap-2 sm:grid-cols-2">
-      {FIELDS[section].map((field) => <label key={field.key} className="text-sm">{field.label}{field.required ? " *" : ""}{field.options ? <select aria-label={field.label} value={values[field.key] ?? ""} onChange={(event) => setValues((current) => ({ ...current, [field.key]: event.target.value }))} className="mt-1 block w-full rounded border bg-white p-1 dark:bg-zinc-950"><option value="">Не выбрано</option>{field.options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select> : <input type={field.type ?? "text"} value={values[field.key] ?? ""} onChange={(event) => setValues((current) => ({ ...current, [field.key]: event.target.value }))} className="mt-1 block w-full rounded border bg-white p-1 dark:bg-zinc-950" />}</label>)}
+      {FIELDS[section].map((field) => <label key={field.key} className="text-sm">{field.label}{field.required ? " *" : ""}{field.options ? <select aria-label={field.label} value={values[field.key] ?? ""} onChange={(event) => setValues((current) => ({ ...current, [field.key]: event.target.value }))} className="mt-1 block w-full rounded border bg-white p-1 dark:bg-zinc-950"><option value="">Не выбрано</option>{(field.key === "education_kind" ? programKindOptions(programKinds.items, editing && "education_kind" in editing ? editing.education_kind : undefined, editing && "education_kind_name_ru" in editing ? String(editing.education_kind_name_ru || "") : undefined) : field.options).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select> : <input type={field.type ?? "text"} value={values[field.key] ?? ""} onChange={(event) => setValues((current) => ({ ...current, [field.key]: event.target.value }))} className="mt-1 block w-full rounded border bg-white p-1 dark:bg-zinc-950" />}</label>)}
       <div className="sm:col-span-2 flex gap-2"><button type="button" className="rounded border border-blue-500 bg-blue-600 px-3 py-1 text-sm text-white disabled:opacity-50" disabled={saving} onClick={() => void save()}>{saving ? "Сохранение…" : "Сохранить"}</button><button type="button" className="rounded border px-3 py-1 text-sm" disabled={saving} onClick={cancel}>Отмена</button></div>
     </div> : null}
     {voiding ? <div className="space-y-2"><p className="text-sm">Удаление аннулирует запись и сохраняется в истории.</p><label className="block text-sm">Причина удаления *<textarea value={reason} onChange={(event) => setReason(event.target.value)} className="mt-1 block w-full rounded border bg-white p-1 dark:bg-zinc-950" /></label><div className="flex gap-2"><button type="button" disabled={saving} className="rounded border border-red-500 px-3 py-1 text-sm text-red-700" onClick={() => void confirmVoid()}>Удалить</button><button type="button" disabled={saving} className="rounded border px-3 py-1 text-sm" onClick={cancel}>Отмена</button></div></div> : null}

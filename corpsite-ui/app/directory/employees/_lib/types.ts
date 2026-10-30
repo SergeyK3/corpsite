@@ -18,6 +18,7 @@ export type Position = {
   name_kk?: string | null;
   document_possessive_kk?: string | null;
   document_nominative_ru?: string | null;
+  document_genitive_ru?: string | null;
 };
 
 export type OrgUnitRef = {
@@ -25,6 +26,7 @@ export type OrgUnitRef = {
   name: string | null;
   name_kk?: string | null;
   document_genitive_kk?: string | null;
+  document_genitive_ru?: string | null;
   code: string | null;
   parent_unit_id: number | null;
   is_active: boolean | null;
@@ -34,6 +36,8 @@ export type OrgUnitRef = {
  * То, что реально приходит с backend (/directory/employees и /directory/employees/{id})
  */
 export type EmployeeDTO = {
+  document_forms_ru?: Record<string, string | null>;
+  document_forms_kk?: Record<string, string | null>;
   id: string | null;
   person_id?: number | null;
     active_assignment_id?: number | null;

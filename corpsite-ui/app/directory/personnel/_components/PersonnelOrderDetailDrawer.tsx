@@ -353,6 +353,7 @@ export default function PersonnelOrderDetailDrawer({
   const [tombstone, setTombstone] = React.useState<PersonnelOrderDeletedTombstone | null>(null);
   const [templatePreviewRefresh, setTemplatePreviewRefresh] = React.useState(0);
   const pendingItemSaveRef = React.useRef<(() => Promise<boolean>) | null>(null);
+  const sourceItemEditorRef = React.useRef<((itemId: number) => void) | null>(null);
   const [editorial, setEditorial] = React.useState<PersonnelOrderEditorialState | null>(null);
   const [documentReview, setDocumentReview] = React.useState<PersonnelOrderDocumentReview | null>(null);
   const [loading, setLoading] = React.useState(false);
@@ -735,7 +736,7 @@ export default function PersonnelOrderDetailDrawer({
                     <Field label="Должность подписанта" value={signatoryPositionLabel} />
                     <Field label="ФИО подписанта" value={order.signed_by_name || "—"} />
                     <Field label="Источник" value={personnelOrderSourceModeLabel(order.source_mode)} />
-                    <Field label="Основание" value={order.legal_basis_article || order.basis_summary || "—"} />
+                    {order.order_type_code!=="PERSONAL_DATA_CHANGE"?<Field label="Основание" value={order.legal_basis_article || order.basis_summary || "—"} />:null}
                     <Field label="Комментарий" value={order.comment || "—"} />
                     {order.void_reason ? (
                       <>
@@ -776,6 +777,7 @@ export default function PersonnelOrderDetailDrawer({
                   onChanged={handleChanged}
                   hirePersonId={hirePersonId}
                   registerPendingSave={(save) => { pendingItemSaveRef.current = save; }}
+                  registerSourceEdit={(edit) => { sourceItemEditorRef.current = edit; }}
                 />
               </section>
 
@@ -824,6 +826,7 @@ export default function PersonnelOrderDetailDrawer({
                   basisDocuments={basisDocuments}
                   onOrderChanged={handleChanged}
                   onEditorialChanged={handleEditorialChanged}
+                  onEditSourcePosition={itemId => { setActiveTab("data"); sourceItemEditorRef.current?.(itemId); }}
                   beforeGenerate={async () => pendingItemSaveRef.current ? pendingItemSaveRef.current() : true}
                   editorialState={editorial}
                   locale={orderLanguage}
@@ -856,6 +859,7 @@ export default function PersonnelOrderDetailDrawer({
 
       <PersonnelOrderPrintLanguageDialog
         open={printOpen}
+        documentTypeCode={detail?.order.order_type_code}
         onClose={() => {
           if (printBusy) return;
           setPrintOpen(false);

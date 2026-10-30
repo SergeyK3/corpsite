@@ -17,6 +17,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Index,
+    Integer,
     Numeric,
     Text,
     func,
@@ -62,6 +63,7 @@ EDUCATION_KIND_MASTERS = "masters"
 EDUCATION_KIND_PHD = "phd"
 EDUCATION_KIND_OTHER = "other"
 
+# Legacy wire codes for import adapters only; runtime validation uses education_program_kinds.
 EDUCATION_KINDS = (
     EDUCATION_KIND_BASIC,
     EDUCATION_KIND_INTERNSHIP,
@@ -518,6 +520,19 @@ class PersonStatusFact(Base):
     )
 
 
+class EducationProgramKind(Base):
+    __tablename__ = "education_program_kinds"
+    code: Mapped[str] = mapped_column(Text, primary_key=True)
+    name_ru: Mapped[str] = mapped_column(Text, nullable=False)
+    name_kk: Mapped[str] = mapped_column(Text, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("true"))
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("0"))
+    revision: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_by_user_id: Mapped[Optional[int]] = mapped_column(BigInteger, ForeignKey("users.user_id", ondelete="SET NULL"))
+
+
 class PersonEducation(Base):
     """Permanent structured education record (person-owned SoT)."""
 
@@ -538,7 +553,7 @@ class PersonEducation(Base):
         ForeignKey("employees.employee_id", ondelete="SET NULL"),
         nullable=True,
     )
-    education_kind: Mapped[str] = mapped_column(Text, nullable=False)
+    education_kind: Mapped[str] = mapped_column(Text, ForeignKey("education_program_kinds.code", ondelete="RESTRICT", onupdate="RESTRICT"), nullable=False)
     institution_type: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     institution_name: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     specialty: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

@@ -143,6 +143,14 @@ def validate_hire_item_identity(
 ) -> None:
     normalized = str(item_type_code or "").strip().upper()
     if normalized != ORDER_TYPE_HIRE:
+        manual = (payload or {}).get("unresolved_subject")
+        if (
+            normalized in {"SERVICE_LENGTH_CHANGE", "EDUCATION_INFORMATION_CHANGE", "PERSONAL_DATA_CHANGE"}
+            and (payload or {}).get("subject_mode") == "MANUAL"
+            and isinstance(manual, dict)
+            and str(manual.get("full_name") or "").strip()
+        ):
+            return
         if employee_id is None:
             raise PersonnelOrderValidationError(
                 f"Order item type {item_type_code} requires employee_id."

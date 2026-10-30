@@ -241,6 +241,9 @@ def change_template_type(item_type_code: str, template_id: int, target_type_code
 
 
 def _validate(values: Mapping[str, str], item_type_code: str = EDITABLE_TYPE, *, check_variables: bool = True, require_complete: bool = True) -> None:
+    if item_type_code == 'EDUCATION_INFORMATION_CHANGE':
+        from app.services.personnel_order_education_template_contract import bind_editor_texts
+        values = bind_editor_texts(values)
     _assert_type(item_type_code)
     spec = get_personnel_order_template_spec(item_type_code)
     variables = set(spec.allowed_variables)
@@ -256,6 +259,10 @@ def _validate(values: Mapping[str, str], item_type_code: str = EDITABLE_TYPE, *,
         unknown = {match.group(1) for match in _TOKEN.finditer(value)} - variables
         if unknown:
             raise TemplateDraftError("TEMPLATE_VARIABLE_UNKNOWN", "Неизвестная переменная: " + ", ".join(sorted(unknown)))
+    if check_variables and item_type_code == 'PERSONAL_DATA_CHANGE':
+        from app.services.personnel_order_personal_data_contract import validate_placeholders
+        try: validate_placeholders(values)
+        except ValueError as exc: raise TemplateDraftError('TEMPLATE_EDITORIAL_PLACEHOLDER', str(exc)) from exc
     if not check_variables or not require_complete:
         return
     if item_type_code == "SUPPLEMENTARY_PAY":

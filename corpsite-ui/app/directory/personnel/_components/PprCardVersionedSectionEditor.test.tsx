@@ -2,6 +2,11 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import PprCardVersionedSectionEditor from "./PprCardVersionedSectionEditor";
+vi.mock("../_lib/educationProgramKinds", async () => {
+  const actual=await vi.importActual<object>("../_lib/educationProgramKinds");
+  const {educationProgramKindTestRows}=await import("../_lib/educationProgramKinds.fixture");
+  return {...actual,useEducationProgramKinds:()=>({items:educationProgramKindTestRows,loading:false,error:""})};
+});
 
 const create = vi.fn();
 const supersede = vi.fn();

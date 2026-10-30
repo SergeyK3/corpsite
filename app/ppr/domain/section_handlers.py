@@ -5,7 +5,6 @@ from dataclasses import replace
 from typing import Any
 
 from app.db.models.personnel_migration import (
-    EDUCATION_KINDS,
     EXTERNAL_EMPLOYMENT_SOURCE_MANUAL,
     LIFECYCLE_STATUS_ACTIVE,
     SECTION_SOURCE_TYPE_ENTERED,
@@ -157,14 +156,21 @@ def _require_active_training(uow: UnitOfWork, person_id: int, record_id: int) ->
     return loaded
 
 
+def _require_education_kind(uow: UnitOfWork, code: str, previous: str | None = None) -> None:
+    entry = uow.sections.education_kind(code)
+    if entry is None:
+        raise SectionValidationError(f"invalid education_kind: {code!r}")
+    if not entry['is_active'] and code != previous:
+        raise SectionValidationError('Вид программы неактивен. Для новой записи выберите активное значение.')
+
+
 def handle_add_education_record(
     command: AddEducationRecord,
     uow: UnitOfWork,
 ) -> SectionMutationResult:
     _require_positive_person_id(command.person_id)
     _require_non_empty(command.education_kind, "education_kind")
-    if command.education_kind not in EDUCATION_KINDS:
-        raise SectionValidationError(f"invalid education_kind: {command.education_kind!r}")
+    _require_education_kind(uow, command.education_kind)
 
     candidate = EducationRecord(
         person_id=command.person_id,
@@ -214,8 +220,7 @@ def handle_update_education_record(
         document_date=command.document_date if command.document_date is not None else current.document_date,
         metadata=dict(command.metadata) if command.metadata is not None else current.metadata,
     )
-    if updated.education_kind not in EDUCATION_KINDS:
-        raise SectionValidationError(f"invalid education_kind: {updated.education_kind!r}")
+    _require_education_kind(uow, updated.education_kind, current.education_kind)
 
     _assert_no_duplicate_education(
         uow,
@@ -255,7 +260,7 @@ def handle_supersede_education_record(
     uow: UnitOfWork,
 ) -> SectionMutationResult:
     _require_positive_person_id(command.person_id)
-    _require_active_education(uow, command.person_id, command.record_id)
+    current = _require_active_education(uow, command.person_id, command.record_id)
     if command.replacement.person_id != command.person_id:
         raise SectionValidationError("replacement.person_id must match supersede person_id")
 
@@ -273,8 +278,7 @@ def handle_supersede_education_record(
         document_date=command.replacement.document_date,
         metadata=dict(command.replacement.metadata) if command.replacement.metadata is not None else None,
     )
-    if replacement.education_kind not in EDUCATION_KINDS:
-        raise SectionValidationError(f"invalid education_kind: {replacement.education_kind!r}")
+    _require_education_kind(uow, replacement.education_kind, current.education_kind)
     _require_non_empty(replacement.education_kind, "education_kind")
 
     old_record, new_record = uow.section_mutations().supersede_pair(

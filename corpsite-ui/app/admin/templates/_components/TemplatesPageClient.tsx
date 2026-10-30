@@ -1,5 +1,7 @@
 "use client";
 
+import {educationLiteralTokens} from "@/app/directory/personnel/_lib/educationDraft";
+import { PERSONAL_DATA_TEMPLATE_TYPE, personalDataTemplateIssues } from "../_lib/personalDataTemplate";
 import QualificationCategoryTemplatePreview from "../qualification-category-draft/QualificationCategoryTemplatePreview";
 import { usePersonnelSectionLanguage, localizedPersonnelTitle } from "@/app/directory/personnel/_lib/personnelSectionLanguage";
 
@@ -37,6 +39,8 @@ import {
   savePersonnelOrderTemplateDraft,
   publishPersonnelOrderTemplateDraft,
 } from "../_lib/personnelOrderTemplatesApi.client";
+
+const TEMPLATE_TYPE_GROUP = { ...PERSONNEL_ORDER_TYPE_GROUP, EDUCATION_INFORMATION_CHANGE: "record_changes", PERSONAL_DATA_CHANGE: "record_changes" };
 
 const TAB_CLASS = "rounded-xl border px-4 py-2 text-sm font-medium transition";
 function templateArgs(id?: number | null): [] | [number] { return id == null ? [] : [id]; }
@@ -235,12 +239,18 @@ function textMatches(left: PersonnelOrderTemplateDraftText, right: PersonnelOrde
   return DRAFT_HEIGHT_FIELDS.every(({ ru, kk }) => left[ru[0]] === right[ru[0]] && left[kk[0]] === right[kk[0]]);
 }
 
+function isEducationDraft(source: { template_id?: number | null; template_version_id?: number; status?: string }): boolean {
+  return source.template_id === 44 && source.template_version_id === 60 && source.status === "DRAFT";
+}
+
 function DraftEditor({ editor, published, onSaved, onPublished, variables, requiredVariables, warning, onRemove }: { onRemove: (name: string) => void; editor: EditorDocument; published: PersonnelOrderTemplateDraft | null; onSaved: (draft: PersonnelOrderTemplateDraft) => void; onPublished: (draft: PersonnelOrderTemplateDraft) => void; variables: string[]; requiredVariables?: Partial<Record<keyof PersonnelOrderTemplateDraftText, string[]>>; warning?: string }) {
   const { language: sectionLanguage } = usePersonnelSectionLanguage();
   const initial = editor.kind === "DRAFT" ? editor.draft : editor.workingCopy;
   const [savedDraft, setSavedDraft] = useState<PersonnelOrderTemplateDraftText & { item_type_code: string; template_id?: number | null }>(initial);
   const [values, setValues] = useState<PersonnelOrderTemplateDraftText>(() => editableDraftText(initial));
+  const latestValues = useRef(values);
   const [preview, setPreview] = useState<Record<"ru" | "kk", PersonnelOrderTemplatePreview> | null>(null);
+  const [templateTextPreview, setTemplateTextPreview] = useState<PersonnelOrderTemplateDraftText | null>(null);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [saving, setSaving] = useState(false);
@@ -257,12 +267,18 @@ function DraftEditor({ editor, published, onSaved, onPublished, variables, requi
   const kkTextareas = useRef<Partial<Record<keyof PersonnelOrderTemplateDraftText, HTMLTextAreaElement | null>>>({});
   useEffect(() => {
     if (editorDocument.current === editor) return;
+    const previous = editorDocument.current;
     editorDocument.current = editor;
     const next = editor.kind === "DRAFT" ? editor.draft : editor.workingCopy;
     setSavedDraft(next);
+    // A save acknowledgement updates the revision, not edits made in flight.
+    if (previous.kind === "DRAFT" && editor.kind === "DRAFT"
+      && isEducationDraft(previous.draft) && isEducationDraft(editor.draft)) return;
+    latestValues.current = editableDraftText(next);
     setValues(editableDraftText(next));
+    setTemplateTextPreview(null);
   }, [editor]);
-  useEffect(() => { if (preview) previewRef.current?.scrollIntoView?.({ behavior: "smooth", block: "nearest" }); }, [preview]);
+  useEffect(() => { if (preview || templateTextPreview) previewRef.current?.scrollIntoView?.({ behavior: "smooth", block: "nearest" }); }, [preview, templateTextPreview]);
   const setPairHeight = useCallback((pair: DraftHeightPair, rawHeight: number, persist: boolean) => {
     const height = clampTextareaHeight(rawHeight);
     if (height == null) return;
@@ -303,13 +319,18 @@ function DraftEditor({ editor, published, onSaved, onPublished, variables, requi
   };
   const change = (key: keyof PersonnelOrderTemplateDraftText, value: string) => {
     previewRequest.current += 1;
+    latestValues.current = { ...latestValues.current, [key]: value };
     setValues((old) => ({ ...old, [key]: value }));
     setPreview(null);
+    setTemplateTextPreview(null);
     setError("");
     setNotice("");
   };
   const isWorkingCopy = editor.kind === "WORKING_COPY";
   const serverDraft = editor.kind === "DRAFT" ? editor.draft : null;
+  const educationDraft = serverDraft != null && isEducationDraft(serverDraft);
+  const useTemplateTextPreview = educationDraft || (["QUALIFICATION_CATEGORY", "SERVICE_LENGTH_CHANGE"].includes(savedDraft.item_type_code)
+    && savedDraft.template_id === 43 && serverDraft?.template_version_id === 58 && serverDraft.status === "DRAFT");
   const useEditorValuesPreview = savedDraft.item_type_code === "QUALIFICATION_CATEGORY"
     && savedDraft.template_id === 42 && serverDraft?.template_version_id === 56;
   const hideOrderPreview = savedDraft.item_type_code === "QUALIFICATION_CATEGORY" && savedDraft.template_id === 42 && !useEditorValuesPreview;
@@ -319,8 +340,11 @@ function DraftEditor({ editor, published, onSaved, onPublished, variables, requi
   const isDirty = !textMatches(values, savedDraft);
   const differsFromPublished = serverDraft != null && published != null && !textMatches(serverDraft, published);
   const canSave = !saving && (isInitialWorkingCopy || isDirty);
+  const saveStateExplanation = saving ? "Сохранение отправленных изменений…"
+    : isDirty ? "Есть несохранённые изменения." : "Нет несохранённых изменений.";
   const incompatible = Object.entries(values).flatMap(([field, value]) => {
     const tokens = [...(value || '').matchAll(/\{\{\s*([a-zA-Z0-9_.]+)\s*\}\}/g)].map(match => match[1]);
+    if(savedDraft.item_type_code === "EDUCATION_INFORMATION_CHANGE") tokens.push(...educationLiteralTokens(field, value || ""));
     const unknown = [...new Set(tokens.filter(code => !variables.includes(code)))];
     const classifierDraft = savedDraft.item_type_code === "QUALIFICATION_CATEGORY" && values.body_template_ru.includes("medical_specialty.clause_ru");
     const requirements = (requiredVariables?.[field as keyof PersonnelOrderTemplateDraftText] ?? []).flatMap(code => {
@@ -334,8 +358,29 @@ function DraftEditor({ editor, published, onSaved, onPublished, variables, requi
     return unknown.length || missing.length ? [{ field, unknown, missing }] : [];
   });
   const replacementMode = /\{\{\s*replacement\.term\s*\}\}/.test(values.body_template_ru) ? (/\{\{\s*allowance\.percent\s*\}\}/.test(values.body_template_ru) ? "PAY" : "RATE") : null;
-  const canPublish = incompatible.length === 0 && serverDraft != null && !publishing && !isDirty && (published == null || differsFromPublished);
+  const educationPublicationBlockers = educationDraft ? [
+    ...(saving ? ["Дождитесь завершения сохранения."] : []),
+    ...(publishing ? ["Публикация выполняется."] : []),
+    ...(isDirty ? ["Сначала сохраните изменения."] : []),
+    ...(incompatible.length ? ["Исправьте неизвестные переменные."] : []),
+    ...(published != null && !differsFromPublished ? ["Черновик совпадает с опубликованной версией."] : []),
+    ...DRAFT_HEIGHT_FIELDS.flatMap(({ ru, kk }) => [ru, kk].flatMap(([key, label]) => {
+      const text = values[key] || "";
+      if (!text.trim()) return [`Заполните поле «${label}».`];
+      if (/<\s*\/?\s*(?:script|style)|javascript:|=>|\b(?:if|for|function)\s*\(/i.test(text)) return [`Удалите небезопасное содержимое из поля «${label}».`];
+      return [];
+    })),
+  ] : [];
+  const canPublish = incompatible.length === 0 && serverDraft != null && !publishing && !isDirty && (published == null || differsFromPublished)
+    && (!educationDraft || educationPublicationBlockers.length === 0)
+    && (savedDraft.item_type_code !== PERSONAL_DATA_TEMPLATE_TYPE || personalDataTemplateIssues(values).length === 0);
   const showPreview = () => {
+    if (useTemplateTextPreview) {
+      setTemplateTextPreview(editableDraftText(values));
+      setError("");
+      setNotice("");
+      return;
+    }
     if (!useStandardPreview) {
       setCategoryPreviewRefresh(n => n + 1);
       return;
@@ -373,13 +418,28 @@ function DraftEditor({ editor, published, onSaved, onPublished, variables, requi
       }, ...templateArgs(savedDraft.template_id))
       : savePersonnelOrderTemplateDraft(savedDraft.item_type_code, { ...submittedValues, expected_revision: serverDraft!.revision, expected_template_version_id: serverDraft!.template_version_id }, ...templateArgs(savedDraft.template_id));
     void persist
+      .then(async (next) => {
+        if (!educationDraft) return next;
+        const reloaded = await getPersonnelOrderTemplateDraft(next.item_type_code, ...templateArgs(next.template_id));
+        if (!isEducationDraft(next) || !reloaded || !isEducationDraft(reloaded)
+          || reloaded.revision !== next.revision || !textMatches(next, submittedValues)
+          || !textMatches(reloaded, submittedValues)) {
+          throw new Error("Не удалось подтвердить сохранение отправленных текстов ID60. Введённые тексты сохранены в редакторе.");
+        }
+        return reloaded;
+      })
       .then((next) => {
         const savedValues = editableDraftText(next);
         setSavedDraft(next);
         onSaved(next);
-        setValues(savedValues);
-        setNotice("Черновик сохранён");
-        if (hideOrderPreview || useEditorValuesPreview) { setPreview(null); return; }
+        const hasNewerEdits = educationDraft && !textMatches(latestValues.current, submittedValues);
+        if (!hasNewerEdits) {
+          latestValues.current = savedValues;
+          setValues(savedValues);
+        }
+        setTemplateTextPreview(null);
+        setNotice(hasNewerEdits ? "Отправленные тексты сохранены. В редакторе есть более новые несохранённые изменения." : "Черновик сохранён");
+        if (hideOrderPreview || useEditorValuesPreview || useTemplateTextPreview) { setPreview(null); return; }
         setPreviewSaved(true);
         const request = ++previewRequest.current;
         return (next.template_id ? previewSavedPersonnelOrderTemplateDraft(next) : previewPersonnelOrderTemplateDraft(next.item_type_code, savedValues))
@@ -408,7 +468,9 @@ function DraftEditor({ editor, published, onSaved, onPublished, variables, requi
         const reloadedValues = editableDraftText(next);
         setSavedDraft(next);
         onSaved(next);
+        latestValues.current = reloadedValues;
         setValues(reloadedValues);
+        setTemplateTextPreview(null);
         setPreview(null);
         setNotice("Загружена актуальная версия черновика.");
       })
@@ -428,7 +490,9 @@ function DraftEditor({ editor, published, onSaved, onPublished, variables, requi
     <section ref={editorRef} className="mt-5 rounded-xl border border-blue-200 p-4" data-testid="template-draft-editor" data-template-id={savedDraft.template_id} data-template-version-id={serverDraft?.template_version_id} data-revision={serverDraft?.revision}>
       <h4 className="font-semibold">{isWorkingCopy ? (isInitialWorkingCopy ? "Первая версия шаблона ещё не сохранена" : `Несохранённая рабочая копия опубликованной версии ${editor.workingCopy.base.version_number}`) : "Черновая версия шаблона"}</h4>
       <p className="text-sm">{isWorkingCopy && editor.workingCopy.base.source === "PUBLISHED" ? "Основа: " : ""}<PersonnelTemplateIdentity templateId={savedDraft.template_id} versionId={serverDraft?.template_version_id ?? (isWorkingCopy ? editor.workingCopy.base.template_version_id : undefined)} versionNumber={serverDraft?.version_number ?? (isWorkingCopy ? editor.workingCopy.base.version_number : undefined)} status={serverDraft?.status ?? "PUBLISHED"} />{serverDraft ? ` · revision ${serverDraft.revision}` : ""}</p>
-      <p className="mt-2 text-sm text-amber-700" data-testid="template-editor-application-notice">Эта версия не применяется к кадровым приказам.</p>
+      <p className="mt-2 text-sm text-amber-700" data-testid="template-editor-application-notice">{savedDraft.item_type_code === PERSONAL_DATA_TEMPLATE_TYPE
+        ? "Черновик не доступен для выбора при создании приказа. Для создания нужна опубликованная версия этого шаблона; текущая версия остаётся DRAFT."
+        : "Эта версия не применяется к кадровым приказам."}</p>
       {incompatible.length ? <div role="alert" data-testid="template-incompatible-variables" className="mt-3 text-sm text-red-700">
         <p>{sectionLanguage === "kk" ? "Жаңа бұйрық түрінің айнымалыларын жариялау алдында түзетіңіз." : "Исправьте переменные для нового вида приказа до публикации."}</p>
         {incompatible.map(issue => <p key={issue.field}>{issue.field}: {issue.unknown.length ? `${sectionLanguage === "kk" ? "Үйлесімсіз" : "Несовместимые"}: ${issue.unknown.join(", ")}. ` : ""}{issue.missing.length ? `${sectionLanguage === "kk" ? "Міндетті айнымалылар жоқ" : "Отсутствуют обязательные переменные"}: ${issue.missing.join(", ")}.` : ""}</p>)}
@@ -470,7 +534,7 @@ function DraftEditor({ editor, published, onSaved, onPublished, variables, requi
       <p className="mt-3 text-xs" data-testid="template-editor-allowed-variables">Разрешённые переменные: {variables.join(", ")}.</p>
       <div className="mt-4 flex items-center gap-2 overflow-x-auto whitespace-nowrap border-t border-zinc-200 pt-3 dark:border-zinc-800" data-testid="template-draft-actions">
         {!hideOrderPreview && <button type="button" onClick={showPreview} disabled={previewing} className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-800 transition hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800">{previewing ? "Формирование…" : "Предварительный просмотр"}</button>}
-        <button type="button" onClick={save} disabled={!canSave} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-500 dark:text-zinc-950 dark:hover:bg-blue-400">{saving ? "Сохранение…" : "Сохранить черновик"}</button>
+        <button type="button" onClick={save} disabled={!canSave} aria-describedby={educationDraft ? "education-draft-save-state" : undefined} className="rounded-lg bg-blue-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-blue-500 dark:text-zinc-950 dark:hover:bg-blue-400">{saving ? "Сохранение…" : "Сохранить черновик"}</button>
         <button type="button" onClick={() => onRemove(sectionLanguage === "kk" ? values.title_kk : values.title_ru)} disabled={saving || publishing} className="shrink-0 rounded-lg border border-red-600 px-3 py-2 text-sm font-semibold text-red-700">Удалить шаблон</button>
         <button type="button" onClick={publish} disabled={!canPublish} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-60">{publishing ? "Публикация…" : "Опубликовать версию"}</button>
         <button type="button" onClick={resetHeights} className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800">Сбросить высоту полей</button>
@@ -478,8 +542,31 @@ function DraftEditor({ editor, published, onSaved, onPublished, variables, requi
         {error ? <p role="alert" className="text-sm text-red-700">{error}</p> : null}
         {notice ? <p role="status" className="text-sm text-emerald-700">{notice}</p> : null}
       </div>
+      {savedDraft.item_type_code === PERSONAL_DATA_TEMPLATE_TYPE ? <div className="mt-3 space-y-2 text-sm" data-testid="personal-data-template-checks">
+        <p>Самостоятельный контракт персональных данных. Фамилию, имя и отчество, а также формы ФИО кадровик уточняет вручную в тексте RU/KK. Сведения об образовании и дипломе не используются.</p>
+        {personalDataTemplateIssues(values).length ? <ul>{personalDataTemplateIssues(values).map(issue => <li key={issue}>{issue}</li>)}</ul> : null}
+      </div> : null}
+      {educationDraft ? <div className="mt-3 space-y-2 text-sm" data-testid="education-draft-publication-checks">
+        <p id="education-draft-save-state">{saveStateExplanation}</p>
+        <p>Обозначения полей образования связываются с данными формы приказа без изменения текста шаблона. Требуются использованные в тексте формы ФИО, должности, подразделения, дата действия, образование, специальность и реквизиты документа. Категория и срок категории не требуются.</p>
+        <p>Перед публикацией: сохранённая актуальная версия DRAFT, заполненные тексты и печатные заголовки RU/KK, безопасное содержимое без неизвестных переменных, отличие от опубликованной версии при её наличии.</p>
+        {educationPublicationBlockers.length ? <ul>{educationPublicationBlockers.map(reason => <li key={reason}>{reason}</li>)}</ul>
+          : <p>Проверки редактора пройдены. Публикация требует прав администратора и проверки актуальной revision сервером.</p>}
+      </div> : null}
       {serverDraft && published && !differsFromPublished && !isDirty ? <p className="mt-3 text-sm text-amber-700">Черновик полностью совпадает с опубликованной версией и не может быть опубликован</p> : null}
-      {!hideOrderPreview && !useStandardPreview ? <QualificationCategoryTemplatePreview values={values} refresh={categoryPreviewRefresh} /> : null}
+      {useTemplateTextPreview && templateTextPreview ? <section className="mt-4" data-testid="template-draft-preview" data-preview-source="EDITOR_VALUES">
+        <h5 className="font-semibold">Предварительный просмотр шаблона</h5>
+        <div ref={previewRef} className="mt-3 grid gap-4 md:grid-cols-2">
+          {(["ru", "kk"] as const).map(locale => <article key={locale} className="min-w-0 rounded-lg border p-4">
+            <h6 className="font-semibold">{locale.toUpperCase()}</h6>
+            <dl className="mt-3 space-y-3">{DRAFT_HEIGHT_FIELDS.map(field => {
+              const [key, label] = field[locale];
+              return <div key={key}><dt className="text-sm font-medium">{label}</dt><dd className="whitespace-pre-wrap break-words">{templateTextPreview[key]}</dd></div>;
+            })}</dl>
+          </article>)}
+        </div>
+      </section> : null}
+      {!useTemplateTextPreview && !hideOrderPreview && !useStandardPreview ? <QualificationCategoryTemplatePreview values={values} refresh={categoryPreviewRefresh} /> : null}
       {serverDraft && replacementMode && !isDirty ? <PersonnelReplacementPreviewForm draft={serverDraft} mode={replacementMode} onPreview={result=>{setPreview(result.previews);setPreviewSaved(true);setError("");}}/> : null}
       {!hideOrderPreview && preview && useStandardPreview ? <p className="mt-3 text-sm" data-testid="template-preview-origin">{previewSaved
         ? (sectionLanguage === "kk" ? "Сақталған жобаны алдын ала қарау" : "Просмотр сохранённого черновика")
@@ -592,8 +679,8 @@ export default function TemplatesPageClient() {
   const [switchingType, setSwitchingType] = useState<string | null>(null);
   const selectedType = searchParams.get("type") || "";
   const displayedType = switchingType ?? selectedType;
-  const selectedItem = items.find((item) => item.type_code === displayedType && (!group || PERSONNEL_ORDER_TYPE_GROUP[item.type_code as keyof typeof PERSONNEL_ORDER_TYPE_GROUP] === group))
-    ?? items.find((item) => !group || PERSONNEL_ORDER_TYPE_GROUP[item.type_code as keyof typeof PERSONNEL_ORDER_TYPE_GROUP] === group);
+  const selectedItem = items.find((item) => item.type_code === displayedType && (!group || TEMPLATE_TYPE_GROUP[item.type_code as keyof typeof TEMPLATE_TYPE_GROUP] === group))
+    ?? items.find((item) => !group || TEMPLATE_TYPE_GROUP[item.type_code as keyof typeof TEMPLATE_TYPE_GROUP] === group);
 
   useEffect(() => {
     if (selectedItem && displayedType) selectedCardRef.current?.scrollIntoView?.({block:"start"});
@@ -611,7 +698,7 @@ export default function TemplatesPageClient() {
   }, [activeSection,catalogRefresh]);
 
   const visibleItems = useMemo(() => items.filter((item) => {
-    if (group && PERSONNEL_ORDER_TYPE_GROUP[item.type_code as keyof typeof PERSONNEL_ORDER_TYPE_GROUP] !== group) return false;
+    if (group && TEMPLATE_TYPE_GROUP[item.type_code as keyof typeof TEMPLATE_TYPE_GROUP] !== group) return false;
     return level === "ALL" || item.support_level === level;
   }), [items, level, group]);
 
@@ -647,7 +734,7 @@ export default function TemplatesPageClient() {
           {catalogError ? <div role="alert" className="text-red-700">{catalogError}<button type="button" onClick={()=>setCatalogRefresh(n=>n+1)} className="ml-2 rounded border px-3 py-2">Повторить загрузку каталога</button></div> : null}
           <p className="mt-2 text-sm text-zinc-600 dark:text-zinc-400">Откройте выбранный шаблон для редактирования или создайте на его основе независимый черновик с названиями RU/KZ.</p>
           <div className="flex gap-2"><input aria-label="Поиск шаблонов кадровых приказов" value={query} onChange={(e) => setQuery(e.target.value)} className="rounded border px-2 py-1" /><select aria-label="Уровень поддержки" value={level} onChange={(e) => setLevel(e.target.value)} className="rounded border px-2 py-1"><option value="ALL">Все уровни</option><option value="SUPPORTED">SUPPORTED</option><option value="PARTIAL">PARTIAL</option><option value="NOT_IMPLEMENTED">NOT_IMPLEMENTED</option></select></div>
-          <div role="group" aria-label={language === "kk" ? "Бұйрық топтары" : "Группы приказов"} className="mb-3 flex flex-wrap gap-2">{PERSONNEL_ORDER_GROUPS.map(entry => <button type="button" key={entry.id} aria-pressed={group === entry.id} onClick={() => { const nextGroup = group === entry.id ? null : entry.id; setGroup(nextGroup); if (nextGroup && selectedItem && PERSONNEL_ORDER_TYPE_GROUP[selectedItem.type_code as keyof typeof PERSONNEL_ORDER_TYPE_GROUP] !== nextGroup) { const nextItem = items.find(item => PERSONNEL_ORDER_TYPE_GROUP[item.type_code as keyof typeof PERSONNEL_ORDER_TYPE_GROUP] === nextGroup); if (nextItem) selectType(nextItem.type_code); } }} className="rounded border px-3 py-2">{entry[language]}</button>)}</div>
+          <div role="group" aria-label={language === "kk" ? "Бұйрық топтары" : "Группы приказов"} className="mb-3 flex flex-wrap gap-2">{PERSONNEL_ORDER_GROUPS.map(entry => <button type="button" key={entry.id} aria-pressed={group === entry.id} onClick={() => { const nextGroup = group === entry.id ? null : entry.id; setGroup(nextGroup); if (nextGroup && selectedItem && TEMPLATE_TYPE_GROUP[selectedItem.type_code as keyof typeof TEMPLATE_TYPE_GROUP] !== nextGroup) { const nextItem = items.find(item => TEMPLATE_TYPE_GROUP[item.type_code as keyof typeof TEMPLATE_TYPE_GROUP] === nextGroup); if (nextItem) selectType(nextItem.type_code); } }} className="rounded border px-3 py-2">{entry[language]}</button>)}</div>
           <div className="grid gap-2 md:grid-cols-2" data-testid="personnel-order-template-list">{visibleItems.flatMap((item) => item.templates?.length ? item.templates.filter(template => `${item.type_code} ${template.name_ru} ${template.name_kk}`.toLowerCase().includes(query.toLowerCase())).map(template=><button key={template.template_id} type="button" data-catalog-template-id={template.template_id} className="rounded border p-3 text-left hover:bg-blue-50 dark:hover:bg-zinc-800" onClick={()=>{
               setCopiedDraft(undefined);setSwitchingType(item.type_code);
               const params=new URLSearchParams(searchParams.toString());params.set("section",TEMPLATE_SECTIONS.personnelOrders);params.set("type",item.type_code);params.set("template_id",String(template.template_id));router.push(`/admin/templates?${params.toString()}`);

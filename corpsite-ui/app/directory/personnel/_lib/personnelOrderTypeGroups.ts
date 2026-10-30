@@ -21,6 +21,9 @@ export type PersonnelOrderGroupId = (typeof PERSONNEL_ORDER_GROUPS)[number]["id"
 
 // Display grouping only. These are the existing creation codes, not new actions.
 export const PERSONNEL_ORDER_TYPE_GROUP: Record<PersonnelOrderCreateType, PersonnelOrderGroupId> = {
+  PERSONAL_DATA_CHANGE: "record_changes",
+  EDUCATION_INFORMATION_CHANGE: "record_changes",
+  SERVICE_LENGTH_CHANGE: "record_changes",
   QUALIFICATION_CATEGORY: "record_changes",
   HIRE: "employment",
   TRANSFER: "employment",

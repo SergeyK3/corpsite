@@ -124,3 +124,12 @@ INITIAL_TEXTS_BY_TYPE["CONCURRENT_DUTY_END"].update(body_template_ru=CESSATION_R
 
 from app.services.personnel_order_category_contract import TYPE as CATEGORY_TYPE, TEXTS as CATEGORY_TEXTS
 INITIAL_TEXTS_BY_TYPE[CATEGORY_TYPE] = dict(CATEGORY_TEXTS)
+
+from app.services.personnel_order_service_length_contract import TYPE as SERVICE_LENGTH_TYPE, TEXTS as SERVICE_LENGTH_TEXTS
+INITIAL_TEXTS_BY_TYPE[SERVICE_LENGTH_TYPE] = dict(SERVICE_LENGTH_TEXTS)
+
+from app.services.personnel_order_education_template_contract import TYPE as EDUCATION_TYPE, TEXTS as EDUCATION_TEXTS
+INITIAL_TEXTS_BY_TYPE[EDUCATION_TYPE] = dict(EDUCATION_TEXTS)
+
+from app.services.personnel_order_personal_data_contract import TYPE as PERSONAL_DATA_TYPE, TEXTS as PERSONAL_DATA_TEXTS
+INITIAL_TEXTS_BY_TYPE[PERSONAL_DATA_TYPE] = dict(PERSONAL_DATA_TEXTS)

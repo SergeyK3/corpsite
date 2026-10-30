@@ -18,7 +18,7 @@ def creation_capabilities(conn, item_type_code):
         'creation_supported':supported,
         'creation_reason':None if supported else (
             f"Текущая схема БД не разрешает вид {item_type_code} в приказах и пунктах. "
-            f"Требуется согласованная миграция {'poqual001 (локальная ветка: hrlocal305)' if item_type_code == 'QUALIFICATION_CATEGORY' else 'hrrecall001'}; БД автоматически не изменяется."),
+            f"Требуется согласованная миграция {'hrlocal310' if item_type_code == 'PERSONAL_DATA_CHANGE' else 'hrlocal307' if item_type_code == 'EDUCATION_INFORMATION_CHANGE' else 'hrlocal306' if item_type_code == 'SERVICE_LENGTH_CHANGE' else 'poqual001 (локальная ветка: hrlocal305)' if item_type_code == 'QUALIFICATION_CATEGORY' else 'hrrecall001'}; БД автоматически не изменяется."),
         'schema_mode':'INDEPENDENT' if independent else 'LEGACY',
         'job_catalog_supported':bool(metadata['job_catalog']),
     }

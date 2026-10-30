@@ -24,6 +24,150 @@ const open = async (label = "Редактировать шаблон") => { awai
 const changeTitle = (value: string) => fireEvent.change(screen.getByLabelText("Заголовок RU"), { target: { value } });
 
 describe("TemplatesPageClient draft lifecycle", () => {
+  async function openEducationDraft() {
+    const scoped = { ...draft, template_id: 44, template_version_id: 60, item_type_code: "EDUCATION_INFORMATION_CHANGE",
+      print_title_ru: "Об образовании", print_title_kk: "Білім туралы" };
+    const identity = { template_id: 44, item_type_code: scoped.item_type_code, name_ru: scoped.title_ru,
+      name_kk: scoped.title_kk, is_default: false, draft_version_id: 60, template_version_id: null };
+    currentSearch = new URLSearchParams("section=personnel-orders&type=QUALIFICATION_CATEGORY&template_id=44");
+    vi.mocked(listPersonnelOrderTemplateCatalog).mockResolvedValue({ items: [{ ...catalog.items[0], type_code: scoped.item_type_code, templates: [identity] }] });
+    vi.mocked(listPersonnelIndependentTemplates).mockResolvedValue({ items: [identity] });
+    vi.mocked(getPersonnelOrderTemplateDraft).mockResolvedValue(scoped);
+    vi.mocked(getPersonnelOrderTemplatePublished).mockResolvedValue(null);
+    setup(); await screen.findByTestId("template-draft-editor");
+    return scoped;
+  }
+
+  it("keeps the newest ID60 RU/KK edits across an older save response and verifies the next save by GET", async () => {
+    const scoped = await openEducationDraft();
+    let acknowledge!: (value: typeof scoped) => void;
+    const pending = new Promise<typeof scoped>(resolve => { acknowledge = resolve; });
+    vi.mocked(savePersonnelOrderTemplateDraft).mockReturnValueOnce(pending);
+    const sent = { ...scoped, preamble_ru: "Отправленная преамбула", revision: 2 };
+    fireEvent.change(screen.getByLabelText("Преамбула RU"), { target: { value: sent.preamble_ru } });
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить черновик", exact: true }));
+    expect(screen.getByRole("button", { name: "Сохранение…" })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText("Преамбула RU"), { target: { value: "Последняя RU [поле]" } });
+    fireEvent.change(screen.getByLabelText("Преамбула KK"), { target: { value: "Последняя KK [өріс]" } });
+    vi.mocked(getPersonnelOrderTemplateDraft).mockResolvedValue(sent);
+    acknowledge(sent);
+    await screen.findByText("Отправленные тексты сохранены. В редакторе есть более новые несохранённые изменения.");
+    expect(screen.getByLabelText("Преамбула RU")).toHaveValue("Последняя RU [поле]");
+    expect(screen.getByLabelText("Преамбула KK")).toHaveValue("Последняя KK [өріс]");
+    expect(screen.getByRole("button", { name: "Сохранить черновик", exact: true })).toBeEnabled();
+    const latest = { ...sent, preamble_ru: "Последняя RU [поле]", preamble_kk: "Последняя KK [өріс]", revision: 3 };
+    vi.mocked(savePersonnelOrderTemplateDraft).mockResolvedValue(latest);
+    vi.mocked(getPersonnelOrderTemplateDraft).mockResolvedValue(latest);
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить черновик", exact: true }));
+    await screen.findByText("Черновик сохранён");
+    expect(savePersonnelOrderTemplateDraft).toHaveBeenLastCalledWith("EDUCATION_INFORMATION_CHANGE", expect.objectContaining({ expected_revision: 2, expected_template_version_id: 60, preamble_ru: latest.preamble_ru, preamble_kk: latest.preamble_kk }), 44);
+    expect(getPersonnelOrderTemplateDraft).toHaveBeenLastCalledWith("EDUCATION_INFORMATION_CHANGE", 44);
+    expect(screen.getByRole("button", { name: "Сохранить черновик", exact: true })).toBeDisabled();
+  });
+
+  it("does not claim ID60 is saved when a successful PUT is contradicted by the readback", async () => {
+    const scoped = await openEducationDraft();
+    vi.mocked(savePersonnelOrderTemplateDraft).mockResolvedValue({ ...scoped, title_ru: "Последний текст", revision: 2 });
+    changeTitle("Последний текст");
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить черновик", exact: true }));
+    await screen.findByText(/Не удалось подтвердить сохранение отправленных текстов ID60/);
+    expect(screen.queryByText("Черновик сохранён")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Заголовок RU")).toHaveValue("Последний текст");
+    expect(screen.getByRole("button", { name: "Сохранить черновик", exact: true })).toBeEnabled();
+  });
+
+  it("explains unchanged ID60 save state and retains publication checks for education", async () => {
+    await openEducationDraft();
+    const save = screen.getByRole("button", { name: "Сохранить черновик", exact: true });
+    const publish = screen.getByRole("button", { name: "Опубликовать версию", exact: true });
+    expect(save).toBeDisabled();
+    expect(screen.getByText("Нет несохранённых изменений.")).toBeVisible();
+    expect(publish).toBeEnabled();
+    fireEvent.change(screen.getByLabelText("Распорядительный текст RU"), { target: { value: "Образование [уровень образования]" } });
+    expect(save).toBeEnabled();
+    expect(screen.getByText("Есть несохранённые изменения.")).toBeVisible();
+    expect(publish).toBeDisabled();
+    expect(screen.getByText("Сначала сохраните изменения.")).toBeVisible();
+    fireEvent.change(screen.getByLabelText("Печатный заголовок KK"), { target: { value: "" } });
+    expect(screen.getByText("Заполните поле «Печатный заголовок KK».")).toBeVisible();
+    expect(publish).toBeDisabled();
+    expect(publishPersonnelOrderTemplateDraft).not.toHaveBeenCalled();
+  });
+
+  it("previews all ten current ID60 fields without synthetic order layouts or API requests", async () => {
+    await openEducationDraft();
+    vi.mocked(previewPersonnelOrderTemplateDraft).mockClear();
+    vi.mocked(apiFetchJson).mockClear();
+    const fields = screen.getByTestId("template-draft-editor").querySelectorAll("textarea");
+    fields.forEach((field, i) => fireEvent.change(field, { target: { value: `[поле ${i}]\nНесохранённый текст` } }));
+    fireEvent.click(screen.getByRole("button", { name: "Предварительный просмотр", exact: true }));
+    const panel = await screen.findByTestId("template-draft-preview");
+    expect(panel.querySelectorAll("article")).toHaveLength(2);
+    expect(panel.querySelectorAll("dd")).toHaveLength(10);
+    fields.forEach((_, i) => expect(panel).toHaveTextContent(`[поле ${i}]`));
+    expect(panel.querySelectorAll("iframe,.text-center")).toHaveLength(0);
+    expect(screen.queryByRole("button", { name: "Печатный предпросмотр KK/RU" })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("qualification-category-template-preview")).not.toBeInTheDocument();
+    expect(previewPersonnelOrderTemplateDraft).not.toHaveBeenCalled();
+    expect(apiFetchJson).not.toHaveBeenCalled();
+    expect(savePersonnelOrderTemplateDraft).not.toHaveBeenCalled();
+    expect(publishPersonnelOrderTemplateDraft).not.toHaveBeenCalled();
+  });
+  it.each(["QUALIFICATION_CATEGORY", "SERVICE_LENGTH_CHANGE"])("previews only raw %s editor texts for 43/58, refreshes unsaved fields and reopens the saved draft", async type => {
+    vi.mocked(previewPersonnelOrderTemplateDraft).mockClear();
+    vi.mocked(apiFetchJson).mockClear();
+    const scoped = { ...draft, template_id: 43, template_version_id: 58, item_type_code: type,
+      title_ru: "Об изменении стажа", title_kk: "Еңбек өтілін өзгерту туралы",
+      print_title_ru: "Изменение стажа [ФИО]", print_title_kk: "Өтіл [аты-жөні]",
+      body_template_ru: "Установить [стаж] с [дата].", body_template_kk: "[күні] бастап [өтіл] белгілеу." };
+    const identity = { template_id: 43, item_type_code: type, name_ru: scoped.title_ru, name_kk: scoped.title_kk,
+      is_default: false, draft_version_id: 58, template_version_id: null };
+    currentSearch = new URLSearchParams("section=personnel-orders&type=QUALIFICATION_CATEGORY&template_id=43");
+    vi.mocked(listPersonnelOrderTemplateCatalog).mockResolvedValue({ items: [{ ...catalog.items[0], type_code: type, support_level: "PARTIAL", templates: [identity] }] });
+    vi.mocked(listPersonnelIndependentTemplates).mockResolvedValue({ items: [identity] });
+    vi.mocked(getPersonnelOrderTemplateDraft).mockResolvedValue(scoped);
+    vi.mocked(getPersonnelOrderTemplatePublished).mockResolvedValue(null);
+    const view = setup();
+    await screen.findByTestId("template-draft-editor");
+    const show = async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Предварительный просмотр" }));
+      const panel = await screen.findByTestId("template-draft-preview");
+      expect(panel).toHaveAttribute("data-preview-source", "EDITOR_VALUES");
+      expect(panel.querySelectorAll("article")).toHaveLength(2);
+      expect(panel.querySelectorAll("dd")).toHaveLength(10);
+      expect(screen.queryByTestId("qualification-category-template-preview")).not.toBeInTheDocument();
+      expect(screen.queryByText("Предварительный просмотр приказа")).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Печатный предпросмотр KK/RU" })).not.toBeInTheDocument();
+      expect(previewPersonnelOrderTemplateDraft).not.toHaveBeenCalled();
+      expect(apiFetchJson).not.toHaveBeenCalled();
+      return panel;
+    };
+    const initial = await show();
+    expect(initial).toHaveTextContent(scoped.body_template_ru);
+    expect(initial).toHaveTextContent(scoped.body_template_kk);
+    const fields = [
+      ["Заголовок RU", "title_ru"], ["Заголовок KK", "title_kk"],
+      ["Печатный заголовок RU", "print_title_ru"], ["Печатный заголовок KK", "print_title_kk"],
+      ["Преамбула RU", "preamble_ru"], ["Преамбула KK", "preamble_kk"],
+      ["Распорядительный текст RU", "body_template_ru"], ["Распорядительный текст KK", "body_template_kk"],
+      ["Основание RU", "basis_template_ru"], ["Основание KK", "basis_template_kk"],
+    ] as const;
+    for (const [label, key] of fields) fireEvent.change(screen.getByLabelText(label), { target: { value: `[${key}]\nUNSAVED` } });
+    expect(screen.queryByTestId("template-draft-preview")).not.toBeInTheDocument();
+    const changed = await show();
+    expect(Array.from(changed.querySelectorAll("dd"), node => node.textContent)).toEqual(fields.filter((_, i) => i % 2 === 0).concat(fields.filter((_, i) => i % 2 === 1)).map(([, key]) => `[${key}]\nUNSAVED`));
+    fireEvent.change(screen.getByLabelText("Распорядительный текст RU"), { target: { value: "[повторная правка]" } });
+    expect(await show()).toHaveTextContent("[повторная правка]");
+    view.unmount(); setup();
+    await screen.findByTestId("template-draft-editor");
+    const reopened = await show();
+    for (const [label, key] of fields) expect(screen.getByLabelText(label)).toHaveValue(scoped[key]);
+    expect(reopened).not.toHaveTextContent("UNSAVED");
+    expect(reopened).toHaveTextContent(scoped.body_template_ru);
+    expect(createPersonnelOrderTemplateDraft).not.toHaveBeenCalled();
+    expect(savePersonnelOrderTemplateDraft).not.toHaveBeenCalled();
+    expect(publishPersonnelOrderTemplateDraft).not.toHaveBeenCalled();
+  });
   it("shows current category requirements, optional specialty, calculated expiry and the actual partial scope", async () => {
     const type="QUALIFICATION_CATEGORY";
     const scoped={...draft,template_id:42,template_version_id:56,item_type_code:type};
@@ -93,7 +237,7 @@ describe("TemplatesPageClient draft lifecycle", () => {
   it('saves an official print heading independently of the detailed internal name and reports a missing KK heading',async()=>{
     const internal='О совмещении (О замещении на время отпуска как доп ставка)';
     vi.mocked(getPersonnelOrderTemplateDraft).mockResolvedValue({...draft,title_ru:internal,print_title_ru:'О замещении',print_title_kk:null});
-    setup();await open();
+    setup();await open("Продолжить редактирование");
     expect(screen.getByLabelText('Заголовок RU')).toHaveValue(internal);
     expect(screen.getByLabelText('Печатный заголовок RU')).toHaveValue('О замещении');
     expect(screen.getByLabelText('Печатный заголовок KK')).toHaveValue('');

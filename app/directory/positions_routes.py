@@ -564,9 +564,11 @@ def list_positions_crud(
         q_list = text(
             f"""
             {with_prefix}
-            SELECT p.*, ARRAY(SELECT a.alias_text FROM public.position_aliases a
+            SELECT p.*, NULLIF(BTRIM(to_jsonb(raw_position)->>'document_genitive_ru'),'') AS document_genitive_ru,
+                ARRAY(SELECT a.alias_text FROM public.position_aliases a
                 WHERE a.position_id=p.position_id ORDER BY a.alias_id) AS aliases
             FROM public.position_directory p
+            LEFT JOIN public.positions raw_position ON raw_position.position_id=p.position_id
             WHERE {where_sql}
             ORDER BY {order_sql}
             LIMIT :limit OFFSET :offset
