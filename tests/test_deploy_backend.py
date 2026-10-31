@@ -53,6 +53,7 @@ def _deploy_fixture(tmp_path: Path) -> tuple[Path, Path, dict[str, str]]:
         repo / ".venv" / "bin" / "alembic",
         f"""#!/usr/bin/env bash
 echo "alembic:$*" >> "$TEST_LOG"
+if [[ -n "${{TEST_PYTHONPATH_LOG:-}}" ]]; then printf '%s\\n' "$PYTHONPATH" >> "$TEST_PYTHONPATH_LOG"; fi
 case "$1 $2" in
   "upgrade head") exit "${{MOCK_ALEMBIC_UPGRADE_EXIT:-0}}" ;;
   "heads ") echo "{HEAD_REVISION} (head)" ;;
@@ -114,10 +115,10 @@ curl() { echo "curl:$*" >> "$TEST_LOG"; printf '200'; }
     return deploy_script, log_path, env
 
 
-def _run_deploy(script: Path, env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+def _run_deploy(script: Path, env: dict[str, str], *, cwd: Path | None = None) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [_bash_executable(), str(script)],
-        cwd=script.parents[1],
+        cwd=cwd or script.parents[1],
         env=env,
         text=True,
         capture_output=True,
@@ -170,3 +171,25 @@ def test_deploy_fails_before_restart_when_current_is_not_head(tmp_path: Path) ->
     assert "systemctl:restart test-backend" not in calls
     assert "database revision does not match the single Alembic head" in result.stderr
     assert "deploy backend OK" not in result.stdout
+
+
+@pytest.mark.parametrize("existing", [None, "", "/retained path:/another-module-root"])
+def test_alembic_import_path_uses_release_root_and_preserves_existing_path(tmp_path: Path, existing: str | None) -> None:
+    script, _, env = _deploy_fixture(tmp_path / "release with spaces")
+    unrelated = tmp_path / "unrelated working directory"
+    unrelated.mkdir()
+    captured = tmp_path / "alembic-pythonpath.log"
+    env["TEST_PYTHONPATH_LOG"] = _shell_path(captured)
+    if existing is None:
+        env.pop("PYTHONPATH", None)
+    else:
+        env["PYTHONPATH"] = existing
+
+    result = _run_deploy(script, env, cwd=unrelated)
+
+    assert result.returncode == 0, result.stderr
+    expected = _shell_path(script.parents[1]) + (":" + existing if existing else "")
+    # upgrade, heads and current must all get the release root, with no empty
+    # path component that would make imports depend on the caller's cwd.
+    assert captured.read_text(encoding="utf-8").splitlines() == [expected] * 3
+    assert "deploy backend OK" in result.stdout

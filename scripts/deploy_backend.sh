@@ -3,6 +3,8 @@
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Alembic's console entrypoint must resolve migration imports from this release.
+export PYTHONPATH="${REPO_ROOT}${PYTHONPATH:+:${PYTHONPATH}}"
 SERVICE_NAME="${CORPSITE_BACKEND_SERVICE:-corpsite-backend}"
 HEALTH_URL="${CORPSITE_BACKEND_HEALTH_URL:-http://127.0.0.1:8000/health}"
 ENSURE_PORT="${REPO_ROOT}/scripts/ops/ensure_port_free.sh"
