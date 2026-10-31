@@ -2,12 +2,15 @@
 import {useEffect,useState} from "react";
 import {apiFetchJson} from "@/lib/api";
 import {formatThrownError} from "@/lib/i18n";
+import {useCurrentUser} from "@/lib/currentUser";
 type ReferenceValue={code:string;name_ru:string;name_kk:string;description_ru?:string;description_kk?:string;sort_order:number;is_active:boolean;revision:number;usage_count:number};
 type ReferenceList={items:ReferenceValue[];total:number;schema_ready:boolean};
 
 const blank={code:"",name_ru:"",name_kk:"",sort_order:0,is_active:true,description_ru:"",description_kk:""};
 const input="rounded border bg-transparent p-2";
 export default function EducationReferenceManager({levels}:{levels:boolean}){
+  const standaloneUser=useCurrentUser();
+  const documentationViewer=standaloneUser?.is_documentation_viewer===true || standaloneUser?.is_sysadmin_assistant===true;
   const API=levels?"/api/ppr/education-levels":"/api/ppr/document-kinds";
   const [list,setList]=useState<ReferenceList & {can_manage?:boolean}>({items:[],total:0,schema_ready:false});
   const [query,setQuery]=useState("");const [state,setState]=useState("all");const [refresh,setRefresh]=useState(0);
@@ -25,7 +28,7 @@ export default function EducationReferenceManager({levels}:{levels:boolean}){
     <h1 className="text-2xl font-semibold">{levels?"Уровни образования":"Виды документов"}</h1>
     <p>{levels?"Пустое значение означает «не указано». «Без образования» — отдельный выбор. Пояснения о классах отображаются только здесь; для документов передаётся выбранное название.":"Виды документов самостоятельны и не объединяются с типами документов. ATTESTATION — Свидетельство; SCHOOL_ATTESTATE — Аттестат."} Коды постоянны. Неактивные значения сохраняются в прежних записях. Использования считаются по явным ссылкам в карточках и документах, без сопоставления свободного текста.</p>
     <div className="flex flex-wrap gap-3"><label>Поиск RU/KK <input className={input} value={query} onChange={e=>setQuery(e.target.value)}/></label><label>Статус <select aria-label="Статус" className={input} value={state} onChange={e=>setState(e.target.value)}><option value="all">Все</option><option value="active">Активные</option><option value="inactive">Неактивные</option></select></label>
-      {list.can_manage&&list.schema_ready?<button className={input} onClick={()=>open(null)}>Добавить значение</button>:null}</div>
+      {(list.can_manage||documentationViewer)&&list.schema_ready?<button className={input} onClick={()=>open(null)}>Добавить значение</button>:null}</div>
     {!list.schema_ready?<p role="status">Управление станет доступно после миграции hrlocal309.</p>:null}
     {error?<p role="alert">{error}</p>:null}
     {editing!==undefined?<form className="grid gap-3 rounded border p-3" onSubmit={e=>{e.preventDefault();void save();}}>
@@ -37,6 +40,6 @@ export default function EducationReferenceManager({levels}:{levels:boolean}){
       {levels?<><label>Пояснение RU <textarea aria-label="Пояснение RU" maxLength={2000} disabled={busy} className={input} value={form.description_ru} onChange={e=>setForm(v=>({...v,description_ru:e.target.value}))}/></label><label>Пояснение KK <textarea aria-label="Пояснение KK" maxLength={2000} disabled={busy} className={input} value={form.description_kk} onChange={e=>setForm(v=>({...v,description_kk:e.target.value}))}/></label></>:null}
       <div className="flex gap-3"><button className={input} disabled={busy}>Сохранить</button><button className={input} type="button" disabled={busy} onClick={()=>setEditing(undefined)}>Отмена</button></div>
     </form>:null}
-    <table className="w-full text-left"><thead><tr>{['Код','Название RU','Название KK',...(levels?['Пояснения RU / KK']:[]),'Порядок','Статус','Использований',''].map((h,i)=><th key={i} className="p-2">{h}</th>)}</tr></thead><tbody>{list.items.map(row=><tr key={row.code} className="border-t"><td className="p-2">{row.code}</td><td className="p-2">{row.name_ru}</td><td className="p-2">{row.name_kk}</td>{levels?<td className="p-2">{row.description_ru}<br/>{row.description_kk}</td>:null}<td className="p-2">{row.sort_order}</td><td className="p-2">{row.is_active?'Активно':'Неактивно'}</td><td className="p-2">{row.usage_count??0}</td><td>{list.can_manage&&list.schema_ready?<button className={input} onClick={()=>open(row)}>Редактировать {row.code}</button>:null}</td></tr>)}</tbody></table>
+    <table className="w-full text-left"><thead><tr>{['Код','Название RU','Название KK',...(levels?['Пояснения RU / KK']:[]),'Порядок','Статус','Использований',''].map((h,i)=><th key={i} className="p-2">{h}</th>)}</tr></thead><tbody>{list.items.map(row=><tr key={row.code} className="border-t"><td className="p-2">{row.code}</td><td className="p-2">{row.name_ru}</td><td className="p-2">{row.name_kk}</td>{levels?<td className="p-2">{row.description_ru}<br/>{row.description_kk}</td>:null}<td className="p-2">{row.sort_order}</td><td className="p-2">{row.is_active?'Активно':'Неактивно'}</td><td className="p-2">{row.usage_count??0}</td><td>{(list.can_manage||documentationViewer)&&list.schema_ready?<button className={input} onClick={()=>open(row)}>Редактировать {row.code}</button>:null}</td></tr>)}</tbody></table>
   </div>;
 }

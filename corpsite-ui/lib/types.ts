@@ -1,6 +1,10 @@
 // FILE: corpsite-ui/lib/types.ts
 
 export type MeInfo = {
+  is_documentation_viewer?: boolean;
+  is_sysadmin_assistant?: boolean;
+  assistant_permissions?: Record<string, boolean>;
+  must_change_password?: boolean;
   user_id?: number;
   role_id?: number;
   role_code?: string;

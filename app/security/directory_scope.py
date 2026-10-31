@@ -188,9 +188,9 @@ def require_uid(
 def load_user_ctx(user_id: int) -> Dict[str, Any]:
     q = text(
         """
-        SELECT user_id, role_id, unit_id, is_active, login
-        FROM public.users
-        WHERE user_id = :uid
+        SELECT u.user_id, u.role_id, u.unit_id, u.is_active, u.login, r.code AS role_code
+        FROM public.users u LEFT JOIN public.roles r ON r.role_id=u.role_id
+        WHERE u.user_id = :uid
         LIMIT 1
         """
     )
@@ -205,6 +205,9 @@ def load_user_ctx(user_id: int) -> Dict[str, Any]:
 
 
 def is_privileged(user_ctx: Dict[str, Any]) -> bool:
+    from app.security.documentation_viewer import is_standalone_profile
+    if is_standalone_profile(user_ctx):
+        return False
     if is_system_admin(user_ctx):
         return True
 

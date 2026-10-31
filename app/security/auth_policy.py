@@ -53,10 +53,14 @@ def require_password_not_expired_or_change_allowed(
     user_ctx: Dict[str, Any],
 ) -> None:
     """Raise 403 when must_change_password enforcement blocks the request path."""
-    if not must_change_password_enforcement_enabled():
+    from app.security.documentation_viewer import is_standalone_profile
+    viewer = is_standalone_profile(user_ctx)
+    if not must_change_password_enforcement_enabled() and not viewer:
         return
     if not user_ctx.get("must_change_password"):
         return
+    if viewer and request.url.path.rstrip("/") == "/auth/me":
+        return  # The UI needs the flag to route the first login to password change.
     if is_password_change_allowed_path(request.url.path):
         return
     raise HTTPException(status_code=403, detail="Password change required.")

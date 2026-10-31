@@ -97,14 +97,14 @@ export default function ProfilePageClient() {
         ) : null}
       </div>
 
-      <TelegramBindPanel
+      {!me?.is_documentation_viewer && !me?.is_sysadmin_assistant ? <TelegramBindPanel
         me={me}
         loading={loading}
         onRefresh={async () => {
           const data = await loadMe();
           setMe(data);
         }}
-      />
+      /> : null}
 
       <PasswordChangePanel
         onSuccess={() => {

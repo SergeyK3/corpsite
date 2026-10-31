@@ -30,6 +30,9 @@ def evaluate_hr_governance_access(user_ctx: Dict[str, Any]) -> bool:
 def require_personnel_admin_api(
     user_ctx: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
+    from app.security.documentation_viewer import documentation_read_allowed
+    if documentation_read_allowed(user_ctx):
+        return user_ctx
     if not evaluate_personnel_admin_access(user_ctx):
         raise HTTPException(
             status_code=403,

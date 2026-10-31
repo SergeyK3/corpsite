@@ -692,7 +692,7 @@ export default function PersonnelOrderDetailDrawer({
                   onToast={(message, kind = "success") => setToast({ message, kind })}
                 />
                 <div className="mt-3 flex flex-wrap items-start gap-2">{editable ? <button type="button" data-testid="personnel-order-open-header-editor" onClick={() => { setActiveTab("data"); window.requestAnimationFrame(() => { const editor = headerEditorRef.current; if (!editor) return; if (typeof editor.scrollIntoView === "function") editor.scrollIntoView({ block: "start", behavior: "smooth" }); editor.querySelector<HTMLInputElement>("input:not([disabled])")?.focus(); }); }} className="rounded border border-blue-300 px-3 py-1.5 text-sm text-blue-800">Редактировать</button> : null}{isHrHead ? <HrHeadDeletionPanel orderId={order.order_id} orderNumber={order.order_number} onDeleted={() => { onChanged?.(detail); onClose(); }} /> : null}</div>
-                {editable && !isHrHead ? <DraftDeletionPanel orderId={order.order_id} onDeleted={() => { onChanged?.(detail); onClose(); }} /> : null}
+                {editable && !isHrHead && (!me?.is_sysadmin_assistant || order.created_by === me.user_id) ? <DraftDeletionPanel orderId={order.order_id} onDeleted={() => { onChanged?.(detail); onClose(); }} /> : null}
               </section>
 
               <section ref={headerEditorRef} data-testid="personnel-order-header-editor-section">

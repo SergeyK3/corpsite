@@ -19,6 +19,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 
 from app.errors import raise_error, ErrorCode
+from app.security.documentation_viewer import enforce_documentation_request
 
 from app.db.engine import engine
 from app.meta import router as meta_router
@@ -68,6 +69,7 @@ _openapi_url = None if is_prod_env() else "/openapi.json"
 
 app = FastAPI(
     title="Corpsite MVP",
+    dependencies=[Depends(enforce_documentation_request)],
     default_response_class=UTF8JSONResponse,
     docs_url=_docs_url,
     redoc_url=_redoc_url,

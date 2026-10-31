@@ -14,16 +14,17 @@ from app.services.personnel_order_template_application_service import _FIELDS, _
 from app.services.personnel_orders_query_service import PersonnelOrderValidationError
 
 
-def resolve_add_item_context(conn: Any, order: Any) -> dict[str, Any]:
+def resolve_add_item_context(conn: Any, order: Any, *, lock: bool = True) -> dict[str, Any]:
     # The generic command row intentionally omits newer template columns.
-    # Read the actual persisted binding under the same transaction's lock.
-    order = conn.execute(text("SELECT * FROM personnel_orders WHERE order_id=:id FOR UPDATE"), {"id": order["order_id"]}).mappings().one()
+    # Read the persisted binding; mutation callers retain the transaction lock.
+    suffix = " FOR UPDATE" if lock else ""
+    order = conn.execute(text("SELECT * FROM personnel_orders WHERE order_id=:id" + suffix), {"id": order["order_id"]}).mappings().one()
     items = conn.execute(text("SELECT * FROM personnel_order_items WHERE order_id=:id AND item_status='ACTIVE' ORDER BY item_number,item_id"), {"id": order["order_id"]}).mappings().all()
     if not items:
         raise PersonnelOrderValidationError("Добавление недоступно: в приказе нет действующего первого пункта с привязкой к шаблону.")
     from app.services.personnel_order_item_templates import resolve_item_templates
     try:
-        templates = resolve_item_templates(conn, order, list(items))
+        templates = resolve_item_templates(conn, order, list(items), lock=lock)
     except TemplateApplicationError as exc:
         raise PersonnelOrderValidationError(str(exc)) from exc
     first = items[0]
@@ -42,7 +43,7 @@ def get_add_item_context(order_id: int) -> dict[str, Any]:
         order = _fetch_order_row(conn, order_id)
         _ensure_order_editable(order)
         try:
-            context = resolve_add_item_context(conn, order)
+            context = resolve_add_item_context(conn, order, lock=False)
         except PersonnelOrderValidationError as exc:
             return {"available": False, "reason": str(exc)}
         template = context["template"]

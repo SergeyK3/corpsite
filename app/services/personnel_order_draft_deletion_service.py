@@ -61,12 +61,14 @@ def _ensure_scope(conn, order_id: int, scope_unit_ids: list[int] | None) -> None
         raise DraftDeletionError("DRAFT_ORDER_SCOPE_FORBIDDEN", "Personnel order is outside your organizational scope.", 403)
 
 
-def _preview_tx(conn, order_id: int, *, lock: bool = False, scope_unit_ids: list[int] | None = None) -> dict[str, Any]:
+def _preview_tx(conn, order_id: int, *, lock: bool = False, scope_unit_ids: list[int] | None = None, owner_user_id: int | None = None) -> dict[str, Any]:
     suffix = " FOR UPDATE" if lock else ""
     order = conn.execute(text(f"SELECT * FROM public.personnel_orders WHERE order_id=:id{suffix}"), {"id": order_id}).mappings().first()
     if not order:
         raise DraftDeletionError("DRAFT_ORDER_NOT_FOUND", "Personnel order not found.", 404)
     order = dict(order)
+    from app.security.sysadmin_assistant import assert_delete_owner
+    assert_delete_owner(order, owner_user_id=owner_user_id)
     if order.get("deleted_at") is not None:
         raise DraftDeletionError("DRAFT_ORDER_ALREADY_DELETED", "Personnel order has already been removed from the working contour.")
     if str(order.get("status")) != "DRAFT":
@@ -81,18 +83,18 @@ def _preview_tx(conn, order_id: int, *, lock: bool = False, scope_unit_ids: list
     return {"order": {key: order.get(key) for key in ("order_id", "order_number", "order_date", "order_type_code", "status", "storage_json")}, "planned_deletions": [{"table": "personnel_orders", "column": "order_id", "count": 1}], "retained": ["employees", "employee_events", "template applications", "lifecycle and acknowledgement audit"], "retained_dependencies": retained_refs, "blocking_dependencies": blockers, "can_delete": not blockers, "confirmation_phrase": f"DELETE DRAFT ORDER {order_id}", "deletion_mode": "SOFT_DELETE"}
 
 
-def preview(order_id: int, *, scope_unit_ids: list[int] | None = None) -> dict[str, Any]:
+def preview(order_id: int, *, scope_unit_ids: list[int] | None = None, owner_user_id: int | None = None) -> dict[str, Any]:
     with engine.connect() as conn:
-        return _preview_tx(conn, int(order_id), scope_unit_ids=scope_unit_ids)
+        return _preview_tx(conn, int(order_id), scope_unit_ids=scope_unit_ids, owner_user_id=owner_user_id)
 
 
-def execute(*, order_id: int, actor_user_id: int, reason: str, confirmation_phrase: str, scope_unit_ids: list[int] | None = None) -> dict[str, Any]:
+def execute(*, order_id: int, actor_user_id: int, reason: str, confirmation_phrase: str, scope_unit_ids: list[int] | None = None, owner_user_id: int | None = None) -> dict[str, Any]:
     if not reason or not reason.strip():
         raise DraftDeletionError("DRAFT_ORDER_REASON_REQUIRED", "Reason is required.", 422)
     if confirmation_phrase != f"DELETE DRAFT ORDER {int(order_id)}":
         raise DraftDeletionError("DRAFT_ORDER_CONFIRMATION_REQUIRED", "Confirmation must contain the exact order_id.", 422)
     with engine.begin() as conn:
-        plan = _preview_tx(conn, int(order_id), lock=True, scope_unit_ids=scope_unit_ids)
+        plan = _preview_tx(conn, int(order_id), lock=True, scope_unit_ids=scope_unit_ids, owner_user_id=owner_user_id)
         if plan["blocking_dependencies"]:
             raise DraftDeletionError("DRAFT_ORDER_DEPENDENCY_BLOCKED", "Blocking or unknown dependencies exist.")
         snapshot = dict(plan["order"])

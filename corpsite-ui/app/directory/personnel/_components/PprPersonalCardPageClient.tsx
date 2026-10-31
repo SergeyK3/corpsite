@@ -130,7 +130,7 @@ export default function PprPersonalCardPageClient({
   const resolvedEmployeeId = pprEmployeeId ?? fallbackEmployeeId;
   const migrationUniverseId = Number(searchParams.get("migration_universe_id"));
   const canReadMigration = currentUser?.has_ppr_migration_status_read === true;
-  const canReadEmployeeAccess = currentUser?.has_user_access_admin === true;
+  const canReadEmployeeAccess = currentUser?.has_user_access_admin === true || (currentUser?.is_documentation_viewer === true || currentUser?.is_sysadmin_assistant === true);
   const provisionAccount = searchParams.get("provisionAccount") === "1";
 
   const loadCard = React.useCallback(
@@ -303,7 +303,7 @@ export default function PprPersonalCardPageClient({
     ppr != null &&
     (!ppr.materialization.materialized ||
       ppr.materialization.lifecycle_state === PPR_LIFECYCLE_NOT_MATERIALIZED);
-  const canCorrectCard = currentUser?.has_personnel_card_edit === true;
+  const canCorrectCard = currentUser?.has_personnel_card_edit === true || (currentUser?.is_documentation_viewer === true || currentUser?.is_sysadmin_assistant === true);
   const employmentBiographyEditable = !notMaterialized && canEditPprSections && canCorrectCard && correctionMode;
   const militaryEditable = !notMaterialized && canEditPprSections && canCorrectCard && correctionMode;
   const canManagePhoto = Boolean(canCorrectCard && correctionMode);
@@ -561,7 +561,7 @@ export default function PprPersonalCardPageClient({
                 <PprCardAdditionalSection
                   additional={ppr.additional}
                   personId={resolvedPersonId ?? undefined}
-                  editableStatusFacts={Boolean(canEditPprSections && currentUser?.has_personnel_admin)}
+                  editableStatusFacts={Boolean(canEditPprSections && (currentUser?.has_personnel_admin || currentUser?.is_documentation_viewer || currentUser?.is_sysadmin_assistant))}
                   onStatusFactsSaved={() => { void loadCard(); }}
                 />
               </PprCardSection>

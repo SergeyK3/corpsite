@@ -252,6 +252,13 @@ export async function fetchAdminUsers(params?: {
   return apiFetchJson<AdminUser[]>("/admin/users", { query: params });
 }
 
+export async function createDocumentationUser(body: {
+  full_name: string; login: string; temporary_password: string;
+  profile_code?: "DOCUMENTATION_VIEWER" | "SYSADMIN_ASSISTANT";
+}): Promise<AdminUser> {
+  return apiFetchJson<AdminUser>("/admin/users", { method: "POST", body });
+}
+
 export async function fetchAdminUser(userId: number): Promise<AdminUser> {
   return apiFetchJson<AdminUser>(`/admin/users/${userId}`);
 }

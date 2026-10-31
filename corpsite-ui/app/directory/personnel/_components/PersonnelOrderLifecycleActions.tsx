@@ -49,10 +49,12 @@ export default function PersonnelOrderLifecycleActions({
   const applyInFlightRef = React.useRef(false);
 
   const hasRegistrationFields = Boolean(String(order.order_number || "").trim() && order.order_date);
-  const canReady = String(order.status).toUpperCase() === "DRAFT";
-  const canRegister = canRegisterPersonnelOrder(order.status);
-  const canApply = canApplyPersonnelOrderAction(order.status, linkedEventCount);
-  const canVoid = canVoidPersonnelOrder(order.status) && !order.is_archived;
+  const allowed = (permission: string) => !me?.is_documentation_viewer &&
+    (!me?.is_sysadmin_assistant || me.assistant_permissions?.[permission] === true);
+  const canReady = allowed("ASSISTANT_PERSONNEL_ORDERS_EDIT") && String(order.status).toUpperCase() === "DRAFT";
+  const canRegister = allowed("ASSISTANT_PERSONNEL_ORDERS_REGISTER") && canRegisterPersonnelOrder(order.status);
+  const canApply = allowed("ASSISTANT_PERSONNEL_ORDERS_APPLY") && canApplyPersonnelOrderAction(order.status, linkedEventCount);
+  const canVoid = !me?.is_sysadmin_assistant && !me?.is_documentation_viewer && canVoidPersonnelOrder(order.status) && !order.is_archived;
   const canArchive =
     me?.has_personnel_orders_archive === true &&
     canArchivePersonnelOrder(order.status, order.is_archived);

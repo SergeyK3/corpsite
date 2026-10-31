@@ -189,6 +189,15 @@ def resolve_effective_personnel_visibility(
     include_inactive: bool = False,
 ) -> Dict[str, Any]:
     """Resolve merged visibility scope for a user (read-only; no action grants)."""
+    from app.security.documentation_viewer import is_standalone_profile
+    if user_ctx and is_standalone_profile(user_ctx):
+        return {
+            "has_visibility": True, "show_org_sidebar": True,
+            "organization_wide": True, "scope_unit_ids": None,
+            "can_view_personnel": True, "can_view_tasks": False,
+            "source": user_ctx["role_code"], "matched_assignment_ids": [],
+            "implicit_from_access_level": False,
+        }
     with engine.connect() as conn:
         ctx = _fetch_user_context(conn, int(user_id))
         if not ctx:

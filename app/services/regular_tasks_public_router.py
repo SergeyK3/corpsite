@@ -25,6 +25,9 @@ router = APIRouter(prefix="/regular-tasks", tags=["regular-tasks"])
 
 
 def _require_admin_or_privileged(user: Dict[str, Any]) -> None:
+    from app.security.documentation_viewer import documentation_read_allowed
+    if documentation_read_allowed(user):
+        return
     role_id = user.get("role_id")
     try:
         rid = int(role_id) if role_id is not None else None

@@ -29,6 +29,22 @@ afterEach(() => {
 });
 
 describe("PersonnelOrderLifecycleActions archive buttons", () => {
+  it("allows assistant application without exposing void or administrator capabilities", async () => {
+    const { apiAuthMe } = await import("@/lib/api");
+    vi.mocked(apiAuthMe).mockResolvedValueOnce({user_id:970001,is_sysadmin_assistant:true,
+      has_sysadmin_api:false,assistant_permissions:{ASSISTANT_PERSONNEL_ORDERS_APPLY:true}});
+    render(<PersonnelOrderLifecycleActions order={baseOrder} itemCount={1} linkedEventCount={0} onChanged={vi.fn()} />);
+    await waitFor(() => expect(screen.queryByRole("button",{name:"Аннулировать"})).not.toBeInTheDocument());
+    expect(screen.getByTestId("personnel-order-apply-button")).toBeEnabled();
+  });
+
+  it("removes assistant application action when its separate grant is revoked", async () => {
+    const { apiAuthMe } = await import("@/lib/api");
+    vi.mocked(apiAuthMe).mockResolvedValueOnce({user_id:970001,is_sysadmin_assistant:true,assistant_permissions:{}});
+    render(<PersonnelOrderLifecycleActions order={baseOrder} itemCount={1} linkedEventCount={0} onChanged={vi.fn()} />);
+    await waitFor(() => expect(screen.queryByTestId("personnel-order-apply-button")).not.toBeInTheDocument());
+  });
+
   it("shows archive button for archivable order with permission", async () => {
     render(
       <PersonnelOrderLifecycleActions

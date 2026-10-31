@@ -7,6 +7,7 @@ from typing import Annotated, Any, Dict, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.api.admin_schemas import (
+    DocumentationAccountCreate,
     PersonnelCategorySamplePreview,
     AccessGrantCreate,
     AccessGrantResponse,
@@ -518,6 +519,22 @@ def admin_list_users(
 ) -> List[Dict[str, Any]]:
     result = list_admin_users(limit=limit, offset=offset)
     return result["items"]
+
+
+@router.post("/users", response_model=AdminUserResponse, status_code=201)
+def admin_create_documentation_user(
+    body: DocumentationAccountCreate,
+    admin: Dict[str, Any] = Depends(require_sysadmin_api),
+) -> Dict[str, Any]:
+    if int(admin.get("role_id") or 0) != 2:
+        raise HTTPException(403, "System administrator required.")
+    from app.services.documentation_accounts_service import create_documentation_account
+    try:
+        return create_documentation_account(**body.model_dump(), actor_user_id=int(admin["user_id"]))
+    except PermissionError as exc:
+        raise HTTPException(403, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
 
 
 @router.get("/users/{user_id}", response_model=AdminUserResponse)

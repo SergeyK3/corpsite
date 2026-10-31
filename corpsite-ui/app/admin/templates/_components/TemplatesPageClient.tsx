@@ -1,4 +1,5 @@
 "use client";
+import { useCurrentUser } from "@/lib/currentUser";
 
 import {educationLiteralTokens} from "@/app/directory/personnel/_lib/educationDraft";
 import { PERSONAL_DATA_TEMPLATE_TYPE, personalDataTemplateIssues } from "../_lib/personalDataTemplate";
@@ -245,6 +246,8 @@ function isEducationDraft(source: { template_id?: number | null; template_versio
 
 function DraftEditor({ editor, published, onSaved, onPublished, variables, requiredVariables, warning, onRemove }: { onRemove: (name: string) => void; editor: EditorDocument; published: PersonnelOrderTemplateDraft | null; onSaved: (draft: PersonnelOrderTemplateDraft) => void; onPublished: (draft: PersonnelOrderTemplateDraft) => void; variables: string[]; requiredVariables?: Partial<Record<keyof PersonnelOrderTemplateDraftText, string[]>>; warning?: string }) {
   const { language: sectionLanguage } = usePersonnelSectionLanguage();
+  const standaloneUser = useCurrentUser();
+  const documentationViewer = standaloneUser?.is_documentation_viewer === true || standaloneUser?.is_sysadmin_assistant === true;
   const initial = editor.kind === "DRAFT" ? editor.draft : editor.workingCopy;
   const [savedDraft, setSavedDraft] = useState<PersonnelOrderTemplateDraftText & { item_type_code: string; template_id?: number | null }>(initial);
   const [values, setValues] = useState<PersonnelOrderTemplateDraftText>(() => editableDraftText(initial));
@@ -339,7 +342,7 @@ function DraftEditor({ editor, published, onSaved, onPublished, variables, requi
   const isInitialWorkingCopy = isWorkingCopy && editor.workingCopy.base.source === "INITIAL";
   const isDirty = !textMatches(values, savedDraft);
   const differsFromPublished = serverDraft != null && published != null && !textMatches(serverDraft, published);
-  const canSave = !saving && (isInitialWorkingCopy || isDirty);
+  const canSave = !documentationViewer && !saving && (isInitialWorkingCopy || isDirty);
   const saveStateExplanation = saving ? "Сохранение отправленных изменений…"
     : isDirty ? "Есть несохранённые изменения." : "Нет несохранённых изменений.";
   const incompatible = Object.entries(values).flatMap(([field, value]) => {
@@ -371,7 +374,7 @@ function DraftEditor({ editor, published, onSaved, onPublished, variables, requi
       return [];
     })),
   ] : [];
-  const canPublish = incompatible.length === 0 && serverDraft != null && !publishing && !isDirty && (published == null || differsFromPublished)
+  const canPublish = !documentationViewer && incompatible.length === 0 && serverDraft != null && !publishing && !isDirty && (published == null || differsFromPublished)
     && (!educationDraft || educationPublicationBlockers.length === 0)
     && (savedDraft.item_type_code !== PERSONAL_DATA_TEMPLATE_TYPE || personalDataTemplateIssues(values).length === 0);
   const showPreview = () => {

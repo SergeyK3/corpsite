@@ -73,6 +73,9 @@ def _log_shadow_guard_decision(
 
 def evaluate_admin_access(user_ctx: Dict[str, Any]) -> bool:
     """Sysadmin API access: role_id=2, break-glass user allowlist, or admin grants."""
+    from app.security.documentation_viewer import is_standalone_profile
+    if is_standalone_profile(user_ctx):
+        return False
     mode = admin_guard_mode()
     allowed = _sysadmin_api_allowed(user_ctx)
 
@@ -100,6 +103,9 @@ def require_sysadmin_api(
 
     DIRECTORY_PRIVILEGED_ROLE_IDS does NOT grant sysadmin API access.
     """
+    from app.security.documentation_viewer import documentation_read_allowed
+    if documentation_read_allowed(user_ctx):
+        return user_ctx
     if not evaluate_admin_access(user_ctx):
         raise HTTPException(status_code=403, detail="Admin access required.")
     return user_ctx

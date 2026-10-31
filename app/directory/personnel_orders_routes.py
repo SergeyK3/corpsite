@@ -228,9 +228,9 @@ def create_manual_personnel_order_draft_route(payload: PersonnelOrderManualDraft
     require_personnel_admin_or_403(user)
     try:
         values = payload.model_dump(exclude_none=True)
-        if payload.item_type_code in {"PERSONAL_DATA_CHANGE", "SERVICE_LENGTH_CHANGE", "EDUCATION_INFORMATION_CHANGE"} and payload.unresolved_subject is not None:
-            # This document mode deliberately has no employee identifier.
-            values["employee_id"] = None
+        # The service requires this argument even when a manual subject has no
+        # employee link; exclude_none must not drop it from the call.
+        values["employee_id"] = payload.employee_id
         return call_service(create_manual_draft, created_by=_require_user_id(user), **values)
     except PersonnelOrderValidationError as exc:
         raise validation_error_to_http422(exc)
@@ -490,7 +490,9 @@ def personnel_order_draft_deletion_preview_route(
     """Read-only, fail-closed dependency preview for one DRAFT order."""
     try:
         require_personnel_admin_or_403(user)
-        return draft_deletion.preview(order_id, scope_unit_ids=_draft_order_scope_or_403(user))
+        from app.security.sysadmin_assistant import is_assistant
+        options = {"owner_user_id": int(user["user_id"])} if is_assistant(user) else {}
+        return draft_deletion.preview(order_id, scope_unit_ids=_draft_order_scope_or_403(user), **options)
     except draft_deletion.DraftDeletionError as exc:
         raise HTTPException(exc.status_code, detail={"code": exc.code, "message": exc.message}) from exc
     except HTTPException:
@@ -508,7 +510,9 @@ def delete_personnel_order_draft_route(
     """Atomically delete one explicitly confirmed, isolated DRAFT order."""
     try:
         require_personnel_admin_or_403(user)
-        return draft_deletion.execute(order_id=order_id, actor_user_id=int(user["user_id"]), reason=payload.reason, confirmation_phrase=payload.confirmation_phrase, scope_unit_ids=_draft_order_scope_or_403(user))
+        from app.security.sysadmin_assistant import is_assistant
+        options = {"owner_user_id": int(user["user_id"])} if is_assistant(user) else {}
+        return draft_deletion.execute(order_id=order_id, actor_user_id=int(user["user_id"]), reason=payload.reason, confirmation_phrase=payload.confirmation_phrase, scope_unit_ids=_draft_order_scope_or_403(user), **options)
     except draft_deletion.DraftDeletionError as exc:
         raise HTTPException(exc.status_code, detail={"code": exc.code, "message": exc.message}) from exc
     except HTTPException:

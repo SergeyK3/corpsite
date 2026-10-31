@@ -7,6 +7,14 @@ from typing import Any, Dict, List, Optional, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
+class DocumentationAccountCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    full_name: str = Field(min_length=1, max_length=200)
+    login: str = Field(min_length=1, max_length=200)
+    temporary_password: str = Field(min_length=8, max_length=200, repr=False)
+    profile_code: Literal["DOCUMENTATION_VIEWER", "SYSADMIN_ASSISTANT"] = "DOCUMENTATION_VIEWER"
+
+
 class PersonnelReplacementPreview(BaseModel):
     model_config = {"extra": "forbid"}
     expected_revision: int = Field(..., ge=1)

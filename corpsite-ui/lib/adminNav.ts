@@ -31,7 +31,7 @@ export function isPrivilegedOperator(me: MeInfo | null | undefined): boolean {
 
 /** Full admin sidebar (directory, sync, regular-tasks) — role_id=2 only. */
 export function canSeeAdminShell(me: MeInfo | null | undefined): boolean {
-  return isSystemAdminRole(me);
+  return isSystemAdminRole(me) || me?.is_documentation_viewer === true || me?.is_sysadmin_assistant === true;
 }
 
 /** Run journal — aligned with GET /regular-task-runs (_require_admin_or_privileged). */
@@ -41,6 +41,7 @@ export function canSeeRegularTaskRunsJournal(me: MeInfo | null | undefined): boo
 
 /** Sysadmin cabinet nav — role_id=2 or explicit sysadmin API access only. */
 export function canSeeSysadminCabinetNav(me: MeInfo | null | undefined): boolean {
+  if (me?.is_documentation_viewer || me?.is_sysadmin_assistant) return true;
   if (isSystemAdminRole(me)) return true;
   return me?.has_sysadmin_api === true;
 }

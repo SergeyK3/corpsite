@@ -19,6 +19,9 @@ router = APIRouter()
 
 
 def _require_user_access_admin(user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
+    from app.security.documentation_viewer import documentation_read_allowed
+    if documentation_read_allowed(user):
+        return user
     if not has_admin_permission(int(user["user_id"]), USER_ACCESS_ADMIN):
         raise HTTPException(status_code=403, detail="Permission required: USER_ACCESS_ADMIN")
     return user

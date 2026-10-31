@@ -7,6 +7,8 @@ import { usePathname, useRouter } from "next/navigation";
 
 import { apiAuthMe } from "@/lib/api";
 import { CurrentUserProvider } from "@/lib/currentUser";
+import DocumentationViewingBoundary from "./DocumentationViewingBoundary";
+import PasswordChangePanel from "@/app/profile/_components/PasswordChangePanel";
 import {
   canSeeAdminShell,
   canSeePersonnelIdentityOperationsNav,
@@ -431,6 +433,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const showHrDirectoryOnly = showDirectoryOnlySidebar;
 
   useEffect(() => {
+    if ((me?.is_documentation_viewer || me?.is_sysadmin_assistant) && !me.must_change_password && (pathname === "/" || pathname === "/tasks")) {
+      router.replace("/admin/system");
+    }
+  }, [me, pathname, router]);
+
+  useEffect(() => {
     if (isLogin || loading || isPrintPage) return;
     if (!forbiddenNonAdminRoute) return;
     router.replace("/tasks");
@@ -443,7 +451,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const showPositionCabinetNav = shouldShowPositionCabinetNav(pathname, { showPersonnelVisibility });
 
   function renderMainSection(content: React.ReactNode) {
-    return <section className="min-w-0">{content}</section>;
+    const viewOnly = me?.is_documentation_viewer || (me?.is_sysadmin_assistant && !pathname.startsWith("/directory/personnel/orders"));
+    return <section className="min-w-0">{viewOnly && !pathname.startsWith("/profile")
+      ? <DocumentationViewingBoundary>{content}</DocumentationViewingBoundary> : content}</section>;
   }
 
   function withCurrentUser(node: React.ReactNode) {
@@ -451,6 +461,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   }
 
   if (isLogin || isPublicIntake) return withCurrentUser(<>{children}</>);
+
+  if ((me?.is_documentation_viewer || me?.is_sysadmin_assistant) && me.must_change_password) {
+    return withCurrentUser(<main className="mx-auto max-w-xl space-y-4 p-6">
+      <h1 className="text-xl font-semibold">Смените временный пароль</h1>
+      <p>Перед просмотром интерфейса задайте собственный пароль.</p>
+      <PasswordChangePanel onSuccess={redirectToLogin} />
+      <button type="button" onClick={onLogoutClick}>Выйти</button>
+    </main>);
+  }
 
   if (isPrintPage) {
     if (loading) {

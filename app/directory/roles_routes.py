@@ -21,7 +21,8 @@ router = APIRouter()
 
 def _can_manage_user_access(user: Dict[str, Any]) -> bool:
     """Keep the role catalogue authorization aligned with user provisioning."""
-    return _is_privileged(user) or has_admin_permission(
+    from app.security.documentation_viewer import documentation_read_allowed
+    return documentation_read_allowed(user) or _is_privileged(user) or has_admin_permission(
         int(user["user_id"]), USER_ACCESS_ADMIN
     )
 

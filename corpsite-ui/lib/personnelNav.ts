@@ -17,6 +17,7 @@ export function isSystemAdministrator(me: MeInfo | null | undefined): boolean {
 
 /** Read-only «Персонал» — management-facing personnel browser (ADR-042 E1 + admin + HR). */
 export function canSeePersonnelDirectoryNav(me: MeInfo | null | undefined): boolean {
+  if (me?.is_documentation_viewer || me?.is_sysadmin_assistant) return true;
   if (isSystemAdminRole(me)) return true;
   if (me?.has_sysadmin_api === true) return true;
   if (me?.is_privileged === true) return true;
@@ -26,6 +27,7 @@ export function canSeePersonnelDirectoryNav(me: MeInfo | null | undefined): bool
 
 /** «Кадровые процессы» — HR operational contour (HR enrollment manager or sysadmin). */
 export function canSeeHrProcessesNav(me: MeInfo | null | undefined): boolean {
+  if (me?.is_documentation_viewer || me?.is_sysadmin_assistant) return true;
   if (isSystemAdminRole(me)) return true;
   if (me?.is_privileged === true) return true;
   if (String(me?.role_code ?? "").toUpperCase() === "HR_HEAD") return true;
@@ -197,6 +199,7 @@ export function shouldShowPrimaryAdminNavItem(
   me: MeInfo | null | undefined,
   opts: { isAdmin: boolean; showSysadminNav: boolean; showPersonnelLifecycleNav: boolean; showPersonnelIdentityOperationsNav: boolean },
 ): boolean {
+  if ((me?.is_documentation_viewer || me?.is_sysadmin_assistant) && ["/admin/regular-tasks/catch-up", "/admin/sync", "/tasks"].includes(item.href)) return false;
   if (item.href === "/admin/system/personnel-lifecycle") return opts.showPersonnelLifecycleNav;
   if (item.href === "/admin/system/personnel-identity/operations") {
     return opts.showPersonnelIdentityOperationsNav;

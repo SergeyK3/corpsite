@@ -65,7 +65,8 @@ def assert_ppr_read_allowed_for_employee(
     uid = int(user_ctx["user_id"])
     scope = compute_scope(uid, user_ctx, include_inactive=True)
     require_personnel_visibility_or_403(user_ctx, scope)
-    if _is_org_wide_reader(user_ctx, scope):
+    from app.security.documentation_viewer import documentation_read_allowed
+    if documentation_read_allowed(user_ctx) or _is_org_wide_reader(user_ctx, scope):
         return
     visible = _employee_visible_in_scope(
         employee_id=employee_id,
@@ -87,7 +88,8 @@ def assert_ppr_read_allowed_for_person(
     uid = int(user_ctx["user_id"])
     scope = compute_scope(uid, user_ctx, include_inactive=True)
     require_personnel_visibility_or_403(user_ctx, scope)
-    if _is_org_wide_reader(user_ctx, scope):
+    from app.security.documentation_viewer import documentation_read_allowed
+    if documentation_read_allowed(user_ctx) or _is_org_wide_reader(user_ctx, scope):
         return
 
     db = db_engine or default_engine

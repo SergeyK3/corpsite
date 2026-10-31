@@ -25,6 +25,9 @@ def require_privileged_or_403(user_ctx: Dict[str, Any]) -> None:
 
 
 def _require_privileged_or_personnel_admin(user_ctx: Dict[str, Any], *, detail: str) -> None:
+    from app.security.documentation_viewer import documentation_read_allowed
+    if documentation_read_allowed(user_ctx):
+        return
     if _is_privileged(user_ctx):
         return
     if evaluate_personnel_admin_access(user_ctx):
@@ -34,6 +37,9 @@ def _require_privileged_or_personnel_admin(user_ctx: Dict[str, Any], *, detail: 
 
 def require_personnel_admin_or_403(user_ctx: Dict[str, Any]) -> None:
     """Org-wide personnel journal and HR process reads (ADR-045)."""
+    from app.security.sysadmin_assistant import assistant_order_operation_allowed
+    if assistant_order_operation_allowed(user_ctx):
+        return
     _require_privileged_or_personnel_admin(
         user_ctx,
         detail="Personnel admin access required.",
@@ -42,6 +48,9 @@ def require_personnel_admin_or_403(user_ctx: Dict[str, Any]) -> None:
 
 def require_personnel_events_read_or_403(user_ctx: Dict[str, Any]) -> None:
     """Allow the narrow journal reader without broad HR-process authority."""
+    from app.security.documentation_viewer import documentation_read_allowed
+    if documentation_read_allowed(user_ctx):
+        return
     if _is_privileged(user_ctx) or evaluate_personnel_admin_access(user_ctx):
         return
     try:
@@ -55,6 +64,9 @@ def require_personnel_events_read_or_403(user_ctx: Dict[str, Any]) -> None:
 
 def resolve_personnel_events_scope_or_403(user_ctx: Dict[str, Any]) -> Optional[List[int]]:
     """Resolve journal scope without promoting an observer into PPR visibility."""
+    from app.security.documentation_viewer import documentation_read_allowed
+    if documentation_read_allowed(user_ctx):
+        return None
     if _is_privileged(user_ctx) or evaluate_personnel_admin_access(user_ctx):
         scope = compute_scope(int(user_ctx["user_id"]), user_ctx)
         require_personnel_visibility_or_403(user_ctx, scope)

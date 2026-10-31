@@ -300,6 +300,26 @@ def _enrich_user_context(user: Dict[str, Any]) -> Dict[str, Any]:
     )
 
     out = dict(user)
+    from app.security.documentation_viewer import is_documentation_viewer, is_standalone_profile
+    if is_standalone_profile(out):
+        from app.security.sysadmin_assistant import is_assistant, PERMISSIONS
+        # Separate read capability; never advertise administrative write rights.
+        out.update({"is_documentation_viewer": is_documentation_viewer(out),
+            "is_sysadmin_assistant": is_assistant(out), "is_privileged": False,
+            "is_system_admin": False, "has_sysadmin_api": False,
+            "has_personnel_admin": False, "has_personnel_card_edit": False,
+            "has_user_access_admin": False, "has_hr_governance": False,
+            "has_hr_enrollment_manager": False, "can_hard_delete_employee": False,
+            "can_view_all_tasks": False, "has_personnel_events_read": True,
+            "has_personnel_visibility": True, "show_org_sidebar": True,
+            "personnel_visibility": {"has_visibility": True, "show_org_sidebar": True,
+                "organization_wide": True, "scope_unit_ids": None,
+                "can_view_personnel": True, "can_view_tasks": False,
+                "source": out["role_code"], "matched_assignment_ids": []}})
+        out["assistant_permissions"] = {
+            code: has_admin_permission(int(out["user_id"]), code) for code in PERMISSIONS
+        } if is_assistant(out) else {}
+        return out
     out["is_privileged"] = is_privileged(out)
     out["is_system_admin"] = int(out.get("role_id") or 0) == 2
     # WP-TD-002A: the web process never advertises the legacy delete capability.

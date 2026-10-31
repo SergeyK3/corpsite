@@ -2,9 +2,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCurrentUser } from "@/lib/currentUser";
 
 import {
   fetchAdminUsers,
+  createDocumentationUser,
   forcePasswordChangeAdminUser,
   lockAdminUser,
   mapAdminSystemApiError,
@@ -23,6 +25,14 @@ function userStatusLabel(u: AdminUser): string {
 }
 
 export default function UsersTab() {
+  const me = useCurrentUser();
+  const canCreate = Number(me?.role_id) === 2 && !me?.is_documentation_viewer;
+  const [createOpen, setCreateOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [fullName, setFullName] = useState("");
+  const [login, setLogin] = useState("");
+  const [temporaryPassword, setTemporaryPassword] = useState("");
+  const [profileCode, setProfileCode] = useState<"DOCUMENTATION_VIEWER" | "SYSADMIN_ASSISTANT">("DOCUMENTATION_VIEWER");
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -84,10 +94,40 @@ export default function UsersTab() {
     }
   }
 
+  async function submitCreate(event: React.FormEvent) {
+    event.preventDefault();
+    if (creating || !canCreate) return;
+    setCreating(true); setError(null); setSuccess(null);
+    try {
+      const created = await createDocumentationUser({ full_name: fullName.trim(), login: login.trim(), temporary_password: temporaryPassword, profile_code: profileCode });
+      setTemporaryPassword(""); setLogin(""); setFullName(""); setCreateOpen(false);
+      setSuccess(`Создан аккаунт ${created.login}. При первом входе потребуется сменить пароль.`);
+      await load();
+    } catch (err) {
+      setError(mapAdminSystemApiError(err, "Не удалось создать аккаунт"));
+    } finally { setCreating(false); }
+  }
+
   return (
     <div className="space-y-4">
       <ErrorBanner message={error} />
       <SuccessBanner message={success} />
+
+      {canCreate ? <button type="button" onClick={() => { setCreateOpen(true); setError(null); }}
+        className="rounded-lg bg-blue-600 px-3 py-2 text-sm text-white">Создать аккаунт для руководства</button> : null}
+      {canCreate && createOpen ? <form onSubmit={submitCreate} aria-label="Создание самостоятельного аккаунта" className="space-y-3 rounded-lg border p-4">
+        <h2 className="font-semibold">Самостоятельный аккаунт</h2>
+        <label className="block">Профиль<select value={profileCode} onChange={e => setProfileCode(e.target.value as typeof profileCode)} className="ml-2 rounded border p-2 dark:bg-zinc-900">
+          <option value="DOCUMENTATION_VIEWER">DOCUMENTATION_VIEWER — просмотр</option>
+          <option value="SYSADMIN_ASSISTANT">SYSADMIN_ASSISTANT — Помощник системного администратора</option>
+        </select></label>
+        <p className="text-sm text-zinc-500">{profileCode === "DOCUMENTATION_VIEWER" ? "Просмотр без сохранения." : "Помощник может создавать и редактировать кадровые приказы, регистрировать и применять их к реальным сотрудникам. Управление системой, справочниками и шаблонами закрыто."} Сотрудник не создаётся. При первом входе обязательна смена пароля.</p>
+        <label className="block">Имя<input required maxLength={200} value={fullName} onChange={e => setFullName(e.target.value)} className="ml-2 rounded border p-2 dark:bg-zinc-900" /></label>
+        <label className="block">Логин<input required maxLength={200} autoComplete="off" value={login} onChange={e => setLogin(e.target.value)} className="ml-2 rounded border p-2 dark:bg-zinc-900" /></label>
+        <label className="block">Временный пароль<input required type="password" minLength={8} maxLength={200} autoComplete="new-password" value={temporaryPassword} onChange={e => setTemporaryPassword(e.target.value)} className="ml-2 rounded border p-2 dark:bg-zinc-900" /></label>
+        <div className="flex gap-3"><button type="submit" disabled={creating} className="rounded bg-blue-600 px-3 py-2 text-white">{creating ? "Создание…" : "Создать аккаунт"}</button>
+          <button type="button" disabled={creating} onClick={() => { setCreateOpen(false); setTemporaryPassword(""); }}>Отмена</button></div>
+      </form> : null}
 
       <div className="flex flex-wrap items-center gap-3">
         <input

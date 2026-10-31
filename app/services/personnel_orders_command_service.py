@@ -929,6 +929,15 @@ def delete_personnel_order_item(*, order_id: int, item_id: int) -> Dict[str, Any
     with engine.begin() as conn:
         scope_tokens = lock_personnel_order_evidence_scopes_tx(conn, order_ids=[order_id])
         order = _fetch_order_row(conn, order_id)
+        from app.security.sysadmin_assistant import assert_delete_owner
+        assert_delete_owner(order)
+        from app.security.sysadmin_assistant import _action, DELETE_OWN
+        assistant_action = _action.get()
+        if assistant_action and assistant_action["permission"] == DELETE_OWN:
+            applied = conn.execute(text("SELECT EXISTS(SELECT 1 FROM public.employee_events WHERE order_id=:id)"),
+                {"id": int(order_id)}).scalar_one()
+            if applied:
+                raise PersonnelOrderConflictError("Cannot delete items of an applied personnel order.")
         _ensure_order_editable(order)
         item = conn.execute(
             text(

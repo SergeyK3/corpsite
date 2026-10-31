@@ -61,7 +61,7 @@ def _document_form_ru(payload:Mapping[str,Any],field:str)->str:
  employee=payload.get("employee")
  name=employee.get("name") if isinstance(employee,Mapping) else None
  return _mapped_text(name,"full_name_dative_ru","dative_ru")
-def _order(conn:Any,order_id:int):
+def _order(conn:Any,order_id:int,*,lock:bool=True):
  from app.services.personnel_orders_command_service import require_active_personnel_order
  require_active_personnel_order(conn,order_id,lock=True)
  order=conn.execute(text("SELECT * FROM public.personnel_orders WHERE order_id=:id FOR UPDATE"),{"id":order_id}).mappings().first()
@@ -234,8 +234,8 @@ def _render(template:Mapping[str,Any],values:Mapping[str,str], *, draft_preview:
  return result
 def _blocks(conn,order_id,item_ids):
  return conn.execute(text("SELECT editorial_block_id block_id,'ORDER' scope,NULL::bigint order_item_id,locale,block_type,generated_text,override_text,revision FROM public.personnel_order_editorial_blocks WHERE order_id=:id UNION ALL SELECT item_editorial_block_id,'ITEM',order_item_id,locale,block_type,generated_text,override_text,revision FROM public.personnel_order_item_editorial_blocks WHERE order_item_id=ANY(:items)"),{"id":order_id,"items":item_ids}).mappings().all()
-def _preview(conn,order_id):
- order,items,templates=_order(conn,order_id); template=templates[int(items[0]["item_id"])]; combined=len({t["template_version_id"] for t in templates.values()})>1 or order["order_type_code"]=="COMPOSITE"; item_ids=[int(x["item_id"]) for x in items]; entries=[]
+def _preview(conn,order_id,*,lock=True):
+ order,items,templates=_order(conn,order_id,lock=lock); template=templates[int(items[0]["item_id"])]; combined=len({t["template_version_id"] for t in templates.values()})>1 or order["order_type_code"]=="COMPOSITE"; item_ids=[int(x["item_id"]) for x in items]; entries=[]
  for item in items:
   item_template=templates[int(item["item_id"])]
   warnings,missing_data=[],[]
@@ -263,7 +263,7 @@ def _preview(conn,order_id):
  if len(entries)==1: result["current"]={**result["order_current"],**entries[0]["current"]}; result["proposed"]={**result["order_proposed"],**{f"{k}_template_{lang}":entries[0]["proposed"][f"{k}_{lang}"] for k in ("body","basis") for lang in ("ru","kk")}}
  return result
 def preview_template_application(order_id:int)->dict[str,Any]:
- with engine.connect() as conn:return _preview(conn,order_id)
+ with engine.connect() as conn:return _preview(conn,order_id,lock=False)
 def apply_template_application(order_id:int,actor_user_id:int,*,expected_document_revision:int,confirm_replace_overrides:bool=False,confirm_reapply:bool=False)->dict[str,Any]:
     with engine.begin() as conn:
         apply_template_application_tx(conn, order_id, actor_user_id,

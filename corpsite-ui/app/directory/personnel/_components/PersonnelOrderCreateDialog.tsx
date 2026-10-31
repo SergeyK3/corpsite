@@ -1,4 +1,5 @@
 "use client";
+import { useCurrentUser } from "@/lib/currentUser";
 import PersonnelOrderPersonalDataFields from './PersonnelOrderPersonalDataFields';
 import {emptyPersonalDataDraft,refreshPersonalDataContext,personalDataErrors,personalDataOrderPayload} from '../_lib/personalDataDraft';
 import PersonnelOrderEducationFields from "./PersonnelOrderEducationFields";
@@ -176,6 +177,7 @@ export default function PersonnelOrderCreateDialog({
   initialEmployeeQuery = null,
   initialOrgUnitId = null,
 }: Props) {
+  const documentationViewer = useCurrentUser()?.is_documentation_viewer === true;
   const { language: sectionLanguage } = usePersonnelSectionLanguage();
   const [type, setType] = React.useState(itemContext?.itemTypeCode ?? "");
   const [selectedVersion, setSelectedVersion] = React.useState<number | undefined>();
@@ -670,6 +672,7 @@ export default function PersonnelOrderCreateDialog({
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
+    if (documentationViewer) return;
     if (!canSubmit || !templateReady || submitInFlight.current || savedOrder.current) return;
     submitInFlight.current=true;
     setError(null);
@@ -944,7 +947,7 @@ export default function PersonnelOrderCreateDialog({
             <div className="flex justify-end gap-3">
             <button type="button" onClick={requestClose} disabled={busy} className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-800 shadow-sm hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800">Отмена</button>
 
-            <button type="submit" disabled={!canSubmit} aria-describedby={!canSubmit ? 'personnel-order-create-blockers' : undefined} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-blue-300 dark:disabled:bg-blue-900">{busy ? (itemContext ? "Сохранение…" : "Создание…") : itemContext ? "Добавить пункт" : "Создать приказ"}</button>
+            <button type="submit" disabled={documentationViewer || !canSubmit} aria-describedby={!canSubmit ? 'personnel-order-create-blockers' : undefined} className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-blue-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:bg-blue-300 dark:disabled:bg-blue-900">{busy ? (itemContext ? "Сохранение…" : "Создание…") : itemContext ? "Добавить пункт" : "Создать приказ"}</button>
             </div>
           </footer>
         </form>
