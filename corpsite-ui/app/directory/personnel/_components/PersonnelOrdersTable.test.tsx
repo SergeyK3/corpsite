@@ -1,8 +1,10 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PersonnelOrdersTable } from "./PersonnelOrdersTable";
 import type { PersonnelOrderListItem } from "../_lib/personnelOrdersApi.client";
+import { PERSONNEL_ORDER_TYPES } from "../_lib/personnelOrderLabels";
+import { PERSONNEL_ORDER_CANONICAL_TITLES } from "../_lib/personnelOrderCanonicalTitles";
 
 afterEach(cleanup);
 
@@ -22,9 +24,13 @@ const sampleRow: PersonnelOrderListItem = {
 };
 
 describe("PersonnelOrdersTable", () => {
-  it("renders the list API source title verbatim and falls back only for null", () => {
+  it("renders a single KK catalogue title by type regardless of the saved source title", () => {
     const { rerender } = render(<PersonnelOrdersTable items={[sampleRow]} />);
-    expect(screen.getByText("Қызметке қабылдау туралы")).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", {name: "Тип приказа"})).toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", {name: "Исходное название"})).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", {name: "Тип", exact: true})).not.toBeInTheDocument();
+    expect(within(screen.getByTestId("personnel-order-row-101")).getAllByText("Жұмысқа қабылдау туралы")).toHaveLength(1);
+    expect(screen.queryByText(sampleRow.source_title!)).not.toBeInTheDocument();
     rerender(
       <PersonnelOrdersTable
         items={[{
@@ -33,11 +39,26 @@ describe("PersonnelOrdersTable", () => {
         }]}
       />,
     );
-    expect(
-      screen.getByText("Бала күтіміне байланысты демалыстан жұмысқа шығу туралы"),
-    ).toBeInTheDocument();
+    expect(screen.getByText("Жұмысқа қабылдау туралы")).toBeInTheDocument();
+    expect(screen.queryByText("Бала күтіміне байланысты демалыстан жұмысқа шығу туралы")).not.toBeInTheDocument();
     rerender(<PersonnelOrdersTable items={[{ ...sampleRow, source_title: null }]} />);
-    expect(screen.getByTestId("personnel-order-row-101").children[2]).toHaveTextContent("—");
+    expect(screen.getByTestId("personnel-order-row-101").children[2]).toHaveTextContent("Жұмысқа қабылдау туралы");
+  });
+  it("uses KK catalogue names for every supported type, including reconstructed composite orders, without changing source data", () => {
+    const journalTitle = "  Қоса\u00a0 атқару туралыы\n";
+    const rows = PERSONNEL_ORDER_TYPES.map((code, index) => ({...sampleRow, order_id: index + 1,
+      order_type_code: code, source_title: "Исходная опичатка", storage_json: {source_title: journalTitle, reconstruction_status: "NEEDS_DOCX_REVIEW"}}));
+    const before = JSON.stringify(rows);
+    render(<PersonnelOrdersTable items={rows} />);
+    for (const row of rows) {
+      const title = row.order_type_code === "COMPOSITE" ? "Кадрлық өзгерістер туралы" : PERSONNEL_ORDER_CANONICAL_TITLES[row.order_type_code].kk;
+      const rendered = screen.getByTestId(`personnel-order-row-${row.order_id}`);
+      expect(rendered.children[2]).toHaveTextContent(title);
+      expect(within(rendered).getAllByText(title, {exact: true})).toHaveLength(1);
+      expect(rendered.children).toHaveLength(7);
+      expect(within(rendered).getByText("Восстановлен, требует сверки")).toBeInTheDocument();
+    }
+    expect(JSON.stringify(rows)).toBe(before);
   });
   it("renders empty state", () => {
     render(<PersonnelOrdersTable items={[]} loading={false} emptyMessage="Нет данных" />);
@@ -62,7 +83,7 @@ describe("PersonnelOrdersTable", () => {
     expect(screen.queryByText("PRINT TABLE V2")).not.toBeInTheDocument();
     expect(screen.getByText("WPPO-101")).toBeInTheDocument();
     expect(screen.getByText("Действия")).toBeInTheDocument();
-    expect(screen.getByTestId("personnel-order-row-101").children[5]).toHaveTextContent(
+    expect(screen.getByTestId("personnel-order-row-101").children[4]).toHaveTextContent(
       "Петрова Анна, Исходное имя без employee_id",
     );
     expect(screen.queryByTestId("personnel-order-print-101")).not.toBeInTheDocument();

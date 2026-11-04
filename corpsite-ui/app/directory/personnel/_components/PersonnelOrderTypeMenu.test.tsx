@@ -5,6 +5,62 @@ import { personnelOrderTypeLabel } from "../_lib/personnelOrderLabels";
 
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 const open = () => fireEvent.click(screen.getByRole("button", { name: "Тип кадрового приказа" }));
+const concurrentVariants = [
+  {template_id:29,template_version_id:47,version_number:1,name_ru:"О совмещении (иной вариант)",name_kk:"Басқа нұсқа",title_ru:"О совмещении",title_kk:"Қоса атқару",is_default:true},
+  {template_id:30,template_version_id:49,version_number:1,name_ru:"О совмещении (простой, как по доп ставке)",name_kk:"Қарапайым нұсқа",title_ru:"О совмещении",title_kk:"Қоса атқару",is_default:false},
+];
+
+it.each([400,700,1000])("keeps the type panel geometry when variants open at anchor %s", left => {
+  vi.stubGlobal("visualViewport", {width:1440,height:1000,offsetLeft:0,offsetTop:0,addEventListener:vi.fn(),removeEventListener:vi.fn()});
+  render(<PersonnelOrderTypeMenu value="" language="ru" onChange={vi.fn()} variants={{CONCURRENT_DUTY_START:concurrentVariants}}/>);
+  vi.spyOn(screen.getByRole("button",{name:"Тип кадрового приказа"}),"getBoundingClientRect").mockReturnValue({left,right:left+300,top:50,bottom:90} as DOMRect);
+  open();fireEvent.click(document.querySelector('[data-group="concurrent_pay"]')!);
+  const popup=screen.getByTestId("personnel-order-type-menu");
+  const panel=screen.getAllByRole("menu",{name:"Совмещение и доплаты"})[0];
+  const before={side:popup.dataset.side,width:panel.style.width,typeEdge:Number.parseFloat(popup.style.left)+(popup.dataset.side==='left'?0:280)};
+  fireEvent.pointerEnter(document.querySelector('[data-type-code="CONCURRENT_DUTY_START"]')!);
+  expect(popup.dataset.side).toBe(before.side);
+  expect(panel.style.width).toBe(before.width);
+  if(popup.dataset.side==='left')expect(Number.parseFloat(popup.style.left)+Number.parseFloat(panel.style.width)).toBe(before.typeEdge);
+});
+
+it("opens variants by click, cancels pending hover and selects the exact fractional-rate variant", async () => {
+  vi.useFakeTimers();vi.stubGlobal("PointerEvent",MouseEvent);
+  const choose=vi.fn();
+  render(<PersonnelOrderTypeMenu value="" language="ru" onChange={choose} variants={{CONCURRENT_DUTY_START:concurrentVariants}}/>);
+  open();fireEvent.click(document.querySelector('[data-group="concurrent_pay"]')!);
+  const type=document.querySelector('[data-type-code="CONCURRENT_DUTY_START"]')!;
+  fireEvent.pointerEnter(type,{clientX:400,clientY:210});
+  const panel=screen.getByRole("menu",{name:"Варианты шаблона"});
+  vi.spyOn(panel,"getBoundingClientRect").mockReturnValue({left:440,right:780,top:80,bottom:450} as DOMRect);
+  fireEvent.pointerEnter(document.querySelector('[data-type-code="CONCURRENT_DUTY_END"]')!,{clientX:420,clientY:240});
+  fireEvent.click(type);fireEvent.pointerEnter(panel);
+  act(()=>vi.advanceTimersByTime(500));
+  fireEvent.click(screen.getByRole("menuitem",{name:concurrentVariants[1].name_ru}));
+  expect(choose).toHaveBeenCalledExactlyOnceWith("CONCURRENT_DUTY_START",49);
+  expect(screen.queryByTestId("personnel-order-type-menu")).not.toBeInTheDocument();
+});
+
+it("navigates to variants and back to a search result with the keyboard", async () => {
+  const choose=vi.fn();
+  render(<PersonnelOrderTypeMenu value="" language="ru" onChange={choose} variants={{CONCURRENT_DUTY_START:concurrentVariants}}/>);
+  open();fireEvent.change(screen.getByRole("searchbox"),{target:{value:"совмещении"}});
+  fireEvent.keyDown(screen.getByRole("searchbox"),{key:"ArrowDown"});
+  const type=document.querySelector('[data-type-code="CONCURRENT_DUTY_START"]')!;
+  expect(type).toHaveFocus();
+  fireEvent.keyDown(type,{key:"ArrowRight"});
+  const first=await screen.findByRole("menuitem",{name:concurrentVariants[0].name_ru});
+  await waitFor(()=>expect(first).toHaveFocus());
+  fireEvent.keyDown(first,{key:"ArrowLeft"});expect(type).toHaveFocus();
+  expect(screen.queryByRole("menu",{name:"Варианты шаблона"})).not.toBeInTheDocument();
+  fireEvent.keyDown(type,{key:"ArrowRight"});await waitFor(()=>expect(first.isConnected).toBe(false));
+  await waitFor(()=>expect(screen.getByRole("menuitem",{name:concurrentVariants[0].name_ru})).toHaveFocus());
+  fireEvent.keyDown(document.activeElement!,{key:"End"});
+  expect(screen.getByRole("menuitem",{name:concurrentVariants[1].name_ru})).toHaveFocus();
+  fireEvent.keyDown(document.activeElement!,{key:"Escape"});
+  expect(screen.getByRole("button",{name:"Тип кадрового приказа"})).toHaveFocus();
+  expect(choose).not.toHaveBeenCalled();
+});
 
 it.each(["ru", "kk"] as const)("chooses exact versions in a third level in %s and selects a single variant directly", language => {
   const choose = vi.fn();

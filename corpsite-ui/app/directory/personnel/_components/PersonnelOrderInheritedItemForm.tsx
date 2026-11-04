@@ -2,10 +2,11 @@
 
 import * as React from "react";
 import PersonnelOrderCreateDialog from "./PersonnelOrderCreateDialog";
-import {getPersonnelOrderAddItemContext, mapPersonnelOrdersApiError, type PersonnelOrderAddItemContext, type PersonnelOrderDetailResponse} from "../_lib/personnelOrdersApi.client";
+import {getPersonnelOrderAddItemContext, mapPersonnelOrdersApiError, type PersonnelOrderAddItemContext, type PersonnelOrderDetailResponse, type PersonnelOrderItem} from "../_lib/personnelOrdersApi.client";
 
-export default function PersonnelOrderInheritedItemForm({orderId, onAdded, onCancel}: {
+export default function PersonnelOrderInheritedItemForm({orderId, orderItems, onAdded, onCancel}: {
   orderId: number;
+  orderItems?: PersonnelOrderItem[];
   onAdded: (order: PersonnelOrderDetailResponse) => void;
   onCancel: () => void;
 }) {
@@ -23,8 +24,8 @@ export default function PersonnelOrderInheritedItemForm({orderId, onAdded, onCan
     return () => {cancelled = true;};
   }, [orderId, attempt]);
   const itemContext = React.useMemo(() => context?.available && context.template && context.item_type_code
-    ? {orderId, template: context.template, itemTypeCode: context.item_type_code, employeeIds: context.employee_ids ?? []}
-    : undefined, [context, orderId]);
+    ? {orderId, template: context.template, itemTypeCode: context.item_type_code, employeeIds: context.employee_ids ?? [],items:orderItems, sourceTitleLocale: context.source_title_locale}
+    : undefined, [context, orderId, orderItems]);
   if (error) return <div className="p-4"><p role="alert">{error}</p><button type="button" onClick={() => setAttempt(value => value + 1)}>Повторить загрузку</button></div>;
   if (!context) return <p role="status" className="p-4">Загрузка закреплённого шаблона…</p>;
   if (!itemContext) return <p role="alert" className="p-4">{context.reason || "Добавление недоступно: версия шаблона не определена."}</p>;

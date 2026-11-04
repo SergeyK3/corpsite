@@ -4,6 +4,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import PersonnelOrderDetailDrawer from "./PersonnelOrderDetailDrawer";
 import type { PersonnelOrderDetailResponse } from "../_lib/personnelOrdersApi.client";
 
+vi.mock("@/lib/orgUnitsSelect", () => ({ loadOrgUnitSelectOptions: vi.fn(async () => [{unit_id: 91, name: "Document unit", name_kk: "Құжат бөлімі", document_genitive_kk: "Құжат бөлімінің", group_id: 99}]) }));
+
 const currentUser = vi.hoisted(() => ({ value: null as { role_code?: string } | null }));
 const hrHeadDelete = vi.hoisted(() => vi.fn());
 
@@ -149,15 +151,6 @@ function templateEditorial(prefix: "old" | "new"): PersonnelOrderEditorialState 
         { block_id: 11 + index * 2, scope: "item" as const, order_item_id: 17, locale: locale as "ru" | "kk", block_type: "basis" as const, generated_text: `${prefix} ${locale} basis`, override_text: null, effective_text: `${prefix} ${locale} basis`, review_status: "CURRENT" as const, editable: true, revision: 1 },
       ]),
     }],
-  };
-}
-
-function withClosingSuppressed(editorial: PersonnelOrderEditorialState, suppressed: boolean): PersonnelOrderEditorialState {
-  return {
-    ...editorial,
-    order_blocks: editorial.order_blocks.map((block) => block.block_type === "closing"
-      ? { ...block, override_text: suppressed ? "" : null, effective_text: suppressed ? "" : block.generated_text, revision: block.revision + 1 }
-      : block) as PersonnelOrderEditorialState["order_blocks"],
   };
 }
 
@@ -347,14 +340,16 @@ describe("PersonnelOrderDetailDrawer document tab", () => {
     await waitFor(() => expect(getEmployees).toHaveBeenCalled());
     fireEvent.click(screen.getByRole("button", { name: /Selected employee/ }));
     fireEvent.change(screen.getByLabelText("Должность в приказе 9"), { target: { value: "Document doctor" } });
-    fireEvent.change(screen.getByLabelText("Отделение в приказе 9"), { target: { value: "Document unit" } });
+    await screen.findByRole("option", {name:"Document unit",exact:true});
+    fireEvent.change(screen.getByLabelText("Подразделение 9"), { target: { value: "91" } });
     fireEvent.change(screen.getByLabelText("Специальность 9"), { target: { value: "Neurology" } });
     fireEvent.change(screen.getByLabelText("Дата действия 9"), { target: { value: "2026-09-03" } });
     fireEvent.change(screen.getByLabelText("Ставка в приказе 9"), { target: { value: "0,25" } });
     fireEvent.change(screen.getByLabelText("Причина исправления пункта 9"), { target: { value: "DOCUMENT_CONTEXT_CORRECTION" } });
     fireEvent.change(screen.getByLabelText("Пояснение исправления пункта 9"), { target: { value: "Исправлен документный контекст" } });
     fireEvent.click(screen.getByRole("button", { name: "Сохранить изменения" }));
-    await waitFor(() => expect(patchPersonnelOrderDocumentItem).toHaveBeenCalledWith(42, 9, expect.objectContaining({ expected_document_revision: 1, item_type_code: "TRANSFER", employee_id: 8, effective_date: "2026-09-03", document_subject_context: { position_name: "Document doctor", org_unit_name: "Document unit", specialty: "Neurology", rate: "0,25" }, reason_code: "DOCUMENT_CONTEXT_CORRECTION", reason_text: "Исправлен документный контекст" })));
+    await waitFor(() => expect(patchPersonnelOrderDocumentItem).toHaveBeenCalledWith(42, 9, expect.objectContaining({ expected_document_revision: 1, item_type_code: "TRANSFER", employee_id: 8, effective_date: "2026-09-03", document_subject_context: expect.objectContaining({ document_department:expect.objectContaining({unit:expect.objectContaining({unit_id:91,name:"Document unit"})}), document_position_nominative_ru: "Document doctor", position_name: "Document doctor", org_unit_name: "Document unit", specialty: "Neurology", rate: "0,25" }), reason_code: "DOCUMENT_CONTEXT_CORRECTION", reason_text: "Исправлен документный контекст" })));
+    expect(vi.mocked(patchPersonnelOrderDocumentItem).mock.calls[0][2]).not.toHaveProperty('payload');
     await waitFor(() => expect(getPersonnelOrderEditorial).toHaveBeenCalledTimes(2));
   });
 
@@ -572,7 +567,7 @@ describe("PersonnelOrderDetailDrawer document tab", () => {
     expect(screen.getByText("Вложения (1)")).toBeInTheDocument();
   });
 
-  it("hides closing controls while preserving stored closing wording in the document", async () => {
+  it("hides closing controls without changing saved text or document output", async () => {
     const before = templateEditorial("new");
     const terminationDetail: PersonnelOrderDetailResponse = {
       ...detail,
@@ -590,23 +585,32 @@ describe("PersonnelOrderDetailDrawer document tab", () => {
       }],
     };
     vi.mocked(getPersonnelOrder).mockResolvedValue(terminationDetail);
-    vi.mocked(getPersonnelOrderEditorial).mockResolvedValueOnce(before);
-    const savedBlocks = JSON.parse(JSON.stringify(before.order_blocks));
+    vi.mocked(getPersonnelOrderEditorial).mockResolvedValue(before);
+    const original=JSON.stringify(before);
+
     render(<PersonnelOrderDetailDrawer orderId={42} open onClose={vi.fn()} />);
     fireEvent.click(await screen.findByRole("tab", { name: "Данные" }));
-    expect(await screen.findByTestId("personnel-order-editorial-editor")).toBeInTheDocument();
     expect(screen.queryByTestId("personnel-order-closing-control")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("personnel-order-editorial-closing-toggle")).not.toBeInTheDocument();
-    expect(screen.queryByText("new kk closing")).not.toBeInTheDocument();
-    expect(patchPersonnelOrderEditorialBlock).not.toHaveBeenCalled();
-    expect(before.order_blocks).toEqual(savedBlocks);
+    await screen.findByTestId('personnel-order-editorial-requisites');
+    expect(screen.queryByTestId('personnel-order-editorial-block-Заключительная часть')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('personnel-order-editorial-closing-toggle')).not.toBeInTheDocument();
+
     fireEvent.click(screen.getByRole("tab", { name: "Документ" }));
     const document = await screen.findByTestId("personnel-order-document");
+    expect(document).not.toHaveTextContent("Қосымша өкімдер");
+    expect(document).toHaveTextContent("new kk closing");
     expect(document).toHaveTextContent("new kk title");
+    expect(document).toHaveTextContent("new kk preamble");
     expect(document).toHaveTextContent("new kk body");
     expect(document).toHaveTextContent("new kk basis");
-    expect(document).toHaveTextContent("new kk closing");
+
+    fireEvent.click(screen.getByRole("tab", { name: "Данные" }));
+    expect(screen.queryByTestId("personnel-order-editorial-closing-toggle")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("tab", { name: "Документ" }));
+    await waitFor(() => expect(screen.getByTestId("personnel-order-document")).not.toHaveTextContent("Қосымша өкімдер"));
+    expect(screen.getByTestId("personnel-order-document")).toHaveTextContent("new kk closing");
     expect(patchPersonnelOrderEditorialBlock).not.toHaveBeenCalled();
+    expect(JSON.stringify(before)).toBe(original);
   });
   it("keeps document blockers in data and uses revision for confirm", async () => {
     vi.mocked(getPersonnelOrder).mockResolvedValue(detail);

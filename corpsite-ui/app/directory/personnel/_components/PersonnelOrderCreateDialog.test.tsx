@@ -5,7 +5,7 @@ import PersonnelOrderCreateDialog from "./PersonnelOrderCreateDialog";
 
 it("prefills recall from a selected Musabekov, keeps corrections, and uses manual case input when missing", async () => {
   setup();
-  const musabekov={...employeeDetail,id:"77",fio:"Мусабеков Арман Ерланович",has_current_assignment:true,
+  const musabekov={...employeeDetail,id:"77",fio:"Мусабеков Арман Ерланович",document_forms_ru:{},document_forms_kk:{},has_current_assignment:true,
     position:{id:6,name:"Врач",job_nameru:"врач",job_namekk:"дәрігер"},
     org_unit:{...employeeDetail.org_unit,name:"Терапия",name_kk:"Терапия"}};
   vi.mocked(getEmployees).mockResolvedValue({items:[musabekov,musabekov],total:2});vi.mocked(getEmployee).mockResolvedValue(musabekov);
@@ -14,7 +14,7 @@ it("prefills recall from a selected Musabekov, keeps corrections, and uses manua
   expect(screen.getAllByRole("option",{name:/Мусабеков Арман Ерланович/})).toHaveLength(1);fireEvent.click(option);
   await waitFor(()=>expect(screen.getByTestId("selected-employee-id")).toHaveValue("77"));
   expect(screen.getByLabelText("Должность")).toHaveValue("врач");expect(screen.getByLabelText("Лауазым KZ")).toHaveValue("дәрігер");
-  expect(screen.getByLabelText("Подразделение")).toHaveValue("Терапия");expect(screen.getByLabelText("Бөлімше KZ")).toHaveValue("Терапия");
+  expect(screen.getByLabelText("Подразделение")).toHaveValue("59");expect(screen.getByTestId("department-name_kk")).toHaveTextContent("Терапия");
   expect(screen.getByLabelText("Основание RU")).toHaveValue("Докладная записка и личное согласие Мусабекова Армана Ерлановича");
   expect(screen.getByLabelText("Негіз KZ")).toHaveValue("Баяндау хат және Арман Ерланович Мусабековтің жеке келісімі");
   fireEvent.change(screen.getByLabelText("Основание RU"),{target:{value:"Ручное основание"}});
@@ -22,7 +22,7 @@ it("prefills recall from a selected Musabekov, keeps corrections, and uses manua
   expect(screen.getByLabelText("Основание RU")).toHaveValue("Ручное основание");
   fireEvent.click(screen.getByRole("button",{name:"Негізді ұсыну RU"}));
   expect(screen.getByLabelText("Основание RU")).toHaveValue("Докладная записка и личное согласие Ручная форма ФИО");
-  fireEvent.click(screen.getByRole("button",{name:"Сменить сотрудника"}));
+  fireEvent.click(screen.getByRole("button",{name:"Очистить сотрудника"}));
   const unknown={...musabekov,id:"78",fio:"Неизвестный"};vi.mocked(getEmployees).mockResolvedValue({items:[unknown],total:1});vi.mocked(getEmployee).mockResolvedValue(unknown);
   fireEvent.change(screen.getByLabelText("Сотрудник"),{target:{value:"Неизвестный"}});fireEvent.click(await screen.findByRole("option",{name:/Неизвестный/}));
   await waitFor(()=>expect(screen.getByTestId("selected-employee-id")).toHaveValue("78"));
@@ -44,9 +44,9 @@ it("creates a recall with separate bilingual bases and no rate or leave period",
   fireEvent.change(screen.getByLabelText("Номер приказа"), {target:{value:"RECALL-TEST"}});
   fireEvent.change(screen.getByLabelText("Дата приказа"), {target:{value:"2026-10-07"}});
   fireEvent.change(screen.getByLabelText("Дата действия"), {target:{value:"2026-10-12"}});
-  expect(screen.getByRole("button",{name:"Создать приказ"})).toBeDisabled();
+  expect(screen.getByRole("button",{name:"Создать приказ"})).toBeEnabled();
   fireEvent.change(screen.getByLabelText("Лауазым KZ"), {target:{value:"дәрігер"}});
-  fireEvent.change(screen.getByLabelText("Бөлімше KZ"), {target:{value:"Терапия"}});
+  fireEvent.change(screen.getByLabelText("Название KK — вручную"), {target:{value:"Терапия"}});
   fireEvent.change(screen.getByLabelText("Основание RU"), {target:{value:"Служебная записка"}});
   fireEvent.change(screen.getByLabelText("Негіз KZ"), {target:{value:"Қызметтік хат"}});
   vi.mocked(previewPersonnelOrderHeaderDuplicate).mockResolvedValue({blocking:false,warnings:[],candidates:[]});
@@ -94,6 +94,9 @@ const employee = {
 };
 const employeeDetail = {
   ...employee,
+  document_forms_ru:{employee_full_name_genitive_ru:"Ильясовой Ассель Адиловны",employee_full_name_dative_ru:"Ильясовой Ассель Адиловне"},
+  document_forms_kk:{employee_full_name_dative_kk:"Ассель Адиловна Ильясоваға",employee_full_name_genitive_kk:"Ассель Адиловна Ильясованың"},
+  position:{...employee.position,document_possessive_kk:"дәрігері"},
   active_assignment_id: 361,
   org_unit: { ...employee.org_unit, document_genitive_kk: "Сәулелік диагностика бөлімшесінің" },
   user: null,
@@ -163,7 +166,7 @@ const recallVariant = {template_id:8,template_version_id:13,version_number:1,nam
 
 async function fillRecall(select = true) {
   if (select) await selectEmployee();
-  for (const [label,value] of [["Номер приказа","RECALL-SLOW"],["Дата приказа","2026-10-08"],["Дата действия","2026-10-12"],["Лауазым KZ","дәрігер"],["Бөлімше KZ","Терапия"],["Основание RU","Служебная записка"],["Негіз KZ","Қызметтік хат"]]) {
+  for (const [label,value] of [["Номер приказа","RECALL-SLOW"],["Дата приказа","2026-10-08"],["Дата действия","2026-10-12"],["Лауазым KZ","дәрігер"],["Название KK — вручную","Терапия"],["Основание RU","Служебная записка"],["Негіз KZ","Қызметтік хат"]]) {
     fireEvent.change(screen.getByLabelText(label),{target:{value}});
   }
 }
@@ -230,6 +233,116 @@ async function chooseTypeInMenu(type: string) {
   fireEvent.change(screen.getByRole("searchbox"), { target: { value: personnelOrderTypeLabel(type, "kk") } });
   fireEvent.click(screen.getByRole("menuitem", { name: personnelOrderTypeLabel(type, "kk") }));
 }
+
+it.each(["", "Синтетикович"])("creates HIRE with separate manual names and optional patronymic %s without employee search", async middle => {
+  const variant = {...recallVariant, template_id: 38, template_version_id: 51, name_ru: "О приёме на работу", name_kk: "Жұмысқа қабылдау туралы"};
+  vi.mocked(getPersonnelOrderPublishedVariants).mockImplementation(async code => ({items: code === "HIRE" ? [variant] : [], independent_supported: true}));
+  setup();
+  vi.mocked(getPersonnelOrderPublishedTemplateTitle).mockResolvedValue({item_type_code: "HIRE", template_version_id: 51, title_ru: variant.name_ru, title_kk: variant.name_kk});
+  await chooseTypeInMenu("HIRE");
+  fireEvent.click(screen.getByRole("radio", {name: "Новый сотрудник"}));
+  expect(screen.queryByLabelText("Сотрудник", {selector: "input"})).not.toBeInTheDocument();
+  vi.mocked(getEmployees).mockClear();
+  fireEvent.change(screen.getByLabelText("Фамилия"), {target: {value: "Синтетиков"}});
+  fireEvent.change(screen.getByLabelText("Имя"), {target: {value: "Сынақ"}});
+  if (middle) fireEvent.change(screen.getByLabelText("Отчество (необязательно)"), {target: {value: middle}});
+  fireEvent.change(screen.getByLabelText("Ставка"), {target: {value: "0,75"}});
+  fireEvent.change(screen.getByLabelText("Основание (KK)", {selector: "textarea"}), {target: {value: "SYNTHETIC APPLICATION"}});
+  for (const [label, value] of [["Номер приказа", "SYNTHETIC-HIRE"], ["Дата приказа", "2026-11-04"], ["Дата действия", "2026-11-04"]]) {
+    fireEvent.change(screen.getByLabelText(label), {target: {value}});
+  }
+  vi.mocked(previewPersonnelOrderHeaderDuplicate).mockResolvedValue({blocking: false, warnings: [], candidates: []});
+  vi.mocked(createManualPersonnelOrderDraft).mockResolvedValue({order_id: 7001} as never);
+  await waitFor(() => expect(screen.getByRole("button", {name: "Создать приказ"})).toBeEnabled());
+  fireEvent.click(screen.getByRole("button", {name: "Создать приказ"}));
+  await waitFor(() => expect(createManualPersonnelOrderDraft).toHaveBeenCalledWith(expect.objectContaining({
+    item_type_code: "HIRE", employee_id: null,
+    unresolved_subject: expect.objectContaining({full_name: ["Синтетиков", "Сынақ", middle].filter(Boolean).join(" ")}),
+    item_payload: expect.objectContaining({new_employee: {last_name: "Синтетиков", first_name: "Сынақ", middle_name: middle}, employment_rate: 0.75, hire_basis:expect.objectContaining({kk:"SYNTHETIC APPLICATION"})}),
+  })));
+  expect(getEmployees).not.toHaveBeenCalled();
+  expect(getEmployee).not.toHaveBeenCalled();
+});
+
+it("keeps HIRE name inputs when toggling modes and requires both surname and first name", async () => {
+  setup();
+  await chooseTypeInMenu("HIRE");
+  fireEvent.click(screen.getByRole("radio", {name: "Новый сотрудник"}));
+  fireEvent.change(screen.getByLabelText("Фамилия"), {target: {value: "Синтетиков"}});
+  expect(screen.getByTestId("personnel-order-create-blockers")).toHaveTextContent("Укажите фамилию и имя");
+  fireEvent.click(screen.getByRole("radio", {name: "Сотрудник из списка"}));
+  expect(screen.queryByLabelText("Фамилия")).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("radio", {name: "Новый сотрудник"}));
+  expect(screen.getByLabelText("Фамилия")).toHaveValue("Синтетиков");
+  expect(createManualPersonnelOrderDraft).not.toHaveBeenCalled();
+});
+
+it("shows the existing HIRE rate and basis once, blocks missing values and retains inputs across mode changes", async () => {
+  setup();
+  await chooseTypeInMenu("HIRE");
+  expect(screen.getByRole('combobox',{name:'Подразделение (RU)',exact:true})).toBeVisible();
+  const terms=screen.getByTestId('hire-terms-fields');
+  expect(screen.getByRole('combobox',{name:'Сотрудник',exact:true}).compareDocumentPosition(terms)&Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  fireEvent.click(screen.getByRole("radio", {name: "Новый сотрудник"}));
+  expect(screen.getByRole('combobox',{name:'Подразделение (RU)',exact:true})).toBeVisible();
+  const form=screen.getByLabelText('Ставка').closest('form')!;
+  const controls=Array.from(form.querySelectorAll('input:not([type="hidden"]),select,textarea'));
+  expect(controls.slice(-3).map(control=>control.getAttribute('aria-label'))).toEqual(['Ставка','Основание (RU)','Основание (KK)']);
+  expect(screen.getAllByLabelText("Ставка")).toHaveLength(1);
+  expect(screen.getAllByLabelText("Основание (KK)", {selector: "textarea"})).toHaveLength(1);
+  expect(screen.getByLabelText("Основание (KK)", {selector: "textarea"})).toHaveValue("жеке өтініші, еңбек шарты");
+  fireEvent.change(screen.getByLabelText("Основание (RU)", {selector: "textarea"}), {target: {value: ""}});
+  expect(screen.getByTestId("personnel-order-create-blockers")).toHaveTextContent("Укажите ставку");
+  expect(screen.getByTestId("personnel-order-create-blockers")).toHaveTextContent("Заполните основание");
+  fireEvent.submit(screen.getByRole("button", {name: "Создать приказ"}).closest("form")!);
+  expect(createManualPersonnelOrderDraft).not.toHaveBeenCalled();
+  expect(previewPersonnelOrderHeaderDuplicate).not.toHaveBeenCalled();
+  fireEvent.change(screen.getByLabelText("Ставка"), {target: {value: "0,75"}});
+  expect(screen.getByTestId("personnel-order-create-blockers")).not.toHaveTextContent("Укажите ставку");
+  expect(screen.getByTestId("personnel-order-create-blockers")).toHaveTextContent("Заполните основание");
+  fireEvent.change(screen.getByLabelText("Основание (RU)", {selector: "textarea"}), {target: {value: "SYNTHETIC APPLICATION"}});
+  fireEvent.click(screen.getByRole("radio", {name: "Сотрудник из списка"}));
+  fireEvent.click(screen.getByRole("radio", {name: "Новый сотрудник"}));
+  expect(screen.getByLabelText("Ставка")).toHaveValue("0,75");
+  expect(screen.getByLabelText("Основание (RU)", {selector: "textarea"})).toHaveValue("SYNTHETIC APPLICATION");
+});
+
+it("uses the document language for an untouched new HIRE basis and preserves manual edits, including an empty value", async () => {
+  setup();
+  await chooseTypeInMenu("HIRE");
+  const basis = screen.getByLabelText("Основание (KK)", {selector: "textarea"});
+  expect(basis).toHaveValue("жеке өтініші, еңбек шарты");
+  fireEvent.change(screen.getByLabelText("Язык"), {target: {value: "ru"}});
+  expect(basis).toHaveValue("жеке өтініші, еңбек шарты");
+  expect(screen.getByLabelText("Основание (RU)")).toHaveValue("личное заявление, трудовой договор");
+  fireEvent.change(basis, {target: {value: "Собственное основание"}});
+  fireEvent.change(screen.getByLabelText("Язык"), {target: {value: "kk"}});
+  expect(basis).toHaveValue("Собственное основание");
+  fireEvent.change(basis, {target: {value: ""}});
+  fireEvent.change(screen.getByLabelText("Язык"), {target: {value: "ru"}});
+  expect(basis).toHaveValue("");
+  expect(screen.getByTestId("personnel-order-create-blockers")).not.toHaveTextContent("Заполните основание");
+});
+
+it.each([["ru", "личное заявление, трудовой договор"], ["kk", "жеке өтініші, еңбек шарты"]] as const)("submits the default new HIRE basis in %s", async (locale, basis) => {
+  const variant = {...recallVariant, template_id: 38, template_version_id: 51, name_ru: "О приёме на работу", name_kk: "Жұмысқа қабылдау туралы"};
+  vi.mocked(getPersonnelOrderPublishedVariants).mockImplementation(async code => ({items: code === "HIRE" ? [variant] : [], independent_supported: true}));
+  setup();
+  vi.mocked(getPersonnelOrderPublishedTemplateTitle).mockResolvedValue({item_type_code: "HIRE", template_version_id: 51, title_ru: variant.name_ru, title_kk: variant.name_kk});
+  await chooseTypeInMenu("HIRE");
+  fireEvent.click(screen.getByRole("radio", {name: "Новый сотрудник"}));
+  for (const [label, value] of [["Язык", locale], ["Фамилия", "Синтетиков"], ["Имя", "Сынақ"], ["Ставка", "1"], ["Номер приказа", "SYNTHETIC-HIRE-DEFAULT"], ["Дата приказа", "2026-11-04"], ["Дата действия", "2026-11-04"]]) {
+    fireEvent.change(screen.getByLabelText(label), {target: {value}});
+  }
+  expect(screen.getByLabelText(`Основание (${locale.toUpperCase()})`, {selector: "textarea"})).toHaveValue(basis);
+  vi.mocked(previewPersonnelOrderHeaderDuplicate).mockResolvedValue({blocking: false, warnings: [], candidates: []});
+  vi.mocked(createManualPersonnelOrderDraft).mockResolvedValue({order_id: 7001} as never);
+  await waitFor(() => expect(screen.getByRole("button", {name: "Создать приказ"})).toBeEnabled());
+  fireEvent.click(screen.getByRole("button", {name: "Создать приказ"}));
+  await waitFor(() => expect(createManualPersonnelOrderDraft).toHaveBeenCalledWith(expect.objectContaining({
+    item_type_code: "HIRE", source_title_locale: locale, item_payload: expect.objectContaining({hire_basis: expect.objectContaining({[locale]: basis})}),
+  })));
+});
 
 it("creates SERVICE_LENGTH_CHANGE with manual FIO and explicit RU/KK forms without employee selection", async () => {
   const variant={template_id:3,template_version_id:3,version_number:1,name_ru:'Об изменении стажа',name_kk:'Жұмыс тәжірибесін өзгерту туралы',title_ru:'Об изменении стажа',title_kk:'Жұмыс тәжірибесін өзгерту туралы',is_default:false};
@@ -389,7 +502,7 @@ it.each(PERSONNEL_ORDER_CREATE_TYPE_OPTIONS.map(option => option.value))("offers
   }
   if (type === "CONCURRENT_DUTY_END") {
     expect(screen.getByLabelText("Дополнительная должность (RU)")).toHaveValue("");
-    expect(screen.getByLabelText("ФИО в родительном падеже (RU)")).toHaveValue("");
+    expect(screen.getByLabelText("ФИО в родительном падеже (RU)")).toHaveValue(employeeDetail.document_forms_ru.employee_full_name_genitive_ru);
     expect(screen.getByLabelText("Оставшаяся общая ставка")).toHaveValue(null);
     return;
   }
@@ -428,7 +541,7 @@ it.each(PERSONNEL_ORDER_CREATE_TYPE_OPTIONS.map(option => option.value))("offers
 
 it.each(["LEAVE.CHILDCARE.GRANT", "LEAVE.UNPAID.GRANT"] as const)("autofills actual API Медсестра in create %s", async (type) => {
   setup();
-  vi.mocked(getEmployee).mockResolvedValue({ ...employeeDetail, position: { id: 27, name: "Медсестра", name_kk: "мейіргер" } });
+  vi.mocked(getEmployee).mockResolvedValue({ ...employeeDetail, position: { id: 27, name: "Медсестра", name_kk: "мейіргер",document_possessive_kk:"мейіргері" } });
   await selectType(type);
   await selectEmployee();
   await waitFor(() => expect(screen.getByLabelText("Должность в тексте приказа (KK)")).toHaveValue("мейіргері"));
@@ -438,12 +551,12 @@ it.each(["LEAVE.CHILDCARE.GRANT", "LEAVE.UNPAID.GRANT"] as const)("autofills act
 
 it.each(["LEAVE.CHILDCARE.GRANT", "LEAVE.UNPAID.GRANT"] as const)("uses arbitrary catalogue positions and warns only for missing KK in %s", async type => {
   setup();
-  vi.mocked(getEmployee).mockResolvedValue({ ...employeeDetail, position: { id: 44, name: "сестра-хозяйка", name_kk: "шаруа бикесі" } });
+  vi.mocked(getEmployee).mockResolvedValue({ ...employeeDetail, position: { id: 44, name: "сестра-хозяйка", name_kk: "шаруа бикесі",document_possessive_kk:"шаруа бикесі" } });
   await selectType(type); await selectEmployee();
   expect(screen.getByLabelText("Должность в тексте приказа (KK)")).toHaveValue("шаруа бикесі");
   expect(screen.getByLabelText("Должность в тексте приказа (RU)")).toHaveValue("сестра-хозяйка");
   fireEvent.change(screen.getByLabelText("Должность в тексте приказа (KK)"), { target: { value: "Ручная форма первого сотрудника" } });
-  fireEvent.click(screen.getByRole("button", { name: "Сменить сотрудника" }));
+  fireEvent.click(screen.getByRole("button", { name: "Очистить сотрудника" }));
   const second = { ...employeeDetail, id: "777", fio: "Ильясова Анна Сергеевна", position: { id: 3, name: "Бухгалтер", name_kk: null } };
   vi.mocked(getEmployees).mockResolvedValue({ items: [employee, second], total: 2 });
   vi.mocked(getEmployee).mockResolvedValue(second);
@@ -456,37 +569,7 @@ it.each(["LEAVE.CHILDCARE.GRANT", "LEAVE.UNPAID.GRANT"] as const)("uses arbitrar
   expect(screen.getByText(/В справочнике должности нет казахского названия/)).toBeInTheDocument();
 });
 
-it.each(["LEAVE.CHILDCARE.GRANT", "LEAVE.UNPAID.GRANT"] as const)("preserves manual position edits across late detail, then refreshes on employee change in %s", async (type) => {
-  const { rerender, onClose, onCreated } = setup();
-  await selectType(type);
-  await selectEmployee();
-  const nurse = { ...employeeDetail, id: "618", fio: "Адилова Жадыра Хабибуловна", position: { id: 27, name: "Медсестра", name_kk: "мейіргер" },
-    document_forms_ru: { position_document_nominative_ru: "Сохранённая RU" },
-    document_forms_kk: { position_document_possessive_kk: "Сохранённая KK" },
-  };
-  vi.mocked(getEmployees).mockResolvedValue({ items: [nurse], total: 1 });
-  let resolveDetail!: (value: typeof nurse) => void;
-  vi.mocked(getEmployee).mockResolvedValueOnce(nurse).mockReturnValueOnce(new Promise(resolve => { resolveDetail = resolve; }));
-  rerender(<PersonnelOrderCreateDialog open onClose={onClose} onCreated={onCreated} initialEmployeeId={618} />);
-  const ru = screen.getByLabelText("Должность в тексте приказа (RU)");
-  const kk = screen.getByLabelText("Должность в тексте приказа (KK)");
-  await waitFor(() => expect(ru).toHaveValue("")); expect(kk).toHaveValue("");
-  fireEvent.change(ru, { target: { value: "Ручная RU" } });
-  fireEvent.change(kk, { target: { value: "Ручная KK" } });
-  const unit = screen.getByLabelText("Подразделение в тексте приказа (KK)");
-  fireEvent.change(unit, { target: { value: "Ручное подразделение" } });
-  resolveDetail(nurse);
-  await waitFor(() => expect(screen.getByLabelText("Должность")).toHaveValue("Медсестра"));
-  expect(ru).toHaveValue("Ручная RU"); expect(kk).toHaveValue("Ручная KK");
-  expect(unit).toHaveValue("Ручное подразделение");
-  fireEvent.change(screen.getByLabelText("Дата начала"), { target: { value: "2026-08-01" } });
-  expect(ru).toHaveValue("Ручная RU"); expect(kk).toHaveValue("Ручная KK");
-  vi.mocked(getEmployee).mockResolvedValue({ ...nurse, id: "619" });
-  rerender(<PersonnelOrderCreateDialog open onClose={onClose} onCreated={onCreated} initialEmployeeId={619} />);
-  await waitFor(() => expect(ru).toHaveValue("Сохранённая RU"));
-  expect(kk).toHaveValue("Сохранённая KK");
-  expect(createManualPersonnelOrderDraft).not.toHaveBeenCalled();
-});
+
 
 it("starts without a type, template request, title, employee fields, or enabled Create", () => {
   setup();
@@ -597,18 +680,7 @@ it("ignores an old unpaid response when type changes to TRANSFER before it resol
   await waitFor(() => expect(screen.getByLabelText("Название приказа")).not.toHaveValue(unpaidTitles.title_kk));
 });
 
-it("clears previous leave dates and document forms when type changes", async () => {
-  setup();
-  await selectUnpaid();
-  await selectEmployee();
-  fireEvent.change(screen.getByLabelText("Дата начала"), { target: { value: "2026-07-17" } });
-  fireEvent.change(screen.getByLabelText("ФИО сотрудника в дательном падеже (KK)"), { target: { value: "Тестоваға" } });
-  await selectType("TRANSFER");
-  await selectType("LEAVE.UNPAID.GRANT");
-  expect(screen.getByLabelText("Дата начала")).toHaveValue("");
-  expect(screen.getByLabelText("Дата окончания")).toHaveValue("");
-  expect(screen.getByLabelText("ФИО сотрудника в дательном падеже (KK)")).toHaveValue("");
-});
+
 
 it("uses a canonical title when PUBLISHED template is absent", async () => {
   setup();
@@ -670,7 +742,7 @@ it("blocks an invalid reverse unpaid range before request submission", async () 
 
 it("keeps Create disabled and names missing document forms", async () => {
   setup();
-  vi.mocked(getEmployee).mockResolvedValueOnce({ ...employee, org_unit: { ...employee.org_unit, unit_id: 999 }, position: { ...employee.position, id: 999 } });
+  vi.mocked(getEmployee).mockResolvedValueOnce({ ...employee, org_unit: { ...employee.org_unit, unit_id: 999, name_kk:null, document_genitive_kk:null }, position: { ...employee.position, id: 999 } });
   await selectUnpaid();
   await selectEmployee();
   fireEvent.change(screen.getByLabelText("Номер приказа"), { target: { value: "T-1" } });
@@ -688,8 +760,8 @@ it("fills Ilyasova's actual active-assignment document forms from the API detail
   const forms = screen.getByTestId("personnel-order-text-forms");
   expect(forms).not.toHaveAttribute("open");
   expect(forms).toHaveTextContent("Формы для текста приказа заполнены автоматически");
-  expect(screen.queryByText("В справочнике отсутствует казахское название выбранного подразделения.")).not.toBeInTheDocument();
-  expect(screen.getByLabelText("Подразделение в тексте приказа (KK)")).toHaveValue("Сәулелік диагностика бөлімшесінің");
+  expect(screen.queryByText(/В справочнике отсутствует казахское название выбранного подразделения/)).not.toBeInTheDocument();
+  expect(screen.getByTestId("department-genitive_kk")).toHaveTextContent("Сәулелік диагностика бөлімшесінің");
   expect(screen.getByLabelText("Должность в тексте приказа (KK)")).toHaveValue("дәрігері");
   expect(screen.getByLabelText("Должность в тексте приказа (RU)")).toHaveValue("врач");
   expect(screen.getByLabelText("ФИО сотрудника в дательном падеже (KK)")).toHaveValue("Ассель Адиловна Ильясоваға");
@@ -735,8 +807,8 @@ it("uses the directory Kazakh name when its order-text form is absent and preser
   });
   await selectUnpaid();
   await selectEmployee();
-  const field = screen.getByLabelText("Подразделение в тексте приказа (KK)");
-    expect(field).toHaveValue("Сәулелік диагностика бөлімшесінің");
+  const field = screen.getByLabelText("Для текста KK (ілік септік) — вручную");
+    expect(field).toHaveAttribute("placeholder", "");
   fireEvent.change(field, { target: { value: "Ручная форма" } });
   fireEvent.change(screen.getByLabelText("Язык"), { target: { value: "ru" } });
   expect(field).toHaveValue("Ручная форма");
@@ -749,11 +821,11 @@ it("replaces the order-text department form from the selected directory unit", a
   const department = screen.getByLabelText("Подразделение");
   await waitFor(() => expect(screen.getByRole("option", { name: "Лучевая диагностика" })).toBeInTheDocument());
   fireEvent.change(department, { target: { value: "41" } });
-  expect(screen.getByLabelText("Подразделение в тексте приказа (KK)")).toHaveValue("");
-  expect(screen.getByText("В справочнике отсутствует казахское название выбранного подразделения.")).toBeInTheDocument();
+  expect(screen.getByLabelText("Для текста KK (ілік септік) — вручную")).toHaveValue("");
+  expect(screen.getByText(/В справочнике отсутствует казахское название выбранного подразделения/)).toBeInTheDocument();
   fireEvent.change(department, { target: { value: "59" } });
-  expect(screen.getByLabelText("Подразделение в тексте приказа (KK)")).toHaveValue("Сәулелік диагностика бөлімшесінің");
-  expect(screen.queryByText("В справочнике отсутствует казахское название выбранного подразделения.")).not.toBeInTheDocument();
+  expect(screen.getByTestId("department-genitive_kk")).toHaveTextContent("Сәулелік диагностика бөлімшесінің");
+  expect(screen.queryByText(/В справочнике отсутствует казахское название выбранного подразделения/)).not.toBeInTheDocument();
 });
 
 it("keeps automatic employee-selected department text while the directory finishes loading", async () => {
@@ -762,10 +834,10 @@ it("keeps automatic employee-selected department text while the directory finish
   setup();
   await selectUnpaid();
   await selectEmployee();
-  const field = screen.getByLabelText("Подразделение в тексте приказа (KK)");
-  expect(field).toHaveValue("Сәулелік диагностика бөлімшесінің");
+  const field = screen.getByLabelText("Для текста KK (ілік септік) — вручную");
+  expect(field).toHaveAttribute("placeholder", "Сәулелік диагностика бөлімшесінің");
   resolveCatalog?.([{ unit_id: 59, name: "Лучевая диагностика", group_id: 2, name_kk: "Сәулелік диагностика бөлімшесі", document_genitive_kk: "Сәулелік диагностика бөлімшесінің" }]);
-  await waitFor(() => expect(field).toHaveValue("Сәулелік диагностика бөлімшесінің"));
+  await waitFor(() => expect(field).toHaveAttribute("placeholder", "Сәулелік диагностика бөлімшесінің"));
   fireEvent.change(field, { target: { value: "Ручная форма" } });
   fireEvent.change(screen.getByLabelText("Язык"), { target: { value: "ru" } });
   expect(field).toHaveValue("Ручная форма");
@@ -779,20 +851,20 @@ it("keeps a manual department-text edit when the dialog is closed and reopened",
   const view = render(<PersonnelOrderCreateDialog open onClose={vi.fn()} onCreated={vi.fn()} />);
   await selectUnpaid();
   await selectEmployee();
-  const field = screen.getByLabelText("Подразделение в тексте приказа (KK)");
+  const field = screen.getByLabelText("Для текста KK (ілік септік) — вручную");
   fireEvent.change(field, { target: { value: "Ручная форма" } });
   view.rerender(<PersonnelOrderCreateDialog open={false} onClose={vi.fn()} onCreated={vi.fn()} />);
   view.rerender(<PersonnelOrderCreateDialog open onClose={vi.fn()} onCreated={vi.fn()} />);
-  expect(screen.getByLabelText("Подразделение в тексте приказа (KK)")).toHaveValue("Ручная форма");
+  expect(screen.getByLabelText("Для текста KK (ілік септік) — вручную")).toHaveValue("Ручная форма");
 });
 
 it("identifies a missing Kazakh directory name next to the editable field", async () => {
   setup();
-  vi.mocked(getEmployee).mockResolvedValueOnce({ ...employeeDetail, org_unit: { ...employee.org_unit, unit_id: 999 } });
+  vi.mocked(getEmployee).mockResolvedValueOnce({ ...employeeDetail, org_unit: { ...employee.org_unit, unit_id: 999, name_kk:null, document_genitive_kk:null } });
   await selectUnpaid();
   await selectEmployee();
-  expect(screen.getByText("В справочнике отсутствует казахское название выбранного подразделения.")).toBeInTheDocument();
-  expect(screen.getByLabelText("Подразделение в тексте приказа (KK)")).toBeEnabled();
+  expect(screen.getByText(/В справочнике отсутствует казахское название выбранного подразделения/)).toBeInTheDocument();
+  expect(screen.getByLabelText("Для текста KK (ілік септік) — вручную")).toBeEnabled();
 });
 
 it("prevents a second request while the first create request is pending", async () => {
@@ -854,36 +926,19 @@ it("requires transfer destination, rate and bilingual basis, then opens the crea
   expect(createManualPersonnelOrderDraft).toHaveBeenCalledWith(expect.objectContaining({employee_id:383,item_payload:{transfer:{position_ru:"Врач",position_kk:"Дәрігер",org_unit_ru:"Терапия",org_unit_kk:"Терапия бөлімшесі",rate:0.5,basis_ru:"Заявление",basis_kk:"Өтініш"},document_forms_ru:{employee_full_name_accusative_ru:"Ильясову Ассель Адиловну"}}}));
 });
 
-it("submits only explicit additional placement, dative names and concurrent rates", async () => {
-  const {onCreated} = setup();await chooseTypeInMenu("CONCURRENT_DUTY_START");await selectEmployee();
-  for(const [label,value] of [["Номер приказа","CONCURRENT-TEST"],["Дата приказа","2026-05-21"],["Дата действия","2026-05-21"],["Дополнительная должность (RU)","Врач"],["Дополнительная должность (KK)","дәрігер"],["Дополнительное подразделение (RU)","Терапия"],["Дополнительное подразделение (KK)","терапия бөлімшесінің"],["Дополнительная должность в родительном падеже (RU)","врача"],["Дополнительное подразделение в родительном падеже (RU)","отделения терапии"],["ФИО в дательном падеже (RU)","Ильясовой Ассель Адиловне"],["ФИО в дательном падеже (KK)","Ассель Адиловна Ильясоваға"],["Дополнительная ставка","0.5"],["Общая ставка","1.5"],["Основание совмещения (RU)","личное заявление"],["Основание совмещения (KK)","жеке өтініш"]]) fireEvent.change(screen.getByLabelText(label),{target:{value}});
-  vi.mocked(previewPersonnelOrderHeaderDuplicate).mockResolvedValue({blocking:false,warnings:[],candidates:[]});vi.mocked(createManualPersonnelOrderDraft).mockResolvedValue({order_id:78} as never);
-  await waitFor(()=>expect(screen.getByRole("button",{name:"Создать приказ"})).toBeEnabled());fireEvent.click(screen.getByRole("button",{name:"Создать приказ"}));await waitFor(()=>expect(onCreated).toHaveBeenCalled());
-  expect(createManualPersonnelOrderDraft).toHaveBeenCalledWith(expect.objectContaining({item_type_code:"CONCURRENT_DUTY_START",item_payload:{concurrent:expect.objectContaining({position_ru:"Врач",position_kk:"дәрігер",position_genitive_ru:"врача",org_unit_genitive_ru:"отделения терапии",employee_dative_ru:"Ильясовой Ассель Адиловне",rate:0.5,total_rate:1.5})}}));
-});
 
-it("prefills saved KK dative in the add form and keeps an explicit correction after choosing another employee", async () => {
- setup();
- const first={...employeeDetail,fio:"Тестова Первая Сотрудница",document_forms_kk:{employee_full_name_dative_kk:"Первая подтверждённая форма"}};
- vi.mocked(getEmployee).mockResolvedValue(first);
- await chooseTypeInMenu("CONCURRENT_DUTY_START");await selectEmployee();
- const kk=screen.getByLabelText("ФИО в дательном падеже (KK)");
- expect(kk).toHaveValue("Первая подтверждённая форма");
- fireEvent.change(kk,{target:{value:"Ручная правка КК"}});
- const second={...first,id:"139",fio:"Тестов Второй Сотрудник",document_forms_kk:{employee_full_name_dative_kk:"Вторая подтверждённая форма"}};
- vi.mocked(getEmployees).mockResolvedValue({items:[second],total:1});vi.mocked(getEmployee).mockResolvedValue(second);
- fireEvent.click(screen.getByRole("button",{name:"Сменить сотрудника"}));
- fireEvent.change(screen.getByLabelText("Сотрудник"),{target:{value:"Второй"}});
- fireEvent.click(await screen.findByRole("option",{name:/Тестов Второй Сотрудник/}));
- await waitFor(()=>expect(screen.getByTestId("selected-employee-id")).toHaveValue("139"));
- expect(screen.getByLabelText("ФИО в дательном падеже (KK)")).toHaveValue("Ручная правка КК");
- fireEvent.change(screen.getByLabelText("ФИО в дательном падеже (KK)"),{target:{value:""}});
- expect(screen.getByText("Заполните ФИО в дательном падеже (KK).")).toBeInTheDocument();
- expect(screen.getByRole("button",{name:"Создать приказ"})).toBeDisabled();
-});
+
+
+
+
+
+
+
+
 
 it("does not guess KK dative from a display FIO and retains the blocking warning", async () => {
  setup();
+ vi.mocked(getEmployee).mockResolvedValue({...employeeDetail,document_forms_kk:{}});
  await chooseTypeInMenu("CONCURRENT_DUTY_START");await selectEmployee();
  expect(screen.getByLabelText("ФИО в дательном падеже (KK)")).toHaveValue("");
  expect(screen.getByText("Заполните ФИО в дательном падеже (KK).")).toBeInTheDocument();
@@ -896,7 +951,7 @@ it('shows the exact conflicting order and links directly without journal filters
  vi.mocked(previewPersonnelOrderHeaderDuplicate).mockResolvedValue({blocking:true,warnings:[],candidates:[{order_id:456,order_number:'RECALL-SLOW',order_date:'2026-10-08',status:'SIGNED',order_type_code:'HIRE',is_conflict:true,can_open:true}]});
  const button=screen.getByRole('button',{name:'Создать приказ'});await waitFor(()=>expect(button).toBeEnabled());fireEvent.click(button);
  expect(await screen.findByRole('alert')).toHaveTextContent('№ RECALL-SLOW от 08.10.2026 (ID 456)');
- expect(screen.getByRole('link',{name:/Открыть приказ/})).toHaveAttribute('href','/directory/personnel/orders?order_id=456&tab=data');
+ expect(screen.getByRole('link',{name:'Открыть существующий приказ'})).toHaveAttribute('href','/directory/personnel/orders?order_id=456&record_quality=ALL&include_closed=true');
  expect(createManualPersonnelOrderDraft).not.toHaveBeenCalled();
 });
 
@@ -954,5 +1009,5 @@ it("selects only additional assignments for cessation and submits an explicit re
   for(const[label,value]of [["Номер приказа","END-TEST"],["Дата приказа","2026-07-01"],["Дата действия","2026-07-01"],["Дополнительная должность в родительном падеже (RU)","врача"],["Дополнительное подразделение в родительном падеже (RU)","отделения терапии"],["ФИО в родительном падеже (RU)","Ильясовой Ассель Адиловны"],["ФИО в исходном падеже (KK)","Ассель Адиловна Ильясовадан"],["Оставшаяся общая ставка","0.2"],["Основание прекращения совмещения (RU)","личное заявление"],["Основание прекращения совмещения (KK)","жеке өтініш"]])fireEvent.change(screen.getByLabelText(label),{target:{value}});
   vi.mocked(previewPersonnelOrderHeaderDuplicate).mockResolvedValue({blocking:false,warnings:[],candidates:[]});vi.mocked(createManualPersonnelOrderDraft).mockResolvedValue({order_id:78} as never);
   await waitFor(()=>expect(screen.getByRole("button",{name:"Создать приказ"})).toBeEnabled());fireEvent.click(screen.getByRole("button",{name:"Создать приказ"}));await waitFor(()=>expect(onCreated).toHaveBeenCalled());
-  expect(createManualPersonnelOrderDraft).toHaveBeenCalledWith(expect.objectContaining({item_type_code:"CONCURRENT_DUTY_END",item_payload:{concurrent:expect.objectContaining({assignment_id:2,position_id:6,org_unit_id:59,employee_genitive_ru:"Ильясовой Ассель Адиловны",employee_ablative_kk:"Ассель Адиловна Ильясовадан",rate:0.5,remaining_rate:0.2})}}));
+  expect(createManualPersonnelOrderDraft).toHaveBeenCalledWith(expect.objectContaining({item_type_code:"CONCURRENT_DUTY_END",item_payload:expect.objectContaining({concurrent:expect.objectContaining({assignment_id:2,position_id:6,org_unit_id:59,employee_genitive_ru:"Ильясовой Ассель Адиловны",employee_ablative_kk:"Ассель Адиловна Ильясовадан",rate:0.5,remaining_rate:0.2})})}));
 });

@@ -10,8 +10,8 @@ INITIAL_TEXTS_BY_TYPE: Final[dict[str, InitialTexts]] = {'HIRE': {'title_ru': '�
           'preamble_ru': 'В соответствии с Трудовым кодексом Республики Казахстан',
           'preamble_kk': 'Қазақстан Республикасының Еңбек кодексіне сәйкес',
           'body_template_ru': 'Принять на работу {{employee.full_name}} в подразделение «{{org_unit.title_ru}}» на '
-                              'должность «{{position.title_ru}}» со ставкой {{rate}} с {{effective_date}}.',
-          'body_template_kk': '{{employee.full_name}} «{{org_unit.title_kk}}» бөлімшесіне «{{position.title_kk}}» '
+                              'должность {{position.title_ru}} со ставкой {{rate}} с {{effective_date}}.',
+          'body_template_kk': '{{employee.full_name}} «{{org_unit.title_kk}}» бөлімшесіне {{position.title_kk}} '
                               'лауазымына {{rate}} мөлшерлемесінде {{effective_date}} бастап жұмысқа қабылдансын.',
           'basis_template_ru': 'Основание: {{basis}}.',
           'basis_template_kk': 'Негіз: {{basis}}.'},

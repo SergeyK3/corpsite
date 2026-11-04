@@ -70,9 +70,9 @@ const DEFAULT_SECTION_ORDER: readonly ItemFormSection[] = [
 
 const HIRE_SECTION_ORDER: readonly ItemFormSection[] = [
   "item_type",
+  "employee",
   "org_placement",
   "effective_date",
-  "employee",
   "additional",
 ] as const;
 

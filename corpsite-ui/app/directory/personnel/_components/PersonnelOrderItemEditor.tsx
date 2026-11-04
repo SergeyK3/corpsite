@@ -1,4 +1,11 @@
 "use client";
+import PersonnelOrderHireDetailsFields from "./PersonnelOrderHireDetailsFields";
+import PersonnelOrderHireTermsFields from './PersonnelOrderHireTermsFields';
+import {hireBasisFromPayload,hireBasisForEditing,newHireBasis} from '../_lib/personnelOrderHireBasis';
+import {emptyHireDetails} from "../_lib/personnelOrderHireDetails";
+import {hireTermsIssues, hasHireBasis} from "../_lib/personnelOrderHireTerms";
+import PersonnelOrderHireEmployeeFields from "./PersonnelOrderHireEmployeeFields";
+import {blankHireNewEmployee, hireNewEmployeeName, hireNewEmployeeError} from "../_lib/personnelOrderHireNewEmployee";
 import PersonnelOrderPersonalDataFields from './PersonnelOrderPersonalDataFields';
 import {emptyPersonalDataDraft,refreshPersonalDataContext,personalDataErrors,personalDataOrderPayload,personalDataDraftFromRecord} from '../_lib/personalDataDraft';
 import PersonnelOrderEducationFields from "./PersonnelOrderEducationFields";
@@ -6,8 +13,9 @@ import {emptyEducationDraft, refreshEducationContext, educationErrors, education
 import PersonnelOrderServiceLengthFields from "./PersonnelOrderServiceLengthFields";
 import {emptyServiceLengthDraft, refreshServiceLengthContext, serviceLengthErrors, serviceLengthDraftFromRecord, serviceLengthOrderPayload} from "../_lib/serviceLengthDraft";
 import PersonnelOrderCategoryFields from "./PersonnelOrderCategoryFields";
-import {resolvePersonnelDocumentContext,refreshCategoryDocumentContext} from "../_lib/personnelOrderDocumentContext";
+import {resolvePersonnelDocumentContext,mergeDocumentContextValues,refreshCategoryDocumentContext,type PersonnelDocumentContext} from "../_lib/personnelOrderDocumentContext";
 import {emptyCategoryOrderDraft as emptyCategoryDraft,categoryDraftErrors,categoryOrderDraftFromRecord} from "../_lib/qualificationCategoryDraft";
+
 import PersonnelOrderAllowancePercent from "./PersonnelOrderAllowancePercent";
 import { allowancePercentError } from "../_lib/personnelOrderAllowancePercent";
 
@@ -15,9 +23,10 @@ import PersonnelOrderTransferFields, {type TransferFields} from "./PersonnelOrde
 import PersonnelOrderReplacementFields, {blankReplacement, type ReplacementFields} from "./PersonnelOrderReplacementFields";
 import PersonnelOrderInheritedItemForm from "./PersonnelOrderInheritedItemForm";
 import * as React from "react";
-import PersonnelOrderMedicalSpecialtyPicker from "./PersonnelOrderMedicalSpecialtyPicker";
+import {manualSubjectWording} from "../_lib/personnelOrderManualSubject";
 import {concurrentEmployeeDatives, refreshAutomaticForm} from "../_lib/personnelOrderConcurrentForms";
 
+import type {EmployeeDTO} from "@/app/directory/employees/_lib/types";
 import { getEmployee, getEmployees, getPositions } from "@/app/directory/employees/_lib/api.client";
 import OrgScopeFilter from "@/components/OrgScopeFilter";
 import OrgUnitScopeFilter from "@/components/OrgUnitScopeFilter";
@@ -27,6 +36,8 @@ import {
   type PersonnelOrderPositionSelectGroup,
 } from "@/lib/taskOrgFilters";
 import { useOrgUnitScopeOptions } from "@/lib/useOrgUnitScopeOptions";
+import PersonnelOrderPositionPicker from "./PersonnelOrderPositionPicker";
+import { usePersonnelOrderPositions, type DocumentPosition } from "../_lib/personnelOrderPositions";
 import { usePersonnelOrderPositionOptions } from "@/lib/usePersonnelOrderPositionOptions";
 import { HR_DOSSIER_TITLE } from "@/lib/personnelCardTerminology";
 import { resolveEmployeeOrgScopePrefill } from "@/lib/userCreateOrgScope";
@@ -49,7 +60,14 @@ import {
 } from "../_lib/personnelOrderCurrentPlacement";
 import { resolvePersonnelOrderDocumentForms, resolvePersonnelOrderOrgUnitForms, savedKazakhEmployeeNameForm } from "../_lib/personnelOrderDocumentForms";
 import { calculateKazakhOrgUnitGenitive, calculateKazakhPersonForm, firstNonEmpty } from "../_lib/kazakhDocumentForms";
-import { russianEmployeeGenitiveForOrder, savedRussianEmployeeNameForm } from "../_lib/personnelOrderRussianWording";
+import PersonnelOrderDepartmentPicker from "./PersonnelOrderDepartmentPicker";
+import PersonnelOrderHirePositionFields from "./PersonnelOrderHirePositionFields";
+import {hirePositionManualForms} from "../_lib/personnelOrderHirePosition";
+import PersonnelOrderHireDepartmentFields from "./PersonnelOrderHireDepartmentFields";
+import PersonnelOrderMedicalSpecialtyPicker from "./PersonnelOrderMedicalSpecialtyPicker";
+import {blankDepartment,departmentFromUnit,departmentValues} from "../_lib/personnelOrderDepartment";
+import PersonnelOrderAllowanceRecipient, {blankAllowanceRecipient,recipientBlockers} from "./PersonnelOrderAllowanceRecipient";
+import { russianEmployeeDativeForOrder, russianEmployeeGenitiveForOrder, savedRussianEmployeeNameForm } from "../_lib/personnelOrderRussianWording";
 import {
   mapEmployeesResponseToSearchOptions,
   requireEmployeeIdForItemType,
@@ -86,9 +104,16 @@ import {
   setPositionId,
 } from "../_lib/personnelOrderOrgScope";
 
+function sameFormSignature(left: string, right: string): boolean {
+  const canonical=(value: unknown): unknown=>Array.isArray(value)?value.map(canonical):value&&typeof value==="object"
+    ? Object.fromEntries(Object.entries(value).sort(([a],[b])=>a.localeCompare(b)).map(([key,v])=>[key,canonical(v)])) : value;
+  return JSON.stringify(canonical(JSON.parse(left)))===JSON.stringify(canonical(JSON.parse(right)));
+}
+
 type Props = {
   orderId: number;
   orderTypeCode?: string | null;
+  sourceTitleLocale?: string | null;
   items: PersonnelOrderItem[];
   disabled?: boolean;
   onChanged: (detail: PersonnelOrderDetailResponse) => void;
@@ -170,16 +195,31 @@ function assignmentSummary(value: unknown): string | null {
   };
   const values = [label(assignment.unit), label(assignment.position)];
   const rate = assignment.rate;
-  if (typeof rate === "string" && rate.trim()) values.push(`${rate.trim()} ставка`);
+  if ((typeof rate === "string" && rate.trim()) || (typeof rate === "number" && Number.isFinite(rate))) values.push(`${String(rate).trim()} ставка`);
   return values.filter(Boolean).join(" · ") || null;
 }
 
 function sourceItemSummary(item: PersonnelOrderItem): string {
   const payload = item.payload || {};
-  const allowance = payload.allowance && typeof payload.allowance === "object" && !Array.isArray(payload.allowance) ? payload.allowance as Record<string, unknown> : {};
-  const percent = allowance.percent;
+  const nested = (key: string): Record<string, unknown> => payload[key] && typeof payload[key] === "object" && !Array.isArray(payload[key]) ? payload[key] as Record<string, unknown> : {};
+  const numeric = (...values: unknown[]): string | null => {
+    for (const value of values) {
+      if ((typeof value === "number" || typeof value === "string") && String(value).trim() && Number.isFinite(Number(String(value).replace(",", ".")))) return String(value).trim();
+    }
+    return null;
+  };
+  const transferRate = item.item_type_code === "TRANSFER" ? numeric(nested("transfer").rate, payload.to_rate, payload.to_employment_rate) : null;
+  const percent = numeric(nested("allowance").percent, nested("replacement").allowance_percent);
+  const concurrent = nested("concurrent");
+  const position = String(concurrent.position_ru || concurrent.position_kk || "").trim();
+  const extraRate = numeric(concurrent.rate);
+  const totalRate = numeric(concurrent.total_rate);
   const summaries = [
-    item.item_type_code === "SUPPLEMENTARY_PAY" && (typeof percent === "number" || typeof percent === "string") && String(percent).trim() && Number.isFinite(Number(percent)) ? `Доплата: ${percent}%` : null,
+    position || null,
+    extraRate !== null ? `Дополнительная ставка: ${extraRate}` : null,
+    totalRate !== null ? `Общая ставка: ${totalRate}` : null,
+    transferRate !== null ? `Ставка перевода: ${transferRate}` : null,
+    percent !== null ? `Доплата: ${percent}%` : null,
     assignmentSummary(payload.assignment),
     assignmentSummary(payload.to_assignment),
     typeof payload.termination_reason === "string" ? payload.termination_reason : null,
@@ -299,6 +339,7 @@ function CurrentPlacementPanel({ placement }: { placement: CurrentPlacementView 
 export default function PersonnelOrderItemEditor({
   orderId,
   orderTypeCode = null,
+  sourceTitleLocale = null,
   items,
   disabled = false,
   onChanged,
@@ -327,6 +368,8 @@ export default function PersonnelOrderItemEditor({
   // An existing historical item can reference an employee who is no longer
   // returned by the active-only employee search.
   const [selectedEmployeeId, setSelectedEmployeeId] = React.useState<number | null>(null);
+  const [employeeSearchFinished,setEmployeeSearchFinished]=React.useState(false);
+  const [employeeSearching,setEmployeeSearching]=React.useState(false);
   const [changingEmployee, setChangingEmployee] = React.useState(false);
   const [pendingNewEmployee, setPendingNewEmployee] = React.useState(false);
   const [employeeOptions, setEmployeeOptions] = React.useState<EmployeeSearchOption[]>([]);
@@ -339,49 +382,82 @@ export default function PersonnelOrderItemEditor({
   const itemSaveInFlight = React.useRef<Promise<boolean> | null>(null);
   const [effectiveDate, setEffectiveDate] = React.useState("");
   const [payloadDraft, setPayloadDraft] = React.useState<ItemPayloadDraft>(emptyItemPayloadDraft());
+  const hireBasisValue=payloadDraft.hire_basis??(editingItemId==null?newHireBasis():hireBasisFromPayload(items.find(item=>item.item_id===editingItemId)?.payload||{},sourceTitleLocale,basisDocuments));
+  const payloadForSave=itemTypeCode==='HIRE'&&editingItemId==null&&payloadDraft.hire_basis===undefined?{...payloadDraft,hire_basis:hireBasisValue}:payloadDraft;
   const [calculatedKkFields, setCalculatedKkFields] = React.useState<Set<string>>(() => new Set());
   const [terminationReasonSuggested, setTerminationReasonSuggested] = React.useState(false);
   const [editingBasis, setEditingBasis] = React.useState(false);
   const [targetOrgGroupId, setTargetOrgGroupId] = React.useState<number | null>(null);
   const [hireOrgGroupId, setHireOrgGroupId] = React.useState<number | null>(null);
   const [saving, setSaving] = React.useState(false);
+  const [positionRefreshing,setPositionRefreshing]=React.useState(false);
   const [employeeSearchError, setEmployeeSearchError] = React.useState<string | null>(null);
+  const [validationShown, setValidationShown] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   React.useEffect(() => {
     if (error && formDisclosure.current) formDisclosure.current.open = true;
   }, [error]);
   const [rateTemplates, setRateTemplates] = React.useState<PersonnelPublishedTemplateVariant[]>([]);
+  const [rateTemplatesLoading, setRateTemplatesLoading] = React.useState(true);
   const [rateTemplateError, setRateTemplateError] = React.useState("");
   React.useEffect(() => {
     if (itemTypeCode !== "CONCURRENT_DUTY_START" || editingItemId == null) return;
     let cancelled = false;
     setRateTemplateError("");
+    setRateTemplatesLoading(true);
     getPersonnelOrderPublishedVariants("CONCURRENT_DUTY_START").then(result => {
       if (!cancelled) setRateTemplates(result.items.filter(row => !row.replacement_mode || row.replacement_mode === "RATE"));
-    }).catch(error => {if (!cancelled) setRateTemplateError(mapPersonnelOrdersApiError(error, "Не удалось загрузить шаблоны совмещения."));});
+    }).catch(error => {if (!cancelled) setRateTemplateError(mapPersonnelOrdersApiError(error, "Не удалось загрузить шаблоны совмещения."));})
+      .finally(() => {if (!cancelled) setRateTemplatesLoading(false);});
     return () => {cancelled = true;};
   }, [itemTypeCode, editingItemId]);
   const employeeSelectionRevision = React.useRef(0);
   const automaticEmployeeForms = React.useRef<Record<string, string>>({});
   const manualEmployeeForms = React.useRef(new Set<string>());
-  const documentOrder=['PERSONAL_DATA_CHANGE','EDUCATION_INFORMATION_CHANGE','SERVICE_LENGTH_CHANGE'].includes(itemTypeCode);
-  const [documentEmployee,setDocumentEmployee]=React.useState<import('@/app/directory/employees/_lib/types').EmployeeDTO|null>(null);
-  const previousDocumentContext=React.useRef<import('../_lib/personnelOrderDocumentContext').PersonnelDocumentContext|null>(null);
+  const [concurrentEmployee,setConcurrentEmployee]=React.useState<EmployeeDTO | null>(null);
+  const [recipientEmployee,setRecipientEmployee]=React.useState<EmployeeDTO|null>(null);
+  const documentRecipient=recipientEmployee??(payloadDraft.unresolved_subject?manualSubjectWording(payloadDraft.unresolved_subject.full_name):null);
+  const [documentEmployee,setDocumentEmployee]=React.useState<EmployeeDTO|null>(null);
+  const previousDocumentContext=React.useRef<PersonnelDocumentContext|null>(null);
+  const sharedDocumentContext=React.useMemo(()=>{
+    const p=payloadDraft.document_position;
+    const department=payloadDraft.document_department;
+    return documentEmployee?resolvePersonnelDocumentContext(documentEmployee,p?{...p,id:p.position_id}:undefined,
+      department?.unit?{...department.unit,
+        name:department.overrides.name_ru??department.unit.name,
+        name_kk:department.overrides.name_kk??department.unit.name_kk,
+        document_genitive_ru:department.overrides.genitive_ru??department.unit.document_genitive_ru,
+        document_genitive_kk:department.overrides.genitive_kk??department.unit.document_genitive_kk}:undefined):null;
+  },[documentEmployee,payloadDraft.document_position,payloadDraft.document_department]);
   React.useEffect(()=>{
-    if(!documentOrder)return;
-    const id=Number(employeeId);if(!id){setDocumentEmployee(null);return;}
-    let cancelled=false;void getEmployee(String(id)).then(employee=>{if(!cancelled)setDocumentEmployee(employee);});return()=>{cancelled=true;};
-  },[documentOrder,employeeId]);
+    if(!sharedDocumentContext)return;
+    const previous=previousDocumentContext.current;previousDocumentContext.current=sharedDocumentContext;
+    setPayloadDraft(current=>{
+      const fill=(value:ItemPayloadDraft)=>({...value,...mergeDocumentContextValues({...value},sharedDocumentContext,previous),
+        ...(itemTypeCode==="EDUCATION_INFORMATION_CHANGE"?{education_document:refreshEducationContext(value.education_document??emptyEducationDraft(),sharedDocumentContext,previous)}:{}),
+        ...(itemTypeCode==='PERSONAL_DATA_CHANGE'?{personal_data_document:refreshPersonalDataContext(value.personal_data_document??emptyPersonalDataDraft(),sharedDocumentContext,previous)}:{}),
+        ...(itemTypeCode==="SERVICE_LENGTH_CHANGE"?{service_length_document:refreshServiceLengthContext(value.service_length_document??emptyServiceLengthDraft(),sharedDocumentContext,previous)}:{}),
+        ...(itemTypeCode==="QUALIFICATION_CATEGORY"?{category_document:refreshCategoryDocumentContext(value.category_document??emptyCategoryDraft(),sharedDocumentContext,previous)}:{})});
+      const saved=savedFormSignature.current?JSON.parse(savedFormSignature.current):null;
+      if(saved&&saved.employeeId===employeeId&&saved.itemTypeCode===itemTypeCode) {
+        const baseline=fill(saved.payloadDraft);
+        if(!baseline.document_department&&current.document_department&&!Object.keys(current.document_department.overrides).length) baseline.document_department=current.document_department;
+        savedFormSignature.current=JSON.stringify({...saved,payloadDraft:baseline});
+      }
+      return fill(current);
+    });
+  },[sharedDocumentContext,itemTypeCode]);
+
   React.useEffect(()=>{
-    if(!documentOrder||!documentEmployee)return;
-    const context=resolvePersonnelDocumentContext(documentEmployee),previous=previousDocumentContext.current;previousDocumentContext.current=context;
-    setPayloadDraft(value=>({...value,
-      ...(itemTypeCode==='PERSONAL_DATA_CHANGE'?{personal_data_document:refreshPersonalDataContext(value.personal_data_document??emptyPersonalDataDraft(),context,previous)}:{}),
-      ...(itemTypeCode==='EDUCATION_INFORMATION_CHANGE'?{education_document:refreshEducationContext(value.education_document??emptyEducationDraft(),context,previous)}:{}),
-      ...(itemTypeCode==='SERVICE_LENGTH_CHANGE'?{service_length_document:refreshServiceLengthContext(value.service_length_document??emptyServiceLengthDraft(),context,previous)}:{}),
-    }));
-  },[documentOrder,documentEmployee,itemTypeCode]);
+    setRecipientEmployee(null);
+    if(editingItemId==null || !employeeId || !payloadDraft.allowance_recipient)return;
+    let cancelled=false;
+    void getEmployee(employeeId,true).then(details=>{if(!cancelled)setRecipientEmployee(details);}).catch(()=>{if(!cancelled)setError("Не удалось загрузить данные получателя. Повторите выбор сотрудника.");});
+    return()=>{cancelled=true;};
+  },[editingItemId,employeeId,Boolean(payloadDraft.allowance_recipient)]);
+
   function fillConcurrentEmployeeForms(employee: unknown) {
+    setConcurrentEmployee(employee as EmployeeDTO | null);
     const next = concurrentEmployeeDatives(employee);
     const previous = automaticEmployeeForms.current;
     automaticEmployeeForms.current = next;
@@ -436,6 +512,7 @@ export default function PersonnelOrderItemEditor({
   }, [itemTypeCode, payloadDraft.person_id]);
 
   const formConfig = getItemFormRegistry(itemTypeCode);
+  const documentPositions=usePersonnelOrderPositions(editingItemId!=null);
   const orgScoped = isOrgScopedItemType(itemTypeCode);
   const activeOrgGroupId = formConfig?.showHirePlacement ? hireOrgGroupId : targetOrgGroupId;
   const {
@@ -465,7 +542,7 @@ export default function PersonnelOrderItemEditor({
     allowsPendingNewEmployee(itemTypeCode) && !savedEmployeeIdBlocksPendingReset;
   const showEmployeePicker =
     formConfig?.employeePicker && !(pendingNewEmployee && pendingNewEmployeeAllowed)
-    && (!savedEmployeeIdBlocksPendingReset || changingEmployee);
+    ;
 
   React.useEffect(() => {
     if (editingItemId != null) return;
@@ -478,14 +555,16 @@ export default function PersonnelOrderItemEditor({
       setEmployeeSearchError(null);
       return;
     }
+    if(selectedEmployeeId!=null||payloadDraft.unresolved_subject){setEmployeeOptions([]);setEmployeeSearching(false);setEmployeeSearchFinished(false);return;}
     const q = employeeQuery.trim();
     if (q.length < 2) {
       setEmployeeOptions([]);
-      setEmployeeSearchError(null);
+      setEmployeeSearchError(null);setEmployeeSearching(false);setEmployeeSearchFinished(false);
       return;
     }
     const activeOnly = usesActiveEmployeeSearch(itemTypeCode);
     let cancelled = false;
+    setEmployeeSearching(true);setEmployeeSearchFinished(false);
     const timer = window.setTimeout(() => {
       setEmployeeSearchError(null);
       void getEmployees({
@@ -503,13 +582,13 @@ export default function PersonnelOrderItemEditor({
           setEmployeeSearchError(
             err instanceof Error ? err.message : "Не удалось загрузить список сотрудников.",
           );
-        });
-    }, 250);
+        }).finally(()=>{if(!cancelled){setEmployeeSearching(false);setEmployeeSearchFinished(true);}});
+    }, 0);
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [employeeQuery, formConfig?.employeePicker, itemTypeCode, pendingNewEmployee]);
+  }, [employeeQuery, formConfig?.employeePicker, itemTypeCode, pendingNewEmployee, selectedEmployeeId, payloadDraft.unresolved_subject]);
 
   React.useEffect(() => {
     if (!orgScoped) return;
@@ -528,6 +607,7 @@ export default function PersonnelOrderItemEditor({
   React.useEffect(() => {
     if (!orgScoped) return;
 
+    if (itemTypeCode === "HIRE" && payloadDraft.document_position?.position_id) return;
     const positionId = Number(selectedPositionIdFromDraft(payloadDraft, itemTypeCode));
     if (!Number.isFinite(positionId) || positionId <= 0) return;
     if (positionsLoading) return;
@@ -537,7 +617,7 @@ export default function PersonnelOrderItemEditor({
   }, [orgScoped, positionOptions, positionsLoading, payloadDraft, itemTypeCode]);
 
   const formSignature = JSON.stringify({ itemTypeCode, employeeId, effectiveDate, payloadDraft });
-  const hasUnsavedEdit = editingItemId != null && savedFormSignature.current != null && savedFormSignature.current !== formSignature;
+  const hasUnsavedEdit = editingItemId != null && savedFormSignature.current != null && !sameFormSignature(savedFormSignature.current,formSignature);
 
   React.useEffect(() => {
     if (hasUnsavedEdit) setSaveNotice(null);
@@ -545,6 +625,7 @@ export default function PersonnelOrderItemEditor({
 
   function resetForm(typeCode: PersonnelOrderItemFormType = defaultItemType) {
     ++employeeSelectionRevision.current;
+    setDocumentEmployee(null); previousDocumentContext.current=null;
     setEditingItemId(null);
     setEditingItemSavedEmployeeId(null);
     setItemTypeCode(typeCode);
@@ -565,8 +646,32 @@ export default function PersonnelOrderItemEditor({
     savedFormSignature.current = null;
   }
 
+  function changeEmployeeQuery(query: string) {
+                  ++employeeSelectionRevision.current;
+                  if(!changingEmployee||selectedEmployeeId!=null){setChangingEmployee(true);setEmployeeId("");setCurrentPlacement(null);manualEmployeeForms.current.clear();editedPositionForms.current.clear();setPayloadDraft(previous=>({...previous,document_department:blankDepartment(),document_position:undefined,unresolved_subject:undefined,allowance_recipient:previous.allowance_recipient?blankAllowanceRecipient():undefined,employee_full_name_dative_ru:"",employee_full_name_dative_kk:"",employee_full_name_genitive_ru:"",employee_full_name_genitive_kk:"",position_title_ru:"",position_title_kk:"",position_document_nominative_ru:"",position_document_possessive_kk:""}));}
+                  setEmployeeQuery(query);setSelectedEmployeeId(null);
+  }
+
+  function confirmManualName() {
+    const name=employeeQuery.trim();
+    if(!name||employeeSearching||employeeSearchError||!employeeSearchFinished||employeeOptions.length)return;
+    ++employeeSelectionRevision.current;
+    setEmployeeId("");setSelectedEmployeeId(null);setPendingNewEmployee(false);setChangingEmployee(false);
+    const actor=manualSubjectWording(name);
+    const dativeRu=russianEmployeeDativeForOrder(actor),dativeKk=calculateKazakhPersonForm(actor,"dative").value;
+    setPayloadDraft(previous=>({...previous,unresolved_subject:{full_name:name},person_id:"",assignment_id:undefined,
+      document_department:blankDepartment(),document_position:undefined,
+      allowance_recipient:previous.allowance_recipient?blankAllowanceRecipient():undefined,
+      allowance:previous.allowance?{...previous.allowance,employee_dative_ru:dativeRu,employee_dative_kk:dativeKk}:undefined,
+      employee_full_name_dative_ru:dativeRu,employee_full_name_dative_kk:dativeKk,
+      employee_full_name_genitive_ru:russianEmployeeGenitiveForOrder(actor),employee_full_name_genitive_kk:calculateKazakhPersonForm(actor,"genitive").value,
+      employee_full_name_accusative_ru:savedRussianEmployeeNameForm(actor, "accusative")}));
+  }
+
   async function applyEmployeeSelection(option: EmployeeSearchOption) {
     const selectionRevision = ++employeeSelectionRevision.current;
+    manualEmployeeForms.current.clear();
+    automaticEmployeeForms.current={};
     ruGenitiveEdited.current = false;
     editedPositionForms.current.clear();
     setPendingNewEmployee(false);
@@ -586,12 +691,14 @@ export default function PersonnelOrderItemEditor({
     // into a new item.
     setPayloadDraft((prev) => ({
       ...prev,
-      unresolved_subject:undefined,
+      ...(itemTypeCode === "HIRE" ? {new_employee: undefined} : {}),
+      unresolved_subject:undefined,document_position:undefined,document_department:blankDepartment(),
       education_document:itemTypeCode === "EDUCATION_INFORMATION_CHANGE" ? {...emptyEducationDraft(),employee_id:option.employee_id,source_employee_name:option.full_name,education:prev.education_document?.education??emptyEducationDraft().education,education_document:prev.education_document?.education_document??emptyEducationDraft().education_document,effective_date:prev.education_document?.effective_date||effectiveDate} : prev.education_document,
       personal_data_document:itemTypeCode==='PERSONAL_DATA_CHANGE'?{...emptyPersonalDataDraft(),employee_id:option.employee_id,source_employee_name:option.full_name,personal_data:prev.personal_data_document?.personal_data??emptyPersonalDataDraft().personal_data,identity_document:prev.personal_data_document?.identity_document??emptyPersonalDataDraft().identity_document,effective_date:prev.personal_data_document?.effective_date||effectiveDate}:prev.personal_data_document,
       service_length_document:itemTypeCode === "SERVICE_LENGTH_CHANGE" ? {...emptyServiceLengthDraft(),employee_id:option.employee_id,source_employee_name:option.full_name,service_length:prev.service_length_document?.service_length??emptyServiceLengthDraft().service_length,basis:prev.service_length_document?.basis??emptyServiceLengthDraft().basis,effective_date:prev.service_length_document?.effective_date||effectiveDate} : prev.service_length_document,
       category_document:itemTypeCode === "QUALIFICATION_CATEGORY" ? {...emptyCategoryDraft(),employee_id:option.employee_id,source_employee_name:option.full_name,qualification_category:prev.category_document?.qualification_category??emptyCategoryDraft().qualification_category} : prev.category_document,
       assignment_id:undefined,position_translation_status:undefined,position_document_form_status:undefined,person_id:"",
+      allowance_recipient:prev.allowance_recipient?blankAllowanceRecipient():undefined,
       allowance:prev.allowance?{...prev.allowance,employee_dative_ru:"",employee_dative_kk:"",basis_ru:"Личное заявление",basis_kk:"Жеке өтініш"}:undefined,
       org_unit_document_genitive_kk: "",
       position_document_possessive_kk: "",
@@ -601,8 +708,9 @@ export default function PersonnelOrderItemEditor({
       position_title_ru: "",
       position_title_kk: "",
       org_unit_title_kk: "",
-      employee_full_name_dative_kk: itemTypeCode === "CONCURRENT_DUTY_START" ? prev.employee_full_name_dative_kk : "",
+      employee_full_name_dative_kk: "",
       employee_full_name_genitive_kk: "",
+      ...(itemTypeCode === "TRANSFER" ? { employee_full_name_accusative_ru: "" } : {}),
       ...(itemTypeCode === "LEAVE.CHILDCARE.GRANT" ? { employee_full_name_dative_ru: "", employee_full_name_genitive_ru: "", position_document_nominative_ru: "" } : {}),
     }));
     setCalculatedKkFields(new Set());
@@ -610,9 +718,10 @@ export default function PersonnelOrderItemEditor({
     try {
       const details = await getEmployee(String(option.employee_id));
       if (selectionRevision !== employeeSelectionRevision.current) return;
+      setDocumentEmployee(details);
+      setChangingEmployee(false);
       const selected = employeeDtoToSearchOption(details);
       const positionForms = resolvePersonnelOrderDocumentForms(details.position, details);
-      if(itemTypeCode === "QUALIFICATION_CATEGORY")setPayloadDraft(previous=>({...previous,category_document:refreshCategoryDocumentContext(previous.category_document??emptyCategoryDraft(),resolvePersonnelDocumentContext(details))}));
       const assignmentUnit = details.has_current_assignment === false ? null : details.org_unit;
       const storedOrgUnitGenitive = String(assignmentUnit?.document_genitive_kk || "").trim();
       const automaticOrgUnitGenitive = calculateKazakhOrgUnitGenitive(assignmentUnit?.name_kk);
@@ -627,6 +736,13 @@ export default function PersonnelOrderItemEditor({
       setCalculatedKkFields(calculated);
       setPayloadDraft((prev) => ({
         ...prev,
+        ...(prev.allowance ? {allowance:{...prev.allowance,employee_dative_ru:russianEmployeeDativeForOrder(details),employee_dative_kk:savedKazakhEmployeeNameForm(details,'dative')||automaticDative.value}} : {}),
+        document_department:prev.document_department?.unit?prev.document_department:departmentFromUnit(assignmentUnit),
+        assignment_id:details.active_assignment_id??undefined,
+        position_translation_status:details.position?.translation_status,
+        position_document_form_status:details.position?.document_form_status,
+        person_id:details.person_id!=null?String(details.person_id):"",
+
         org_unit_document_genitive_kk: editedPositionForms.current.has("org_unit_document_genitive_kk") ? prev.org_unit_document_genitive_kk : resolvePersonnelOrderOrgUnitForms(assignmentUnit).org_unit_document_genitive_kk,
         org_unit_title_ru: resolvePersonnelOrderOrgUnitForms(assignmentUnit).org_unit_title_ru,
         job_code: details.has_current_assignment === false ? "" : details.position?.job_code || "",
@@ -675,6 +791,7 @@ export default function PersonnelOrderItemEditor({
     try {
       const details = await getEmployee(String(id));
       if (revision !== employeeSelectionRevision.current) return;
+      setDocumentEmployee(details);
       if (formType === "CONCURRENT_DUTY_START") fillConcurrentEmployeeForms(details);
       if (formType === "TRANSFER") setPayloadDraft(prev => ({...prev, employee_full_name_accusative_ru: manualEmployeeForms.current.has("employee_full_name_accusative_ru") ? prev.employee_full_name_accusative_ru : prev.employee_full_name_accusative_ru || savedRussianEmployeeNameForm(details, "accusative")}));
       const option = employeeDtoToSearchOption(details);
@@ -684,6 +801,14 @@ export default function PersonnelOrderItemEditor({
       const placement = await resolveCurrentPlacementView(option);
       if (revision !== employeeSelectionRevision.current) return;
       setCurrentPlacement(placement);
+      if(formType!=="TERMINATION")setPayloadDraft(previous=>{
+        if(previous.document_department||!details.org_unit)return previous;
+        const next={...previous,document_department:departmentFromUnit({...details.org_unit,document_genitive_kk:resolvePersonnelOrderOrgUnitForms(details.org_unit).org_unit_document_genitive_kk})};
+        // Loading automatic defaults alone must not mark an untouched item dirty.
+        const saved=savedFormSignature.current?JSON.parse(savedFormSignature.current):null;
+        if(saved&&JSON.stringify(saved.payloadDraft)===JSON.stringify(previous))savedFormSignature.current=JSON.stringify({...saved,payloadDraft:next});
+        return next;
+      });
       // Historical rate-only items have no unit in their payload. Resolve the
       // text form from their employee's dictionary record when reopening.
       if (formType === "RATE_CHANGE") {
@@ -700,12 +825,24 @@ export default function PersonnelOrderItemEditor({
   }
 
   async function startEdit(item: PersonnelOrderItem) {
+    setValidationShown(false);
     ++employeeSelectionRevision.current;
     automaticEmployeeForms.current = {};
     manualEmployeeForms.current.clear();
+    setDocumentEmployee(null); previousDocumentContext.current=null;
     const uiType = detectUiItemTypeFromRecord(item);
     const normalizedUiType = normalizeItemFormType(uiType) ?? defaultItemType;
     const draft = itemPayloadDraftFromRecord(item.payload);
+    if(normalizedUiType==='HIRE'){
+      const stored=hireBasisFromPayload(item.payload||{},sourceTitleLocale,basisDocuments);
+      const proposed=hireBasisForEditing(item.payload||{},sourceTitleLocale,basisDocuments);
+      if(proposed.kk!==stored.kk)draft.hire_basis=proposed;
+    }
+    if (!draft.document_position && typeof item.payload?.source_position_name === "string" && item.payload.source_position_name.trim()) {
+      draft.document_position={position_id:Number(item.payload.position_id)||null,name:item.payload.source_position_name,name_kk:draft.position_title_kk||"",document_nominative_ru:draft.position_document_nominative_ru,document_possessive_kk:draft.position_document_possessive_kk};
+    }
+
+    if (normalizedUiType === "HIRE" && !draft.basis_other_text && typeof item.payload?.basis === "string") draft.basis_other_text = item.payload.basis;
     if (!draft.basis_entries?.length) {
       draft.basis_entries = (draft.basis_ids || []).map((basisId) => ({
         basis_id: basisId,
@@ -727,11 +864,11 @@ export default function PersonnelOrderItemEditor({
     setEditingItemSavedEmployeeId(savedEmployeeId);
     setItemTypeCode(normalizedUiType);
     setEmployeeId(item.employee_id ? String(item.employee_id) : "");
-    setEmployeeQuery(item.employee_name || "");
+    setEmployeeQuery(item.employee_name || draft.unresolved_subject?.full_name || "");
     setSelectedEmployeeId(savedEmployeeId);
     setChangingEmployee(false);
     setPendingNewEmployee(
-      savedEmployeeId == null && allowsPendingNewEmployee(normalizedUiType),
+      savedEmployeeId == null && (Boolean(draft.new_employee) || !draft.unresolved_subject) && allowsPendingNewEmployee(normalizedUiType),
     );
     setEffectiveDate(persistedEffectiveDate(item));
     if (normalizedUiType === "QUALIFICATION_CATEGORY" && draft.category_document) draft.category_document = categoryOrderDraftFromRecord(draft.category_document, persistedEffectiveDate(item));
@@ -798,6 +935,13 @@ export default function PersonnelOrderItemEditor({
   function handlePendingNewEmployeeChange(checked: boolean) {
     if (savedEmployeeIdBlocksPendingReset) return;
     setPendingNewEmployee(checked);
+    if (itemTypeCode === "HIRE") {
+      ++employeeSelectionRevision.current;
+      setSelectedEmployeeId(null);
+      setChangingEmployee(true);
+      setPayloadDraft(previous => ({...previous, unresolved_subject: undefined, person_id: "",
+        new_employee: checked ? previous.new_employee ?? blankHireNewEmployee() : undefined}));
+    }
     if (checked) {
       setEmployeeId("");
       setEmployeeQuery("");
@@ -811,7 +955,10 @@ export default function PersonnelOrderItemEditor({
     if (key === "position_document_possessive_kk" || key === "position_document_nominative_ru" || key === "org_unit_document_genitive_kk") editedPositionForms.current.add(key);
     if (key === "employee_full_name_genitive_ru") ruGenitiveEdited.current = true;
     setCalculatedKkFields((previous) => { const next = new Set(previous); next.delete(String(key)); return next; });
-    setPayloadDraft((prev) => ({ ...prev, [key]: value }));
+    setPayloadDraft((prev) => ({ ...prev, [key]: value,
+      ...(itemTypeCode==='HIRE'&&(key==='position_document_nominative_ru'||key==='position_document_possessive_kk')?{
+        hire_position_manual_forms:{...hirePositionManualForms(prev,documentPositions.positions.find(row=>row.id===(prev.document_position?.position_id??Number(prev.position_id)))),[key==='position_document_nominative_ru'?'ru':'kk']:Boolean(value.trim())}}
+        :{})}));
     if (key === "termination_reason") setTerminationReasonSuggested(false);
   }
 
@@ -831,6 +978,28 @@ export default function PersonnelOrderItemEditor({
       ...resolvePersonnelOrderOrgUnitForms(unit), org_unit_title_kk: unit?.name_kk || "",
       position_title_ru: "", position_title_kk: "", position_document_nominative_ru: "", position_document_possessive_kk: "",
     }));
+  }
+
+  function selectDocumentPosition(position: DocumentPosition) {
+    if(itemTypeCode==='HIRE'){
+      setPayloadDraft(previous=>{
+        const manual=hirePositionManualForms(previous,documentPositions.positions.find(row=>row.id===(previous.document_position?.position_id??Number(previous.position_id))));
+        const automatic=resolvePersonnelOrderDocumentForms(position);
+        const forms={...automatic,position_document_nominative_ru:manual.ru?previous.position_document_nominative_ru:automatic.position_document_nominative_ru,
+          position_document_possessive_kk:manual.kk?previous.position_document_possessive_kk:automatic.position_document_possessive_kk};
+        return {...previous,position_id:String(position.id),hire_position_manual_forms:manual,position_title_ru:position.name,position_title_kk:position.name_kk||"",...forms,
+          document_position:{position_id:position.id,name:position.name,name_kk:position.name_kk,document_genitive_ru:position.document_genitive_ru,
+            document_nominative_ru:forms.position_document_nominative_ru,document_possessive_kk:forms.position_document_possessive_kk}};
+      });
+      editedPositionForms.current.add("position_document_nominative_ru");editedPositionForms.current.add("position_document_possessive_kk");return;
+    }
+    const forms=resolvePersonnelOrderDocumentForms(position);
+    setPayloadDraft(prev=>({...prev,document_position:{position_id:position.id,name:position.name,name_kk:position.name_kk,document_genitive_ru:position.document_genitive_ru,document_nominative_ru:forms.position_document_nominative_ru,document_possessive_kk:forms.position_document_possessive_kk},position_title_ru:position.name,position_title_kk:position.name_kk||"",...forms}));
+    editedPositionForms.current.add("position_document_nominative_ru");editedPositionForms.current.add("position_document_possessive_kk");
+  }
+
+  function renderDocumentPositionPicker(label: string) {
+    return <PersonnelOrderPositionPicker label={label} value={payloadDraft.document_position?.name || payloadDraft.position_title_ru || payloadDraft.position_document_nominative_ru || ""} {...documentPositions} onSelect={selectDocumentPosition}/>;
   }
 
   function handlePositionChange(nextPositionId: string, placementType = itemTypeCode) {
@@ -869,9 +1038,11 @@ export default function PersonnelOrderItemEditor({
   }
 
   async function saveItem(): Promise<boolean> {
+    if(positionRefreshing){setError("Загружаются актуальные данные должности.");return false;}
     if (disabled) return false;
     if (formDisclosure.current) formDisclosure.current.open = true;
     setError(null);
+    setValidationShown(true);
     if(itemTypeCode==='PERSONAL_DATA_CHANGE'){
       const errors=personalDataErrors(payloadDraft.personal_data_document||emptyPersonalDataDraft());
       if(errors.length){setError(errors.join(' '));return false;}
@@ -893,25 +1064,39 @@ export default function PersonnelOrderItemEditor({
       if (percentError) { setError(percentError); return false; }
     }
 
+    if(payloadDraft.allowance_recipient){
+      const unit=departmentValues(payloadDraft.document_department??blankDepartment());
+      const recipient={...payloadDraft.allowance_recipient,org_unit_ru:unit.name_ru,org_unit_kk:unit.genitive_kk,org_unit_genitive_ru:unit.genitive_ru};
+      const missing=recipientBlockers(recipient,documentRecipient,itemTypeCode!=="SUPPLEMENTARY_PAY",itemTypeCode!=="SUPPLEMENTARY_PAY");
+      if(missing.length){setError(missing.join(" "));return false;}
+    }
     const employeeNumeric = Number(employeeId);
+    if (itemTypeCode === "HIRE" && pendingNewEmployee && payloadDraft.new_employee) {
+      const nameError = hireNewEmployeeError(payloadDraft.new_employee);
+      if (nameError) {setError(nameError); return false;}
+      const termsErrors = hireTermsIssues(payloadDraft.employment_rate || "", hasHireBasis(payloadForSave));
+      if (termsErrors.length) {setError(termsErrors.join(". ")); return false;}
+    }
     const savedEmployeeIsUnchanged =
+      !changingEmployee &&
       editingItemId != null &&
       editingItemSavedEmployeeId != null &&
       Number.isFinite(employeeNumeric) &&
       employeeNumeric === editingItemSavedEmployeeId;
-    const employeeRequiredMessage = documentOrder ? null : savedEmployeeIsUnchanged
+    const employeeRequiredMessage = savedEmployeeIsUnchanged
       ? null
       : requireEmployeeIdForItemType(itemTypeCode, employeeId, {
           pendingNewEmployee: pendingNewEmployee && pendingNewEmployeeAllowed,
           personId: payloadDraft.person_id,
+          manualFullName:payloadDraft.unresolved_subject?.full_name,
         });
     if (employeeRequiredMessage) {
       setError(employeeRequiredMessage);
       return false;
     }
     if (
-      !savedEmployeeIsUnchanged &&
-      !documentOrder && requiresEmployeeForFormType(itemTypeCode) &&
+      !savedEmployeeIsUnchanged && !payloadDraft.unresolved_subject &&
+      requiresEmployeeForFormType(itemTypeCode) &&
       !pendingNewEmployee &&
       selectedEmployeeId !== employeeNumeric
     ) {
@@ -937,16 +1122,22 @@ export default function PersonnelOrderItemEditor({
       }
       let resolvedEmployeeId =
         Number.isFinite(employeeNumeric) && employeeNumeric > 0 ? employeeNumeric : null;
-      if (savedEmployeeIdBlocksPendingReset && resolvedEmployeeId == null) {
+      if (savedEmployeeIdBlocksPendingReset && !payloadDraft.unresolved_subject && resolvedEmployeeId == null) {
         resolvedEmployeeId = editingItemSavedEmployeeId;
       }
       const savedItem = editingItemId == null ? null : items.find((item) => item.item_id === editingItemId);
       const savedPayload = savedItem?.payload || {};
       // Updating a form field must not erase imported context, placement,
       // basis ids, or other payload attributes not represented by inputs.
-      const payload = { ...savedPayload, ...buildItemPayload(backendType, payloadDraft) };
+      const changingSubject = savedItem && (savedItem.employee_id==null?null:Number(savedItem.employee_id))!==resolvedEmployeeId;
+      const preservedPayload = {...savedPayload};
+      if(changingSubject) for(const key of ["new_employee","person_id","unresolved_subject","source_employee_name","source_position_name","source_org_unit_name","position_name","org_unit_name","document_position","document_org_unit","document_forms_ru","document_forms_kk","position_title_ru","position_title_kk","org_unit_title_kk","assignment_id","position_id","job_code","allowance_recipient","recall_position_kk","recall_org_unit_kk"])delete preservedPayload[key];
+      const payload = { ...preservedPayload, ...buildItemPayload(backendType, payloadForSave) };
+      if (backendType === "HIRE" && !pendingNewEmployee) delete payload.new_employee;
+      if(changingSubject)payload.source_employee_name=employeeQuery;
+
       for (const key of ["document_forms_ru", "document_forms_kk"] as const) {
-        const previous = savedPayload[key];
+        const previous = changingSubject ? undefined : savedPayload[key];
         const incoming = payload[key];
         if (previous && typeof previous === "object" && incoming && typeof incoming === "object") {
           payload[key] = { ...previous, ...incoming };
@@ -960,7 +1151,7 @@ export default function PersonnelOrderItemEditor({
         delete payload.leave_end;
         delete payload.leave_days;
       }
-      if (isLeave && currentPlacement) {
+      if (isLeave && currentPlacement && !payloadDraft.document_department) {
         payload.org_unit_name = currentPlacement.org_unit_name || null;
         payload.position_name = currentPlacement.position_name || null;
       }
@@ -976,6 +1167,11 @@ export default function PersonnelOrderItemEditor({
           delete payload.concurrent_rate; delete payload.total_rate;
           if (!payloadDraft.replacement) delete payload.replacement;
         }
+      }
+      if(backendType==='TRANSFER' && payloadDraft.transfer){
+        // Bound templates render payload.transfer. Retire conflicting legacy targets.
+        delete payload.to_org_unit_id;
+        delete payload.to_position_id;
       }
       const body = {
         ...(backendType === "CONCURRENT_DUTY_START" && payloadDraft.concurrent_template_version_id ? {template_version_id: payloadDraft.concurrent_template_version_id} : {}),
@@ -993,7 +1189,7 @@ export default function PersonnelOrderItemEditor({
           : await createPersonnelOrderItem(orderId, body);
       onChanged(detail);
       resetForm(itemTypeCode);
-      if (editingItemId == null && formDisclosure.current) {
+      if (formDisclosure.current) {
         const disclosure = formDisclosure.current;
         const focusInside = disclosure.contains(document.activeElement);
         disclosure.open = false;
@@ -1020,7 +1216,7 @@ export default function PersonnelOrderItemEditor({
       if (itemSaveInFlight.current) return itemSaveInFlight.current;
       // A successful save clears the ref before React installs the next render's
       // callback. A generation retry in that interval must not PATCH it again.
-      if (editingItemId != null && (savedFormSignature.current == null || savedFormSignature.current === formSignature)) return Promise.resolve(true);
+      if (editingItemId != null && (savedFormSignature.current == null || sameFormSignature(savedFormSignature.current,formSignature))) return Promise.resolve(true);
       // The editor is rendered even before the operator starts a new item.
       // Generating text in that state must not attempt to save an empty
       // item (and, consequently, must not turn a normal generation into a
@@ -1092,9 +1288,15 @@ export default function PersonnelOrderItemEditor({
             onChange={options.onOrgGroupChange}
           />
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <OrgUnitScopeFilter
+            {cascadeType === "HIRE" ? <PersonnelOrderHireDepartmentFields disabled={disabled || saving}
+              value={payloadDraft.document_department ?? departmentFromUnit(orgUnitCatalogOptions.find(unit=>unit.unit_id===selectedOrgUnitId))}
+              options={orgUnitSelectOptions} onChange={(value, selected)=>{
+                if (selected && (value.unit?.unit_id ?? null) !== selectedOrgUnitId) handleOrgUnitChange(value.unit?.unit_id ?? null, "HIRE");
+                setPayloadDraft(previous=>({...previous,document_department:value,
+                  ...(selected ? {org_unit_id:value.unit?.unit_id ? String(value.unit.unit_id) : ""} : {})}));
+              }}/> : <OrgUnitScopeFilter
               basePath={ORG_SCOPE_BASE_PATH}
-              label={options.unitLabel}
+              label={cascadeType === "TRANSFER" ? "Новое подразделение (назначение)" : "Подразделение назначения"}
               allLabel={options.unitEmptyLabel}
               orgGroupId={options.orgGroupId}
               value={selectedOrgUnitIdFromDraft(payloadDraft, cascadeType)}
@@ -1108,9 +1310,21 @@ export default function PersonnelOrderItemEditor({
                   handleOrgUnitChange(unitId);
                 }
               }}
-            />
+            />}
+            {cascadeType === "HIRE" ? <PersonnelOrderHirePositionFields
+              value={{id:payloadDraft.document_position?.position_id??(Number(payloadDraft.position_id)||null),ru:payloadDraft.document_position?.name??payloadDraft.position_title_ru??"",kk:payloadDraft.document_position?.name_kk??payloadDraft.position_title_kk??""}}
+              {...documentPositions} disabled={disabled||saving} onSelect={selectDocumentPosition}
+              onTextChange={(locale,text)=>setPayloadDraft(previous=>{
+                const reference=documentPositions.positions.find(row=>row.id===(previous.document_position?.position_id??Number(previous.position_id)));
+                const manual=hirePositionManualForms(previous,reference),key=locale==='ru'?'position_document_nominative_ru':'position_document_possessive_kk';
+                editedPositionForms.current.add(key);
+                return {...previous,hire_position_manual_forms:manual,[locale==='ru'?'position_title_ru':'position_title_kk']:text,
+                  document_position:{...previous.document_position,position_id:previous.document_position?.position_id??(Number(previous.position_id)||null),
+                    name:locale==='ru'?text:previous.document_position?.name??previous.position_title_ru??"",name_kk:locale==='kk'?text:previous.document_position?.name_kk??previous.position_title_kk??""},
+                  ...(!manual[locale]?{[key]:text}:{})};
+              })}/> : <>
             <FormField label={options.positionLabel}>
-              <select
+              {payloadDraft.document_position ? renderDocumentPositionPicker("Должность в приказе") : <select
                 data-testid="personnel-order-position-select"
                 value={selectedPositionIdFromDraft(payloadDraft, cascadeType)}
                 onChange={(e) => {
@@ -1137,8 +1351,9 @@ export default function PersonnelOrderItemEditor({
                         : "—"}
                 </option>
                 {renderPersonnelOrderPositionOptions(positionGroups)}
-              </select>
+              </select>}
             </FormField>
+            </>}
           </div>
         </div>
       </div>
@@ -1172,7 +1387,6 @@ export default function PersonnelOrderItemEditor({
   }
 
   function renderEmployeeSection() {
-    if(itemTypeCode==='PERSONAL_DATA_CHANGE'&&payloadDraft.personal_data_document?.subject_mode==='MANUAL')return null;
     if(itemTypeCode === "EDUCATION_INFORMATION_CHANGE" && payloadDraft.education_document?.subject_mode === "MANUAL") return null;
     if(itemTypeCode === "SERVICE_LENGTH_CHANGE" && payloadDraft.service_length_document?.subject_mode === "MANUAL") return null;
     if (!formConfig?.employeePicker) return null;
@@ -1181,7 +1395,11 @@ export default function PersonnelOrderItemEditor({
 
     return (
       <div className="space-y-3" data-testid="personnel-order-employee-section">
-        {pendingAllowed ? (
+        {itemTypeCode === "HIRE" ? <PersonnelOrderHireEmployeeFields isNew={pendingNewEmployee}
+          value={payloadDraft.new_employee ?? blankHireNewEmployee()} newDisabled={!pendingNewEmployeeAllowed} disabled={disabled || saving}
+          onModeChange={handlePendingNewEmployeeChange}
+          onChange={value => setPayloadDraft(previous => ({...previous, new_employee: value, person_id: "",
+            unresolved_subject: {full_name: hireNewEmployeeName(value)}}))} /> : pendingAllowed ? (
           <div className="space-y-1">
             <label
               className={`flex items-start gap-2 text-sm ${
@@ -1217,18 +1435,13 @@ export default function PersonnelOrderItemEditor({
           </div>
         ) : null}
 
-        {savedEmployeeIdBlocksPendingReset && !changingEmployee ? (
-          <div className="flex items-center justify-between gap-3 rounded-lg border border-zinc-200 px-3 py-2 dark:border-zinc-800" data-testid="personnel-order-linked-employee-card">
-            <div className="min-w-0"><div className="truncate text-sm font-medium">{employeeQuery || "Сотрудник"}</div><div className="text-xs text-zinc-500">ID: {editingItemSavedEmployeeId}</div></div>
-            <button type="button" className="shrink-0 text-sm font-medium text-blue-700 hover:underline dark:text-blue-300" onClick={() => { setChangingEmployee(true); setSelectedEmployeeId(null); setEmployeeOptions([]); }}>Сменить сотрудника</button>
-          </div>
-        ) : null}
-
         {showEmployeePicker ? (
           <FormField
             label="Сотрудник"
             hint={
-              pendingAllowed && pendingNewEmployeeAllowed
+              payloadDraft.unresolved_subject
+                ? "ФИО сохранится только в пункте приказа. Карточка сотрудника не создаётся."
+                : pendingAllowed && pendingNewEmployeeAllowed
                 ? "Необязательно для приёма. Можно указать существующего сотрудника или оставить пустым."
                 : "Выберите действующего сотрудника из результатов поиска."
             }
@@ -1236,21 +1449,26 @@ export default function PersonnelOrderItemEditor({
             <div className="flex flex-wrap gap-2">
               <input
                 value={employeeQuery}
-                onChange={(e) => { setEmployeeQuery(e.target.value); setSelectedEmployeeId(null); }}
+                onChange={e=>changeEmployeeQuery(e.target.value)}
                 placeholder="Поиск по ФИО…"
                 autoComplete="off"
                 data-testid="personnel-order-employee-search-input"
                 className={`min-w-[12rem] flex-1 ${FIELD_INPUT_CLASS}`}
               />
               <input
+                type="hidden"
                 value={employeeId}
-                onChange={(e) => { setEmployeeId(e.target.value); setSelectedEmployeeId(null); }}
+                readOnly
                 placeholder="ID"
                 aria-label="Идентификатор сотрудника"
                 data-testid="personnel-order-employee-id-input"
                 className={`w-24 ${FIELD_INPUT_CLASS}`}
               />
+              {employeeId?<span className="self-center text-xs text-zinc-500">Карточка №{employeeId}</span>:null}
+              {employeeQuery||employeeId?<button type="button" onClick={()=>changeEmployeeQuery("")} aria-label="Очистить сотрудника" className="text-sm text-blue-600">Очистить</button>:null}
             </div>
+            {payloadDraft.unresolved_subject?<p role="status" data-testid="manual-subject-status" className="text-sm text-amber-700">ФИО введено вручную. Карточка сотрудника не найдена.</p>:null}
+            {itemTypeCode!=="PERSONAL_DATA_CHANGE"&&itemTypeCode!=="SERVICE_LENGTH_CHANGE"&&itemTypeCode!=="EDUCATION_INFORMATION_CHANGE"&&!payloadDraft.unresolved_subject&&selectedEmployeeId==null&&employeeSearchFinished&&!employeeSearching&&!employeeSearchError&&employeeOptions.length===0&&employeeQuery.trim().length>=2?<button type="button" onClick={confirmManualName} className="rounded border px-3 py-2 text-sm">Использовать ФИО вручную</button>:null}
             {employeeSearchError ? (
               <p
                 className="mt-1 text-xs text-red-600 dark:text-red-400"
@@ -1284,7 +1502,9 @@ export default function PersonnelOrderItemEditor({
             className="rounded-lg border border-dashed border-zinc-300 px-3 py-2 text-sm text-zinc-600 dark:border-zinc-700 dark:text-zinc-400"
             data-testid="personnel-order-pending-new-employee-hint"
           >
-            {payloadDraft.person_id
+            {payloadDraft.new_employee
+              ? "ФИО сохранится в черновике. Новый сотрудник будет оформлен при применении приказа."
+              : payloadDraft.person_id
               ? `Заявитель person #${payloadDraft.person_id}. Employee будет создан при проведении приказа.`
               : "Сотрудник не выбран. Укажите person_id заявителя или сохраните пункт из карточки заявителя."}
           </p>
@@ -1307,8 +1527,8 @@ export default function PersonnelOrderItemEditor({
   }
 
   function renderOrgPlacementSection() {
-    if (itemTypeCode === "TRANSFER" && payloadDraft.transfer) {
-      const setTransfer: React.Dispatch<React.SetStateAction<TransferFields>> = change => setPayloadDraft(previous => {
+    if(itemTypeCode==='TRANSFER' && payloadDraft.transfer){
+      const setTransfer:React.Dispatch<React.SetStateAction<TransferFields>>=change=>setPayloadDraft(previous=>{
         const current=previous.transfer!;
         return {...previous,transfer:typeof change==='function'?change(current):change};
       });
@@ -1409,9 +1629,9 @@ export default function PersonnelOrderItemEditor({
               replacement: template?.replacement_mode === "RATE" ? {...blankReplacement(),...previous.replacement,mode:"RATE"} as ReplacementFields : undefined}));
           }} className={FIELD_INPUT_CLASS}>
             <option value="">Закреплённый шаблон (без замены)</option>
-            {rateTemplates.map(row => <option key={row.template_version_id} value={row.template_version_id}>{row.name_ru} — {row.replacement_mode === "RATE" ? "RATE, замещение" : "доля ставки"} (версия {row.template_version_id})</option>)}
+            {rateTemplates.map(row => <option key={row.template_version_id} value={row.template_version_id}>{row.name_ru} — {row.replacement_mode === "RATE" ? "замещение на долю ставки" : "доля ставки"}</option>)}
           </select>
-          {rateTemplateError ? <p role="alert">{rateTemplateError}</p> : !rateTemplates.length ? <p role="status">Опубликованные шаблоны по ставке не загружены или отсутствуют.</p> : null}
+          {rateTemplateError ? <p role="alert">{rateTemplateError}</p> : rateTemplatesLoading ? <p role="status">Загружаются шаблоны совмещения…</p> : !rateTemplates.length ? <p role="status">Нет опубликованных шаблонов совмещения на долю ставки.</p> : null}
         </FormField>
         <PersonnelOrderTransferFields value={value} onChange={setConcurrent} orgUnits={orgUnitCatalogOptions} mode="concurrent" autoGenitiveForms afterDepartment={!payloadDraft.replacement ? <PersonnelOrderMedicalSpecialtyPicker value={payloadDraft.medical_specialty} disabled={disabled||saving} onChange={medical_specialty=>setPayloadDraft(previous=>({...previous,medical_specialty}))}/> : undefined} />
         {!payloadDraft.employee_full_name_dative_kk?.trim() ? <p role="alert" className="text-xs text-amber-700">Нет сохранённой формы ФИО (KK) или надёжных данных для штатного склонения. Заполните ФИО в дательном падеже (KK) вручную.</p> : null}
@@ -1486,17 +1706,6 @@ export default function PersonnelOrderItemEditor({
               data-testid="personnel-order-new-rate-input"
               value={payloadDraft.to_rate || ""}
               onChange={(e) => updatePayloadField("to_rate", e.target.value)}
-              className={FIELD_INPUT_CLASS}
-            />
-          </FormField>
-        ) : null}
-
-        {formConfig?.showHirePlacement ? (
-          <FormField label="Ставка" className="sm:col-span-2">
-            <input
-              data-testid="personnel-order-hire-rate-input"
-              value={payloadDraft.employment_rate || ""}
-              onChange={(e) => updatePayloadField("employment_rate", e.target.value)}
               className={FIELD_INPUT_CLASS}
             />
           </FormField>
@@ -1588,7 +1797,7 @@ export default function PersonnelOrderItemEditor({
                   </select>
                 </FormField>
               ) : null}
-              {entry.document_type === "OTHER" ? <FormField label="Текст основания"><textarea value={entry.other_text} onChange={(e) => updateEntry(index, { other_text: e.target.value })} className={FIELD_INPUT_CLASS} /></FormField> : null}
+              {entry.document_type === "OTHER" ? <FormField label="Текст основания"><textarea aria-label="Текст основания" value={entry.other_text} onChange={(e) => updateEntry(index, { other_text: e.target.value })} className={FIELD_INPUT_CLASS} /></FormField> : null}
               {entries.length > 1 ? <button type="button" onClick={() => setPayloadDraft((previous) => ({ ...previous, basis_entries: (previous.basis_entries || []).filter((_, entryIndex) => entryIndex !== index) }))} className="justify-self-start text-xs text-red-700 hover:underline dark:text-red-300">Удалить основание</button> : null}
             </div>
           );
@@ -1599,12 +1808,29 @@ export default function PersonnelOrderItemEditor({
     );
   }
 
+  function renderDocumentPlacement() {
+    if(itemTypeCode==='PERSONAL_DATA_CHANGE'&&payloadDraft.personal_data_document?.subject_mode==='MANUAL')return null;
+    if(itemTypeCode === "EDUCATION_INFORMATION_CHANGE" && payloadDraft.education_document?.subject_mode === "MANUAL") return null;
+    if(itemTypeCode === "SERVICE_LENGTH_CHANGE" && payloadDraft.service_length_document?.subject_mode === "MANUAL") return null;
+    return <div className="space-y-4">
+          {itemTypeCode !== "HIRE" && payloadDraft.document_department?<PersonnelOrderDepartmentPicker label={orgScoped?"Подразделение для текста приказа":"Подразделение"} value={payloadDraft.document_department} options={orgUnitCatalogOptions} onChange={value=>setPayloadDraft(previous=>({...previous,document_department:value}))}/>:null}
+          {documentRecipient && payloadDraft.allowance_recipient ? <PersonnelOrderAllowanceRecipient key={documentRecipient.id} employee={documentRecipient} value={{...payloadDraft.allowance_recipient,org_unit_id:payloadDraft.document_department?.unit?.unit_id??undefined,org_unit_ru:departmentValues(payloadDraft.document_department??blankDepartment()).name_ru,org_unit_kk:departmentValues(payloadDraft.document_department??blankDepartment()).genitive_kk,org_unit_genitive_ru:departmentValues(payloadDraft.document_department??blankDepartment()).genitive_ru}} onChange={value=>setPayloadDraft(previous=>{
+            const assignment=documentRecipient.assignments?.find(row=>row.assignment_id===value.assignment_id);
+            const changed=value.assignment_id!==previous.allowance_recipient?.assignment_id;
+            return {...previous,document_department:changed&&assignment?.org_unit?departmentFromUnit({...assignment.org_unit,unit_id:assignment.org_unit_id??assignment.org_unit.unit_id}):previous.document_department,allowance_recipient:{...value,org_unit_id:undefined,org_unit_ru:"",org_unit_kk:"",org_unit_genitive_ru:""}};
+          })}/>:null}
+
+          {payloadDraft.document_position && !orgScoped ? <FormField label="Должность в приказе">{renderDocumentPositionPicker("Должность в приказе")}</FormField> : null}
+
+    </div>;
+  }
+
   function renderFormSection(section: ItemFormSection) {
     switch (section) {
       case "item_type":
         return <React.Fragment key={section}>{renderItemTypeSection()}</React.Fragment>;
       case "employee":
-        return <React.Fragment key={section}>{renderEmployeeSection()}</React.Fragment>;
+        return <React.Fragment key={section}>{renderEmployeeSection()}{renderDocumentPlacement()}</React.Fragment>;
       case "current_placement":
         return formConfig?.showCurrentPlacement && currentPlacement ? (
           <CurrentPlacementPanel key={section} placement={currentPlacement} />
@@ -1656,6 +1882,7 @@ export default function PersonnelOrderItemEditor({
                   </td>
                   <td className="px-3 py-2">
                     {sourceEmployeeName(item)}
+                    {item.employee_id==null&&item.payload?.unresolved_subject?<span data-testid="manual-subject-row-status" className="mt-1 block text-xs text-amber-700">ФИО вручную · без карточки</span>:null}
                   </td>
                   <td className="px-3 py-2">{item.effective_date || "—"}</td>
                   <td className="max-w-[24rem] px-3 py-2 text-zinc-700 dark:text-zinc-300">
@@ -1693,12 +1920,20 @@ export default function PersonnelOrderItemEditor({
       </div>
 
       {editingItemId == null && saveNotice ? <p role="status" className="text-sm text-emerald-700">{saveNotice}</p> : null}
+      {!disabled && editingItemId != null && defaultItemType === "HIRE" ? <button type="button"
+        data-testid="personnel-order-add-another-item" disabled={saving || deletingItemId != null}
+        className="rounded-lg border border-blue-300 px-3 py-2 text-sm font-medium text-blue-800"
+        onClick={() => {
+          if (hasUnsavedEdit && !window.confirm("Есть несохранённые изменения пункта. Перейти к добавлению нового пункта без их сохранения?")) return;
+          resetForm(defaultItemType);
+          if (formDisclosure.current) formDisclosure.current.open = true;
+        }}>Добавить пункт</button> : null}
       {!disabled ? (
         <details ref={formDisclosure} className="rounded-xl border border-zinc-200 dark:border-zinc-800" data-testid="personnel-order-add-item-disclosure">
           <summary className="cursor-pointer px-4 py-2 text-sm font-semibold text-zinc-900 focus-visible:outline-2 focus-visible:outline-blue-500 dark:text-zinc-100">
             {editingItemId != null ? `Редактирование пункта #${editingItemId}` : "Добавить пункт"}
           </summary>
-        {editingItemId == null ? <PersonnelOrderInheritedItemForm key={`${orderId}:${addedCount}`} orderId={orderId} onCancel={() => {if(formDisclosure.current) formDisclosure.current.open=false;}} onAdded={order => {
+        {editingItemId == null ? <PersonnelOrderInheritedItemForm key={`${orderId}:${addedCount}`} orderId={orderId} orderItems={items} onCancel={() => {if(formDisclosure.current) formDisclosure.current.open=false;}} onAdded={order => {
           onChanged(order);
           setAddedCount(count => count + 1);
           if (formDisclosure.current) {
@@ -1717,14 +1952,19 @@ export default function PersonnelOrderItemEditor({
 
           <fieldset disabled={saving} className="space-y-4">
             {sectionOrder.map((section) => renderFormSection(section))}
-            {itemTypeCode !== "LEAVE.CHILDCARE.GRANT" && itemTypeCode !== "CONCURRENT_DUTY_START" && <section className="grid gap-3 sm:grid-cols-2" data-testid="common-position-document-forms">
+            {itemTypeCode === "HIRE" ? <PersonnelOrderHireDetailsFields value={payloadDraft.hire_details ?? emptyHireDetails()}
+              onChange={hire_details => setPayloadDraft(previous => ({...previous, hire_details}))} disabled={saving}/> : null}
+            {itemTypeCode !== "LEAVE.CHILDCARE.GRANT" && itemTypeCode !== "CONCURRENT_DUTY_START" && !(itemTypeCode==='TRANSFER' && payloadDraft.transfer) && <section className="grid gap-3 sm:grid-cols-2" data-testid="common-position-document-forms">
               <FormField label="RU: должность (документная форма)"><input value={payloadDraft.position_document_nominative_ru || ""} onChange={e => updatePayloadField("position_document_nominative_ru", e.target.value)} className={FIELD_INPUT_CLASS} /></FormField>
               {itemTypeCode !== "LEAVE.UNPAID.GRANT" && <>
                 <FormField label="KK: лауазым (құжат нысаны)"><input value={payloadDraft.position_document_possessive_kk || ""} onChange={e => updatePayloadField("position_document_possessive_kk", e.target.value)} className={FIELD_INPUT_CLASS} /></FormField>
-                <FormField label="KK: подразделение в тексте"><input aria-label="KK: подразделение в тексте" value={payloadDraft.org_unit_document_genitive_kk || ""} onChange={e => updatePayloadField("org_unit_document_genitive_kk", e.target.value)} className={FIELD_INPUT_CLASS} /></FormField>
+
               </>}
             </section>}
 
+            {itemTypeCode === "HIRE" ? <PersonnelOrderHireTermsFields rate={payloadDraft.employment_rate || ""}
+              onRateChange={rate=>updatePayloadField("employment_rate",rate)} basis={hireBasisValue}
+              onBasisChange={hire_basis=>setPayloadDraft(previous=>({...previous,hire_basis}))} disabled={saving}/> : null}
           </fieldset>
 
           {error ? (

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import PersonnelTemplateVariants from "./PersonnelTemplateVariants";
 import { copyPersonnelTemplate, listPersonnelIndependentTemplates, listPersonnelTemplateVersions } from "../_lib/personnelOrderTemplatesApi.client";
@@ -8,6 +8,22 @@ const sectionLanguage = vi.hoisted(() => ({ language: "ru" as "ru" | "kk" }));
 vi.mock("@/app/directory/personnel/_lib/personnelSectionLanguage", () => ({ usePersonnelSectionLanguage: () => ({...sectionLanguage,ready:true}) }));
 afterEach(() => { cleanup(); vi.resetAllMocks(); sectionLanguage.language = "ru"; });
 beforeEach(() => { Object.defineProperty(HTMLDialogElement.prototype, "showModal", { configurable: true, value: function () { this.setAttribute("open", ""); } }); vi.mocked(listPersonnelTemplateVersions).mockResolvedValue({items: []}); });
+
+it("keeps the latest selected category when an earlier template-list request completes", async () => {
+  const item = {type_code:"QUALIFICATION_CATEGORY",editor_available:true} as PersonnelOrderTemplateCatalogItem;
+  const first = {template_id:41,item_type_code:item.type_code,name_ru:"Category 41",name_kk:"41",is_default:true,template_version_id:null,draft_version_id:54};
+  const second = {...first,template_id:42,name_ru:"Category 42",is_default:false,draft_version_id:55};
+  let finish!: (value: {items: typeof first[]}) => void;
+  vi.mocked(listPersonnelIndependentTemplates).mockReturnValue(new Promise(resolve => {finish=resolve;}));
+  const selected=vi.fn(), editor=vi.fn((_id:number|undefined)=>null);
+  const view=render(<PersonnelTemplateVariants item={item} onSelected={selected} renderEditor={editor}/>);
+  view.rerender(<PersonnelTemplateVariants item={item} initialTemplateId={42} onSelected={selected} renderEditor={editor}/>);
+  await act(async()=>finish({items:[first,second]}));
+  await waitFor(()=>expect(listPersonnelTemplateVersions).toHaveBeenCalledWith(item.type_code,42));
+  expect(listPersonnelTemplateVersions).not.toHaveBeenCalledWith(item.type_code,41);
+  expect(editor.mock.calls.at(-1)?.[0]).toBe(42);
+  expect(selected).not.toHaveBeenCalledWith(41);
+});
 
 it("opens a different identity from the catalogue while retaining the same order type",async()=>{
   const item={type_code:"CONCURRENT_DUTY_START",editor_available:true} as PersonnelOrderTemplateCatalogItem;

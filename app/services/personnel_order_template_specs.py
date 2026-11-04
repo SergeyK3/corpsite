@@ -12,6 +12,7 @@ from app.db.models.personnel_orders import ORDER_TYPE_COMPOSITE, PERSONNEL_ORDER
 from app.services.personnel_order_template_catalog_data import CATALOG_PROJECTIONS
 from app.services.personnel_order_template_initial_data import INITIAL_TEXTS_BY_TYPE
 from app.services.personnel_order_childcare_contract import VARIABLES as CHILDCARE_VARIABLES, REQUIRED_VARIABLES as CHILDCARE_REQUIRED_VARIABLES
+from app.services.personnel_order_hire_terms import default_hire_basis
 
 DraftTexts = Mapping[str, str]
 RequiredVariables = Mapping[str, tuple[str, ...]]
@@ -64,7 +65,7 @@ PERSONNEL_ORDER_TEMPLATE_SPECS = {
     SERVICE_LENGTH_TYPE: _spec(SERVICE_LENGTH_TYPE, SERVICE_LENGTH_VARIABLES, required=SERVICE_LENGTH_REQUIRED, preview=SERVICE_LENGTH_PREVIEW),
     CATEGORY_TYPE: _spec(CATEGORY_TYPE, CATEGORY_VARIABLES + CLASSIFIER_VARIABLES, required=CATEGORY_REQUIRED, preview=CATEGORY_PREVIEW),
     'LEAVE.ANNUAL.RECALL': _spec('LEAVE.ANNUAL.RECALL', RECALL_VARIABLES, required=RECALL_REQUIRED, preview={'ru': {'effective_date': '[[Дата отзыва]]'}, 'kk': {'effective_date': '[[Шақырту күні]]'}}),
-    "HIRE": _spec("HIRE", _COMMON), "TRANSFER": _spec("TRANSFER", _COMMON + ("employee.full_name_dative_ru", "employee.full_name_accusative_ru")),
+    "HIRE": _spec("HIRE", _COMMON, preview={locale: {**values, "basis": default_hire_basis(locale)} for locale, values in _PREVIEW.items()}), "TRANSFER": _spec("TRANSFER", _COMMON + ("employee.full_name_dative_ru", "employee.full_name_accusative_ru")),
     "TERMINATION": _spec("TERMINATION", ("employee.full_name", "position.title_ru", "position.title_kk", "org_unit.title_ru", "org_unit.title_kk", "effective_date", "effective_date_local", "termination.reason", "termination.unused_leave_days", "basis"), preview={"ru": {"effective_date": "[[Дата увольнения]]", "effective_date_local": "[[Дата увольнения]]"}, "kk": {"effective_date": "[[Жұмыстан босату күні]]", "effective_date_local": "[[Жұмыстан босату күні]]"}}),
     "CONCURRENT_DUTY_START": _spec("CONCURRENT_DUTY_START", CONCURRENT_VARIABLES + REPLACEMENT_VARIABLES + SERVICE_AREA_VARIABLES, preview=CONCURRENT_PREVIEW),
     "CONCURRENT_DUTY_END": _spec("CONCURRENT_DUTY_END", CESSATION_VARIABLES, preview=CESSATION_PREVIEW),

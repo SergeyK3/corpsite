@@ -28,7 +28,7 @@ def resolve_add_item_context(conn: Any, order: Any, *, lock: bool = True) -> dic
     except TemplateApplicationError as exc:
         raise PersonnelOrderValidationError(str(exc)) from exc
     first = items[0]
-    return {"item_type_code": first["item_type_code"], "template": templates[int(first["item_id"])], "templates": templates,
+    return {"item_type_code": first["item_type_code"], "source_title_locale": order.get("source_title_locale"), "template": templates[int(first["item_id"])], "templates": templates,
             "employee_ids": [item["employee_id"] for item in items if item["employee_id"] is not None],
             "default_employee_id": first["employee_id"]}
 
@@ -48,7 +48,7 @@ def get_add_item_context(order_id: int) -> dict[str, Any]:
             return {"available": False, "reason": str(exc)}
         template = context["template"]
         keys = ("template_id", "template_version_id", "version_number", "name_ru", "name_kk", "title_ru", "title_kk", "is_default")
-        return {"available": True, "item_type_code": context["item_type_code"], "employee_ids": context["employee_ids"], "default_employee_id": context["default_employee_id"], "template": {**{key: template[key] for key in keys}, "replacement_mode": variant(template), "replacement_optional_placement": optional_placement(template), "service_area_allowance": enabled(template)}}
+        return {"available": True, "item_type_code": context["item_type_code"], "source_title_locale": context.get("source_title_locale"), "employee_ids": context["employee_ids"], "default_employee_id": context["default_employee_id"], "template": {**{key: template[key] for key in keys}, "replacement_mode": variant(template), "replacement_optional_placement": optional_placement(template), "service_area_allowance": enabled(template)}}
 
 
 def bound_template_generation(conn: Any, order_id: int, items: list[Any]) -> dict[str, Any] | None:

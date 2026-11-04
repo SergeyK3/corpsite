@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
@@ -244,7 +245,14 @@ def _build_list_filters(
         )
         params["org_unit_id"] = int(org_unit_id)
 
-    if q:
+    search = str(q or '').strip()
+    if re.fullmatch(r'[0-9]+', search):
+        # Numeric journal queries are a substring mask on the order number,
+        # never IDs, dates, names or other document contents. Keep this before
+        # COUNT and pagination, with the same rule as the client-side filter.
+        where_parts.append("po.order_number ILIKE :q_order_number")
+        params['q_order_number'] = f'%{search}%'
+    elif search:
         where_parts.append("""(po.order_number ILIKE :q_pattern OR po.source_title ILIKE :q_pattern
             OR CAST(po.order_id AS text) ILIKE :q_pattern
             OR EXISTS (SELECT 1 FROM public.personnel_order_items search_item
@@ -252,7 +260,7 @@ def _build_list_filters(
                 WHERE search_item.order_id=po.order_id
                 AND (COALESCE(NULLIF(BTRIM(search_item.payload->>'source_employee_name'),''),NULLIF(BTRIM(search_employee.full_name),'')) ILIKE :q_pattern
                     OR CAST(search_item.employee_id AS text) ILIKE :q_pattern)))""")
-        params["q_pattern"] = f"%{str(q).strip()}%"
+        params["q_pattern"] = f"%{search}%"
 
     normalized_record_quality = str(record_quality or "WORKING").strip().upper()
     technical = """(COALESCE(po.storage_json ->> 'technical_record', 'false') = 'true'

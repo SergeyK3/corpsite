@@ -1,4 +1,5 @@
 import { withoutAutomaticOrderClosing } from "../_lib/personnelOrderClosingText";
+import {hireBasisFromPayload,hireBasisOverride} from '../_lib/personnelOrderHireBasis';
 import {personnelOrderPrintTitle} from '../_lib/personnelOrderPrintTitle';
 import { formatPersonnelOrderActionStartDate } from "../_lib/personnelOrderPrintFormat";
 import type {
@@ -236,6 +237,7 @@ function renderBasis(
   item: PersonnelOrderItem,
   language: PersonnelOrderDocumentLanguage,
 ): string[] {
+  if(item.item_type_code==='HIRE')return hireItemBasis(detail,item,language);
   const documents = basisDocuments(detail);
   const byId = new Map(documents.map((basis) => [text(basis.basis_id), basis]));
   const selected = itemBasisIds(item)
@@ -262,6 +264,13 @@ function renderBasis(
   }
   if (manual) entries.push(manual);
   return entries;
+}
+
+function hireItemBasis(detail:PersonnelOrderDetailResponse,item:PersonnelOrderItem,language:PersonnelOrderDocumentLanguage,override?:string|null):string[] {
+  const paired=hireBasisFromPayload(item.payload||{},detail.order.source_title_locale,basisDocuments(detail));
+  if(language==='kk'&&paired.kk_intentionally_empty)return [];
+  const basis=typeof override==='string'?override:paired[language];
+  return basis.trim()?[basis]:[];
 }
 
 /**
@@ -309,8 +318,9 @@ export function renderPersonnelOrderDocument(
   const snapshotPoints = activeItems.map((item) => {
     const group = editorial?.items.find((entry) => entry.order_item_id === item.item_id);
     const body = editorialText(group?.blocks.find((block) => block.block_type === "body" && block.locale === language));
-    const basis = editorialText(group?.blocks.find((block) => block.block_type === "basis" && block.locale === language));
-    return body ? { text: body, basis: basis ? [basis] : [] } : null;
+    const basisBlock=group?.blocks.find((block) => block.block_type === "basis" && block.locale === language);
+    const basis = editorialText(basisBlock);
+    return body ? { text: body, basis: item.item_type_code==='HIRE'?hireItemBasis(detail,item,language,hireBasisOverride(basisBlock)):basis ? [basis] : [] } : null;
   });
   if (snapshotTitle && snapshotPreamble && snapshotPoints.length === activeItems.length && snapshotPoints.every(Boolean)) {
     return {
@@ -379,7 +389,8 @@ export function renderPersonnelOrderDocument(
     const group = editorial?.items.find((entry) => entry.order_item_id === item?.item_id);
     const body = manualBlockText(group?.blocks.find((block) => block.block_type === "body" && block.locale === language));
     const basis = manualBlockText(group?.blocks.find((block) => block.block_type === "basis" && block.locale === language));
-    const effectiveBasis = basis ? [basis] : point.basis;
+    const basisOverride=hireBasisOverride(group?.blocks.find(block=>block.block_type==='basis'&&block.locale===language));
+    const effectiveBasis = item.item_type_code==='HIRE'?hireItemBasis(detail,item,language,basisOverride):basis ? [basis] : point.basis;
     return {
       ...point,
       text: body || point.text,

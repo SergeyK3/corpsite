@@ -1,4 +1,5 @@
 "use client";
+import {hireDetailsLines} from "../_lib/personnelOrderHireDetails";
 
 import {
   formatPersonnelOrderDate,
@@ -106,6 +107,8 @@ export default function PersonnelOrderDocumentView({
         {document.points.map((point, index) => (
           <li key={index} className="pl-1 text-sm leading-6">
             <p className={detail.order.order_type_code === "LEAVE.ANNUAL.RECALL" ? "whitespace-pre-wrap" : undefined}>{point.text}</p>
+            {printModel.items[index]?.itemTypeCode === "HIRE" ? hireDetailsLines(printModel.items[index].context.payload, language).map((line, lineIndex) =>
+              <p key={lineIndex} className="whitespace-pre-wrap" data-testid="hire-document-details">{line}</p>) : null}
             {point.basis.length ? (
               <p className="mt-2"><span className="font-medium">{ui.basis}:</span> {point.basis.map((entry) => normalizePersonnelOrderBasisText(entry, language)).filter(Boolean).join("; ")}.</p>
             ) : null}

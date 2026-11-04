@@ -138,7 +138,7 @@ def validate_authoritative_hire_target(
     *,
     order_id: int,
     linked_application_person_id: int | None = None,
-) -> int:
+) -> int | None:
     """Validate single authoritative HIRE target and optional linked application match."""
     items = _fetch_active_items(conn, order_id)
     hire_items = [
@@ -152,8 +152,21 @@ def validate_authoritative_hire_target(
         )
 
     hire_targets: set[int] = set()
+    pending_names = []
     for item in hire_items:
+        payload = _parse_payload(item.get("payload"))
+        if item.get("employee_id") is None and not payload.get("person_id") and "new_employee" in payload:
+            from app.services.personnel_order_hire_new_employee import normalize_new_employee, assert_no_hire_name_duplicate
+            value = normalize_new_employee(payload["new_employee"])
+            assert_no_hire_name_duplicate(conn, value)
+            pending_names.append(value)
+            continue
         hire_targets.add(resolve_hire_item_target_person_id(conn, item))
+
+    if pending_names:
+        if len(pending_names) != 1 or hire_targets or linked_application_person_id is not None:
+            raise PersonnelOrderValidationError("Ручной HIRE должен содержать одного нового сотрудника без привязки к другому заявителю.")
+        return None
 
     if len(hire_targets) > 1:
         raise PersonnelOrderValidationError(
@@ -179,7 +192,7 @@ def validate_hire_order_ready_for_apply_readonly(
     *,
     order_id: int,
     linked_application_person_id: int | None = None,
-) -> int:
+) -> int | None:
     """Read-only order/application pre-check before photo hook or HIRE apply."""
     order = _fetch_order_row(conn, int(order_id))
     assert_order_not_archived(order)

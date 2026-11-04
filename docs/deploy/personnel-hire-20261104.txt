@@ -1,0 +1,34 @@
+Personnel orders / HIRE release, 2026-11-04
+
+Base: 2174ba0e7f04c4d82053a470744e8a73a1300f0c (production and origin/master).
+Scope: HIRE new-employee draft/apply flow; paired grounds; education, certificate
+and decimal years snapshots; editable bilingual position and department pickers;
+multiple item editing; dates and position quoting in generated text/print.
+Journal: pagination, whitespace-safe search, numeric number substring mask,
+manual date filters/calendar and Kazakh order type labels. Duplicate opening
+checks access. Header basis/comment fields are hidden without erasing data.
+Shared department/position snapshot and employee/template loading dependencies
+are included. Unfinished transfer/concurrent business-rule changes, HR imports,
+identity merge, dictionary changes and migrations remain outside this release.
+
+No schema changes. Expected single Alembic head and current revision: asst001.
+Use deploy_backend.sh and deploy_frontend_artifact.sh with an off-box Linux build.
+The systemd switch helper bounds new filenames after a long existing release
+chain; existing drop-ins are retained and fingerprinted for safe rollback.
+
+Pre-change production backup: /opt/projects/corpsite/backups/personnel-20261104/before.dump
+The backup stays server-local; no local DB or synthetic rows are transferred.
+Preserved previous-release.txt and previous-systemd.txt accompany the backup.
+
+Template changes are separate from code: local template 38 / DRAFT version 63,
+revision 2. Match by HIRE content and identity, not local numeric IDs. Production
+has corresponding template 13 / DRAFT version 19, revision 1 before transfer,
+and no published HIRE version. Transfer only the agreed body edits through the
+normal draft-save service; preserve grounds {{basis}} and all other settings.
+Do not publish. The user publishes the template after deployment.
+
+Validation: reuse the prior synthetic two-item RU/KK save/reopen/print checks.
+Release assembly additionally checks relevant HIRE, shared form, journal,
+permissions and systemd rollback tests, source TypeScript, diff and Linux build.
+Production smoke checks must be read-only: health, login, journal, HIRE forms,
+services and exact release SHA. Never save real orders/employees during smoke.

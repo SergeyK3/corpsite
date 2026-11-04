@@ -35,6 +35,7 @@ function ItemComparison({ item }: { item: TemplateApplicationItem }) {
     <h4 className="text-sm font-semibold">Пункт {item.item_number}</h4>
     {item.template ? <p className="text-sm text-zinc-500">{item.template.item_type_code} · версия {item.template.version_number} · ID {item.template.template_version_id}</p> : null}
     {item.warnings.map((warning) => <p key={warning.code} role="alert" className="text-sm text-amber-700">{warning.message}</p>)}
+    {item.missing_data.map(message=><p key={message} role="alert" className="text-sm text-red-700">Пункт {item.item_number}: {message}</p>)}
     {(["body", "basis"] as const).map((block) => <div key={block} className="grid gap-2 md:grid-cols-4" data-testid={`template-application-item-${item.item_number}-${block}`}>
       {(["ru", "kk"] as const).flatMap((locale) => [<div key={`${locale}-new`} className="rounded border border-emerald-300 bg-emerald-50 p-2 text-sm dark:bg-emerald-950/30">{locale.toUpperCase()} · по шаблону<br />{text(locale, block, true)}</div>, <div key={`${locale}-old`} className="rounded border border-amber-300 bg-amber-50 p-2 text-sm dark:bg-amber-950/30">{locale.toUpperCase()} · было<br />{text(locale, block, false)}</div>])}
     </div>)}
@@ -68,6 +69,7 @@ function previewProblem(error: unknown): PreviewProblem {
     return { kind: "missing", message: `Не хватает реквизита: ${fields.join(", ")}.` };
   }
   if (/No PUBLISHED template/i.test(detail)) return { kind: "unpublished", message: "Опубликованный шаблон не найден." };
+  if (/^Пункт \d+:|Привязки шаблона приказа и первого пункта противоречат/i.test(detail)) return {kind:'missing',message:detail};
   if (/available only for a non-archived DRAFT order|requires at least one ACTIVE item/i.test(detail)) {
     return { kind: "readonly", message: "Предпросмотр шаблона недоступен для текущего состояния приказа." };
   }

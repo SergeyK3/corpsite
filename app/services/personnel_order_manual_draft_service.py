@@ -18,21 +18,13 @@ from app.services.personnel_order_evidence_scope_service import create_personnel
 from app.services.personnel_orders_editorial.generation_service import generate_editorial
 from app.services.personnel_order_catalog_context import employee_catalog_context, snapshot_catalog_forms
 from app.services.personnel_order_creation_schema import creation_capabilities
+from app.services.personnel_order_document_department import apply_document_department
+from app.services.personnel_order_document_position import apply_document_position
 
 
 def _unresolved_subject_payload(subject: Mapping[str, Any]) -> dict[str, Any]:
-    values = {
-        key: str(subject.get(key) or "").strip()
-        for key in ("full_name", "org_unit_name", "position_name", "specialty")
-    }
-    if not all(values.values()):
-        raise PersonnelOrderValidationError("UNRESOLVED_SUBJECT_FIELDS_REQUIRED")
-    return {
-        "source_employee_name": values["full_name"],
-        "source_org_unit_name": values["org_unit_name"],
-        "source_position_name": values["position_name"],
-        "unresolved_subject": {**values, "needs_employee_link": True},
-    }
+    from app.services.personnel_order_manual_subject import manual_subject_payload
+    return manual_subject_payload(subject)
 
 
 def _employee_document_context(conn: Any, *, employee_id: int, effective_date: date, use_catalog: bool = True) -> dict[str, str]:
@@ -58,6 +50,14 @@ def _selected_employee_payload(conn: Any, *, employee_id: int, effective_date: d
 
 def prepare_manual_item_payload(conn: Any, *, item_type_code: str, employee_id: Optional[int], effective_date: date, period_start: Optional[date] = None, period_end: Optional[date] = None, item_payload: Optional[Mapping[str, Any]] = None, unresolved_subject: Optional[Mapping[str, Any]] = None, document_subject_context: Optional[Mapping[str, Any]] = None, template_version_id: int | None = None, capabilities: Optional[Mapping[str, Any]] = None) -> dict[str, Any]:
     """Use the same typed contract for the first and subsequent employees."""
+    if item_type_code == "HIRE" and "new_employee" in (item_payload or {}):
+        from app.services.personnel_order_hire_new_employee import prepare_hire_new_employee_payload
+        item_payload = prepare_hire_new_employee_payload(item_payload, employee_id, unresolved_subject)
+        from app.services.personnel_order_hire_terms import validate_hire_terms
+        try:
+            item_payload["employment_rate"] = validate_hire_terms(item_payload)
+        except ValueError as exc:
+            raise PersonnelOrderValidationError(str(exc)) from exc
     if item_type_code == "PERSONAL_DATA_CHANGE":
         if template_version_id is None:raise PersonnelOrderValidationError("Выберите опубликованную версию шаблона изменения персональных данных.")
         from app.services.personnel_order_personal_data_contract import prepare_personal_data_payload
@@ -85,8 +85,24 @@ def prepare_manual_item_payload(conn: Any, *, item_type_code: str, employee_id: 
             return prepare_category_payload(conn,item_payload,employee_id,effective_date)
         except ValueError as exc:
             raise PersonnelOrderValidationError(str(exc)) from exc
+    if isinstance((item_payload or {}).get("document_position"), Mapping):
+        selected = item_payload["document_position"]
+        restored = {target: selected.get(source) for source, target in (
+            ("position_id", "document_position_id"), ("name", "position_name"),
+            ("name_kk", "document_position_kk"), ("document_nominative_ru", "document_position_nominative_ru"),
+            ("document_possessive_kk", "document_position_possessive_kk"))}
+        document_subject_context = {**restored, **dict(document_subject_context or {})}
+    unit_snapshot = (item_payload or {}).get("document_org_unit")
+    if unresolved_subject is not None and isinstance(unit_snapshot, Mapping) and isinstance(unit_snapshot.get("draft"), Mapping):
+        document_subject_context = {"document_department": unit_snapshot["draft"],
+            "document_org_unit_genitive_kk": unit_snapshot.get("document_genitive_kk"), **dict(document_subject_context or {})}
+    if unresolved_subject is not None:
+        from app.services.personnel_order_manual_subject import validate_manual_subject_links
+        validate_manual_subject_links(item_payload or {})
     capabilities = capabilities or creation_capabilities(conn, item_type_code)
-    if item_type_code == 'LEAVE.ANNUAL.RECALL':
+    if unresolved_subject is not None and employee_id is not None:
+        raise PersonnelOrderValidationError("Specify either employee_id or unresolved_subject.")
+    if item_type_code == 'LEAVE.ANNUAL.RECALL' and unresolved_subject is None:
         # Recall uses explicit bilingual document placement, not the
         # possessive forms required by the leave-grant constructors.
         resolved = _employee_document_context(conn, employee_id=employee_id, effective_date=effective_date,
@@ -126,6 +142,7 @@ def prepare_manual_item_payload(conn: Any, *, item_type_code: str, employee_id: 
         from app.services.personnel_orders_command_service import _validate_leave_draft_item
         base_payload.update(dict(item_payload or {}))
         _validate_leave_draft_item(item_type_code=item_type_code, employee_id=employee_id, effective_date=effective_date, period_start=period_start, period_end=period_end, payload=base_payload)
+    selected_texts = None
     if item_type_code == "TRANSFER" and (template_version_id is not None or "transfer" in (item_payload or {})):
         from app.services.personnel_order_transfer_contract import transfer_values
         supplied = (item_payload or {}).get("transfer", {})
@@ -215,14 +232,33 @@ def prepare_manual_item_payload(conn: Any, *, item_type_code: str, employee_id: 
             and not base_payload.get("replacement") and "medical_specialty" in (item_payload or {})):
         from app.services.personnel_order_medical_specialty import specialty_values
         base_payload["medical_specialty"] = item_payload["medical_specialty"]
-        selected_texts = {}
-        if template_version_id is not None:
-            selected_texts = conn.execute(text("SELECT * FROM personnel_order_template_versions WHERE template_version_id=:id"), {"id": template_version_id}).mappings().first() or {}
         try:
-            specialty_values(item_type_code, base_payload, selected_texts)
+            specialty_values(item_type_code, base_payload, selected_texts or {})
         except ValueError as exc:
             raise PersonnelOrderValidationError(str(exc)) from exc
-    return base_payload
+    out = apply_document_position(conn, apply_document_department(conn, base_payload, document_subject_context), document_subject_context)
+    if item_type_code == "HIRE":
+        if 'hire_position_manual_forms' in (item_payload or {}):
+            from app.services.personnel_order_hire_terms import normalize_hire_position_manual_forms
+            try: out['hire_position_manual_forms'] = normalize_hire_position_manual_forms(item_payload['hire_position_manual_forms'])
+            except ValueError as exc: raise PersonnelOrderValidationError(str(exc)) from exc
+        for key in ("new_employee", "org_unit_id", "position_id", "employment_rate", "basis_other_text", "basis_entries", "basis_ids", "basis"):
+            if key in (item_payload or {}):
+                out[key] = item_payload[key]
+        if 'hire_details' in (item_payload or {}):
+            from app.services.personnel_order_hire_terms import normalize_hire_details
+            try: out['hire_details'] = normalize_hire_details(item_payload['hire_details'])
+            except ValueError as exc: raise PersonnelOrderValidationError(str(exc)) from exc
+        if 'hire_basis' in (item_payload or {}):
+            from app.services.personnel_order_hire_terms import normalize_hire_basis
+            try: out['hire_basis']=normalize_hire_basis(item_payload['hire_basis'])
+            except ValueError as exc: raise PersonnelOrderValidationError(str(exc)) from exc
+    if unresolved_subject is not None:
+        from app.services.personnel_order_manual_subject import validate_manual_subject_links
+        validate_manual_subject_links(out)
+        out.update(_unresolved_subject_payload({**unresolved_subject,
+            "org_unit_name": out.get("source_org_unit_name") or "", "position_name": out.get("source_position_name") or ""}))
+    return out
 
 
 def create_manual_draft(*, created_by: int, template_version_id: int | None = None, order_number: str, order_date: date, source_title: str, source_title_locale: str, item_type_code: str, employee_id: Optional[int], effective_date: date, period_start: Optional[date] = None, period_end: Optional[date] = None, item_payload: Optional[Mapping[str, Any]] = None, unresolved_subject: Optional[Mapping[str, Any]] = None, document_subject_context: Optional[Mapping[str, Any]] = None) -> dict[str, Any]:

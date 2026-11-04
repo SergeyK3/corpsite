@@ -1,4 +1,5 @@
 import type { PersonnelOrderPrintLanguage } from "./personnelOrderPrintLanguage";
+import {hireDetailsLines} from "./personnelOrderHireDetails";
 import { formatPersonnelOrderPrintDateLines } from "./personnelOrderPrintFormat";
 import { renderPersonnelOrderPrintItemText } from "./personnelOrderPrintItemText";
 import {
@@ -105,7 +106,9 @@ function renderItem(
         ...(manual("kk") ? [manual("kk")!] : renderPersonnelOrderPrintItemText(item.context, "kk")),
         ...(manual("ru") ? [manual("ru")!] : renderPersonnelOrderPrintItemText(item.context, "ru")),
       ];
-  const tenure = ["PERSONAL_DATA_CHANGE", "RETURN_FROM_CHILDCARE_LEAVE", "SUPPLEMENTARY_PAY", "QUALIFICATION_CATEGORY", "SERVICE_LENGTH_CHANGE", "EDUCATION_INFORMATION_CHANGE"].includes(item.itemTypeCode)
+  const tenure = item.itemTypeCode === "HIRE"
+    ? (language === "kk-ru" ? ["kk", "ru"] as const : [language]).flatMap(locale => hireDetailsLines(item.context.payload, locale))
+    : ["PERSONAL_DATA_CHANGE", "RETURN_FROM_CHILDCARE_LEAVE", "SUPPLEMENTARY_PAY", "QUALIFICATION_CATEGORY", "SERVICE_LENGTH_CHANGE", "EDUCATION_INFORMATION_CHANGE"].includes(item.itemTypeCode)
     ? []
     : language === "kk"
       ? ["Жұмыс өтілі әлі анықталмаған."]
@@ -113,9 +116,9 @@ function renderItem(
         ? ["Стаж работы ещё не определён."]
         : ["Жұмыс өтілі әлі анықталмаған.", "Стаж работы ещё не определён."];
   const body = [...lines, ...tenure]
-    .map((line) => `<p class="m-0">${escapePersonnelOrderPrintHtml(line)}</p>`)
+    .map((line, index) => `<p class="m-0"${item.itemTypeCode === "HIRE" && index >= lines.length ? ' style="white-space: pre-wrap"' : ""}>${escapePersonnelOrderPrintHtml(line)}</p>`)
     .join("");
-  const itemBasis = item.itemTypeCode === "SUPPLEMENTARY_PAY" && item.basis
+  const itemBasis = ["SUPPLEMENTARY_PAY","HIRE"].includes(item.itemTypeCode) && item.basis
     ? (language === "kk-ru" ? ["kk", "ru"] as const : [language]).map(locale => {
         const text = normalizePersonnelOrderBasisText(String(item.basis?.[locale] || ""), locale);
         if (!text) return "";
@@ -175,7 +178,10 @@ function renderBasis(
       .map(line => `<p>${escapePersonnelOrderPrintHtml(line)}</p>`).join("")}</section>`;
   }
   const dictionaries = printDictionariesForLanguage(language);
-  const rawLines = model.basis.flatMap((entry) => resolveLocalizedLines(entry, language));
+  const rawLines = model.basis.flatMap((entry) => model.documentTypeCode==='HIRE'
+    ? (language==='kk-ru'?['kk','ru'] as const:[language]).flatMap(locale=>String(entry[locale]||'').split(/\r?\n/).map(line=>line.trim()).filter(Boolean))
+    : resolveLocalizedLines(entry, language));
+  if(model.documentTypeCode==='HIRE'&&!rawLines.length)return '';
   const isChildcareReturn = String(model.documentTypeCode).toUpperCase() === "RETURN_FROM_CHILDCARE_LEAVE";
   const joined = rawLines.join(" ").toLocaleLowerCase(language === "kk" ? "kk-KZ" : "ru-RU");
   const personalApplication = language === "kk"

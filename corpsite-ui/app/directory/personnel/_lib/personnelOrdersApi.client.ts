@@ -1,4 +1,5 @@
 import type {ManualOrderSubject} from "./personnelOrderManualSubject";
+import type {DepartmentDraft} from "./personnelOrderDepartment";
 import { buildHeaders } from "@/lib/api";
 import { formatThrownError } from "@/lib/i18n";
 import { resolveApiUrl } from "@/lib/apiBase";
@@ -302,7 +303,7 @@ export type PersonnelOrderManualDraftCreatePayload = {
   item_type_code: string;
   employee_id?: number | null;
   document_subject_context?: {
-    org_unit_name?: string | null;
+    document_position_id?: number | null; document_position_kk?: string | null; document_position_nominative_ru?: string | null; document_position_possessive_kk?: string | null; document_department?: DepartmentDraft | null; document_org_unit_id?: number | null; document_org_unit_kk?: string | null; document_org_unit_genitive_kk?: string | null; org_unit_name?: string | null;
     position_name?: string | null;
     specialty?: string | null;
     rate?: string | null;
@@ -355,7 +356,7 @@ export type PersonnelOrderSignatoryDefault = {
 export type PersonnelOrderItemCreatePayload = {
   unresolved_subject?: ManualOrderSubject;
   template_version_id?: number;
-  document_subject_context?: {org_unit_name?: string | null; position_name?: string | null};
+  document_subject_context?: {document_position_id?: number | null; document_position_kk?: string | null; document_position_nominative_ru?: string | null; document_position_possessive_kk?: string | null; document_department?: DepartmentDraft | null; document_org_unit_id?: number | null; document_org_unit_kk?: string | null; document_org_unit_genitive_kk?: string | null; org_unit_name?: string | null; position_name?: string | null};
   item_type_code: string;
   employee_id?: number | null;
   effective_date?: string | null;
@@ -490,6 +491,7 @@ export function buildPersonnelOrdersQueryParams(
 export function parsePersonnelOrdersFilters(searchParams: URLSearchParams): PersonnelOrdersFilters {
   const employeeId = Number(searchParams.get("employee_id"));
   const orderId = Number(searchParams.get("order_id"));
+  const offset = Number(searchParams.get("offset"));
   const orgFilters = readTaskOrgFiltersFromSearchParams(searchParams);
 
   return {
@@ -500,6 +502,7 @@ export function parsePersonnelOrdersFilters(searchParams: URLSearchParams): Pers
     employee_id: Number.isFinite(employeeId) && employeeId > 0 ? employeeId : undefined,
     org_unit_id: orgFilters.org_unit_id,
     order_id: Number.isFinite(orderId) && orderId > 0 ? orderId : undefined,
+    ...(Number.isSafeInteger(offset) && offset > 0 ? {offset} : {}),
     q: searchParams.get("q") || undefined,
     record_quality: searchParams.get("record_quality") === "TECHNICAL" || searchParams.get("record_quality") === "ALL"
       ? searchParams.get("record_quality") as "TECHNICAL" | "ALL"
@@ -528,6 +531,9 @@ export function filterPersonnelOrdersBySearch(
     .trim()
     .toLowerCase();
   if (!q) return items;
+  if (/^[0-9]+$/.test(q)) {
+    return items.filter(row => String(row.order_number || "").includes(q));
+  }
   return items.filter((row) => {
     const number = String(row.order_number || "").toLowerCase();
     const title = String(row.source_title || "").toLowerCase();
@@ -588,10 +594,10 @@ export type PersonnelOrderDocumentItemPatchResult = {
   audit_event_ids: number[];
 };
 
-export async function patchPersonnelOrderDocumentItem(orderId: number, itemId: number, payload: { expected_document_revision: number; item_type_code: string; employee_id?: number | null; effective_date?: string | null; document_subject_context?: { recall_position_kk?: string | null; recall_org_unit_kk?: string | null; basis_ru?: string | null; basis_kk?: string | null; position_name?: string | null; org_unit_name?: string | null; specialty?: string | null; rate?: string | null; basis_type?: "PERSONAL_APPLICATION" | "OTHER" | null }; reason_code?: string | null; reason_text?: string | null }): Promise<PersonnelOrderDocumentItemPatchResult> {
+export async function patchPersonnelOrderDocumentItem(orderId: number, itemId: number, payload: { expected_document_revision: number; item_type_code: string; employee_id?: number | null; effective_date?: string | null; document_subject_context?: { recall_position_kk?: string | null; recall_org_unit_kk?: string | null; basis_ru?: string | null; basis_kk?: string | null; position_name?: string | null; document_position_id?: number | null; document_position_kk?: string | null; document_position_nominative_ru?: string | null; document_position_possessive_kk?: string | null; document_department?: DepartmentDraft | null; document_org_unit_id?: number | null; document_org_unit_kk?: string | null; document_org_unit_genitive_kk?: string | null; org_unit_name?: string | null; specialty?: string | null; rate?: string | null; basis_type?: "PERSONAL_APPLICATION" | "OTHER" | null }; reason_code?: string | null; reason_text?: string | null }): Promise<PersonnelOrderDocumentItemPatchResult> {
   return requestJson<PersonnelOrderDocumentItemPatchResult>("PATCH", `/directory/personnel-orders/${orderId}/document-items/${itemId}`, { body: payload, fallback: "Не удалось сохранить пункт." });
 }
-export type PersonnelOrderDocumentItem = { recall_position_kk?: string | null; recall_org_unit_kk?: string | null; basis_ru?: string | null; basis_kk?: string | null; item_id: number; item_number: number; item_type_code: string; employee_id?: number | null; employee_name?: string | null; org_unit_name?: string | null; position_name?: string | null; specialty?: string | null; rate?: string | null; needs_employee_link?: boolean; effective_date?: string | null };
+export type PersonnelOrderDocumentItem = { recall_position_kk?: string | null; recall_org_unit_kk?: string | null; basis_ru?: string | null; basis_kk?: string | null; item_id: number; item_number: number; item_type_code: string; employee_id?: number | null; employee_name?: string | null; document_position_id?: number | null; document_position_kk?: string | null; document_position_nominative_ru?: string | null; document_position_possessive_kk?: string | null; document_department?: DepartmentDraft | null; document_org_unit_id?: number | null; document_org_unit_kk?: string | null; document_org_unit_genitive_kk?: string | null; org_unit_name?: string | null; position_name?: string | null; specialty?: string | null; rate?: string | null; needs_employee_link?: boolean; effective_date?: string | null };
 export async function listPersonnelOrderDocumentItems(orderId: number): Promise<{ document_revision: number; items: PersonnelOrderDocumentItem[] }> {
   return requestJson("GET", `/directory/personnel-orders/${orderId}/document-items`, { fallback: "Не удалось загрузить пункты приказа." });
 }
@@ -882,6 +888,7 @@ export const getPersonnelOrderPublishedVariants = (type: string) => requestJson<
 
 export type PersonnelOrderAddItemContext = {
   available: boolean;
+  source_title_locale?: "ru" | "kk" | "unknown" | null;
   reason?: string;
   item_type_code?: string;
   employee_ids?: number[];

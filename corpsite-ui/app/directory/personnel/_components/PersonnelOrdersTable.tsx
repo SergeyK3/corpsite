@@ -9,7 +9,8 @@ import {
 } from "../_lib/personnelOrdersApi.client";
 import PersonnelOrderStatusBadge from "./PersonnelOrderStatusBadge";
 import PersonnelOrderArchivedBadge from "./PersonnelOrderArchivedBadge";
-import PersonnelOrderTypeBadge from "./PersonnelOrderTypeBadge";
+import { personnelOrderCanonicalTitle } from "../_lib/personnelOrderCanonicalTitles";
+import { PERSONNEL_ORDER_PRINT_DOCUMENT_TITLES } from "../_lib/personnelOrderPrintViewModel";
 
 export type PersonnelOrdersTableProps = {
   items: PersonnelOrderListItem[];
@@ -27,9 +28,9 @@ export function formatEmployees(row: PersonnelOrderListItem): string {
   return "—";
 }
 
-export function sourceTitle(row: PersonnelOrderListItem): string {
-  const title = row.source_title;
-  return typeof title === "string" && title !== "" ? title : "—";
+export function orderTypeTitle(row: PersonnelOrderListItem): string {
+  const code = String(row.order_type_code || "").trim().toUpperCase();
+  return personnelOrderCanonicalTitle(code, "kk") || PERSONNEL_ORDER_PRINT_DOCUMENT_TITLES[code]?.kk || "—";
 }
 
 function isTechnicalOrder(row: PersonnelOrderListItem): boolean {
@@ -89,7 +90,7 @@ export function PersonnelOrdersTable({
       <table className="min-w-full divide-y divide-zinc-200 text-sm dark:divide-zinc-800">
         <thead className="bg-zinc-50 dark:bg-zinc-900/50">
           <tr>
-            {["№ приказа", "Дата", "Исходное название", "Тип", "Статус", "Сотрудники", "Пунктов"].map((header) => (
+            {["№ приказа", "Дата", "Тип приказа", "Статус", "Сотрудники", "Пунктов"].map((header) => (
               <th
                 key={header}
                 className="px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-zinc-500"
@@ -132,11 +133,8 @@ export function PersonnelOrdersTable({
               <td className="whitespace-nowrap px-3 py-2 text-zinc-700 dark:text-zinc-300">
                 {formatPersonnelOrderDate(row.order_date)}
               </td>
-              <td className="max-w-[20rem] px-3 py-2 text-zinc-700 dark:text-zinc-300">
-                {sourceTitle(row)}
-              </td>
-              <td className="px-3 py-2">
-                <PersonnelOrderTypeBadge typeCode={row.order_type_code} />
+              <td className="max-w-[20rem] whitespace-pre-wrap px-3 py-2 text-zinc-700 dark:text-zinc-300">
+                {orderTypeTitle(row)}
               </td>
               <td className="px-3 py-2">
                 <div className="flex flex-wrap gap-1.5">

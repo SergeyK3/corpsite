@@ -234,6 +234,7 @@ describe("TemplatesPageClient draft lifecycle", () => {
     await screen.findByTestId("template-draft-preview");
     expect(previewPersonnelOrderTemplateDraft).toHaveBeenLastCalledWith(type,expect.objectContaining({...texts,title_ru:scoped.title_ru}));
   });
+
   it('saves an official print heading independently of the detailed internal name and reports a missing KK heading',async()=>{
     const internal='О совмещении (О замещении на время отпуска как доп ставка)';
     vi.mocked(getPersonnelOrderTemplateDraft).mockResolvedValue({...draft,title_ru:internal,print_title_ru:'О замещении',print_title_kk:null});
@@ -428,7 +429,7 @@ describe("TemplatesPageClient draft lifecycle", () => {
   it("opens a PUBLISHED working copy without POST, without draftExists, and with disabled actions", async () => {
     setup(); const editor = await open();
     expect(editor).toHaveTextContent("Несохранённая рабочая копия опубликованной версии 2"); expect(editor).not.toHaveTextContent("revision 0"); expect(screen.getByLabelText("Заголовок RU")).toHaveValue(texts.title_ru);
-    expect(screen.getByTestId("template-editor-application-notice")).toHaveTextContent("Эта версия не применяется к кадровым приказам.");
+    expect(screen.getByTestId("template-editor-application-notice")).toHaveTextContent("Изменения в рабочей копии ещё не применяются к приказам");
     expect(editor).not.toHaveTextContent("Черновая версия шаблона");
     expect(screen.getByTestId("template-published-read-only")).not.toHaveTextContent("Имеется черновик следующей версии"); expect(screen.getByRole("button", { name: "Сохранить черновик" })).toBeDisabled(); expect(screen.getByRole("button", { name: "Опубликовать версию" })).toBeDisabled(); expect(createPersonnelOrderTemplateDraft).not.toHaveBeenCalled();
   });
@@ -437,15 +438,44 @@ describe("TemplatesPageClient draft lifecycle", () => {
     setup(); await open(); changeTitle("Новая редакция"); await waitFor(()=>expect(screen.getByRole("button", { name: "Сохранить черновик" })).toBeEnabled()); expect(screen.getByRole("button", { name: "Опубликовать версию" })).toBeDisabled(); fireEvent.click(screen.getByRole("button", { name: "Сохранить черновик" }));
     await waitFor(() => expect(createPersonnelOrderTemplateDraft).toHaveBeenCalledWith("TERMINATION", expect.objectContaining({ ...texts, title_ru: "Новая редакция", base_source: "PUBLISHED", base_published_template_version_id: 20, base_published_revision: 4 })));
     await waitFor(() => expect(screen.getByRole("button", { name: "Опубликовать версию" })).toBeEnabled());
+    expect(screen.getByTestId("template-editor-application-notice")).toHaveTextContent("Черновик станет доступен для создания приказов после публикации");
   });
 
   it("server DRAFT continues only by click and blocks publish while dirty", async () => {
     vi.mocked(getPersonnelOrderTemplateDraft).mockResolvedValue(draft); setup(); await open("Продолжить редактирование");
-    expect(screen.getByTestId("template-editor-application-notice")).toHaveTextContent("Эта версия не применяется к кадровым приказам.");
+    expect(screen.getByTestId("template-editor-application-notice")).toHaveTextContent("Черновик станет доступен для создания приказов после публикации");
     expect(screen.getByTestId("template-draft-editor")).toHaveTextContent("Черновая версия шаблона");
     expect(screen.getByTestId("template-draft-editor")).not.toHaveTextContent("Несохранённая рабочая копия опубликованной версии");
     expect(screen.getByRole("button", { name: "Сохранить черновик" })).toBeDisabled(); expect(screen.getByRole("button", { name: "Опубликовать версию" })).toBeEnabled(); changeTitle("Ещё не сохранено"); expect(screen.getByRole("button", { name: "Опубликовать версию" })).toBeDisabled(); fireEvent.click(screen.getByRole("button", { name: "Сохранить черновик" }));
     await waitFor(() => expect(savePersonnelOrderTemplateDraft).toHaveBeenCalledWith("TERMINATION", expect.objectContaining({ expected_revision: 1, title_ru: "Ещё не сохранено" })));
+  });
+
+  it.each([false, true])("separates HIRE 38/51 application state from actual incompatibility (saved draft: %s)", async saved => {
+    const scopedPublished = { ...published, template_id: 38, template_version_id: 51, item_type_code: "HIRE" };
+    const identity = { template_id: 38, item_type_code: "HIRE", name_ru: texts.title_ru, name_kk: texts.title_kk,
+      is_default: true, template_version_id: 51, draft_version_id: saved ? 52 : null };
+    currentSearch = new URLSearchParams("section=personnel-orders&type=HIRE&template_id=38");
+    vi.mocked(listPersonnelOrderTemplateCatalog).mockResolvedValue({ items: [{ ...catalog.items[0], type_code: "HIRE", templates: [identity] }] });
+    vi.mocked(listPersonnelIndependentTemplates).mockResolvedValue({ items: [identity] });
+    vi.mocked(getPersonnelOrderTemplatePublished).mockResolvedValue(scopedPublished);
+    vi.mocked(getPersonnelOrderTemplateEditorBase).mockResolvedValue({ ...publishedBase, template_id: 38, template_version_id: 51, item_type_code: "HIRE" });
+    vi.mocked(getPersonnelOrderTemplateDraft).mockResolvedValue(saved ? { ...draft, template_id: 38, template_version_id: 52, item_type_code: "HIRE" } : null);
+    setup();
+    const editor = await open(saved ? "Продолжить редактирование" : "Редактировать шаблон");
+    const message = saved ? "Черновик станет доступен для создания приказов после публикации" : "Изменения в рабочей копии ещё не применяются к приказам";
+    expect(screen.getByTestId("template-editor-application-notice")).toHaveTextContent(message);
+    expect(editor).not.toHaveTextContent("Эта версия не применяется к кадровым приказам");
+    expect(screen.queryByTestId("template-incompatible-variables")).not.toBeInTheDocument();
+    const body = screen.getByLabelText("Распорядительный текст RU");
+    fireEvent.change(body, { target: { value: "{{unsupported.variable}}" } });
+    expect(screen.getByTestId("template-incompatible-variables")).toHaveTextContent("unsupported.variable");
+    expect(screen.getByTestId("template-editor-application-notice")).toHaveTextContent(message);
+    expect(screen.getByRole("button", { name: "Опубликовать версию" })).toBeDisabled();
+    fireEvent.change(body, { target: { value: texts.body_template_ru } });
+    expect(screen.queryByTestId("template-incompatible-variables")).not.toBeInTheDocument();
+    expect(createPersonnelOrderTemplateDraft).not.toHaveBeenCalled();
+    expect(savePersonnelOrderTemplateDraft).not.toHaveBeenCalled();
+    expect(publishPersonnelOrderTemplateDraft).not.toHaveBeenCalled();
   });
 
   it("shows current server-side spec variables instead of stale version metadata", async () => {

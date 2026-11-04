@@ -51,6 +51,101 @@ afterEach(() => {
 });
 
 describe("PersonnelOrdersPageClient employee filter", () => {
+  it("applies completed date boundaries while keeping other filters and resetting only the page", async () => {
+    navigation.params = "status=DRAFT&order_type_code=HIRE&record_quality=WORKING&date_to=2020-01-31&offset=200";
+    api.listPersonnelOrders.mockResolvedValue({items: [], total: 714, limit: 200, offset: 200});
+    render(<PersonnelOrdersPageClient />);
+    await waitFor(() => expect(api.listPersonnelOrders).toHaveBeenCalled());
+    const input = screen.getByLabelText("Дата с"); input.focus();
+    let value = "";
+    for (const character of "05.01.2020") {
+      value += character;
+      fireEvent.change(input, {target: {value}});
+      if (value.length < 10) expect(navigation.replace).not.toHaveBeenCalled();
+    }
+    const params = new URL(navigation.replace.mock.calls.at(-1)![0], "http://localhost").searchParams;
+    expect(Object.fromEntries(params)).toEqual({status: "DRAFT", order_type_code: "HIRE", date_from: "2020-01-05", date_to: "2020-01-31", record_quality: "WORKING"});
+    expect(input).toHaveFocus();
+    fireEvent.click(screen.getByRole("button", {name: "Очистить: Дата по"}));
+    const cleared = new URL(navigation.replace.mock.calls.at(-1)![0], "http://localhost").searchParams;
+    expect(cleared.has("date_to")).toBe(false);
+    expect(cleared.get("status")).toBe("DRAFT");
+    expect(cleared.get("order_type_code")).toBe("HIRE");
+  });
+  it("preserves the space while typing 2, Space, then тест through URL updates", async () => {
+    navigation.params = "record_quality=WORKING&offset=600";
+    api.listPersonnelOrders.mockResolvedValue({items: [], total: 714, limit: 200, offset: 0});
+    const view = render(<PersonnelOrdersPageClient />);
+    await waitFor(() => expect(api.listPersonnelOrders).toHaveBeenCalled());
+    const input = screen.getByPlaceholderText("№ приказа, название, ФИО");
+    let expected = "";
+    for (const character of ["2", " ", "т", "е", "с", "т"]) {
+      fireEvent.change(input, {target: {value: (input as HTMLInputElement).value + character}});
+      expected += character;
+      navigation.params = new URL(navigation.replace.mock.calls.at(-1)![0], "http://localhost").search.slice(1);
+      view.rerender(<PersonnelOrdersPageClient />);
+      expect(input).toHaveValue(expected);
+    }
+    expect(navigation.replace).toHaveBeenLastCalledWith("/directory/personnel/orders?q=2+%D1%82%D0%B5%D1%81%D1%82&record_quality=WORKING");
+  });
+
+  it("keeps the current typed query when an older URL update arrives", async () => {
+    api.listPersonnelOrders.mockResolvedValue({items: [], total: 714, limit: 200, offset: 0});
+    const view = render(<PersonnelOrdersPageClient />);
+    const input = screen.getByPlaceholderText("№ приказа, название, ФИО");
+    for (const character of ["2", " ", "т", "е", "с", "т"]) {
+      fireEvent.change(input, {target: {value: (input as HTMLInputElement).value + character}});
+    }
+    navigation.params = "q=2&record_quality=WORKING";
+    view.rerender(<PersonnelOrdersPageClient />);
+    expect(input).toHaveValue("2 тест");
+    navigation.params = "q=2+%D1%82%D0%B5%D1%81%D1%82&record_quality=WORKING";
+    view.rerender(<PersonnelOrdersPageClient />);
+    expect(input).toHaveValue("2 тест");
+    navigation.params = "q=another&record_quality=WORKING";
+    view.rerender(<PersonnelOrdersPageClient />);
+    expect(input).toHaveValue("another");
+  });
+
+  it("offers navigation beyond the first 200 journal records and preserves filters", async () => {
+    navigation.params = "status=DRAFT&record_quality=WORKING";
+    api.listPersonnelOrders.mockResolvedValue({items: Array.from({length: 200}, (_, i) => ({order_id: i + 1, order_number: String(i + 1), order_type_code: "HIRE", status: "DRAFT", item_count: 1, employee_ids: [], employee_names: [], storage_json: {}})), total: 714, limit: 200, offset: 0});
+    render(<PersonnelOrdersPageClient />);
+    await screen.findByText("Показано 1–200 из 714 приказов");
+    fireEvent.click(screen.getByRole("button", {name: "Следующая страница"}));
+    expect(navigation.replace).toHaveBeenLastCalledWith("/directory/personnel/orders?status=DRAFT&record_quality=WORKING&offset=200");
+    fireEvent.click(screen.getByRole("button", {name: "Последняя страница"}));
+    expect(navigation.replace).toHaveBeenLastCalledWith("/directory/personnel/orders?status=DRAFT&record_quality=WORKING&offset=600");
+  });
+
+  it("loads the saved page offset so an older composite order is reachable", async () => {
+    navigation.params = "record_quality=WORKING&offset=600";
+    api.listPersonnelOrders.mockResolvedValue({items: [{order_id: 5647, order_number: "2 тест", order_date: "2026-01-05", order_type_code: "COMPOSITE", status: "DRAFT", item_count: 2, employee_ids: [], employee_names: [], storage_json: {}}], total: 714, limit: 200, offset: 600});
+    render(<PersonnelOrdersPageClient />);
+    expect(await screen.findByTestId("personnel-order-row-5647")).toBeInTheDocument();
+    expect(api.listPersonnelOrders).toHaveBeenCalledWith(expect.objectContaining({offset: 600, limit: 200}));
+    expect(screen.getByText("Страница 4 из 4")).toBeInTheDocument();
+  });
+
+  it("resets the page when changing journal search filters", async () => {
+    navigation.params = "record_quality=WORKING&offset=600";
+    api.listPersonnelOrders.mockResolvedValue({items: [], total: 714, limit: 200, offset: 600});
+    render(<PersonnelOrdersPageClient />);
+    await waitFor(() => expect(api.listPersonnelOrders).toHaveBeenCalled());
+    fireEvent.change(screen.getByPlaceholderText("№ приказа, название, ФИО"), {target: {value: "2 тест"}});
+    expect(navigation.replace).toHaveBeenLastCalledWith("/directory/personnel/orders?q=2+%D1%82%D0%B5%D1%81%D1%82&record_quality=WORKING");
+  });
+  it("keeps the qualification category filter in the URL and accepts an empty result", async () => {
+    navigation.params="order_type_code=QUALIFICATION_CATEGORY";
+    api.listPersonnelOrders.mockResolvedValue({items:[],total:0,limit:200,offset:0});
+    render(<PersonnelOrdersPageClient/>);
+    expect(await screen.findByTestId("personnel-orders-empty")).toBeInTheDocument();
+    expect(api.listPersonnelOrders).toHaveBeenCalledWith(expect.objectContaining({order_type_code:"QUALIFICATION_CATEGORY"}));
+    const option=screen.getAllByRole("option").find(option=>(option as HTMLOptionElement).value==="QUALIFICATION_CATEGORY")!;
+    expect(option).toHaveValue("QUALIFICATION_CATEGORY");
+    expect(option.parentElement).toHaveValue("QUALIFICATION_CATEGORY");
+    expect(screen.queryByText(/Invalid order_type_code/)).not.toBeInTheDocument();
+  });
   it('sends the number query to the server so orders beyond the first 200 can be found',async()=>{
     navigation.params='q=1128&record_quality=WORKING';
     api.listPersonnelOrders.mockImplementation(async filters=>({items:filters.q==='1128'?[{order_id:5578,order_number:'1128',order_date:'2026-06-23',order_type_code:'CONCURRENT_DUTY_END',status:'DRAFT',item_count:2,employee_ids:[523,256],employee_names:['Руслан Әсем Нариманқызы','Алдиярова Айзада Ермекбайқызы'],storage_json:{}}]:[],total:filters.q==='1128'?1:693,limit:200,offset:0}));

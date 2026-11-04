@@ -413,7 +413,7 @@ def generate_item_body(locale: str, item_ctx: Mapping[str, Any]) -> Dict[str, st
 
     fio = _dash(employee_name)
     date = _format_date(effective_date, lang)
-    if item_type in {ORDER_TYPE_TRANSFER, ORDER_TYPE_CONCURRENT_DUTY_START}:
+    if item_type in {ORDER_TYPE_HIRE, ORDER_TYPE_TRANSFER, ORDER_TYPE_CONCURRENT_DUTY_START}:
         date = format_personnel_order_date_numeric(effective_date) if lang == "ru" else _format_date_from(effective_date,lang)
 
     if item_type == "LEAVE.ANNUAL.GRANT":
@@ -490,13 +490,13 @@ def generate_item_body(locale: str, item_ctx: Mapping[str, Any]) -> Dict[str, st
         rate_value = _format_rate_value(rate)
         if lang == "kk":
             text = (
-                f"{fio} «{org}» бөлімшесіне «{position}» лауазымына "
+                f"{fio} «{org}» бөлімшесіне {position} лауазымына "
                 f"{rate_value} мөлшерлемесінде {date} бастап жұмысқа қабылдансын."
             )
         else:
             text = (
                 f"Принять на работу {fio} в подразделение «{org}» на должность "
-                f"«{position}» со ставкой {rate_value} с {date}."
+                f"{position} со ставкой {rate_value} с {date}."
             )
     elif item_type == ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE:
         has_effective_date = effective_date not in (None, "")

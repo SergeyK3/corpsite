@@ -108,8 +108,6 @@ export default function PersonnelOrderHeaderEditor({
     normalizePersonnelOrderSignatoryRole(order.signed_by_position) || "DIRECTOR",
   );
   const [orderTypeCode, setOrderTypeCode] = React.useState(order.order_type_code);
-  const [comment, setComment] = React.useState(order.comment || "");
-  const [basisSummary, setBasisSummary] = React.useState(order.basis_summary || "");
   const [saving, setSaving] = React.useState(false);
   const [signatorySaving, setSignatorySaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -127,8 +125,6 @@ export default function PersonnelOrderHeaderEditor({
     setSignedByName(order.signed_by_name || "");
     setSignedByPosition(normalizePersonnelOrderSignatoryRole(order.signed_by_position) || "DIRECTOR");
     setOrderTypeCode(order.order_type_code);
-    setComment(order.comment || "");
-    setBasisSummary(order.basis_summary || "");
     setError(null);
     setMessage(null);
     setSignatoryHint(null);
@@ -205,7 +201,7 @@ export default function PersonnelOrderHeaderEditor({
         } catch {
           if (!cancelled) {
             setAutoPersistNotice(
-              "Не удалось автоматически сохранить реквизиты подписанта. Сохраните заголовок вручную.",
+              "Не удалось автоматически сохранить реквизиты подписанта. Сохраните реквизиты вручную.",
             );
           }
         }
@@ -225,7 +221,7 @@ export default function PersonnelOrderHeaderEditor({
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
-    if (disabled) return;
+    if (disabled || saving || signatorySaving) return;
 
     setSaving(true);
     setError(null);
@@ -233,8 +229,6 @@ export default function PersonnelOrderHeaderEditor({
     try {
       const payload: PersonnelOrderUpdatePayload = {
         order_type_code: orderTypeCode,
-        comment,
-        basis_summary: basisSummary,
       };
       if (orderNumber.trim()) payload.order_number = orderNumber.trim();
       if (orderDate.trim()) payload.order_date = orderDate.trim();
@@ -252,11 +246,14 @@ export default function PersonnelOrderHeaderEditor({
   const savedRole = normalizePersonnelOrderSignatoryRole(order.signed_by_position) || "DIRECTOR";
   const signatoryDirty = signedByPosition !== savedRole
     || signedByName.trim() !== (order.signed_by_name || "").trim();
+  const numberDirty = orderNumber.trim() !== (order.order_number || "").trim();
+  const dateDirty = orderDate.trim() !== (order.order_date || "").trim();
+  const requisitesDirty = numberDirty || dateDirty || signatoryDirty;
 
   async function handleSaveSignatory() {
-    if (disabled || !signatoryDirty) return;
+    if (disabled || saving || signatorySaving || !requisitesDirty) return;
     const nextName = signedByName.trim();
-    if (!nextName) {
+    if (signatoryDirty && !nextName) {
       setError("Укажите ФИО подписанта.");
       setMessage(null);
       return;
@@ -265,15 +262,19 @@ export default function PersonnelOrderHeaderEditor({
     setError(null);
     setMessage(null);
     try {
-      const detail = await updatePersonnelOrder(order.order_id, {
-        signed_by_position: signedByPosition,
-        signed_by_name: nextName,
-      });
+      const payload: PersonnelOrderUpdatePayload = {};
+      if (numberDirty) payload.order_number = orderNumber.trim();
+      if (dateDirty) payload.order_date = orderDate.trim();
+      if (signatoryDirty) {
+        payload.signed_by_position = signedByPosition;
+        payload.signed_by_name = nextName;
+      }
+      const detail = await updatePersonnelOrder(order.order_id, payload);
       onSaved(detail);
       setSignatoryHint(null);
       setMessage("Реквизиты сохранены");
     } catch (err) {
-      setError(mapPersonnelOrdersApiError(err, "Не удалось сохранить реквизиты подписанта."));
+      setError(mapPersonnelOrdersApiError(err, "Не удалось сохранить реквизиты."));
     } finally {
       setSignatorySaving(false);
     }
@@ -324,6 +325,7 @@ export default function PersonnelOrderHeaderEditor({
           <div>
             <label className={FIELD_LABEL_CLASS}>№ приказа (из журнала)</label>
             <input
+              aria-label="№ приказа (из журнала)"
               value={orderNumber}
               onChange={(e) => setOrderNumber(e.target.value)}
               disabled={disabled}
@@ -376,7 +378,7 @@ export default function PersonnelOrderHeaderEditor({
           <div className="sm:col-span-2">
             <button
               type="button"
-              disabled={disabled || !signatoryDirty || signatorySaving}
+              disabled={disabled || !requisitesDirty || saving || signatorySaving}
               onClick={() => void handleSaveSignatory()}
               className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-60 dark:border-zinc-700"
               data-testid="personnel-order-header-save-signatory"
@@ -400,25 +402,6 @@ export default function PersonnelOrderHeaderEditor({
               {autoPersistNotice}
             </div>
           ) : null}
-          {order.order_type_code!=='PERSONAL_DATA_CHANGE'?<div className="sm:col-span-2">
-            <label className={FIELD_LABEL_CLASS}>Основание</label>
-            <input
-              value={basisSummary}
-              onChange={(e) => setBasisSummary(e.target.value)}
-              disabled={disabled}
-              className={FIELD_INPUT_CLASS}
-            />
-          </div>:null}
-        </div>
-        <div>
-          <label className={FIELD_LABEL_CLASS}>Комментарий</label>
-          <textarea
-            value={comment}
-            onChange={(e) => setComment(e.target.value)}
-            disabled={disabled}
-            rows={2}
-            className={FIELD_INPUT_CLASS}
-          />
         </div>
       </div>
 
@@ -432,7 +415,7 @@ export default function PersonnelOrderHeaderEditor({
       {!disabled ? (
         <button
           type="submit"
-          disabled={saving}
+          disabled={saving || signatorySaving}
           className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium disabled:opacity-60 dark:border-zinc-700"
         >
           {saving ? "Сохранение…" : "Сохранить заголовок"}

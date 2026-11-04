@@ -51,7 +51,6 @@ describe("personnelOrderItemFormRegistry", () => {
     expect(
       detectUiItemTypeFromRecord({
         item_id: 1,
-        order_id: 1,
         item_number: 1,
         item_type_code: "TRANSFER",
         item_status: "ACTIVE",
@@ -64,7 +63,6 @@ describe("personnelOrderItemFormRegistry", () => {
     expect(
       detectUiItemTypeFromRecord({
         item_id: 1,
-        order_id: 1,
         item_number: 1,
         item_type_code: "TRANSFER",
         item_status: "ACTIVE",
@@ -74,16 +72,16 @@ describe("personnelOrderItemFormRegistry", () => {
   });
 
   it.each([{org_unit_id:43},{position_id:6},{org_unit_ru:"Хирургия 2"},{position_kk:"Дәрігер"}])("reopens nested TRANSFER placement %j despite the compatibility to_rate", transfer => {
-    const saved = JSON.parse(JSON.stringify({item_id:1,order_id:1,item_number:1,item_type_code:"TRANSFER",item_status:"ACTIVE",payload:{transfer:{...transfer,rate:1},to_rate:1}}));
+    const saved = JSON.parse(JSON.stringify({item_id:1,item_number:1,item_type_code:"TRANSFER",item_status:"ACTIVE",payload:{transfer:{...transfer,rate:1},to_rate:1}}));
     expect(detectUiItemTypeFromRecord(saved)).toBe("TRANSFER");
   });
 
   it.each([null,{},[],{rate:0.5},{org_unit_ru:" "}])("preserves legacy RATE_CHANGE with no nested destination %j",transfer=>{
-    expect(detectUiItemTypeFromRecord({item_id:1,order_id:1,item_number:1,item_type_code:"TRANSFER",item_status:"ACTIVE",payload:{transfer,to_employment_rate:0.5}})).toBe("RATE_CHANGE");
+    expect(detectUiItemTypeFromRecord({item_id:1,item_number:1,item_type_code:"TRANSFER",item_status:"ACTIVE",payload:{transfer,to_employment_rate:0.5}})).toBe("RATE_CHANGE");
   });
 
   it.each(["HIRE","TERMINATION","CONCURRENT_DUTY_START","CONCURRENT_DUTY_END","SUPPLEMENTARY_PAY","LEAVE.ANNUAL.GRANT","LEAVE.UNPAID.GRANT","LEAVE.CHILDCARE.GRANT","LEAVE.ANNUAL.RECALL","RETURN_FROM_CHILDCARE_LEAVE"])("preserves existing type %s",item_type_code=>{
-    expect(detectUiItemTypeFromRecord({item_id:1,order_id:1,item_number:1,item_type_code,item_status:"ACTIVE",payload:{to_rate:1,transfer:{org_unit_id:43}}})).toBe(item_type_code);
+    expect(detectUiItemTypeFromRecord({item_id:1,item_number:1,item_type_code,item_status:"ACTIVE",payload:{to_rate:1,transfer:{org_unit_id:43}}})).toBe(item_type_code);
   });
 
   it("defaults item type from order type", () => {
@@ -102,9 +100,9 @@ describe("personnelOrderItemFormRegistry", () => {
     const config = getItemFormRegistry("HIRE");
     expect(config?.fieldSectionOrder).toEqual([
       "item_type",
+      "employee",
       "org_placement",
       "effective_date",
-      "employee",
       "additional",
     ]);
   });

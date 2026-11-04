@@ -19,6 +19,10 @@ export default function PersonnelTemplateVariants({ item, catalog = [item], init
   const [templates, setTemplates] = useState<PersonnelIndependentTemplate[]>([]);
   const [selected, setSelected] = useState<number | undefined>(initialDraft?.template_id ?? initialTemplateId);
   const [selectionCleared, setSelectionCleared] = useState(false);
+  // Async list responses must validate the current choice, not the choice
+  // captured when the request started (the URL can change in the meantime).
+  const currentSelection = useRef({selected, selectionCleared});
+  currentSelection.current = {selected, selectionCleared};
   const [changingType, setChangingType] = useState(false);
   const [versions, setVersions] = useState<PersonnelOrderTemplateDraft[]>([]);
   const [source, setSource] = useState<number>();
@@ -67,18 +71,19 @@ export default function PersonnelTemplateVariants({ item, catalog = [item], init
       setTemplates(result.items);
       loadedType.current = editorItem.type_code;
       setTemplatesLoaded(true);
-      const valid = result.items.some(t => t.template_id === selected);
-      if (!valid && !selectionCleared) {
+      const current = currentSelection.current;
+      const valid = result.items.some(t => t.template_id === current.selected);
+      if (!valid && !current.selectionCleared) {
         const fallback = result.items.find(t => t.is_default)?.template_id ?? result.items[0]?.template_id;
         setSelected(fallback);
-        if (selected != null) onSelected?.(fallback);
+        if (current.selected != null) onSelected?.(fallback);
       }
     }).catch(cause => {
       if (cancelled) return;
       setError("templates"); setLoadStatus(cause?.status);
       if (cause?.details?.detail?.code === "TEMPLATE_SCHEMA_REQUIRED") {
         setLegacySchema(true); setTemplates([]); setTemplatesLoaded(true);
-        setSelected(undefined); if (selected != null) onSelected?.(undefined);
+        setSelected(undefined); if (currentSelection.current.selected != null) onSelected?.(undefined);
       }
     });
     return () => { cancelled = true; };

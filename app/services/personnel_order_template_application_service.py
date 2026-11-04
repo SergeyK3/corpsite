@@ -63,15 +63,16 @@ def _document_form_ru(payload:Mapping[str,Any],field:str)->str:
  return _mapped_text(name,"full_name_dative_ru","dative_ru")
 def _order(conn:Any,order_id:int,*,lock:bool=True):
  from app.services.personnel_orders_command_service import require_active_personnel_order
- require_active_personnel_order(conn,order_id,lock=True)
- order=conn.execute(text("SELECT * FROM public.personnel_orders WHERE order_id=:id FOR UPDATE"),{"id":order_id}).mappings().first()
+ require_active_personnel_order(conn,order_id,lock=lock)
+ suffix=" FOR UPDATE" if lock else ""
+ order=conn.execute(text("SELECT * FROM public.personnel_orders WHERE order_id=:id"+suffix),{"id":order_id}).mappings().first()
  if not order or order["archived_at"] is not None or order["status"]!="DRAFT": raise TemplateApplicationError("Template application is available only for a non-archived DRAFT order.")
  items=conn.execute(text("SELECT * FROM public.personnel_order_items WHERE order_id=:id AND item_status='ACTIVE' ORDER BY item_number,item_id"),{"id":order_id}).mappings().all()
  if not items: raise TemplateApplicationError("Template application requires at least one ACTIVE item.")
  codes = {str(item["item_type_code"]) for item in items}
  if str(order['order_type_code']) not in ({next(iter(codes)), 'COMPOSITE'} if len(codes) == 1 else {'COMPOSITE'}): raise TemplateApplicationError('The active item type does not match the order type.')
  from app.services.personnel_order_item_templates import resolve_item_templates
- templates = resolve_item_templates(conn, order, list(items), allow_defaults=True)
+ templates = resolve_item_templates(conn, order, list(items), allow_defaults=True, lock=lock)
  return order,list(items),templates
 
 def _values(conn:Any,item:Mapping[str,Any],template:Mapping[str,Any]|None=None):
@@ -102,8 +103,10 @@ def _values(conn:Any,item:Mapping[str,Any],template:Mapping[str,Any]|None=None):
   try: return childcare_values(payload, org_unit_ru=_snapshot(payload, "source_org_unit_name", unitru)), [], []
   except ValueError as exc: raise TemplateApplicationError(str(exc)) from exc
  unpaid=str(item["item_type_code"]) == "LEAVE.UNPAID.GRANT"
- if not unpaid:
-  poskk=poskk or localized_personnel_order_position(posru,"kk") or posru; unitkk=unitkk or unitru
+ if not unpaid and payload.get('position_document_form_status') != 'needs_review':
+  if str(item["item_type_code"]) != "HIRE":
+   poskk=poskk or localized_personnel_order_position(posru,"kk") or posru
+  unitkk=unitkk or unitru
  forms={field:_document_form_kk(payload,field) for field in ("org_unit.document_genitive_kk","position.document_possessive_kk","employee.full_name_dative_kk","employee.full_name_genitive_kk")}
  # Stored forms apply to every supported template, including title tokens.
  saved_ru=_mapped_text(payload.get("document_forms_ru"),"position_document_nominative_ru")
@@ -116,11 +119,46 @@ def _values(conn:Any,item:Mapping[str,Any],template:Mapping[str,Any]|None=None):
    if not value:
     warnings.append({"code":"KK_DOCUMENT_FORM_MISSING","message":f"Missing confirmed document form: {field}."}); missing.append(field)
  values={"employee.full_name":_name(payload,employee),"employee.full_name_dative_ru":_document_form_ru(payload,"employee.full_name_dative_ru"),"position.title_ru":posru,"position.document_nominative_ru":document_nominative_personnel_order_position(posru),"position.title_kk":poskk,"org_unit.title_ru":unitru,"org_unit.title_kk":unitkk,**forms,"effective_date":str(item.get("effective_date") or ""),"effective_date_local":str(item.get("effective_date") or ""),"termination.reason.ru":termination_reason_text(payload.get("termination_reason") or payload.get("reason"),"ru"),"termination.reason.kk":termination_reason_text(payload.get("termination_reason") or payload.get("reason"),"kk"),"termination.unused_leave_days":str(payload.get("unused_leave_days") or ""),"basis":str(payload.get("basis") or "")}
+ if str(item["item_type_code"]) == "HIRE":
+  from app.services.personnel_order_hire_terms import hire_rate, hire_basis_text
+  try: values['rate']=str(hire_rate(payload['employment_rate'])) if payload.get('employment_rate') not in (None,'') else ''
+  except ValueError as exc: raise TemplateApplicationError(str(exc)) from exc
+  documents=[]
+  source_locale='ru'
+  if item.get('order_id') and 'hire_basis' not in payload:
+   source_locale=conn.execute(text('SELECT source_title_locale FROM personnel_orders WHERE order_id=:id'),{'id':item['order_id']}).scalar_one() or 'ru'
+  if payload.get('basis_ids') or any(isinstance(entry,Mapping) and entry.get('basis_id') for entry in payload.get('basis_entries') or []):
+   storage=conn.execute(text("SELECT storage_json FROM personnel_orders WHERE order_id=:id"),{'id':item['order_id']}).scalar_one() or {}
+   documents=storage.get('basis_documents') or []
+  values.update({f'basis.{locale}':hire_basis_text(payload,locale,documents,source_locale) for locale in ('ru','kk')})
+  if isinstance(payload.get('hire_basis'),Mapping) and payload['hire_basis'].get('kk_intentionally_empty') is True and not values['basis.kk']:
+   values['__hire_basis_kk_intentionally_empty']='1'
  if saved_ru: values["position.document_nominative_ru"]=saved_ru
  # New catalog snapshots keep nominal titles separate from grammatical forms.
  # Legacy payloads keep their existing resolution; no current catalog is read.
  for key,field in (("position_title_ru","position.title_ru"),("position_title_kk","position.title_kk"),("org_unit_title_kk","org_unit.title_kk")):
   if payload.get(key): values[field]=str(payload[key])
+ if isinstance(payload.get("document_position"), Mapping):
+  position=payload["document_position"]
+  values["position.title_ru"]=str(position.get("name") or "")
+  values["position.title_kk"]=str(position.get("name_kk") or "")
+  values["position.document_nominative_ru"]=str(position.get("document_nominative_ru") or "")
+  values["position.document_possessive_kk"]=str(position.get("document_possessive_kk") or "")
+ if str(item["item_type_code"]) == "HIRE":
+  if isinstance(payload.get('hire_position_manual_forms'), Mapping) and saved_ru:
+   values['position.title_ru'] = saved_ru
+   values['position.document_nominative_ru'] = saved_ru
+  # A title snapshot is nominal catalog data, not the user's editable
+  # wording for this order. Do not erase that wording with a missing name_kk.
+  explicit_kk=forms["position.document_possessive_kk"]
+  if explicit_kk:
+   values["position.title_kk"]=explicit_kk
+   values["position.document_possessive_kk"]=explicit_kk
+ if isinstance(payload.get("document_org_unit"), Mapping):
+  unit=payload["document_org_unit"]
+  values["org_unit.title_ru"]=str(unit.get("name") or "")
+  values["org_unit.title_kk"]=str(unit.get("name_kk") or "")
+  values["org_unit.document_genitive_kk"]=str(unit.get("document_genitive_kk") or "")
  if unpaid:
   try: p=unpaid_leave_period(payload)
   except UnpaidLeaveContractError as exc: raise TemplateApplicationError(str(exc)) from exc
@@ -162,7 +200,7 @@ def _values(conn:Any,item:Mapping[str,Any],template:Mapping[str,Any]|None=None):
   from app.services.personnel_order_concurrent_end_contract import cessation_values
   try: values.update(cessation_values(payload["concurrent"],item.get("effective_date")))
   except ValueError as exc: raise TemplateApplicationError(str(exc)) from exc
- if str(item["item_type_code"]) in {"TRANSFER", "CONCURRENT_DUTY_START"}:
+ if str(item["item_type_code"]) in {"HIRE", "TRANSFER", "CONCURRENT_DUTY_START"}:
   from app.services.personnel_orders_editorial.generators import format_personnel_order_date_numeric, _format_date_from
   day = str(item.get("effective_date") or "")
   values.update({"effective_date.ru":format_personnel_order_date_numeric(day), "effective_date.kk":_format_date_from(day,"kk") if day else ""})
@@ -204,6 +242,9 @@ def _render(template:Mapping[str,Any],values:Mapping[str,str], *, draft_preview:
  from app.services.personnel_order_work_allowance_contract import enabled as work_enabled
  if work_enabled(texts): optional_tokens.add('concurrent.rate')
  def each(key,value):
+  if template.get('item_type_code') == 'HIRE' and key in ('body_template_ru', 'body_template_kk'):
+   from app.services.personnel_order_hire_position_quotes import hire_body_template_without_position_quotes
+   value = hire_body_template_without_position_quotes(value)
   if template.get('item_type_code') == 'PERSONAL_DATA_CHANGE':
    from app.services.personnel_order_personal_data_contract import adapt_identity_date_clause
    value = adapt_identity_date_clause(value, values)
@@ -222,8 +263,14 @@ def _render(template:Mapping[str,Any],values:Mapping[str,str], *, draft_preview:
    missing.add(token) if not value.strip() and token not in optional_tokens and not token.startswith("basis.application_") else None
    return value
   return _TOKEN.sub(repl,value)
- result={key:(value if item_only and key.startswith(("title_", "preamble_")) else each(key,value)) for key,value in texts.items()}
+ result={key:('' if key=='basis_template_kk' and template.get('item_type_code')=='HIRE' and values.get('__hire_basis_kk_intentionally_empty')=='1'
+              else value if item_only and key.startswith(("title_", "preamble_")) else each(key,value)) for key,value in texts.items()}
  if missing:
+  if template.get("item_type_code") == "HIRE":
+   messages=(["Укажите ставку"] if 'rate' in missing else []) + (["Заполните основание"] if 'basis' in missing else [])
+   remaining=missing-{'rate','basis'}
+   if remaining: messages.append('Заполните обязательные данные шаблона: ' + ', '.join(sorted(remaining)))
+   raise TemplateApplicationError('. '.join(messages))
   if template.get("item_type_code") == "TRANSFER":
    labels={"rate":"ставка после перевода", "basis":"основание перевода", "position.title_ru":"новая должность (RU)", "position.title_kk":"новая должность (KK)", "org_unit.title_ru":"новое подразделение (RU)", "org_unit.title_kk":"новое подразделение (KK)", "employee.full_name":"ФИО сотрудника", "effective_date":"дата перевода"}
    labels['employee.full_name_dative_ru']='ФИО в дательном падеже (RU)'

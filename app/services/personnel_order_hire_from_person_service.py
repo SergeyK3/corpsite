@@ -162,6 +162,10 @@ def validate_hire_item_identity(
 
     person_id = parse_person_id_from_payload(payload or {})
     if person_id is None:
+        if "new_employee" in (payload or {}):
+            from app.services.personnel_order_hire_new_employee import normalize_new_employee
+            normalize_new_employee(payload["new_employee"])
+            return
         raise PersonnelOrderValidationError(
             "HIRE order item requires employee_id or payload.person_id."
         )

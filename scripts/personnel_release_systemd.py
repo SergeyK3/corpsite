@@ -38,6 +38,10 @@ def last_name(paths,sha):
     names=[Path(path).name for path in paths]
     prefix=max(names,key=lambda value:value.encode()) if names else 'zz-release'
     result=prefix+'.personnel-'+sha+'.conf'
+    if len(result.encode())>255:
+        # Preserve every old drop-in and outrank it without extending its chain.
+        leading_z=max((len(name)-len(name.lstrip('z')) for name in names),default=0)
+        result='z'*(leading_z+1)+'-personnel-'+sha+'.conf'
     if not re.fullmatch(r'[A-Za-z0-9_.-]+',result) or len(result.encode())>255:
         raise RuntimeError('Cannot safely choose a last-priority drop-in filename')
     if any(result.encode()<=name.encode() for name in names):raise RuntimeError('Drop-in priority conflict')

@@ -1,28 +1,48 @@
+import type {HirePositionManualForms} from "./personnelOrderHirePosition";
 import {emptyCategoryOrderDraft as emptyCategoryDraft,categoryOrderPayload,categoryOrderDraftFromRecord,type QualificationCategoryDraft} from "./qualificationCategoryDraft";
 import {emptyServiceLengthDraft, serviceLengthDraftFromRecord, serviceLengthOrderPayload, type ServiceLengthDraft} from "./serviceLengthDraft";
 import {emptyEducationDraft, educationDraftFromRecord, educationOrderPayload, type EducationDraft} from "./educationDraft";
 import {emptyPersonalDataDraft,personalDataOrderPayload,personalDataDraftFromRecord,type PersonalDataDraft} from './personalDataDraft';
 import type {ManualOrderSubject} from "./personnelOrderManualSubject";
+import type {HireNewEmployee} from "./personnelOrderHireNewEmployee";
+import {hireDetailsFromPayload, hireDetailsPayload, type HireDetails} from "./personnelOrderHireDetails";
+import {hireBasisFromPayload,type HireBasis} from './personnelOrderHireBasis';
 import type {MedicalSpecialtySnapshot} from "../_components/PersonnelOrderMedicalSpecialtyPicker";
+import {departmentFromPayload,departmentSnapshot,departmentValues,type DepartmentDraft} from "./personnelOrderDepartment";
+import type {AllowanceRecipient} from "../_components/PersonnelOrderAllowanceRecipient";
 import type { TransferFields } from "../_components/PersonnelOrderTransferFields";
 import type { ReplacementFields } from "../_components/PersonnelOrderReplacementFields";
 import type { PersonnelOrderType } from "./personnelOrderLabels";
 
+export type DocumentPositionSnapshot = {position_id:number|null;name:string;name_kk?:string|null;document_nominative_ru?:string|null;document_possessive_kk?:string|null;document_genitive_ru?:string|null};
+
 export type ItemPayloadDraft = {
-  unresolved_subject?:ManualOrderSubject;
+  hire_position_manual_forms?: HirePositionManualForms;
+  hire_basis?: HireBasis;
+  hire_details?: HireDetails;
+  new_employee?: HireNewEmployee;
   personal_data_document?:PersonalDataDraft;
   education_document?: EducationDraft;
   service_length_document?: ServiceLengthDraft;
   category_document?: QualificationCategoryDraft;
-  transfer?: TransferFields;
   medical_specialty?: MedicalSpecialtySnapshot|null;
+  unresolved_subject?: ManualOrderSubject;
+  document_department?: DepartmentDraft;
+  allowance_recipient?: AllowanceRecipient;
+  document_position?: DocumentPositionSnapshot;
   allowance?: Record<string, unknown>;
   allowance_percent?: string;
+  transfer?: TransferFields;
   employee_full_name_accusative_ru?: string;
   concurrent?: TransferFields;
   replacement?: ReplacementFields;
   concurrent_template_version_id?: number;
   job_code?: string;
+  assignment_id?: number;
+  position_translation_status?: string;
+  position_document_form_status?: string;
+  document_forms_ru_present?: boolean;
+  document_forms_kk_present?: boolean;
   position_title_ru?: string;
   position_title_kk?: string;
   org_unit_title_kk?: string;
@@ -41,6 +61,7 @@ export type ItemPayloadDraft = {
   employee_full_name_dative_ru?: string;
   employee_full_name_genitive_ru?: string;
   position_document_nominative_ru?: string;
+  position_document_genitive_ru?: string;
   vacation_benefit_applicable?: boolean;
   vacation_benefit_rule?: string;
   leave_note?: string;
@@ -137,6 +158,10 @@ export function itemPayloadDraftFromRecord(payload: Record<string, unknown> | nu
     workPeriods.push({ start: String(source.work_period_start || ""), end: String(source.work_period_end || ""), days: String(source.work_period_days || "") });
   }
   return {
+    unresolved_subject:source.unresolved_subject && typeof source.unresolved_subject === "object" ? Object.fromEntries(["full_name","org_unit_name","position_name","specialty"].map(key=>[key,String((source.unresolved_subject as Record<string,unknown>)[key]||"")])) as ManualOrderSubject : undefined,
+    hire_basis: source.hire_basis&&typeof source.hire_basis==='object'?hireBasisFromPayload(source):undefined,
+    hire_details: hireDetailsFromPayload(source),
+    new_employee: source.new_employee && typeof source.new_employee === "object" ? Object.fromEntries(["last_name", "first_name", "middle_name"].map(key => [key, String((source.new_employee as Record<string, unknown>)[key] || "")])) as HireNewEmployee : undefined,
     medical_specialty: source.medical_specialty === null ? null : source.medical_specialty && typeof source.medical_specialty==='object' ? {...source.medical_specialty as MedicalSpecialtySnapshot} : undefined,
     transfer: source.transfer && typeof source.transfer === "object" ? {...source.transfer,
       position_ru:String((source.transfer as Record<string,unknown>).position_ru ?? ""),
@@ -153,10 +178,21 @@ export function itemPayloadDraftFromRecord(payload: Record<string, unknown> | nu
     )} as TransferFields : undefined,
     employee_full_name_accusative_ru: String(ruForms.employee_full_name_accusative_ru || nestedForm("employee", ["full_name_accusative_ru"]) || ""),
     replacement: source.replacement && typeof source.replacement === "object" && !Array.isArray(source.replacement) ? {...source.replacement} as ReplacementFields : undefined,
+    document_department: source.document_org_unit || source.allowance_recipient || source.source_org_unit_name ? departmentFromPayload(source) : undefined,
+    allowance_recipient: source.allowance_recipient && typeof source.allowance_recipient === "object" ? {...source.allowance_recipient,org_unit_id:undefined,org_unit_ru:"",org_unit_kk:"",org_unit_genitive_ru:""} as AllowanceRecipient : undefined,
     allowance: source.allowance && typeof source.allowance === "object" && !Array.isArray(source.allowance) ? {...source.allowance} as Record<string, unknown> : undefined,
     allowance_percent: source.allowance && typeof source.allowance === "object" && !Array.isArray(source.allowance) ? String((source.allowance as Record<string, unknown>).percent ?? "") : undefined,
+    hire_position_manual_forms: source.hire_position_manual_forms && typeof source.hire_position_manual_forms === "object"
+      ? {...source.hire_position_manual_forms} as HirePositionManualForms : undefined,
+    document_position: source.document_position && typeof source.document_position === "object" ? {...source.document_position} as DocumentPositionSnapshot : undefined,
     org_unit_title_ru: asString("source_org_unit_name"),
     job_code: source.job_code == null ? undefined : String(source.job_code),
+    document_forms_ru_present: source.document_forms_ru != null,
+    position_document_genitive_ru: typeof ruForms.position_document_genitive_ru==="string"?ruForms.position_document_genitive_ru:undefined,
+    document_forms_kk_present: source.document_forms_kk != null,
+    assignment_id: source.assignment_id == null ? undefined : Number(source.assignment_id),
+    position_translation_status: source.position_translation_status == null ? undefined : String(source.position_translation_status),
+    position_document_form_status: source.position_document_form_status == null ? undefined : String(source.position_document_form_status),
     position_title_ru: source.position_title_ru == null ? undefined : String(source.position_title_ru),
     position_title_kk: source.position_title_kk == null ? undefined : String(source.position_title_kk),
     org_unit_title_kk: source.org_unit_title_kk == null ? undefined : String(source.org_unit_title_kk),
@@ -238,18 +274,48 @@ export function buildItemPayload(
   if(type === "SERVICE_LENGTH_CHANGE") return {...serviceLengthOrderPayload(draft.service_length_document || emptyServiceLengthDraft())};
   if(type === "QUALIFICATION_CATEGORY") return categoryOrderPayload(draft.category_document || emptyCategoryDraft());
   const payload: Record<string, unknown> = {};
+  if(type === "HIRE" && draft.hire_position_manual_forms) payload.hire_position_manual_forms={...draft.hire_position_manual_forms};
+  if(draft.unresolved_subject){payload.unresolved_subject={...draft.unresolved_subject,needs_employee_link:true,input_mode:"manual"};payload.source_employee_name=draft.unresolved_subject.full_name;}
   if (type === "SUPPLEMENTARY_PAY" && (draft.allowance || draft.allowance_percent !== undefined)) {
     payload.allowance = { ...draft.allowance, percent: optionalNumber(draft.allowance_percent) };
   }
   if (draft.job_code !== undefined) payload.job_code = draft.job_code || null;
+  if(draft.position_id?.trim())payload.position_id=optionalNumber(draft.position_id);
+  for (const key of ['assignment_id','position_translation_status','position_document_form_status'] as const) {
+    if(draft[key] !== undefined)payload[key]=draft[key];
+  }
   for (const key of ["position_title_ru", "position_title_kk", "org_unit_title_kk"] as const) {
     if (draft[key] !== undefined) payload[key] = draft[key] || null;
   }
-  const ruForms = { position_document_nominative_ru: draft.position_document_nominative_ru || "" };
-  const kkForms = { position_document_possessive_kk: draft.position_document_possessive_kk || "", org_unit_document_genitive_kk: draft.org_unit_document_genitive_kk || "" };
-  if (Object.values(ruForms).some(Boolean)) payload.document_forms_ru = ruForms;
-  if (Object.values(kkForms).some(Boolean)) payload.document_forms_kk = kkForms;
-  if (draft.org_unit_title_ru?.trim()) payload.source_org_unit_name = draft.org_unit_title_ru.trim();
+  const ruForms = { position_document_nominative_ru: draft.position_document_nominative_ru || "",
+    ...(draft.position_document_genitive_ru!==undefined?{position_document_genitive_ru:draft.position_document_genitive_ru}:{}),
+    ...(draft.employee_full_name_dative_ru!==undefined?{employee_full_name_dative_ru:draft.employee_full_name_dative_ru}:{}),
+    ...(draft.employee_full_name_genitive_ru!==undefined?{employee_full_name_genitive_ru:draft.employee_full_name_genitive_ru}:{}),
+    ...(draft.employee_full_name_accusative_ru!==undefined?{employee_full_name_accusative_ru:draft.employee_full_name_accusative_ru}:{})};
+  const kkForms = { position_document_possessive_kk: draft.position_document_possessive_kk || "", org_unit_document_genitive_kk: draft.org_unit_document_genitive_kk || "",
+    ...(draft.employee_full_name_dative_kk!==undefined?{employee_full_name_dative_kk:draft.employee_full_name_dative_kk}:{}),
+    ...(draft.employee_full_name_genitive_kk!==undefined?{employee_full_name_genitive_kk:draft.employee_full_name_genitive_kk}:{})};
+  if (draft.document_forms_ru_present || Object.values(ruForms).some(Boolean)) payload.document_forms_ru = ruForms;
+  if (draft.document_forms_kk_present || Object.values(kkForms).some(Boolean)) payload.document_forms_kk = kkForms;
+  if (draft.allowance_recipient) payload.allowance_recipient = {...draft.allowance_recipient};
+  if(draft.document_department){
+    const unit=departmentValues(draft.document_department);
+    payload.document_org_unit=departmentSnapshot(draft.document_department);
+    payload.source_org_unit_name=unit.name_ru;payload.org_unit_name={ru:unit.name_ru,kk:unit.name_kk};payload.org_unit_title_kk=unit.name_kk;payload.recall_org_unit_kk=unit.name_kk;
+    kkForms.org_unit_document_genitive_kk=unit.genitive_kk;payload.document_forms_kk=kkForms;
+    if(draft.allowance_recipient)payload.allowance_recipient={...draft.allowance_recipient,org_unit_id:draft.document_department.unit?.unit_id??undefined,org_unit_ru:unit.name_ru,org_unit_kk:unit.genitive_kk,org_unit_genitive_ru:unit.genitive_ru};
+  }
+
+  if (!draft.document_department && draft.org_unit_title_ru?.trim()) payload.source_org_unit_name = draft.org_unit_title_ru.trim();
+  if (draft.document_position) {
+    const position={...draft.document_position,document_nominative_ru:ruForms.position_document_nominative_ru,document_possessive_kk:kkForms.position_document_possessive_kk};
+    payload.document_position=position;
+    payload.source_position_name=position.name;
+    payload.position_title_ru=position.name;
+    payload.position_title_kk=position.name_kk||"";
+    payload.recall_position_kk=position.name_kk||"";
+  }
+
 
 
   if (type === "LEAVE.ANNUAL.GRANT" || type === "LEAVE.UNPAID.GRANT" || type === "LEAVE.CHILDCARE.GRANT") {
@@ -304,9 +370,12 @@ export function buildItemPayload(
   }
 
   if (type === "HIRE") {
+    if(draft.hire_basis!==undefined)payload.hire_basis={...draft.hire_basis};
+    if (draft.hire_details !== undefined) payload.hire_details = hireDetailsPayload(draft.hire_details);
+    if (draft.new_employee) payload.new_employee = {...draft.new_employee};
     const orgUnitId = optionalNumber(draft.org_unit_id);
     const positionId = optionalNumber(draft.position_id);
-    const rate = optionalNumber(draft.employment_rate);
+    const rate = optionalNumber(String(draft.employment_rate || "").replace(",", "."));
     if (orgUnitId != null) payload.org_unit_id = orgUnitId;
     if (positionId != null) payload.position_id = positionId;
     if (rate != null) payload.employment_rate = rate;

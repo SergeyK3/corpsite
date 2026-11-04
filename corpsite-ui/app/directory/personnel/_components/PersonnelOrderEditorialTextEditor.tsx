@@ -28,6 +28,7 @@ import {
   type PersonnelOrderEditorialUiStatus,
 } from "../_lib/personnelOrderEditorialUi";
 import PersonnelOrderDocumentRequisitesPreview from "./PersonnelOrderDocumentRequisitesPreview";
+import {personnelOrderPositionOverride} from "../_lib/personnelOrderPositionOverride";
 
 const GENERATE_CONFIRM_MESSAGE = [
   "Пересформировать текст приказа?",
@@ -112,7 +113,7 @@ function StructuredBasisBlockEditor({ item, block, editable, documents = [], onC
 }
 
 function PositionTextOverrideEditor({ item, editable, onChanged, manualBody }: { item: PersonnelOrderItem; editable: boolean; onChanged?: Props["onOrderChanged"]; manualBody: boolean }) {
-  const stored = (item.payload?.position_text_override || {}) as Record<string, unknown>;
+  const stored = personnelOrderPositionOverride(item.payload || {});
   const [ru, setRu] = React.useState(String(stored.ru || ""));
   const [kk, setKk] = React.useState(String(stored.kk || ""));
   const ruRef = React.useRef(ru);

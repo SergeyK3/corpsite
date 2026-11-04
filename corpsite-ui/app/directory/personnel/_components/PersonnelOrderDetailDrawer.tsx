@@ -736,8 +736,6 @@ export default function PersonnelOrderDetailDrawer({
                     <Field label="Должность подписанта" value={signatoryPositionLabel} />
                     <Field label="ФИО подписанта" value={order.signed_by_name || "—"} />
                     <Field label="Источник" value={personnelOrderSourceModeLabel(order.source_mode)} />
-                    {order.order_type_code!=="PERSONAL_DATA_CHANGE"?<Field label="Основание" value={order.legal_basis_article || order.basis_summary || "—"} />:null}
-                    <Field label="Комментарий" value={order.comment || "—"} />
                     {order.void_reason ? (
                       <>
                         <Field label="Причина аннулирования" value={order.void_reason} />
@@ -772,6 +770,7 @@ export default function PersonnelOrderDetailDrawer({
                 <PersonnelOrderItemEditor
                   orderId={order.order_id}
                   orderTypeCode={order.order_type_code}
+                  sourceTitleLocale={order.source_title_locale}
                   items={detail?.items || []}
                   disabled={!editable}
                   onChanged={handleChanged}

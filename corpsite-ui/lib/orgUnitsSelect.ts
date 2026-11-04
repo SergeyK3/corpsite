@@ -339,13 +339,13 @@ export function buildOrgUnitSelectOptionsFromRows(
   return mergeOrgUnitOptions(...collected);
 }
 
-export async function loadOrgUnitSelectOptions(): Promise<OrgUnitSelectOption[]> {
+export async function loadOrgUnitSelectOptions(options: { includeInactive?: boolean } = {}): Promise<OrgUnitSelectOption[]> {
   const groupLabelById = await loadDepartmentGroupLabelMap();
   const collected: OrgUnitSelectOption[][] = [];
 
   try {
     const tree = await apiFetchJson<{ items?: OrgUnitRow[] }>("/directory/org-units/tree", {
-      query: { status: "active" },
+      query: { status: options.includeInactive ? "all" : "active" },
     });
     const itemsRaw = Array.isArray(tree?.items) ? tree.items : [];
     if (itemsRaw.length > 0) {
@@ -358,7 +358,7 @@ export async function loadOrgUnitSelectOptions(): Promise<OrgUnitSelectOption[]>
 
   try {
     const flat = await apiFetchJson<OrgUnitsListResponse>("/directory/org-units", {
-      query: { status: "active" },
+      query: { status: options.includeInactive ? "all" : "active" },
     });
     const rows = Array.isArray(flat?.items) ? flat.items : [];
     if (rows.length > 0) {

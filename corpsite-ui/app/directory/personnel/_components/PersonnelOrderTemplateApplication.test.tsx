@@ -120,6 +120,13 @@ describe("PersonnelOrderTemplateApplication", () => {
       "template-application-item-1", "template-application-item-2", "template-application-item-3", "template-application-item-4",
     ]);
     expect(screen.getByTestId("template-application-item-3")).toHaveTextContent("KK missing");
+    expect(screen.getByTestId("template-application-item-3")).toHaveTextContent("Пункт 3: org_unit.title_kk");
     expect(screen.getByRole("button", { name: "Применить шаблон" })).toBeDisabled();
+  });
+  it('shows a real item binding error instead of the unexpected-error fallback',async()=>{
+    vi.mocked(previewPersonnelOrderTemplateApplication).mockRejectedValue(new Error('Пункт 2: отсутствует привязка к конкретной версии шаблона.'));
+    render(<PersonnelOrderTemplateApplication orderId={42} onApplied={vi.fn()}/>);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Пункт 2: отсутствует привязка');
+    expect(screen.queryByText(/Не удалось проверить шаблон приказа/)).not.toBeInTheDocument();
   });
 });

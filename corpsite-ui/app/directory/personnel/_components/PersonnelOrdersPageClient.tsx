@@ -1,10 +1,11 @@
 "use client";
+import PersonnelOrderDateFilter from "./PersonnelOrderDateFilter";
 
 import * as React from "react";
 import ExportExcelButton from "@/components/ExportExcelButton";
 import { allExportPages, type ExcelTable } from "@/lib/tableExport";
 import { formatPersonnelOrderDate, formatPersonnelOrderNumber } from "../_lib/personnelOrdersApi.client";
-import { formatEmployees, sourceTitle } from "./PersonnelOrdersTable";
+import { formatEmployees, orderTypeTitle } from "./PersonnelOrdersTable";
 import { usePersonnelSectionLanguage, type PersonnelSectionLanguage } from "../_lib/personnelSectionLanguage";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCurrentUser } from "@/lib/currentUser";
@@ -85,7 +86,27 @@ export default function PersonnelOrdersPageClient() {
   const [createOpen, setCreateOpen] = React.useState(false);
   const [toast, setToast] = React.useState<string | null>(null);
   const [employeeQuery, setEmployeeQuery] = React.useState("");
+  const [filterResetKey, setFilterResetKey] = React.useState(0);
   const [employeeOptions, setEmployeeOptions] = React.useState<EmployeeSearchOption[]>([]);
+  const [searchInput, setSearchInput] = React.useState(filters.q || "");
+  const pendingSearchQueries = React.useRef(new Set<string>());
+  const latestSearchQuery = React.useRef(filters.q || "");
+  const loadRequest = React.useRef(0);
+  const pageSize = 200;
+  const pageOffset = filters.offset ?? 0;
+
+  React.useEffect(() => {
+    const query = filters.q || "";
+    // Acknowledge our own navigation without replacing the user's raw input.
+    // Earlier keystrokes can reach the URL after newer text has been entered.
+    if (pendingSearchQueries.current.delete(query)) {
+      if (query === latestSearchQuery.current) pendingSearchQueries.current.clear();
+      return;
+    }
+    pendingSearchQueries.current.clear();
+    latestSearchQuery.current = query;
+    setSearchInput(current => current.trim() === query.trim() ? current : query);
+  }, [filters.q]);
 
   React.useEffect(() => {
     const employeeId = filters.employee_id;
@@ -114,6 +135,7 @@ export default function PersonnelOrdersPageClient() {
   }, [employeeQuery]);
 
   const load = React.useCallback(async () => {
+    const request = ++loadRequest.current;
     setLoading(true);
     setError(null);
     try {
@@ -121,22 +143,25 @@ export default function PersonnelOrdersPageClient() {
         ...filters,
         order_id: undefined,
         q: filters.q,
-        limit: 200,
-        offset: 0,
+        limit: pageSize,
+        offset: pageOffset,
       });
+      if (request !== loadRequest.current) return;
       setItems(Array.isArray(body.items) ? body.items : []);
       setTotal(Number(body.total) || 0);
     } catch (e) {
+      if (request !== loadRequest.current) return;
       setItems([]);
       setTotal(0);
       setError(mapPersonnelOrdersApiError(e, "Не удалось загрузить журнал приказов"));
     } finally {
-      setLoading(false);
+      if (request === loadRequest.current) setLoading(false);
     }
-  }, [filters]);
+  }, [filters, pageOffset]);
 
   React.useEffect(() => {
     void load();
+    return () => { ++loadRequest.current; };
   }, [load]);
 
   React.useEffect(() => {
@@ -162,21 +187,42 @@ export default function PersonnelOrdersPageClient() {
   async function loadExcel(): Promise<ExcelTable> {
     const rows = await allExportPages((page) => listPersonnelOrders({ ...filters, order_id: undefined, ...page }));
     return {
-      headers: ["№ приказа", "Дата", "Исходное название", "Тип", "Статус", "Сотрудники", "Пунктов"],
-      rows: filterPersonnelOrdersBySearch(rows, filters.q).map((row) => [formatPersonnelOrderNumber(row.order_number), formatPersonnelOrderDate(row.order_date), sourceTitle(row), personnelOrderTypeLabel(row.order_type_code, language), personnelOrderStatusLabel(row.status) + (row.is_archived ? "; 📦 Архив" : ""), formatEmployees(row), row.item_count]),
+      headers: ["№ приказа", "Дата", "Тип приказа", "Статус", "Сотрудники", "Пунктов"],
+      rows: filterPersonnelOrdersBySearch(rows, filters.q).map((row) => [formatPersonnelOrderNumber(row.order_number), formatPersonnelOrderDate(row.order_date), orderTypeTitle(row), personnelOrderStatusLabel(row.status) + (row.is_archived ? "; 📦 Архив" : ""), formatEmployees(row), row.item_count]),
     };
   }
 
   function updateFilters(next: Partial<PersonnelOrdersFilters>) {
-    const merged: PersonnelOrdersFilters = { ...filters, ...next };
+    const merged: PersonnelOrdersFilters = { ...filters, offset: undefined, ...next };
     const params = buildPersonnelOrdersQueryParams(merged, { includeOrderIdInQuery: true });
     const qs = params.toString();
     router.replace(qs ? `${PERSONNEL_ORDERS_BASE_PATH}?${qs}` : PERSONNEL_ORDERS_BASE_PATH);
   }
 
   function clearScopedFilters() {
+    setFilterResetKey(current => current + 1);
+    pendingSearchQueries.current.clear();
+    latestSearchQuery.current = "";
+    setSearchInput("");
     router.replace(PERSONNEL_ORDERS_BASE_PATH);
   }
+
+  function changeSearchInput(value: string) {
+    setSearchInput(value);
+    const query = value.trim();
+    latestSearchQuery.current = query;
+    if (query !== (filters.q || "")) pendingSearchQueries.current.add(query);
+    updateFilters({q: value || undefined});
+  }
+
+  React.useEffect(() => {
+    // External department filters can preserve the previous page in the URL.
+    // Recover when that page no longer exists in the new result set.
+    if (!loading && !error && pageOffset > 0 && pageOffset >= total) {
+      updateFilters({offset: undefined});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, error, pageOffset, total]);
 
   function openOrder(row: PersonnelOrderListItem) {
     setSelectedOrderId(row.order_id);
@@ -326,28 +372,8 @@ export default function PersonnelOrdersPageClient() {
             ))}
           </select>
         </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">
-            Дата с
-          </label>
-          <input
-            type="date"
-            value={filters.date_from || ""}
-            onChange={(e) => updateFilters({ date_from: e.target.value || undefined })}
-            className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-          />
-        </div>
-        <div>
-          <label className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">
-            Дата по
-          </label>
-          <input
-            type="date"
-            value={filters.date_to || ""}
-            onChange={(e) => updateFilters({ date_to: e.target.value || undefined })}
-            className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
-          />
-        </div>
+        <PersonnelOrderDateFilter label="Дата с" value={filters.date_from} onCommit={date_from => updateFilters({date_from})} resetKey={filterResetKey} />
+        <PersonnelOrderDateFilter label="Дата по" value={filters.date_to} onCommit={date_to => updateFilters({date_to})} resetKey={filterResetKey} />
         <div className="relative">
           <label className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">
             Сотрудник
@@ -372,8 +398,8 @@ export default function PersonnelOrdersPageClient() {
           </label>
           <input
             type="search"
-            value={filters.q || ""}
-            onChange={(e) => updateFilters({ q: e.target.value || undefined })}
+            value={searchInput}
+            onChange={(e) => changeSearchInput(e.target.value)}
             placeholder="№ приказа, название, ФИО"
             className="min-w-[12rem] rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
           />
@@ -391,9 +417,7 @@ export default function PersonnelOrdersPageClient() {
         <div className="text-sm text-zinc-500 dark:text-zinc-400">
           {loading
             ? "Загрузка…"
-            : filters.q?.trim()
-              ? `${filteredItems.length} из ${total} приказов`
-              : `${total} приказов`}
+            : `Показано ${items.length ? pageOffset + 1 : 0}–${pageOffset + items.length} из ${total} приказов`}
         </div>
       </div>
 
@@ -404,6 +428,13 @@ export default function PersonnelOrdersPageClient() {
       ) : null}
 
       <ExportExcelButton load={loadExcel} filename="Кадровые_приказы.xlsx" disabled={loading || !!error} />
+      {total > pageSize || pageOffset > 0 ? <nav aria-label="Страницы журнала приказов" className="flex flex-wrap items-center gap-3 text-sm">
+        <button type="button" disabled={loading || pageOffset === 0} onClick={() => updateFilters({offset: undefined})}>Первая страница</button>
+        <button type="button" disabled={loading || pageOffset === 0} onClick={() => updateFilters({offset: Math.max(0, pageOffset - pageSize) || undefined})}>Предыдущая страница</button>
+        <span>Страница {Math.floor(pageOffset / pageSize) + 1} из {Math.max(1, Math.ceil(total / pageSize))}</span>
+        <button type="button" disabled={loading || pageOffset + items.length >= total} onClick={() => updateFilters({offset: pageOffset + pageSize})}>Следующая страница</button>
+        <button type="button" disabled={loading || pageOffset + items.length >= total} onClick={() => updateFilters({offset: Math.floor((total - 1) / pageSize) * pageSize})}>Последняя страница</button>
+      </nav> : null}
       <PersonnelOrdersTable
         items={filteredItems}
         loading={loading}

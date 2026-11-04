@@ -1,5 +1,7 @@
-import {personnelOrderPrintTitle} from "./personnelOrderPrintTitle";
 import { withoutAutomaticOrderClosing } from "./personnelOrderClosingText";
+import {hireBasisFromPayload,hireBasisOverride} from './personnelOrderHireBasis';
+import {personnelOrderPositionOverride} from './personnelOrderPositionOverride';
+import {personnelOrderPrintTitle} from './personnelOrderPrintTitle';
 import {personalDataAcknowledgementNames} from './personalDataAcknowledgement';
 import type {
   PersonnelOrderDetailResponse,
@@ -304,19 +306,27 @@ function buildItemContext(
   const presentation = payload.presentation_context && typeof payload.presentation_context === "object"
     ? payload.presentation_context as Record<string, unknown>
     : {};
-  const positionOverride = localizedOverride(payload.position_text_override) || localizedOverride(assignment.position_text_override);
+  const documentPosition = payload.document_position && typeof payload.document_position === "object" ? payload.document_position as Record<string, unknown> : null;
+  const documentPositionName = documentPosition ? localizedText(optionalString(documentPosition.name_kk) || "—", optionalString(documentPosition.name) || "—") : null;
+  const documentUnit = payload.document_org_unit && typeof payload.document_org_unit === "object" ? payload.document_org_unit as Record<string, unknown> : null;
+  const documentUnitName = documentUnit ? localizedText(optionalString(documentUnit.name_kk) || "—", optionalString(documentUnit.name) || "—") : null;
+  const override = personnelOrderPositionOverride(payload);
+  const positionOverride = override.ru || override.kk ? localizedText(override.kk,override.ru) : null;
+  const selectedPosition = documentPositionName || localizedOverride(presentation.position_name) || assignmentText(assignment.position) || nameFromMap(maps.positionNames, positionId);
+  const clarifyPosition = (selected:LocalizedText|null):LocalizedText|null => selected || positionOverride
+    ? localizedText(positionOverride?.kk || selected?.kk,positionOverride?.ru || selected?.ru) : null;
 
   return {
     itemNumber: item.item_number,
     itemTypeCode: item.item_type_code,
     employeeName: itemDisplayName(item),
     effectiveDate: optionalString(item.effective_date),
-    orgUnitName: localizedOverride(presentation.org_unit_name) || assignmentText(assignment.unit) ||
+    orgUnitName: documentUnitName || localizedOverride(presentation.org_unit_name) || assignmentText(assignment.unit) ||
       nameFromMap(maps.orgUnitNames, orgUnitId) ||
       (optionalString(item.org_unit_name) ? localizedFromSingle(item.org_unit_name) : null),
-    positionName: localizedOverride(presentation.position_name) || positionOverride || assignmentText(assignment.position) || nameFromMap(maps.positionNames, positionId),
+    positionName: clarifyPosition(selectedPosition),
     toOrgUnitName: assignmentText(assignment.unit) || nameFromMap(maps.orgUnitNames, toOrgUnitId),
-    toPositionName: positionOverride || assignmentText(assignment.position) || nameFromMap(maps.positionNames, toPositionId),
+    toPositionName: clarifyPosition(assignmentText(assignment.position) || nameFromMap(maps.positionNames, toPositionId)),
     rate: (payload.employment_rate as number | string | null | undefined) ?? (payload.rate as number | string | null | undefined) ?? (assignment.rate as number | string | null | undefined) ?? null,
     toRate:
       (payload.to_rate as number | string | null | undefined) ??
@@ -352,8 +362,9 @@ export function buildPersonnelOrderPrintViewModel(
   const basis: LocalizedText[] = [];
   const legal = optionalString(order.legal_basis_article);
   const summary = optionalString(order.basis_summary);
-  if (legal) basis.push(localizedFromSingle(legal));
-  if (summary && summary !== legal) basis.push(localizedFromSingle(summary));
+  const headerBasis=(value:string)=>order.order_type_code==='HIRE'?{[order.source_title_locale==='kk'?'kk':'ru']:value}:localizedFromSingle(value);
+  if (legal) basis.push(headerBasis(legal));
+  if (summary && summary !== legal) basis.push(headerBasis(summary));
 
   const activeItems = (detail.items || []).filter(
     (item) => String(item.item_status || "").toUpperCase() !== "VOIDED",
@@ -361,13 +372,23 @@ export function buildPersonnelOrderPrintViewModel(
 
   const items: PersonnelOrderPrintItemViewModel[] = activeItems.map((item) => {
     const editorialTexts = itemEditorialTexts(editorial, item.item_id);
-    if (editorialTexts.basis && item.item_type_code !== "SUPPLEMENTARY_PAY") {
+    let itemBasis=editorialTexts.basis;
+    if(item.item_type_code==='HIRE') {
+      const documents=Array.isArray(order.storage_json?.basis_documents)?order.storage_json.basis_documents:[];
+      const paired=hireBasisFromPayload(item.payload||{},order.source_title_locale,documents);
+      for(const locale of ['ru','kk'] as const) {
+        const override=hireBasisOverride(editorial?.items.find(group=>group.order_item_id===item.item_id)?.blocks.find(block=>block.locale===locale&&block.block_type==='basis'));
+        if(typeof override==='string'&&!(locale==='kk'&&paired.kk_intentionally_empty))paired[locale]=override;
+      }
+      itemBasis=localizedText(paired.kk,paired.ru);
+    }
+    if (itemBasis && !["SUPPLEMENTARY_PAY","HIRE"].includes(item.item_type_code)) {
       const already = basis.some(
         (entry) =>
           (entry.kk && entry.kk === editorialTexts.basis?.kk) ||
           (entry.ru && entry.ru === editorialTexts.basis?.ru),
       );
-      if (!already) basis.push(editorialTexts.basis);
+      if (!already) basis.push(itemBasis);
     }
     return {
       itemId: item.item_id,
@@ -378,7 +399,7 @@ export function buildPersonnelOrderPrintViewModel(
       effectiveDate: optionalString(item.effective_date),
       context: buildItemContext(item, maps),
       body: editorialTexts.body,
-      basis: editorialTexts.basis,
+      basis: itemBasis,
     };
   });
 

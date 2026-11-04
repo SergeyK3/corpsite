@@ -127,8 +127,8 @@ def _validate_leave_draft_item(
 ) -> None:
     if item_type_code not in LEAVE_DRAFT_ITEM_TYPE_CODES:
         return
-    if employee_id is None:
-        raise PersonnelOrderValidationError("Leave item requires employee_id.")
+    if employee_id is None and not payload.get("unresolved_subject"):
+        raise PersonnelOrderValidationError("Leave item requires employee_id or an explicit manual subject.")
     if item_type_code == "LEAVE.ANNUAL.RECALL":
         from app.services.personnel_order_recall_contract import values
         try:
@@ -802,8 +802,8 @@ def create_personnel_order_item(
             if template is None:
                 raise PersonnelOrderValidationError("Выбранная опубликованная версия шаблона недоступна или не соответствует типу пункта.")
             template = dict(template)
-        if employee_id is None and not (normalized_type in {"PERSONAL_DATA_CHANGE","SERVICE_LENGTH_CHANGE","EDUCATION_INFORMATION_CHANGE"} and unresolved_subject):
-            raise PersonnelOrderValidationError("Выберите сотрудника для нового пункта.")
+        if employee_id is None and unresolved_subject is None:
+            raise PersonnelOrderValidationError("Выберите сотрудника или подтвердите ручное ФИО.")
         if effective_date is None:
             raise PersonnelOrderValidationError("Укажите дату начала действия.")
         if employee_id is not None:
@@ -813,12 +813,13 @@ def create_personnel_order_item(
 
         from app.services.personnel_order_hire_from_person_service import validate_hire_item_identity
 
-        validate_hire_item_identity(
-            conn,
-            item_type_code=normalized_type,
-            employee_id=int(employee_id) if employee_id is not None else None,
-            payload=payload or {},
-        )
+        if unresolved_subject is None:
+            validate_hire_item_identity(
+                conn,
+                item_type_code=normalized_type,
+                employee_id=int(employee_id) if employee_id is not None else None,
+                payload=payload or {},
+            )
 
         _validate_leave_draft_item(
             item_type_code=normalized_type,
@@ -1093,6 +1094,39 @@ def update_personnel_order_item(
         merged_employee_id = updates.get("employee_id", current_item.get("employee_id"))
         merged_payload_raw = payload if payload is not None else current_item.get("payload")
         merged_payload = merged_payload_raw if isinstance(merged_payload_raw, dict) else {}
+        if str(merged_type)=='HIRE' and payload is not None and 'hire_position_manual_forms' in payload:
+            from app.services.personnel_order_hire_terms import normalize_hire_position_manual_forms
+            try: merged_payload = {**merged_payload, 'hire_position_manual_forms': normalize_hire_position_manual_forms(payload['hire_position_manual_forms'])}
+            except ValueError as exc: raise PersonnelOrderValidationError(str(exc)) from exc
+        if str(merged_type)=='HIRE' and payload is not None and 'hire_basis' in payload:
+            from app.services.personnel_order_hire_terms import normalize_hire_basis
+            try: merged_payload={**merged_payload,'hire_basis':normalize_hire_basis(payload['hire_basis'])}
+            except ValueError as exc: raise PersonnelOrderValidationError(str(exc)) from exc
+            updates['payload']=json.dumps(merged_payload,ensure_ascii=False)
+        if str(merged_type) == 'HIRE' and payload is not None and 'hire_details' in payload:
+            from app.services.personnel_order_hire_terms import normalize_hire_details
+            try: merged_payload = {**merged_payload, 'hire_details': normalize_hire_details(payload['hire_details'])}
+            except ValueError as exc: raise PersonnelOrderValidationError(str(exc)) from exc
+            updates['payload'] = json.dumps(merged_payload, ensure_ascii=False)
+        if merged_employee_id is not None and int(merged_employee_id) != int(current_item.get("employee_id") or 0):
+            from app.services.personnel_order_catalog_context import employee_catalog_context, snapshot_catalog_forms
+            subject = employee_catalog_context(conn, int(merged_employee_id), updates.get("effective_date"))
+            if subject is None:
+                raise PersonnelOrderValidationError("EMPLOYEE_NOT_FOUND")
+            recipient = merged_payload.get("allowance_recipient")
+            if isinstance(recipient, dict) and recipient.get("assignment_id") is not None:
+                owned = conn.execute(text("SELECT 1 FROM person_assignments a JOIN employees e ON e.person_id=a.person_id WHERE e.employee_id=:employee AND a.assignment_id=:assignment"),
+                    {"employee": int(merged_employee_id), "assignment": recipient["assignment_id"]}).first()
+                if owned is None:
+                    raise PersonnelOrderValidationError("Выбранное назначение не принадлежит получателю доплаты.")
+            merged_payload = dict(merged_payload)
+            merged_payload.pop("unresolved_subject", None)
+            for key in ("assignment_id", "job_code", "position_translation_status", "position_document_form_status"):
+                merged_payload.pop(key, None)
+            if str(merged_type) == "SUPPLEMENTARY_PAY":
+                merged_payload.pop("position_id", None)
+            merged_payload = snapshot_catalog_forms({**merged_payload, "source_employee_name": subject["full_name"]}, subject)
+            updates["payload"] = json.dumps(merged_payload, ensure_ascii=False)
         if str(merged_type) == "PERSONAL_DATA_CHANGE":
             from app.services.personnel_order_personal_data_contract import prepare_personal_data_payload
             try:merged_payload=prepare_personal_data_payload(conn,merged_payload,merged_employee_id,updates.get("effective_date",current_item.get("effective_date")),unresolved_subject)
@@ -1134,6 +1168,18 @@ def update_personnel_order_item(
             updates["payload"] = json.dumps(merged_payload, ensure_ascii=False)
         elif str(merged_type) != str(current_item["item_type_code"]):
             raise PersonnelOrderValidationError("При изменении типа пункта выберите опубликованный шаблон.")
+        elif str(merged_type) == 'HIRE' and isinstance(merged_payload.get('hire_position_manual_forms'), dict):
+            # Refresh generated wording for the editable HIRE position snapshot.
+            # Keep the exact existing binding; repository upserts retain overrides.
+            from app.services.personnel_order_item_templates import resolve_item_templates
+            bound_order = conn.execute(text("SELECT * FROM personnel_orders WHERE order_id=:id"), {"id": order_id}).mappings().one()
+            has_binding = bound_order.get("selected_template_version_id") is not None or conn.execute(
+                text("SELECT EXISTS(SELECT 1 FROM personnel_order_template_applications WHERE order_id=:id)"), {"id": order_id}
+            ).scalar_one()
+            if has_binding:
+                active_items = list(conn.execute(text("SELECT * FROM personnel_order_items WHERE order_id=:id AND item_status='ACTIVE' ORDER BY item_number,item_id"), {"id": order_id}).mappings())
+                template = resolve_item_templates(conn, bound_order, active_items)[int(item_id)]
+                template_version_id = int(template['template_version_id'])
         elif (merged_type in {"PERSONAL_DATA_CHANGE", "QUALIFICATION_CATEGORY", "SERVICE_LENGTH_CHANGE", "EDUCATION_INFORMATION_CHANGE"} or (merged_type in {"TRANSFER", "CONCURRENT_DUTY_START"}
               and isinstance(merged_payload.get("transfer" if merged_type == "TRANSFER" else "concurrent"), dict))):
             # Saving a bound point must refresh its text even when the user
@@ -1147,6 +1193,42 @@ def update_personnel_order_item(
                 active_items = list(conn.execute(text("SELECT * FROM personnel_order_items WHERE order_id=:id AND item_status='ACTIVE' ORDER BY item_number,item_id"), {"id": order_id}).mappings())
                 template = resolve_item_templates(conn, bound_order, active_items)[int(item_id)]
                 template_version_id = int(template["template_version_id"])
+        if isinstance(merged_payload.get("document_position"), dict):
+            from app.services.personnel_order_document_position import apply_document_position
+            incoming = merged_payload["document_position"]
+            context = {target: incoming.get(source) for source, target in (
+                ("position_id", "document_position_id"), ("name", "position_name"),
+                ("name_kk", "document_position_kk"), ("document_nominative_ru", "document_position_nominative_ru"),
+                ("document_possessive_kk", "document_position_possessive_kk"))}
+            previous_payload = current_item.get("payload") or {}
+            base = {**merged_payload, "document_position": previous_payload.get("document_position")}
+            merged_payload = apply_document_position(conn, base, context)
+            updates["payload"] = json.dumps(merged_payload, ensure_ascii=False)
+
+        document_unit = merged_payload.get("document_org_unit")
+        if isinstance(document_unit, dict) and isinstance(document_unit.get("draft"), dict):
+            from app.services.personnel_order_document_department import apply_document_department
+            previous = current_item.get("payload") or {}
+            merged_payload = apply_document_department(conn, {**merged_payload,"document_org_unit":previous.get("document_org_unit")},
+                {"document_department":document_unit["draft"],"document_org_unit_genitive_kk":document_unit.get("document_genitive_kk")})
+            updates["payload"] = json.dumps(merged_payload, ensure_ascii=False)
+        manual = unresolved_subject if unresolved_subject is not None else (merged_payload.get("unresolved_subject") if merged_employee_id is None else None)
+        if manual is not None:
+            from app.services.personnel_order_manual_draft_service import prepare_manual_item_payload
+            if template_version_id is None:
+                from app.services.personnel_order_item_templates import resolve_item_templates
+                bound_order = conn.execute(text("SELECT * FROM personnel_orders WHERE order_id=:id"), {"id": order_id}).mappings().one()
+                has_applications = conn.execute(text("SELECT to_regclass('public.personnel_order_template_applications') IS NOT NULL")).scalar_one()
+                has_binding = bound_order.get("selected_template_version_id") is not None or (has_applications and conn.execute(text("SELECT EXISTS(SELECT 1 FROM personnel_order_template_applications WHERE order_id=:id)"), {"id": order_id}).scalar_one())
+                if has_binding:
+                    active_items = list(conn.execute(text("SELECT * FROM personnel_order_items WHERE order_id=:id AND item_status='ACTIVE' ORDER BY item_number,item_id"), {"id": order_id}).mappings())
+                    template_version_id = resolve_item_templates(conn, bound_order, active_items)[int(item_id)]["template_version_id"]
+            prepared_payload = prepare_manual_item_payload(conn, item_type_code=merged_type, employee_id=None,
+                unresolved_subject=manual, effective_date=updates.get("effective_date", current_item.get("effective_date")),
+                period_start=updates.get("period_start", current_item.get("period_start")), period_end=updates.get("period_end", current_item.get("period_end")),
+                item_payload=merged_payload, template_version_id=template_version_id)
+            merged_payload = {**merged_payload, **prepared_payload}
+            updates["payload"] = json.dumps(merged_payload, ensure_ascii=False)
         current_periods = conn.execute(
             text("SELECT effective_date, period_start, period_end FROM public.personnel_order_items WHERE item_id = :item_id"),
             {"item_id": int(item_id)},
@@ -1162,12 +1244,13 @@ def update_personnel_order_item(
 
         from app.services.personnel_order_hire_from_person_service import validate_hire_item_identity
 
-        validate_hire_item_identity(
-            conn,
-            item_type_code=str(merged_type or ""),
-            employee_id=int(merged_employee_id) if merged_employee_id is not None else None,
-            payload=merged_payload,
-        )
+        if manual is None:
+            validate_hire_item_identity(
+                conn,
+                item_type_code=str(merged_type or ""),
+                employee_id=int(merged_employee_id) if merged_employee_id is not None else None,
+                payload=merged_payload,
+            )
 
         if employee_id is not None:
             _ensure_employee_exists(conn, employee_id)

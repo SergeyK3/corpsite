@@ -7,6 +7,32 @@ import {buildItemPayload,emptyItemPayloadDraft,itemPayloadDraftFromRecord} from 
 vi.mock("@/lib/api",()=>({apiFetchJson:vi.fn()}));
 afterEach(()=>{cleanup();vi.clearAllMocks();});
 const snapshot:MedicalSpecialtySnapshot={medical_specialty_id:57,name_ru:"Акушерство и гинекология",name_kk:"Акушерия және гинекология"};
+it('matches all RU/KK word fragments in any order and retains the selected snapshot while querying or clearing search',async()=>{
+ const rows=[{medical_specialty_id:41,name:'Радиология',name_kk:'Радиология',is_active:true},
+  {medical_specialty_id:7,name:'Аллергология и иммунология',name_kk:'Аллергология және иммунология',is_active:true}];
+ vi.mocked(apiFetchJson).mockResolvedValue({items:rows,total:rows.length});
+ const changed=vi.fn();
+ render(<Picker value={snapshot} onChange={changed} allWordsSearch/>);
+ const input=screen.getByRole('combobox');
+ await waitFor(()=>expect(screen.queryByText('Загружаются специальности…')).not.toBeInTheDocument());
+ for(const query of ['Радиология','РАДИОЛ','радио']){
+  fireEvent.change(input,{target:{value:query}});
+  expect(screen.getAllByRole('option')).toHaveLength(1);
+  expect(screen.getByRole('option')).toHaveTextContent('Радиология');
+ }
+ for(const query of ['ИММУН аллер','және АЛЛЕРГ','иммунология аллергология']){
+  fireEvent.change(input,{target:{value:query}});
+  expect(screen.getAllByRole('option')).toHaveLength(1);
+  expect(screen.getByRole('option')).toHaveTextContent('Аллергология и иммунология');
+ }
+ fireEvent.change(input,{target:{value:'Радиология иммунология'}});
+ expect(screen.queryByRole('option')).not.toBeInTheDocument();
+ fireEvent.change(input,{target:{value:''}});
+ expect(screen.getAllByRole('option')).toHaveLength(2);
+ expect(changed).not.toHaveBeenCalled();
+ fireEvent.blur(input);
+ expect(input).toHaveValue(`${snapshot.name_ru} / ${snapshot.name_kk}`);
+});
 it("searches active RU/KK and allows replacement and explicit clearing",async()=>{
  vi.mocked(apiFetchJson).mockResolvedValue({items:[{medical_specialty_id:57,name:snapshot.name_ru,name_kk:snapshot.name_kk,is_active:true},{medical_specialty_id:1,name:"Врач-акушер-гинеколог",name_kk:"Старое",is_active:false}],total:2});
  function Harness(){const [value,setValue]=React.useState<MedicalSpecialtySnapshot|null>(null);return <Picker value={value} onChange={setValue}/>;}

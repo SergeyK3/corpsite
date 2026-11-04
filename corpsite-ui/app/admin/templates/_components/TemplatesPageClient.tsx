@@ -493,9 +493,9 @@ function DraftEditor({ editor, published, onSaved, onPublished, variables, requi
     <section ref={editorRef} className="mt-5 rounded-xl border border-blue-200 p-4" data-testid="template-draft-editor" data-template-id={savedDraft.template_id} data-template-version-id={serverDraft?.template_version_id} data-revision={serverDraft?.revision}>
       <h4 className="font-semibold">{isWorkingCopy ? (isInitialWorkingCopy ? "Первая версия шаблона ещё не сохранена" : `Несохранённая рабочая копия опубликованной версии ${editor.workingCopy.base.version_number}`) : "Черновая версия шаблона"}</h4>
       <p className="text-sm">{isWorkingCopy && editor.workingCopy.base.source === "PUBLISHED" ? "Основа: " : ""}<PersonnelTemplateIdentity templateId={savedDraft.template_id} versionId={serverDraft?.template_version_id ?? (isWorkingCopy ? editor.workingCopy.base.template_version_id : undefined)} versionNumber={serverDraft?.version_number ?? (isWorkingCopy ? editor.workingCopy.base.version_number : undefined)} status={serverDraft?.status ?? "PUBLISHED"} />{serverDraft ? ` · revision ${serverDraft.revision}` : ""}</p>
-      <p className="mt-2 text-sm text-amber-700" data-testid="template-editor-application-notice">{savedDraft.item_type_code === PERSONAL_DATA_TEMPLATE_TYPE
-        ? "Черновик не доступен для выбора при создании приказа. Для создания нужна опубликованная версия этого шаблона; текущая версия остаётся DRAFT."
-        : "Эта версия не применяется к кадровым приказам."}</p>
+      <p className="mt-2 text-sm text-amber-700" data-testid="template-editor-application-notice">{isWorkingCopy
+        ? "Изменения в рабочей копии ещё не применяются к приказам"
+        : "Черновик станет доступен для создания приказов после публикации"}</p>
       {incompatible.length ? <div role="alert" data-testid="template-incompatible-variables" className="mt-3 text-sm text-red-700">
         <p>{sectionLanguage === "kk" ? "Жаңа бұйрық түрінің айнымалыларын жариялау алдында түзетіңіз." : "Исправьте переменные для нового вида приказа до публикации."}</p>
         {incompatible.map(issue => <p key={issue.field}>{issue.field}: {issue.unknown.length ? `${sectionLanguage === "kk" ? "Үйлесімсіз" : "Несовместимые"}: ${issue.unknown.join(", ")}. ` : ""}{issue.missing.length ? `${sectionLanguage === "kk" ? "Міндетті айнымалылар жоқ" : "Отсутствуют обязательные переменные"}: ${issue.missing.join(", ")}.` : ""}</p>)}

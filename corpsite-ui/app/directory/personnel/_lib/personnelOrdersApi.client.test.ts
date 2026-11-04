@@ -142,4 +142,14 @@ describe("personnelOrdersApi.client", () => {
     expect(filterPersonnelOrdersBySearch(items, "об отзыве из отпуска")).toHaveLength(1);
     expect(filterPersonnelOrdersBySearch(items, "сидор")).toHaveLength(0);
   });
+  it("matches digit-only queries as a number mask and ignores IDs, dates and text", () => {
+    const numbers=['61','61-ж','61 тест','61/2','561','1361','526-д','1152/2','[60/1 немесе 61]-ж','261','6','610'];
+    const items=numbers.map((order_number,index)=>({order_id:6100+index,order_number,order_date:'1961-06-01',
+      source_title:'Текст приказа 61',order_type_code:'HIRE',order_class:'PERSONNEL',status:'DRAFT',source_mode:'PAPER',
+      created_by:1,item_count:1,employee_ids:[618],employee_names:['SYNTHETIC 61']} as PersonnelOrderListItem));
+    for(const query of ['61',' 61 '])expect(filterPersonnelOrdersBySearch(items,query).map(row=>row.order_number)).toEqual(['61','61-ж','61 тест','61/2','561','1361','[60/1 немесе 61]-ж','261','610']);
+    expect(filterPersonnelOrdersBySearch(items,'61 тест').map(row=>row.order_number)).toEqual(['61 тест']);
+    expect(filterPersonnelOrdersBySearch(items,'SYNTHETIC')).toHaveLength(items.length);
+    expect(filterPersonnelOrdersBySearch(items,'')).toBe(items);
+  });
 });

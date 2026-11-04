@@ -8,6 +8,8 @@ from typing import Any, Mapping, Optional
 from sqlalchemy import text
 
 from app.db.engine import engine
+from app.services.personnel_order_document_department import apply_document_department
+from app.services.personnel_order_document_position import apply_document_position
 from app.db.models.personnel_orders import LIFECYCLE_AUDIT_ACTION_DOCUMENT_REOPENED, LIFECYCLE_AUDIT_ACTION_ITEM_UPDATED, PERSONNEL_ORDER_ITEM_TYPE_CODES
 from app.services.personnel_order_document_review_service import PersonnelOrderDocumentReviewConflictError
 from app.services.personnel_order_lifecycle_audit_service import append_personnel_order_lifecycle_audit
@@ -43,19 +45,35 @@ def list_document_items(*, order_id: int) -> dict[str, Any]:
         rows = c.execute(text("""
             SELECT poi.item_id, poi.item_number, poi.item_type_code, poi.employee_id,
               COALESCE(NULLIF(BTRIM(poi.payload ->> 'source_employee_name'), ''), e.full_name) AS employee_name,
-              COALESCE(NULLIF(BTRIM(poi.payload ->> 'source_org_unit_name'), ''), ou.name) AS org_unit_name,
+              CASE WHEN poi.payload ? 'document_org_unit' THEN poi.payload ->> 'source_org_unit_name' ELSE COALESCE(NULLIF(BTRIM(poi.payload ->> 'source_org_unit_name'), ''), ou.name) END AS org_unit_name,
+              poi.payload #> '{document_org_unit,draft}' AS document_department,
+              (poi.payload #>> '{document_org_unit,unit_id}')::integer AS document_org_unit_id,
+              poi.payload #>> '{document_org_unit,name_kk}' AS document_org_unit_kk,
+              poi.payload #>> '{document_org_unit,document_genitive_kk}' AS document_org_unit_genitive_kk,
               COALESCE(NULLIF(BTRIM(poi.payload ->> 'source_position_name'), ''), pos.name) AS position_name,
               COALESCE(NULLIF(BTRIM(poi.payload ->> 'document_specialty'), ''), NULLIF(BTRIM(poi.payload #>> '{unresolved_subject,specialty}'), '')) AS specialty,
               NULLIF(BTRIM(poi.payload ->> 'document_rate'), '') AS rate,
               CASE WHEN poi.payload #>> '{unresolved_subject,needs_employee_link}' = 'true' THEN TRUE ELSE FALSE END AS needs_employee_link,
+              (poi.payload #>> '{document_position,position_id}')::integer AS document_position_id,
+              poi.payload #>> '{document_position,name_kk}' AS document_position_kk,
+              poi.payload #>> '{document_position,document_nominative_ru}' AS document_position_nominative_ru,
+              poi.payload #>> '{document_position,document_possessive_kk}' AS document_position_possessive_kk,
               poi.payload ->> 'recall_position_kk' AS recall_position_kk,
               poi.payload ->> 'recall_org_unit_kk' AS recall_org_unit_kk,
               poi.payload ->> 'basis_ru' AS basis_ru, poi.payload ->> 'basis_kk' AS basis_kk,
               poi.effective_date
             FROM personnel_order_items poi
             LEFT JOIN employees e ON e.employee_id=poi.employee_id
-            LEFT JOIN org_units ou ON ou.unit_id=e.org_unit_id
-            LEFT JOIN positions pos ON pos.position_id=e.position_id
+            LEFT JOIN LATERAL (
+              SELECT a.org_unit_id,a.position_id FROM person_assignments a
+              WHERE a.person_id=e.person_id AND a.active_flag IS TRUE
+                AND a.is_primary IS TRUE AND a.lifecycle_status='active'
+                AND a.start_date <= COALESCE(poi.effective_date,CURRENT_DATE)
+                AND (a.end_date IS NULL OR a.end_date >= COALESCE(poi.effective_date,CURRENT_DATE))
+              ORDER BY a.start_date DESC,a.assignment_id DESC LIMIT 1
+            ) current_assignment ON TRUE
+            LEFT JOIN org_units ou ON ou.unit_id=current_assignment.org_unit_id
+            LEFT JOIN positions pos ON pos.position_id=current_assignment.position_id
             WHERE poi.order_id=:order_id AND poi.item_status='ACTIVE'
             ORDER BY poi.item_number, poi.item_id
         """), {"order_id": order_id}).mappings().all()
@@ -78,7 +96,7 @@ def patch_document_item(*, order_id: int, item_id: int, expected_document_revisi
             if employee is None: raise ValueError("EMPLOYEE_NOT_FOUND")
         old_payload = item["payload"] if isinstance(item["payload"], dict) else json.loads(item["payload"] or "{}")
         current_basis_type = c.execute(text("SELECT basis_type FROM personnel_order_item_bases WHERE order_item_id=:item_id"), {"item_id": item_id}).scalar_one_or_none()
-        new_payload = _safe_context(old_payload, document_subject_context)
+        new_payload = apply_document_position(c, apply_document_department(c, _safe_context(old_payload, document_subject_context), document_subject_context), document_subject_context)
         if employee is not None:
             # The name is server-derived for the document context; the browser
             # still sends only the selected internal employee_id.
@@ -86,7 +104,7 @@ def patch_document_item(*, order_id: int, item_id: int, expected_document_revisi
         requested_basis_type = str((document_subject_context or {}).get("basis_type") or "").strip().upper()
         before = {"item_type_code": item["item_type_code"], "employee_id": item["employee_id"], "effective_date": item["effective_date"].isoformat() if item["effective_date"] else None, "document_subject_context": {"position_name": old_payload.get("source_position_name"), "org_unit_name": old_payload.get("source_org_unit_name"), "specialty": old_payload.get("document_specialty"), "rate": old_payload.get("document_rate"), "basis_type": current_basis_type}}
         after = {"item_type_code": item_type_code, "employee_id": employee_id, "effective_date": effective_date.isoformat() if effective_date else None, "document_subject_context": {"position_name": new_payload.get("source_position_name"), "org_unit_name": new_payload.get("source_org_unit_name"), "specialty": new_payload.get("document_specialty"), "rate": new_payload.get("document_rate"), "basis_type": requested_basis_type or current_basis_type}}
-        for field in ("recall_position_kk", "recall_org_unit_kk", "basis_ru", "basis_kk"):
+        for field in ("document_position", "document_forms_ru", "position_title_ru", "position_title_kk", "document_org_unit", "document_forms_kk", "org_unit_title_kk", "recall_position_kk", "recall_org_unit_kk", "basis_ru", "basis_kk"):
             before['document_subject_context'][field] = old_payload.get(field)
             after['document_subject_context'][field] = new_payload.get(field)
         if item_type_code == "LEAVE.ANNUAL.RECALL":

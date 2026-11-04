@@ -456,11 +456,14 @@ def preview_draft(item_type_code: str, values: Mapping[str, str]) -> dict[str, A
     if item_type_code == "LEAVE.CHILDCARE.GRANT":
         for samples in locale_samples.values():
             samples.update({"employee.full_name_genitive_ru": "[[ФИО в родительном падеже]]", "basis.birth_certificate_date_ru": "[[Дата выдачи свидетельства]]", "basis.birth_certificate_date_kk": "[[Куәліктің берілген күні]]", "basis.birth_certificate_number": "[[Номер свидетельства]]"})
-    def render(value: str, locale: str) -> str:
+    def render(value: str, locale: str, *, body: bool = False) -> str:
         from app.services.personnel_order_rate_format import format_template_rate
+        if item_type_code == 'HIRE' and body:
+            from app.services.personnel_order_hire_position_quotes import hire_body_template_without_position_quotes
+            value = hire_body_template_without_position_quotes(value)
         result = _TOKEN.sub(lambda m: format_template_rate(item_type_code,m.group(1),locale_samples[locale][m.group(1)]), value)
         if item_type_code == "LEAVE.CHILDCARE.GRANT":
             from app.services.personnel_order_childcare_contract import without_directive
             result = without_directive(result)
         return result
-    return {"ru": {"title": render(values["title_ru"], "ru"), "preamble": render(values["preamble_ru"], "ru"), "directive": "ПРИКАЗЫВАЮ:", "body": render(values["body_template_ru"], "ru"), "basis": render(values["basis_template_ru"], "ru")}, "kk": {"title": render(values["title_kk"], "kk"), "preamble": render(values["preamble_kk"], "kk"), "directive": "БҰЙЫРАМЫН:", "body": render(values["body_template_kk"], "kk"), "basis": render(values["basis_template_kk"], "kk")}}
+    return {"ru": {"title": render(values["title_ru"], "ru"), "preamble": render(values["preamble_ru"], "ru"), "directive": "ПРИКАЗЫВАЮ:", "body": render(values["body_template_ru"], "ru", body=True), "basis": render(values["basis_template_ru"], "ru")}, "kk": {"title": render(values["title_kk"], "kk"), "preamble": render(values["preamble_kk"], "kk"), "directive": "БҰЙЫРАМЫН:", "body": render(values["body_template_kk"], "kk", body=True), "basis": render(values["basis_template_kk"], "kk")}}

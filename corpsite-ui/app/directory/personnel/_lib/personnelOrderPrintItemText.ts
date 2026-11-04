@@ -1,4 +1,5 @@
 import type { PersonnelOrderPrintLanguage } from "./personnelOrderPrintLanguage";
+import {personnelOrderPositionOverride} from './personnelOrderPositionOverride';
 import {
   formatPersonnelOrderPrintDate,
   formatPersonnelOrderActionStartDate,
@@ -39,14 +40,11 @@ function renderHire(ctx: PersonnelOrderPrintItemContext, lang: "kk" | "ru"): str
   const org = resolveLocalizedText(ctx.orgUnitName, lang);
   const position = resolvePersonnelOrderPositionText(ctx.positionName, lang);
   const rateValue = formatPersonnelOrderPrintRateValue(ctx.rate);
-  const date = formatPersonnelOrderPrintDate(ctx.effectiveDate, lang);
+  const date = formatPersonnelOrderActionStartDate(ctx.effectiveDate, lang);
   if (lang === "kk") {
-    return `${fio} «${org}» бөлімшесіне «${position}» лауазымына ${rateValue} мөлшерлемесінде ${date} бастап жұмысқа қабылдансын.`;
+    return `${fio} «${org}» бөлімшесіне ${position} лауазымына ${rateValue} мөлшерлемесінде ${date} бастап жұмысқа қабылдансын.`;
   }
-  const employee = russianEmployeeForOrder(fio);
-  return employee
-    ? `Принять сотрудника ${employee} с ${date} на должность ${russianOrderAssignment(position, org)} с оплатой ${rateValue} ставки.`
-    : `Принять на работу ${fio} в подразделение «${org}» на должность «${position}» со ставкой ${rateValue} с ${date}.`;
+  return `Принять на работу ${fio} в подразделение «${org}» на должность ${position} со ставкой ${rateValue} с ${date}.`;
 }
 
 function renderTransfer(ctx: PersonnelOrderPrintItemContext, lang: "kk" | "ru"): string {
@@ -181,11 +179,12 @@ export function renderPersonnelOrderPrintItemText(
   const kk = ctx.payload.document_forms_kk as Record<string, unknown> | undefined;
   const positionRu = String(ru?.position_document_nominative_ru || "").trim();
   const positionKk = String(kk?.position_document_possessive_kk || "").trim();
+  const {ru:explicitRu,kk:explicitKk}=personnelOrderPositionOverride(ctx.payload);
   if (positionRu || positionKk) {
     ctx = { ...ctx, positionName: {
       ...ctx.positionName,
-      ...(positionRu ? { ru: positionRu } : {}),
-      ...(positionKk ? { kk: positionKk } : {}),
+      ...(positionRu && !explicitRu ? { ru: positionRu } : {}),
+      ...(positionKk && !explicitKk ? { kk: positionKk } : {}),
     } };
   }
   const type = String(ctx.itemTypeCode || "").trim().toUpperCase();

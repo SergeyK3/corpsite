@@ -141,7 +141,7 @@ export function formatPersonnelOrderPrintRateLines(
   return [formatPersonnelOrderPrintRate(rate, language)];
 }
 
-/** Start-date substitution in transfer and concurrent-duty body text. */
+/** Start-date substitution in hire, transfer and concurrent-duty body text. */
 export function formatPersonnelOrderActionStartDate(value: string | null | undefined, language: "kk" | "ru"): string {
   if (language === "kk") return formatPersonnelOrderPrintStartDate(value, language);
   const parts = parsePersonnelOrderCalendarDate(value);

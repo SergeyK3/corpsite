@@ -235,7 +235,7 @@ def create_manual_personnel_order_draft_route(payload: PersonnelOrderManualDraft
     except PersonnelOrderValidationError as exc:
         raise validation_error_to_http422(exc)
     except PersonnelOrderConflictError as exc:
-        if isinstance(exc,PersonnelOrderDuplicateError):raise _conflict_http409(exc)
+        if isinstance(exc,PersonnelOrderDuplicateError):raise _conflict_http409(exc, user)
         raise HTTPException(status_code=409, detail={"code": str(exc)})
 
 
@@ -253,9 +253,21 @@ def _order_archived_http(exc: PersonnelOrderArchivedError) -> HTTPException:
     )
 
 
-def _conflict_http409(exc: PersonnelOrderConflictError) -> HTTPException:
+def _duplicate_for_user(duplicate: Dict[str, Any], user: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    can_open = False
+    if user is not None:
+        try:
+            # Order detail is org-wide and uses this exact read policy.
+            require_personnel_admin_or_403(user)
+            can_open = True
+        except HTTPException:
+            pass
+    return {**duplicate, "candidates": [{**candidate, "can_open": can_open} for candidate in duplicate["candidates"]]}
+
+
+def _conflict_http409(exc: PersonnelOrderConflictError, user: Optional[Dict[str, Any]] = None) -> HTTPException:
     if isinstance(exc, PersonnelOrderDuplicateError):
-        return HTTPException(status_code=409,detail={'code':'DUPLICATE_ORDER_NUMBER_DATE','message':exc.message,'duplicate':exc.duplicate})
+        return HTTPException(status_code=409,detail={'code':'DUPLICATE_ORDER_NUMBER_DATE','message':exc.message,'duplicate':_duplicate_for_user(exc.duplicate, user)})
     if isinstance(exc, PersonnelOrderDeletedError):
         return HTTPException(
             status_code=409,
@@ -1091,7 +1103,8 @@ def list_personnel_order_document_history_route(order_id: int = Path(..., ge=1),
 @router.post("/personnel-orders/header-duplicate-preview")
 def personnel_order_header_duplicate_preview_route(payload: PersonnelOrderHeaderDuplicatePreviewIn, user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
     require_personnel_admin_or_403(user)
-    return call_service(duplicate_preview, order_number=payload.order_number, order_date=payload.order_date, order_id=payload.order_id)
+    duplicate = call_service(duplicate_preview, order_number=payload.order_number, order_date=payload.order_date, order_id=payload.order_id)
+    return _duplicate_for_user(duplicate, user)
 
 @router.patch("/personnel-orders/{order_id}/document-header")
 def patch_personnel_order_document_header_route(payload: PersonnelOrderDocumentHeaderPatchIn, order_id: int = Path(..., ge=1), user: Dict[str, Any] = Depends(get_current_user)) -> Dict[str, Any]:
@@ -1101,7 +1114,7 @@ def patch_personnel_order_document_header_route(payload: PersonnelOrderDocumentH
     except PersonnelOrderDeletedError as exc:
         raise _deleted_order_http(exc)
     except PersonnelOrderDuplicateError as exc:
-        raise _conflict_http409(exc)
+        raise _conflict_http409(exc, user)
     except PersonnelOrderDocumentReviewConflictError as exc:
         raise HTTPException(status_code=409, detail={"code":str(exc)})
     except ValueError as exc:

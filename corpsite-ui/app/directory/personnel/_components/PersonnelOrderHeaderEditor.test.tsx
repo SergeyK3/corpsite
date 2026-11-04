@@ -58,10 +58,71 @@ afterEach(() => {
 });
 
 describe("PersonnelOrderHeaderEditor signatory requisites", () => {
-  it.each(['PERSONAL_DATA_CHANGE','EDUCATION_INFORMATION_CHANGE','HIRE'])('hides header basis only for PERSONAL_DATA_CHANGE (%s)',type=>{
-    render(<PersonnelOrderHeaderEditor order={sampleOrder({order_type_code:type,basis_summary:'TEST основание заголовка',signed_by_name:'TEST',signed_by_position:'DIRECTOR'})} onSaved={onSaved}/>);
-    if(type==='PERSONAL_DATA_CHANGE')expect(screen.queryByText('Основание',{exact:true})).not.toBeInTheDocument();
-    else expect(screen.getByText('Основание',{exact:true})).toBeInTheDocument();
+  it.each(['PERSONAL_DATA_CHANGE','EDUCATION_INFORMATION_CHANGE','HIRE','COMPOSITE'])('hides header basis/comment and never sends hidden values when saving the available type (%s)',async type=>{
+    const order=sampleOrder({order_type_code:type,basis_summary:'TEST основание заголовка',comment:'TEST сохранённый комментарий',signed_by_name:'TEST',signed_by_position:'DIRECTOR'});
+    vi.mocked(updatePersonnelOrder).mockResolvedValue(savedDetail({...order,order_type_code:'TRANSFER'}));
+    render(<PersonnelOrderHeaderEditor order={order} onSaved={onSaved}/>);
+    expect(screen.queryByText('Основание',{exact:true})).not.toBeInTheDocument();
+    expect(screen.queryByText('Комментарий',{exact:true})).not.toBeInTheDocument();
+    fireEvent.change(screen.getByTestId('personnel-order-type-select'),{target:{value:'TRANSFER'}});
+    fireEvent.click(screen.getByRole('button',{name:'Сохранить заголовок',exact:true}));
+    await waitFor(()=>expect(updatePersonnelOrder).toHaveBeenCalledExactlyOnceWith(order.order_id,{order_type_code:'TRANSFER'}));
+    expect(order.basis_summary).toBe('TEST основание заголовка');
+    expect(order.comment).toBe('TEST сохранённый комментарий');
+  });
+  it("detects number-only changes, saves only that number, and resets after reading the saved header", async () => {
+    const order = sampleOrder({order_number:"118 тест",order_date:"2026-10-30",signed_by_name:"Тестовый подписант",signed_by_position:"DIRECTOR"});
+    const saved = savedDetail({...order,order_number:"116 тест"});
+    vi.mocked(updatePersonnelOrder).mockResolvedValue(saved);
+    const {rerender}=render(<PersonnelOrderHeaderEditor order={order} onSaved={onSaved}/>);
+    const input=screen.getByLabelText("№ приказа (из журнала)");
+    const button=screen.getByTestId("personnel-order-header-save-signatory");
+    fireEvent.change(input,{target:{value:"1118 тест"}});
+    expect(input).toHaveValue("1118 тест");
+    expect(button).toBeEnabled();
+    fireEvent.change(input,{target:{value:"118 тест"}});
+    expect(button).toBeDisabled();
+    fireEvent.change(input,{target:{value:"116 тест"}});
+    fireEvent.click(button);
+    await waitFor(()=>expect(onSaved).toHaveBeenCalledWith(saved));
+    expect(updatePersonnelOrder).toHaveBeenCalledExactlyOnceWith(order.order_id,{order_number:"116 тест"});
+    rerender(<PersonnelOrderHeaderEditor order={saved.order} onSaved={onSaved}/>);
+    expect(input).toHaveValue("116 тест");
+    expect(button).toBeDisabled();
+  });
+
+  it("saves date-only and combined requisites through the same action", async () => {
+    const order=sampleOrder({order_number:"118 тест",order_date:"2026-10-30",signed_by_name:"Тестовый подписант",signed_by_position:"DIRECTOR"});
+    vi.mocked(updatePersonnelOrder).mockResolvedValue(savedDetail(order));
+    render(<PersonnelOrderHeaderEditor order={order} onSaved={onSaved}/>);
+    fireEvent.change(screen.getByTestId("personnel-order-header-order-date"),{target:{value:"2026-10-29"}});
+    fireEvent.click(screen.getByTestId("personnel-order-header-save-signatory"));
+    await waitFor(()=>expect(updatePersonnelOrder).toHaveBeenCalledWith(order.order_id,{order_date:"2026-10-29"}));
+    await waitFor(()=>expect(screen.getByTestId("personnel-order-header-save-signatory")).toBeEnabled());
+    fireEvent.change(screen.getByLabelText("№ приказа (из журнала)"),{target:{value:"116 тест"}});
+    fireEvent.change(screen.getByTestId("personnel-order-header-signatory-position"),{target:{value:"ACTING_DIRECTOR"}});
+    fireEvent.click(screen.getByTestId("personnel-order-header-save-signatory"));
+    await waitFor(()=>expect(updatePersonnelOrder).toHaveBeenLastCalledWith(order.order_id,{order_number:"116 тест",order_date:"2026-10-29",signed_by_position:"ACTING_DIRECTOR",signed_by_name:"Тестовый подписант"}));
+  });
+
+  it("preserves an unsaved number after an API error and permits retry", async () => {
+    const order=sampleOrder({order_number:"118 тест",signed_by_name:"Тестовый подписант",signed_by_position:"DIRECTOR"});
+    vi.mocked(updatePersonnelOrder).mockRejectedValue(new Error("number save failed"));
+    render(<PersonnelOrderHeaderEditor order={order} onSaved={onSaved}/>);
+    fireEvent.change(screen.getByLabelText("№ приказа (из журнала)"),{target:{value:"116 тест"}});
+    fireEvent.click(screen.getByTestId("personnel-order-header-save-signatory"));
+    expect(await screen.findByText("number save failed")).toBeInTheDocument();
+    expect(screen.getByLabelText("№ приказа (из журнала)")).toHaveValue("116 тест");
+    expect(screen.getByTestId("personnel-order-header-save-signatory")).toBeEnabled();
+    expect(onSaved).not.toHaveBeenCalled();
+  });
+
+  it("does not submit requisites when editing is disabled", () => {
+    render(<PersonnelOrderHeaderEditor order={sampleOrder({order_number:"118 тест",status:"SIGNED",signed_by_name:"Тестовый подписант",signed_by_position:"DIRECTOR"})} disabled onSaved={onSaved}/>);
+    expect(screen.getByLabelText("№ приказа (из журнала)")).toBeDisabled();
+    expect(screen.getByTestId("personnel-order-header-save-signatory")).toBeDisabled();
+    fireEvent.click(screen.getByTestId("personnel-order-header-save-signatory"));
+    expect(updatePersonnelOrder).not.toHaveBeenCalled();
   });
 
   it("keeps signatory edits local and enables the explicit save only when changed", () => {

@@ -33,6 +33,45 @@ const application = [{ basis_id: "application", document_type: "EMPLOYEE_APPLICA
 afterEach(cleanup);
 
 describe("PersonnelOrderDocumentView", () => {
+  it('switches both document languages from one decimal HIRE value without changing saved prose', () => {
+    const order = detail([{item_id:1,order_id:104,item_number:1,item_type_code:'HIRE',item_status:'ACTIVE',employee_id:null,effective_date:'2026-02-02',
+      payload:{source_employee_name:'SYNTHETIC',hire_details:{education:{code:'',ru:'',kk:''},service_length:{ru:'OLD RU',kk:'OLD KK'},service_length_years:'17.3'}}}],[]);
+    order.order.order_type_code='HIRE';
+    const before=JSON.stringify(order);
+    const view=render(<PersonnelOrderDocumentView detail={order} language='ru'/>);
+    expect(screen.getByTestId('hire-document-details')).toHaveTextContent('Трудовой стаж: 17,3 года');
+    view.rerender(<PersonnelOrderDocumentView detail={order} language='kk'/>);
+    expect(screen.getByTestId('hire-document-details')).toHaveTextContent('Еңбек өтілі: 17,3 жыл');
+    expect(document.body).not.toHaveTextContent('OLD KK');
+    expect(JSON.stringify(order)).toBe(before);
+  });
+  it.each(['ru', 'kk'] as const)('shows saved HIRE details in %s and hides empty localized fields', language => {
+    const order = detail([{item_id: 1, order_id: 104, item_number: 1, item_type_code: 'HIRE', item_status: 'ACTIVE',
+      employee_id: null, effective_date: '2026-02-02', payload: {source_employee_name: 'SYNTHETIC',
+        hire_details: {education: {code:'HIGHER',ru:'Высшее TEST',kk:'Жоғары TEST'},service_length:{ru:'5 лет TEST',kk:'5 жыл TEST'}}}}], []);
+    order.order.order_type_code = 'HIRE';
+    const view = render(<PersonnelOrderDocumentView detail={order} language={language}/>);
+    expect(screen.getAllByTestId('hire-document-details')).toHaveLength(2);
+    expect(document.body).toHaveTextContent(language === 'ru' ? 'Образование: Высшее TEST' : 'Білімі: Жоғары TEST');
+    expect(document.body).toHaveTextContent(language === 'ru' ? 'Трудовой стаж: 5 лет TEST' : 'Еңбек өтілі: 5 жыл TEST');
+    order.items[0].payload.hire_details = {education:{code:'',ru:'',kk:''}, service_length:{ru:'',kk:''}};
+    view.rerender(<PersonnelOrderDocumentView detail={order} language={language}/>);
+    expect(screen.queryByTestId('hire-document-details')).not.toBeInTheDocument();
+  });
+  it.each(["ru", "kk"] as const)("prints a new HIRE employee's saved spelling in %s without employee_id", language => {
+    const fullName = "Синтетиков Сынақ";
+    const order = detail([{
+      item_id: 7001, order_id: 104, item_number: 1, item_type_code: "HIRE", item_status: "ACTIVE",
+      employee_id: null, employee_name: null, effective_date: "2026-11-04",
+      payload: {source_employee_name: fullName, unresolved_subject: {full_name: fullName},
+        new_employee: {last_name: "Синтетиков", first_name: "Сынақ", middle_name: ""},
+        source_org_unit_name: "SYNTHETIC UNIT", source_position_name: "SYNTHETIC POSITION"},
+    }], []);
+    order.order.order_type_code = "HIRE";
+    render(<PersonnelOrderDocumentView detail={order} language={language} printRoot />);
+    expect(document.body).toHaveTextContent(fullName);
+    expect(screen.queryByTestId("personnel-order-document-missing-template")).not.toBeInTheDocument();
+  });
   it("registers and renders the approved bilingual return-from-childcare-leave template", () => {
     const order = detail([{
       item_id: 1,

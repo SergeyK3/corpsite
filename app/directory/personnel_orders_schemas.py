@@ -457,6 +457,14 @@ class PersonnelOrderDocumentSubjectContextIn(BaseModel):
     """Document-only overrides for a selected employee; never an assignment mutation."""
 
     model_config = {"extra": "forbid"}
+    document_position_id: Optional[int] = Field(default=None, ge=1)
+    document_position_kk: Optional[str] = Field(default=None, max_length=300)
+    document_position_nominative_ru: Optional[str] = Field(default=None, max_length=300)
+    document_position_possessive_kk: Optional[str] = Field(default=None, max_length=300)
+    document_department: Optional[Dict[str, Any]] = None
+    document_org_unit_id: Optional[int] = Field(default=None, ge=1)
+    document_org_unit_kk: Optional[str] = Field(default=None, max_length=300)
+    document_org_unit_genitive_kk: Optional[str] = Field(default=None, max_length=300)
     org_unit_name: Optional[str] = Field(default=None, max_length=300)
     position_name: Optional[str] = Field(default=None, max_length=300)
     specialty: Optional[str] = Field(default=None, max_length=300)

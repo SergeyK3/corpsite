@@ -59,9 +59,15 @@ def build_item_ctx(item: Mapping[str, Any], employee_name: Optional[str]) -> Dic
     org_unit_name = pick_payload_value(
         payload, "source_org_unit_name", "org_unit_name", "orgUnitName", "from_org_unit_name"
     ) or presentation.get("org_unit_name") or assignment.get("unit") or item.get("snapshot_org_unit_name")
+    document_unit = payload.get("document_org_unit")
+    if isinstance(document_unit, Mapping):
+        org_unit_name = {"ru": str(document_unit.get("name") or "—"), "kk": str(document_unit.get("name_kk") or "—")}
     position_name = pick_payload_value(
         payload, "source_position_name", "position_name", "positionName", "from_position_name"
     ) or presentation.get("position_name") or assignment.get("position") or item.get("snapshot_position_name")
+    document_position = payload.get("document_position")
+    if isinstance(document_position, Mapping):
+        position_name = {"ru": str(document_position.get("name") or "—"), "kk": str(document_position.get("name_kk") or "—")}
     leave_start = pick_payload_value(payload, "leave_start")
     leave_end = pick_payload_value(payload, "leave_end")
     leave_days = pick_payload_value(payload, "leave_days")
@@ -89,7 +95,10 @@ def build_item_ctx(item: Mapping[str, Any], employee_name: Optional[str]) -> Dic
         "effective_date": iso_date(item.get("effective_date")),
         "org_unit_name": org_unit_name,
         "org_unit_document_genitive_kk": document_forms_kk.get("org_unit_document_genitive_kk"),
-        "position_name": position_name,
+        "position_name": ({"ru": position_name, "kk": "—"}
+            if payload.get('position_document_form_status') == 'needs_review'
+            and not document_forms_kk.get('position_document_possessive_kk')
+            and not isinstance(position_name, dict) else position_name),
         "position_document_nominative_ru": document_forms_ru.get("position_document_nominative_ru"),
         # Explicit document forms are authoritative for the Kazakh document;
         # do not try to infer them from a Russian position snapshot.

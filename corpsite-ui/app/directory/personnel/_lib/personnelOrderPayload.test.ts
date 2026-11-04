@@ -15,6 +15,12 @@ import {
 } from "./personnelOrderLabels";
 
 describe("personnelOrderPayload", () => {
+  it('roundtrips stable position references, review status and explicitly blank manual forms',()=>{
+    const payload={position_id:71,assignment_id:151,job_code:'CLINICAL_DEPARTMENT_HEAD',position_document_form_status:'needs_review',position_translation_status:'confirmed',document_forms_ru:{position_document_nominative_ru:''},document_forms_kk:{position_document_possessive_kk:''}};
+    const result=buildItemPayload('TERMINATION',itemPayloadDraftFromRecord(payload));
+    expect(result).toMatchObject(payload);
+  });
+
   it("reopens explicit concurrent placement and preserves its names independently of the main assignment", () => {
     const source = {concurrent: {position_id: 77, org_unit_id: 43, position_ru: "Врач", position_kk: "Дәрігер", org_unit_ru: "Терапия", org_unit_kk: "Терапия бөлімшесі", rate: 0.75, total_rate: 1.75, employee_dative_ru: "Тестову Тесту Тестовичу", employee_dative_kk: "Тестовқа", custom_context: {keep: true}}, document_forms_ru: {employee_full_name_dative_ru: "Старая форма"}};
     const draft = itemPayloadDraftFromRecord(JSON.parse(JSON.stringify(source)));

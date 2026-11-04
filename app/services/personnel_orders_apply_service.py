@@ -856,6 +856,17 @@ def apply_personnel_order_in_conn(
         )
         if linked_app is not None:
             linked_application_person_id = int(linked_app.person_id)
+        pending_new_items = [item for item in items if item.get("employee_id") is None
+                             and "new_employee" in (item.get("payload") or {})
+                             and not (item.get("payload") or {}).get("person_id")]
+        if pending_new_items:
+            from app.services.personnel_order_hire_new_employee import materialize_hire_new_employee_tx
+            # Reject target/application conflicts before creating any identity.
+            # All creation below belongs to this apply transaction.
+            validate_authoritative_hire_target(conn, order_id=int(order_id),
+                                              linked_application_person_id=linked_application_person_id)
+            for item in pending_new_items:
+                materialize_hire_new_employee_tx(conn, item, created_by=int(created_by))
         validate_authoritative_hire_target(
             conn,
             order_id=int(order_id),

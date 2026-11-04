@@ -7,7 +7,7 @@ import PersonnelOrderItemEditor from "./PersonnelOrderItemEditor";
 import PersonnelOrderEditorialTextEditor from "./PersonnelOrderEditorialTextEditor";
 import PersonnelOrderDocumentView from "./PersonnelOrderDocumentView";
 import { generatePersonnelOrderEditorial, type PersonnelOrderDetailResponse, type PersonnelOrderEditorialState } from "../_lib/personnelOrdersApi.client";
-import { createPersonnelOrderItem, deletePersonnelOrderItem, updatePersonnelOrderItem } from "../_lib/personnelOrdersApi.client";
+import { createPersonnelOrderItem, deletePersonnelOrderItem, updatePersonnelOrderItem, getPersonnelOrderPublishedVariants } from "../_lib/personnelOrdersApi.client";
 import { loadScopedPositionOptions, loadGlobalPositionCatalogCached, resetGlobalPositionCatalogCache } from "@/lib/taskOrgFilters";
 import { resolveEmployeeOrgScopePrefill } from "@/lib/userCreateOrgScope";
 
@@ -231,6 +231,7 @@ async function selectEmployeeFromSearch() {
   });
 }
 
+
 it.each([25,35,50])('edits and reopens structured supplementary percent %s without losing recipient or bases', async percent => {
   const allowance={percent:50,employee_dative_ru:'Тестовому сотруднику',employee_dative_kk:'Сынақ қызметкеріне',basis_ru:'Ручное основание',basis_kk:'Жеке негіз',basis_type:'RECIPIENT_BASE_SALARY'};
   const recipient={assignment_id:77,position_ru:'Врач',position_kk:'дәрігері',org_unit_ru:'Отделение',org_unit_kk:'бөлімшесінің'};
@@ -257,6 +258,8 @@ it.each([25,35,50])('edits and reopens structured supplementary percent %s witho
   expect(await screen.findByLabelText('Доплата')).toHaveValue(percent===35?'other':String(percent));
   if(percent===35)expect(screen.getByLabelText('Процент доплаты')).toHaveValue(35);
 });
+
+
 
 describe("item save → editorial generation integration", () => {
   function setup() {
@@ -304,6 +307,7 @@ describe("item save → editorial generation integration", () => {
     fireEvent.change(ui.position(), { target: { value: "шаруа бикесі" } });
     ui.save();
     await screen.findByText("Пункт сохранён. Сформируйте / обновите текст приказа.");
+    expect(screen.getByTestId("personnel-order-add-item-disclosure")).not.toHaveAttribute("open");
     ui.generate();
     await waitFor(() => expect(screen.getByTestId("personnel-order-document")).toHaveTextContent("шаруа бикесі"));
     expect(updatePersonnelOrderItem).toHaveBeenCalledTimes(1);
@@ -521,9 +525,9 @@ describe("PersonnelOrderItemEditor TERMINATION", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Редактировать" }));
     await screen.findByTestId("personnel-order-termination-reason-input");
-    expect(screen.getByTestId("personnel-order-linked-employee-card")).toHaveTextContent("Уволенный сотрудник");
-    expect(screen.getByTestId("personnel-order-linked-employee-card")).toHaveTextContent("ID: 999");
-    expect(screen.queryByTestId("personnel-order-employee-id-input")).not.toBeInTheDocument();
+    expect(screen.getByTestId("personnel-order-employee-search-input")).toHaveValue("Уволенный сотрудник");
+    expect(screen.getByTestId("personnel-order-employee-id-input")).toHaveValue("999");
+    expect(screen.getByTestId("personnel-order-employee-id-input")).toHaveAttribute("readonly");
     expect(screen.getByDisplayValue("2026-09-30")).toBeInTheDocument();
     fireEvent.change(screen.getByTestId("personnel-order-termination-reason-input"), {
       target: { value: "EMPLOYEE_INITIATIVE" },
@@ -546,17 +550,7 @@ describe("PersonnelOrderItemEditor TERMINATION", () => {
     fireEvent.click(screen.getByRole("button", { name: "Редактировать" }));
     expect(await screen.findByTestId("personnel-order-termination-reason-input")).toHaveValue("EMPLOYEE_INITIATIVE");
   });
-  it("reveals active employee search only after explicit employee change", async () => {
-    render(<PersonnelOrderItemEditor orderId={1} items={[{
-      item_id: 14, order_id: 1, item_number: 1, item_type_code: "TERMINATION", item_status: "ACTIVE",
-      employee_id: 999, employee_name: "Уволенный сотрудник", effective_date: "2026-09-30", payload: {},
-    } as any]} onChanged={vi.fn()} />);
-    fireEvent.click(screen.getByRole("button", { name: "Редактировать" }));
-    expect(screen.queryByTestId("personnel-order-employee-search-input")).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Сменить сотрудника" }));
-    expect(screen.getByTestId("personnel-order-employee-search-input")).toBeInTheDocument();
-    expect(screen.getByTestId("personnel-order-employee-id-input")).toBeInTheDocument();
-  });
+
   it("proposes employee initiative from PERSONAL_APPLICATION without writing until save", async () => {
     const item = {
       item_id: 13, order_id: 1, item_number: 1, item_type_code: "TERMINATION", item_status: "ACTIVE",
@@ -577,6 +571,55 @@ describe("PersonnelOrderItemEditor TERMINATION", () => {
 });
 
 describe("PersonnelOrderItemEditor HIRE", () => {
+  it('keeps saved placement ids when editing historical department text without selecting a different reference',async()=>{
+    const item={item_id:8100,order_id:1,item_number:1,item_type_code:'HIRE',item_status:'ACTIVE',employee_id:null,effective_date:'2026-11-04',
+      payload:{new_employee:{last_name:'Синтетиков',first_name:'Тест',middle_name:''},unresolved_subject:{full_name:'Синтетиков Тест'},
+        org_unit_id:10,position_id:77,employment_rate:1,hire_basis:{ru:'Заявление',kk:'Өтініш'},
+        source_org_unit_name:'Архивное отделение',document_org_unit:{unit_id:null,name:'Архивное отделение',name_kk:'Тарихи бөлімше',
+          draft:{unit:{unit_id:null,name:'Архивное отделение',name_kk:'Тарихи бөлімше'},overrides:{genitive_ru:'архивного отделения',genitive_kk:'тарихи бөлімшенің'}}}}};
+    render(<PersonnelOrderItemEditor orderId={1} orderTypeCode="HIRE" items={[item]} onChanged={vi.fn()}/>);
+    fireEvent.click(screen.getByRole('button',{name:'Редактировать'}));
+    const field=await screen.findByRole('combobox',{name:'Подразделение (RU)'});
+    fireEvent.change(field,{target:{value:'Архивное отделение — уточнение'}});fireEvent.blur(field);
+    fireEvent.click(screen.getByRole('button',{name:'Сохранить пункт'}));
+    await waitFor(()=>expect(updatePersonnelOrderItem).toHaveBeenCalledWith(1,8100,expect.objectContaining({payload:expect.objectContaining({
+      org_unit_id:10,position_id:77,document_org_unit:expect.objectContaining({name:'Архивное отделение — уточнение',name_kk:'Тарихи бөлімше',
+        draft:expect.objectContaining({overrides:expect.objectContaining({name_ru:'Архивное отделение — уточнение',genitive_ru:'архивного отделения',genitive_kk:'тарихи бөлімшенің'})})})
+    })})));
+  });
+  it('keeps both saved HIRE rows and an add action while editing, protecting unsaved details before switching',async()=>{
+    const items=[1,2].map(n=>({item_id:8000+n,order_id:1,item_number:n,item_type_code:'HIRE',item_status:'ACTIVE',employee_id:null,
+      effective_date:'2026-11-04',payload:{new_employee:{last_name:`Синтетиков${n}`,first_name:'Тест',middle_name:''},
+        hire_basis:{ru:'Заявление',kk:'Өтініш'},hire_details:{education:{code:'',ru:'',kk:''},service_length:{ru:'',kk:''},
+          service_length_years:String(n),certificate:{specialty:null,issued_on:'',name_ru:`Историческая ${n}`,name_kk:`Тарихи ${n}`}}}}));
+    render(<PersonnelOrderItemEditor orderId={1} orderTypeCode="HIRE" items={items} onChanged={vi.fn()}/>);
+    const rows=screen.getAllByRole('row').slice(1);
+    expect(rows).toHaveLength(2);
+    fireEvent.click(within(rows[0]).getByRole('button',{name:'Редактировать'}));
+    expect(await screen.findByLabelText('Трудовой стаж, лет')).toHaveValue('1');
+    fireEvent.change(screen.getByLabelText('Трудовой стаж, лет'),{target:{value:'17,3'}});
+    const confirm=vi.spyOn(window,'confirm').mockReturnValue(false);
+    try{
+      fireEvent.click(screen.getByTestId('personnel-order-add-another-item'));
+      expect(confirm).toHaveBeenCalledTimes(1);
+      expect(screen.getByLabelText('Трудовой стаж, лет')).toHaveValue('17,3');
+      expect(screen.getByLabelText('Специальность сертификата (RU)')).toHaveValue('Историческая 1');
+      expect(screen.getAllByRole('row')).toHaveLength(3);
+      expect(updatePersonnelOrderItem).not.toHaveBeenCalled();
+      confirm.mockReturnValue(true);
+      fireEvent.click(screen.getByTestId('personnel-order-add-another-item'));
+      expect(screen.queryByRole('button',{name:'Сохранить пункт'})).not.toBeInTheDocument();
+      expect(screen.getByTestId('personnel-order-add-item-disclosure').querySelector('summary')).toHaveTextContent('Добавить пункт');
+      expect(screen.getByTestId('personnel-order-add-item-disclosure')).toHaveAttribute('open');
+      expect(screen.getAllByRole('row')).toHaveLength(3);
+      expect(updatePersonnelOrderItem).not.toHaveBeenCalled();
+      fireEvent.click(within(rows[1]).getByRole('button',{name:'Редактировать'}));
+      expect(await screen.findByLabelText('Трудовой стаж, лет')).toHaveValue('2');
+      expect(screen.getByLabelText('Специальность сертификата (KK)')).toHaveValue('Тарихи 2');
+    }finally{confirm.mockRestore();}
+  });
+
+
 
   it("disables pending-new-employee checkbox when editing saved HIRE with employee_id", async () => {
     render(
@@ -609,11 +652,10 @@ describe("PersonnelOrderItemEditor HIRE", () => {
       "Сброс сотрудника в сохранённом пункте пока не поддерживается.",
     );
     expect(screen.getByTestId("personnel-order-pending-new-employee")).not.toBeChecked();
-    expect(screen.getByTestId("personnel-order-linked-employee-card")).toHaveTextContent("ID: 138");
+    expect(screen.getByTestId("personnel-order-employee-id-input")).toHaveValue("138");
 
     fireEvent.click(screen.getByTestId("personnel-order-pending-new-employee"));
-    fireEvent.click(screen.getByRole("button", { name: "Сменить сотрудника" }));
-    fireEvent.change(screen.getByTestId("personnel-order-employee-id-input"), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Очистить сотрудника" }));
     fireEvent.change(screen.getByTestId("personnel-order-employee-search-input"), {
       target: { value: "" },
     });
@@ -652,7 +694,7 @@ describe("PersonnelOrderItemEditor HIRE", () => {
       expect(screen.getByTestId("personnel-order-pending-new-employee")).toBeChecked();
     });
 
-    fireEvent.click(screen.getByTestId("personnel-order-pending-new-employee"));
+    fireEvent.click(screen.getByRole("radio", {name: "Сотрудник из списка"}));
 
     await waitFor(() => {
       expect(screen.getByTestId("personnel-order-pending-new-employee")).not.toBeChecked();
@@ -800,26 +842,15 @@ describe("PersonnelOrderItemEditor startEdit org scope", () => {
 });
 
 
+
+
 describe("concurrent duty in the draft item editor", () => {
-  it.each([false,true])("autofills reopened concurrent names and preserves manual KK edits=%s on employee change", async manual => {
-    const first={...activeEmployee,fio:"Тестова Альбина Сериковна",first_name:"Альбина",middle_name:"Сериковна",last_name:"Маженова"};
-    vi.mocked(getEmployee).mockResolvedValue(first);
-    render(<PersonnelOrderItemEditor orderId={1} orderTypeCode="COMPOSITE" items={[{item_id:11,order_id:1,item_number:2,item_type_code:"CONCURRENT_DUTY_START",item_status:"ACTIVE",employee_id:138,payload:{concurrent:{position_ru:"Врач",org_unit_ru:"Отделение терапии",rate:"0.25",total_rate:"1.25"}}}]} onChanged={vi.fn()}/>);
-    fireEvent.click(screen.getByRole("button",{name:"Редактировать"}));
-    const kk=screen.getByLabelText("ФИО в дательном падеже (KK)");
-    await waitFor(()=>expect(kk).toHaveValue("Альбина Сериковна Маженоваға"));
-    expect(screen.getByLabelText("Дополнительная должность в родительном падеже (RU)")).toHaveValue("врача");
-    expect(screen.getByLabelText("Дополнительное подразделение в родительном падеже (RU)")).toHaveValue("отделения терапии");
-    if(manual)fireEvent.change(kk,{target:{value:"Ручная форма КК"}});
-    const second={...activeEmployee,id:"139",fio:"Тестов Второй Сотрудник",document_forms_kk:{employee_full_name_dative_kk:"Подтверждённая вторая форма"}};
-    vi.mocked(getEmployee).mockResolvedValue(second);
-    vi.mocked(getEmployees).mockResolvedValue({items:[second],total:1});
-    fireEvent.click(screen.getByRole("button",{name:"Сменить сотрудника"}));
-    fireEvent.change(screen.getByTestId("personnel-order-employee-search-input"),{target:{value:"Второй"}});
-    fireEvent.click(await screen.findByTestId("personnel-order-employee-option-139"));
-    await waitFor(()=>expect(getEmployee).toHaveBeenLastCalledWith("139"));
-    await waitFor(()=>expect(kk).toHaveValue(manual?"Ручная форма КК":"Подтверждённая вторая форма"));
-  });
+
+
+
+
+
+
   it("keeps the KK warning for ambiguous source data and allows a manual correction", async () => {
     const ambiguous={...activeEmployee,first_name:"Тест",last_name:"Серги"};
     vi.mocked(getEmployee).mockResolvedValue(ambiguous);
@@ -853,7 +884,7 @@ describe("concurrent duty in the draft item editor", () => {
     vi.mocked(getEmployee).mockResolvedValue({...activeEmployee,org_unit:{...activeEmployee.org_unit,name_kk:"Терапия бөлімшесі",document_genitive_kk:"Терапия бөлімшесінің"}});
     render(<PersonnelOrderItemEditor orderId={1} orderTypeCode="TRANSFER" items={[{item_id:12,order_id:1,item_number:1,item_type_code:"TRANSFER",item_status:"ACTIVE",employee_id:138,payload:{to_rate:0.5}}]} onChanged={vi.fn()}/>);
     fireEvent.click(screen.getByRole("button",{name:"Редактировать"}));
-    await waitFor(()=>expect(screen.getByLabelText("KK: подразделение в тексте")).toHaveValue("Терапия бөлімшесінің"));
+    await waitFor(()=>expect(screen.getByTestId("department-genitive_kk")).toHaveTextContent("Терапия бөлімшесінің"));
     expect(screen.getByTestId("personnel-order-item-type-select")).toHaveValue("RATE_CHANGE");
   });
 });

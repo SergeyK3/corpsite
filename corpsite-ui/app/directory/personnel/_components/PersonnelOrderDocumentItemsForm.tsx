@@ -1,6 +1,11 @@
 "use client";
 
 import * as React from "react";
+import PersonnelOrderDepartmentPicker from "./PersonnelOrderDepartmentPicker";
+import {departmentFromUnit,departmentValues} from "../_lib/personnelOrderDepartment";
+import PersonnelOrderPositionPicker from "./PersonnelOrderPositionPicker";
+import { usePersonnelOrderPositions } from "../_lib/personnelOrderPositions";
+import { loadOrgUnitSelectOptions, type OrgUnitSelectOption } from "@/lib/orgUnitsSelect";
 
 import { getEmployees } from "@/app/directory/employees/_lib/api.client";
 import type { EmployeeDTO } from "@/app/directory/employees/_lib/types";
@@ -16,12 +21,12 @@ import {
 const ITEM_TYPES = ["LEAVE.ANNUAL.RECALL", "HIRE", "TRANSFER", "TERMINATION", "CONCURRENT_DUTY_START", "CONCURRENT_DUTY_END", "SUPPLEMENTARY_PAY", "RETURN_FROM_CHILDCARE_LEAVE", "LEAVE.ANNUAL.GRANT", "LEAVE.UNPAID.GRANT", "LEAVE.CHILDCARE.GRANT"];
 const fieldClass = "mt-1 w-full rounded border border-zinc-300 bg-white p-2 text-sm dark:border-zinc-700 dark:bg-zinc-950";
 const labelClass = "block text-sm font-medium text-zinc-800 dark:text-zinc-200";
-const itemFields: (keyof PersonnelOrderDocumentItem)[] = ["recall_position_kk", "recall_org_unit_kk", "basis_ru", "basis_kk", "item_type_code", "employee_id", "effective_date", "position_name", "org_unit_name", "specialty", "rate"];
+const itemFields: (keyof PersonnelOrderDocumentItem)[] = ["document_department", "document_position_id", "document_position_kk", "document_position_nominative_ru", "document_position_possessive_kk", "document_org_unit_id", "document_org_unit_kk", "document_org_unit_genitive_kk", "recall_position_kk", "recall_org_unit_kk", "basis_ru", "basis_kk", "item_type_code", "employee_id", "effective_date", "position_name", "org_unit_name", "specialty", "rate"];
 type CorrectionReason = { code: string; text: string };
 type ReasonErrors = { code?: boolean; text?: boolean };
 
 function itemChanged(current: PersonnelOrderDocumentItem, saved: PersonnelOrderDocumentItem | undefined) {
-  return !saved || itemFields.some((field) => (current[field] ?? "") !== (saved[field] ?? ""));
+  return !saved || itemFields.some((field) => JSON.stringify(current[field] ?? "") !== JSON.stringify(saved[field] ?? ""));
 }
 
 export default function PersonnelOrderDocumentItemsForm({ detail, onSaved, onDirtyChange }: {
@@ -30,6 +35,10 @@ export default function PersonnelOrderDocumentItemsForm({ detail, onSaved, onDir
   onDirtyChange?: (dirty: boolean) => void;
 }) {
   const order = detail.order;
+  const positionCatalog = usePersonnelOrderPositions(true);
+  const [orgUnits, setOrgUnits] = React.useState<OrgUnitSelectOption[]>([]);
+  const [orgUnitsError, setOrgUnitsError] = React.useState(false);
+  React.useEffect(() => { let cancelled = false; void loadOrgUnitSelectOptions({includeInactive: true}).then(units => { if (!cancelled) setOrgUnits(units); }).catch(() => { if (!cancelled) setOrgUnitsError(true); }); return () => { cancelled = true; }; }, []);
   const [items, setItems] = React.useState<PersonnelOrderDocumentItem[]>([]);
   const [revision, setRevision] = React.useState(order.document_revision ?? 1);
   const [loadError, setLoadError] = React.useState<string | null>(null);
@@ -99,7 +108,7 @@ export default function PersonnelOrderDocumentItemsForm({ detail, onSaved, onDir
     try {
       const result = await patchPersonnelOrderDocumentItem(order.order_id, item.item_id, {
         expected_document_revision: revision, item_type_code: item.item_type_code, employee_id: item.employee_id ?? null, effective_date: item.effective_date || null,
-        document_subject_context: { recall_position_kk: item.recall_position_kk, recall_org_unit_kk: item.recall_org_unit_kk, basis_ru: item.basis_ru, basis_kk: item.basis_kk, position_name: item.position_name || null, org_unit_name: item.org_unit_name || null, specialty: item.specialty || null, rate: item.rate || null },
+        document_subject_context: { document_department:item.document_department, document_position_id: item.document_position_id, document_position_kk: item.document_position_kk, document_position_nominative_ru: item.document_position_nominative_ru, document_position_possessive_kk: item.document_position_possessive_kk, document_org_unit_id: item.document_org_unit_id, document_org_unit_kk: item.document_org_unit_kk, document_org_unit_genitive_kk: item.document_org_unit_genitive_kk, recall_position_kk: item.recall_position_kk, recall_org_unit_kk: item.recall_org_unit_kk, basis_ru: item.basis_ru, basis_kk: item.basis_kk, position_name: item.position_name || null, org_unit_name: item.org_unit_name || null, specialty: item.specialty || null, rate: item.rate || null },
         reason_code: reason.code || null, reason_text: reason.text || null,
       });
       await onSaved(); await load(true, item.item_id);
@@ -120,12 +129,15 @@ export default function PersonnelOrderDocumentItemsForm({ detail, onSaved, onDir
       return <article key={item.item_id} className="space-y-4 rounded border border-zinc-200 p-4 dark:border-zinc-800"><div className="text-sm font-medium">Пункт {item.item_number}</div><div className="space-y-3">
         <label className={labelClass}>Тип пункта<select aria-label={`Тип пункта ${item.item_id}`} className={fieldClass} value={item.item_type_code} onChange={(event) => change(item.item_id, { item_type_code: event.target.value })}>{ITEM_TYPES.map((code) => <option key={code} value={code}>{personnelOrderTypeLabel(code)}</option>)}</select></label>
         <label className={labelClass}>Сотрудник<input aria-label={`Сотрудник ${item.item_id}`} className={fieldClass} value={queries[item.item_id] ?? item.employee_name ?? ""} placeholder="Начните вводить ФИО" onChange={(event) => void search(item.item_id, event.target.value)} /></label>
-        {(matches[item.item_id] || []).map((employee) => <button key={employee.id} type="button" className="block w-full rounded border p-2 text-left text-sm" onClick={() => { change(item.item_id, { employee_id: Number(employee.id), employee_name: employee.fio || null, position_name: employee.position?.name || null, org_unit_name: employee.org_unit?.name || null }); setQueries((current) => ({ ...current, [item.item_id]: employee.fio || "" })); setMatches((current) => ({ ...current, [item.item_id]: [] })); }}>{employee.fio} · {employee.position?.name || "Должность не указана"} · {employee.org_unit?.name || "Отделение не указано"}</button>)}
-        <label className={labelClass}>Должность в приказе<input aria-label={`Должность в приказе ${item.item_id}`} className={fieldClass} value={item.position_name || ""} onChange={(event) => change(item.item_id, { position_name: event.target.value || null })} /></label>
-        <label className={labelClass}>Отделение в приказе<input aria-label={`Отделение в приказе ${item.item_id}`} className={fieldClass} value={item.org_unit_name || ""} onChange={(event) => change(item.item_id, { org_unit_name: event.target.value || null })} /></label>
+        {(matches[item.item_id] || []).map((employee) => <button key={employee.id} type="button" className="block w-full rounded border p-2 text-left text-sm" onClick={() => { change(item.item_id, { employee_id: Number(employee.id), employee_name: employee.fio || null, position_name: employee.position?.name || null, ...(!item.document_org_unit_id ? { org_unit_name: employee.org_unit?.name || null } : {}) }); setQueries((current) => ({ ...current, [item.item_id]: employee.fio || "" })); setMatches((current) => ({ ...current, [item.item_id]: [] })); }}>{employee.fio} · {employee.position?.name || "Должность не указана"} · {employee.org_unit?.name || "Отделение не указано"}</button>)}
+        <label className={labelClass}>Должность в приказе<PersonnelOrderPositionPicker label={`Должность в приказе ${item.item_id}`} value={item.position_name || ""} {...positionCatalog} onCustomChange={value => change(item.item_id, {position_name:value,document_position_nominative_ru:value})} onSelect={position => change(item.item_id, {document_position_id:position.id,position_name:position.name,document_position_kk:position.name_kk||"",document_position_nominative_ru:position.document_nominative_ru||position.name,document_position_possessive_kk:position.document_possessive_kk||"",recall_position_kk:position.name_kk||""})}/></label>
+        <PersonnelOrderDepartmentPicker label={`Подразделение ${item.item_id}`} options={orgUnits} value={item.document_department??departmentFromUnit({unit_id:item.document_org_unit_id??null,name:item.org_unit_name||"",name_kk:item.document_org_unit_kk||"",document_genitive_kk:item.document_org_unit_genitive_kk||""})} onChange={draft=>{
+          const text=departmentValues(draft);change(item.item_id,{document_department:draft,document_org_unit_id:draft.unit?.unit_id??null,org_unit_name:text.name_ru,document_org_unit_kk:text.name_kk,document_org_unit_genitive_kk:text.genitive_kk,recall_org_unit_kk:text.name_kk});
+        }}/>
+        {orgUnitsError ? <p role="alert">Не удалось загрузить справочник подразделений.</p> : null}
         <label className={labelClass}>Специальность<input aria-label={`Специальность ${item.item_id}`} className={fieldClass} value={item.specialty || ""} onChange={(event) => change(item.item_id, { specialty: event.target.value || null })} /></label>
         {item.item_type_code !== "LEAVE.ANNUAL.RECALL" && <label className={labelClass}>Ставка в приказе<input aria-label={`Ставка в приказе ${item.item_id}`} className={fieldClass} value={item.rate || ""} onChange={(event) => change(item.item_id, { rate: event.target.value || null })} /></label>}
-        {item.item_type_code === "LEAVE.ANNUAL.RECALL" && ([['recall_position_kk','Должность KZ'],['recall_org_unit_kk','Подразделение KZ'],['basis_ru','Основание RU'],['basis_kk','Негіз KZ']] as const).map(([key,label]) => <label key={key} className={labelClass}>{label}<input aria-label={`${label} ${item.item_id}`} className={fieldClass} value={item[key] || ""} onChange={event => change(item.item_id, {[key]: event.target.value})} /></label>)}
+        {item.item_type_code === "LEAVE.ANNUAL.RECALL" && ([['recall_position_kk','Должность KZ'],['basis_ru','Основание RU'],['basis_kk','Негіз KZ']] as const).map(([key,label]) => <label key={key} className={labelClass}>{label}<input aria-label={`${label} ${item.item_id}`} className={fieldClass} value={item[key] || ""} onChange={event => change(item.item_id, {[key]: event.target.value})} /></label>)}
         <label className={labelClass}>Дата действия<input aria-label={`Дата действия ${item.item_id}`} className={fieldClass} type="date" value={item.effective_date || ""} onChange={(event) => change(item.item_id, { effective_date: event.target.value || null })} /></label>
       </div>
       {registered && isDirty ? <div className="grid gap-3 rounded border border-amber-200 p-3 sm:grid-cols-2"><label className={labelClass}>Причина исправления<input ref={(node) => { reasonCodeRefs.current[item.item_id] = node; }} aria-label={`Причина исправления пункта ${item.item_id}`} aria-invalid={errors.code || undefined} className={`${fieldClass} ${errors.code ? "border-red-500" : ""}`} value={reason.code} onChange={(event) => changeReason(item.item_id, { code: event.target.value })} /></label><label className={labelClass}>Пояснение<textarea ref={(node) => { reasonTextRefs.current[item.item_id] = node; }} aria-label={`Пояснение исправления пункта ${item.item_id}`} aria-invalid={errors.text || undefined} className={`${fieldClass} ${errors.text ? "border-red-500" : ""}`} value={reason.text} onChange={(event) => changeReason(item.item_id, { text: event.target.value })} /></label></div> : null}

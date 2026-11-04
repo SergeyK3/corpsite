@@ -67,3 +67,22 @@ def test_install_does_not_overwrite_existing_target_or_partially_write_other_ser
 def test_execstart_parses_systemctl_without_ignoring_wrong_arguments():
     assert service.exec_argv('{ path=/usr/bin/node ; argv[]=/usr/bin/node /new/next start --port 3000 ; ignore_errors=no ; pid=0 ; }')==['/usr/bin/node','/new/next','start','--port','3000']
     with pytest.raises(RuntimeError):service.exec_argv('{ path=/old ; argv[]=/new ; }')
+
+
+def test_repeated_releases_keep_short_last_priority_name_and_rollback(tmp_path):
+    root,state=fixture(tmp_path)
+    for unit in service.UNITS:
+        path=root/(unit+'.d')/('zzzzzz-release'+'.personnel-'+SHA+'.conf')
+        # Model the existing production chain below the filesystem NAME_MAX.
+        name='zzzzzz-release'+('.personnel-'+SHA+'.conf')*4
+        path=root/(unit+'.d')/name
+        path.write_text('retained production config')
+        state[unit]['paths'].append(str(path))
+    plan=service.prepare(SHA,inspect=lambda u:state[u],config_root=root)
+    for entry in plan['units'].values():
+        name=Path(entry['target']).name
+        assert len(name.encode())<=255
+        assert all(name>Path(p).name for p in entry['original']['paths'])
+    service.install(plan,config_root=root)
+    service.remove(plan,config_root=root)
+    assert all(Path(p).exists() for e in plan['units'].values() for p in e['files'])

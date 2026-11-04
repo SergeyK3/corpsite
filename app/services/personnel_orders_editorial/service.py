@@ -15,7 +15,7 @@ from app.services.personnel_orders_editorial.basis_policy import resolve_basis_r
 from app.services.personnel_orders_editorial.exceptions import (
     PersonnelOrderEditorialConflictError,
 )
-from app.services.personnel_orders_editorial.mapper import serialize_block
+from app.services.personnel_orders_editorial.mapper import serialize_block, payload_dict
 from app.services.personnel_orders_editorial.repository import (
     fetch_order,
     find_block,
@@ -52,6 +52,14 @@ def get_editorial_state(order_id: int) -> Dict[str, Any]:
                 serialize_block(b, scope="item", editable=editable)
                 for b in blocks_by_item.get(item_id, [])
             ]
+            if item['item_type_code'] == 'HIRE':
+                from app.services.personnel_order_hire_position_quotes import hire_generated_body_without_position_quotes
+                for block in group_blocks:
+                    if block['block_type'] == 'body' and block.get('override_text') is None:
+                        generated = hire_generated_body_without_position_quotes(block.get('generated_text') or '', block['locale'], payload_dict(item.get('payload')))
+                        if generated != (block.get('generated_text') or ''):
+                            block['generated_text'] = generated
+                            block['effective_text'] = generated.strip()
             # Prefer basis_required from stored basis blocks when present.
             for b in group_blocks:
                 if b["block_type"] == ITEM_BLOCK_TYPE_BASIS and b.get("basis_required") is not None:

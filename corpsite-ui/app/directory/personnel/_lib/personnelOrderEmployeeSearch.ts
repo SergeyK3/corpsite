@@ -68,8 +68,9 @@ export function mapEmployeesResponseToSearchOptions(
 export function requireEmployeeIdForItemType(
   itemTypeCode: string,
   employeeId: string | number | null | undefined,
-  options?: { pendingNewEmployee?: boolean; personId?: string | number | null },
+  options?: { pendingNewEmployee?: boolean; personId?: string | number | null; manualFullName?: string },
 ): string | null {
+  if (options?.manualFullName?.trim()) return null;
   if (allowsPendingNewEmployee(itemTypeCode) && options?.pendingNewEmployee) {
     if (String(itemTypeCode || "").trim().toUpperCase() === "HIRE") {
       const personNumeric = Number(String(options.personId ?? "").trim());

@@ -1,6 +1,7 @@
-import { calculateKazakhPositionPossessive, calculateKazakhOrgUnitGenitive, firstNonEmpty } from "./kazakhDocumentForms";
+import { firstNonEmpty } from "./kazakhDocumentForms";
 
 type PositionReference = {
+  document_form_status?: "confirmed" | "needs_review";
   job_code?: string | null;
   job_nameru?: string | null;
   job_namekk?: string | null;
@@ -36,9 +37,9 @@ export function resolvePersonnelOrderDocumentForms(position: PositionReference, 
   return {
     position_document_possessive_kk: firstText(
       record(source.document_forms_kk).position_document_possessive_kk,
-      source.position_document_possessive_kk, position?.job_namekk_doc,
-      position?.document_possessive_kk,
-      calculateKazakhPositionPossessive(position?.name_kk).value,
+      source.position_document_possessive_kk,
+      position?.document_form_status === "needs_review" ? "" : position?.job_namekk_doc,
+      position?.document_form_status === "needs_review" ? "" : position?.document_possessive_kk,
     ),
     position_document_nominative_ru: firstText(
       record(source.document_forms_ru).position_document_nominative_ru,
@@ -52,6 +53,6 @@ export function resolvePersonnelOrderDocumentForms(position: PositionReference, 
 export function resolvePersonnelOrderOrgUnitForms(unit: { name?: unknown; name_kk?: unknown; document_genitive_kk?: unknown } | null | undefined) {
   return {
     org_unit_title_ru: firstNonEmpty(unit?.name),
-    org_unit_document_genitive_kk: firstNonEmpty(unit?.document_genitive_kk, calculateKazakhOrgUnitGenitive(unit?.name_kk).value),
+    org_unit_document_genitive_kk: firstNonEmpty(unit?.document_genitive_kk),
   };
 }
