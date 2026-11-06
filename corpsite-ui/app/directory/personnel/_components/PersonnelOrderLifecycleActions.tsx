@@ -54,7 +54,7 @@ export default function PersonnelOrderLifecycleActions({
   const canReady = allowed("ASSISTANT_PERSONNEL_ORDERS_EDIT") && String(order.status).toUpperCase() === "DRAFT";
   const canRegister = allowed("ASSISTANT_PERSONNEL_ORDERS_REGISTER") && canRegisterPersonnelOrder(order.status);
   const canApply = allowed("ASSISTANT_PERSONNEL_ORDERS_APPLY") && canApplyPersonnelOrderAction(order.status, linkedEventCount);
-  const canVoid = !me?.is_sysadmin_assistant && !me?.is_documentation_viewer && canVoidPersonnelOrder(order.status) && !order.is_archived;
+  const canVoid = allowed("ASSISTANT_PERSONNEL_ORDERS_VOID") && canVoidPersonnelOrder(order.status) && !order.is_archived;
   const canArchive =
     me?.has_personnel_orders_archive === true &&
     canArchivePersonnelOrder(order.status, order.is_archived);

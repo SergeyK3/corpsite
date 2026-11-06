@@ -3,6 +3,8 @@
 
 import * as React from "react";
 import { apiFetchJson } from "@/lib/api";
+import { useCurrentUser } from "@/lib/currentUser";
+import ExportExcelButton from "@/components/ExportExcelButton";
 import { formatThrownError, recordStatusLabel } from "@/lib/i18n";
 import type { DictionaryConfig, DictionaryField, DictionaryColumn } from "../_lib/dictionaries.config";
 
@@ -213,6 +215,7 @@ function sanitizePayload(config: DictionaryConfig, form: Record<string, any>, is
 }
 
 export default function DictionaryPageClient({ config }: Props) {
+  const canManage = useCurrentUser()?.is_sysadmin_assistant !== true;
   const [items, setItems] = React.useState<Record<string, any>[]>([]);
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
@@ -447,6 +450,9 @@ export default function DictionaryPageClient({ config }: Props) {
           </div>
 
           <div className="flex items-center gap-2">
+            <ExportExcelButton filename={`${config.title}.xlsx`} disabled={loading || !!error}
+              load={async () => ({ headers: config.columns.map(column => column.title),
+                rows: filteredItems.map(row => config.columns.map(column => formatCellValue(row, column))) })} />
             <button
               type="button"
               onClick={() => {
@@ -459,13 +465,13 @@ export default function DictionaryPageClient({ config }: Props) {
               Обновить
             </button>
 
-            <button
+            {canManage ? <button
               type="button"
               onClick={openCreate}
               className="rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-medium text-white transition hover:bg-blue-500"
             >
               Создать
-            </button>
+            </button> : null}
           </div>
         </div>
 
@@ -489,9 +495,9 @@ export default function DictionaryPageClient({ config }: Props) {
                       {column.title}
                     </th>
                   ))}
-                  <th className="w-[180px] px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-400">
+                  {canManage ? <th className="w-[180px] px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-zinc-600 dark:text-zinc-400">
                     Действия
-                  </th>
+                  </th> : null}
                 </tr>
               </thead>
 
@@ -524,7 +530,7 @@ export default function DictionaryPageClient({ config }: Props) {
                           );
                         })}
 
-                        <td className="px-4 py-3">
+                        {canManage ? <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
                             <button
                               type="button"
@@ -542,7 +548,7 @@ export default function DictionaryPageClient({ config }: Props) {
                               Удалить
                             </button>
                           </div>
-                        </td>
+                        </td> : null}
                       </tr>
                     );
                   })
@@ -553,7 +559,7 @@ export default function DictionaryPageClient({ config }: Props) {
         </div>
       </div>
 
-      {drawerOpen ? (
+      {canManage && drawerOpen ? (
         <>
           <div className="fixed inset-0 z-40 bg-zinc-600/35 dark:bg-black/50" onClick={closeDrawer} />
           <div className="fixed right-0 top-0 z-50 h-full w-full max-w-xl border-l border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 shadow-2xl">

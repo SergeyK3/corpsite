@@ -5,9 +5,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 
 import OrgScopeFilter from "@/components/OrgScopeFilter";
+import ExportExcelButton from "@/components/ExportExcelButton";
+import { useCurrentUser } from "@/lib/currentUser";
 import { readOrgScopeFromSearchParams } from "@/lib/orgScope";
 
-import OrgUnitsTree, { type TreeNode, type TreeAction } from "./_components/OrgUnitsTree";
+import OrgUnitsTree, { nodeSearchText, type TreeNode, type TreeAction } from "./_components/OrgUnitsTree";
 import {
   activateOrgUnit,
   createOrgUnit,
@@ -56,6 +58,7 @@ function flattenNodes(nodes: TreeNode[]): Array<{ id: string; title: string; typ
 }
 
 export default function OrgUnitsPage() {
+  const canManage = useCurrentUser()?.is_sysadmin_assistant !== true;
   const sp = useSearchParams();
   const orgScope = useMemo(() => readOrgScopeFromSearchParams(sp), [sp]);
 
@@ -375,6 +378,22 @@ export default function OrgUnitsPage() {
 
           <div className="mb-3 flex items-center justify-between">
             <div className="text-sm font-medium">Отделения</div>
+            <ExportExcelButton filename="Отделения.xlsx" disabled={isLoading || !!errorText}
+              load={async () => {
+                const query = searchQuery.trim().toLocaleLowerCase("ru");
+                const rows: (string | number | null)[][] = [];
+                function walk(items: TreeNode[], parent: string | null = null) {
+                  for (const node of items) {
+                    if (!query || nodeSearchText(node).toLocaleLowerCase("ru").includes(query)) {
+                      rows.push([node.id, node.code ?? null, node.title, node.type, parent,
+                        inactiveSet.has(String(node.id)) ? "Неактивно" : "Активно"]);
+                    }
+                    walk(node.children ?? [], node.title);
+                  }
+                }
+                walk(nodes);
+                return { headers: ["ID", "Код", "Название", "Тип", "Родитель", "Статус"], rows };
+              }} />
             <button
               type="button"
               className="rounded-lg border px-3 py-1 text-xs hover:bg-gray-50 disabled:opacity-50"
@@ -402,7 +421,7 @@ export default function OrgUnitsPage() {
               selectedId={selectedId}
               inactiveIds={inactiveIds}
               searchQuery={searchQuery}
-              can={{ add: true, rename: true, move: true, deactivate: true }}
+              can={{ add: canManage, rename: canManage, move: canManage, deactivate: canManage }}
               onSelect={handleSelect}
               onToggle={handleToggle}
               onAction={handleTreeAction}

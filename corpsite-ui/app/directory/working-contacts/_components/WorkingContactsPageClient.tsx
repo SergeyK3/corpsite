@@ -5,6 +5,8 @@ import * as React from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import OrgScopeFilter from "@/components/OrgScopeFilter";
 import { apiFetchJson } from "@/lib/api";
+import ExportExcelButton from "@/components/ExportExcelButton";
+import { allExportPages, type ExcelTable } from "@/lib/tableExport";
 import { formatThrownError, recordStatusLabel, uiFieldLabel } from "@/lib/i18n";
 import { ORG_GROUP_ID_PARAM, readOrgScopeFromSearchParams } from "@/lib/orgScope";
 import { WORKING_EMPLOYEE_CARD_TITLE } from "@/lib/personnelCardTerminology";
@@ -240,6 +242,20 @@ export default function WorkingContactsPageClient() {
 
   const [selectedItem, setSelectedItem] = React.useState<WorkingContactItem | null>(null);
   const [drawerOpen, setDrawerOpen] = React.useState<boolean>(false);
+  async function loadExcel(): Promise<ExcelTable> {
+    const rows = await allExportPages(async pagination => {
+      const payload = await apiFetchJson<WorkingContactsResponse>(API_BASE, {query: {
+        q: appliedSearch || undefined, active_only: activeOnly,
+        org_group_id: orgGroupId ?? undefined, org_unit_id: orgUnitId ?? undefined, ...pagination,
+      }});
+      const items = normalizeItems(payload);
+      return {items, total: extractTotal(payload, items)};
+    }, PAGE_SIZE);
+    return {headers: ["ID", "ФИО", "Логин", "Телефон", "Telegram", "Роль", "Отделение", "Статус"],
+      rows: rows.map(row => [row.user_id ?? row.id ?? null, row.full_name ?? null, row.login ?? null,
+        row.phone ?? null, row.telegram_username ?? null, row.role_name_ru ?? row.role_name ?? null,
+        row.unit_name_ru ?? row.unit_name ?? null, recordStatusLabel(row.is_active ? "active" : "inactive")])};
+  }
 
   React.useEffect(() => {
     setOffset(0);
@@ -398,6 +414,7 @@ export default function WorkingContactsPageClient() {
           </div>
 
           <div className="px-4 py-2">
+            <ExportExcelButton load={loadExcel} filename="Рабочие_контакты.xlsx" disabled={loading || !!pageError} />
             {!!pageError && (
               <div className="mb-2 rounded-xl border border-red-200 dark:border-red-900/55 bg-red-50 dark:bg-red-950/35 px-4 py-2 text-sm text-red-800 dark:text-red-200">
                 {pageError}

@@ -91,6 +91,17 @@ export const CONTACTS_DIRECTORY_NAV_ITEM: PersonnelNavItem = {
   matchPrefixes: ["/directory/contacts"],
 };
 
+export function canSeeWorkingContactsNav(me: MeInfo | null | undefined): boolean {
+  return me?.is_system_admin === true || me?.is_privileged === true ||
+    (me?.is_sysadmin_assistant === true && me.has_working_contacts_read === true);
+}
+
+export const WORKING_CONTACTS_NAV_ITEM: PersonnelNavItem = {
+  href: "/directory/working-contacts",
+  title: "Рабочие контакты",
+  matchPrefixes: ["/directory/working-contacts"],
+};
+
 /** HR operational contour sidebar item (ADR-045). */
 export const HR_PROCESSES_NAV_ITEM: PersonnelNavItem = {
   href: HR_PROCESSES_NAV_HREF,
@@ -105,7 +116,8 @@ export const PERSONNEL_JOURNAL_NAV_ITEM: PersonnelNavItem = {
 };
 
 export function canSeePprMigrationNav(me: MeInfo | null | undefined): boolean {
-  return String(me?.role_code ?? "").toUpperCase() === "HR_HEAD";
+  return String(me?.role_code ?? "").toUpperCase() === "HR_HEAD" ||
+    (me?.is_sysadmin_assistant === true && me.ppr_stage_permissions?.["0"] === true);
 }
 
 export const PPR_MIGRATION_NAV_ITEM: PersonnelNavItem = {
@@ -133,6 +145,7 @@ export function buildPersonnelSidebarNavItems(me: MeInfo | null | undefined): Pe
   if (canSeeHrProcessesNav(me)) items.push(HR_PROCESSES_NAV_ITEM);
   else if (canSeePersonnelJournalNav(me)) items.push(PERSONNEL_JOURNAL_NAV_ITEM);
   if (canSeePprMigrationNav(me)) items.push(PPR_MIGRATION_NAV_ITEM);
+  if (canSeeWorkingContactsNav(me)) items.push(WORKING_CONTACTS_NAV_ITEM);
   return items;
 }
 
@@ -199,6 +212,8 @@ export function shouldShowPrimaryAdminNavItem(
   me: MeInfo | null | undefined,
   opts: { isAdmin: boolean; showSysadminNav: boolean; showPersonnelLifecycleNav: boolean; showPersonnelIdentityOperationsNav: boolean },
 ): boolean {
+  if (item.href === WORKING_CONTACTS_NAV_ITEM.href) return canSeeWorkingContactsNav(me);
+  if (item.href === PPR_MIGRATION_NAV_ITEM.href) return canSeePprMigrationNav(me);
   if ((me?.is_documentation_viewer || me?.is_sysadmin_assistant) && ["/admin/regular-tasks/catch-up", "/admin/sync", "/tasks"].includes(item.href)) return false;
   if (item.href === "/admin/system/personnel-lifecycle") return opts.showPersonnelLifecycleNav;
   if (item.href === "/admin/system/personnel-identity/operations") {

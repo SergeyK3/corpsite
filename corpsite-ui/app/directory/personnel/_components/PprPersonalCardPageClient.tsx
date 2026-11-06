@@ -303,7 +303,7 @@ export default function PprPersonalCardPageClient({
     ppr != null &&
     (!ppr.materialization.materialized ||
       ppr.materialization.lifecycle_state === PPR_LIFECYCLE_NOT_MATERIALIZED);
-  const canCorrectCard = currentUser?.has_personnel_card_edit === true || (currentUser?.is_documentation_viewer === true || currentUser?.is_sysadmin_assistant === true);
+  const canCorrectCard = currentUser?.has_personnel_card_edit === true || currentUser?.is_documentation_viewer === true;
   const employmentBiographyEditable = !notMaterialized && canEditPprSections && canCorrectCard && correctionMode;
   const militaryEditable = !notMaterialized && canEditPprSections && canCorrectCard && correctionMode;
   const canManagePhoto = Boolean(canCorrectCard && correctionMode);

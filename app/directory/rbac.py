@@ -130,6 +130,11 @@ def compute_scope(
         resolve_effective_personnel_visibility,
     )
 
+    from app.security.sysadmin_assistant import has_hr_support
+    if has_hr_support(user_ctx):
+        return {"privileged": False, "scope_unit_id": None, "scope_unit_ids": None,
+                "has_personnel_visibility": True, "can_view_tasks_readonly": False}
+
     privileged = _is_privileged(user_ctx)
 
     if privileged:

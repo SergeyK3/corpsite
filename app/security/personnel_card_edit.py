@@ -11,6 +11,9 @@ from app.security.admin_permissions import PERSONNEL_CARD_EDIT, has_admin_permis
 
 def has_personnel_card_edit(user_ctx: dict[str, Any]) -> bool:
     """Only the explicit administrative bypass or the dedicated grant may write."""
+    from app.security.sysadmin_assistant import has_assistant_permission, CARD_EDIT
+    if has_assistant_permission(user_ctx, CARD_EDIT):
+        return True
     if evaluate_admin_access(user_ctx):
         return True
     try:

@@ -15,6 +15,9 @@ from app.security.admin_permissions import (
 
 def evaluate_personnel_admin_access(user_ctx: Dict[str, Any]) -> bool:
     """SYSADMIN/ACCESS_ADMIN (via admin guard) or HR_ENROLLMENT_MANAGER grant."""
+    from app.security.sysadmin_assistant import has_hr_support
+    if has_hr_support(user_ctx):
+        return True
     if evaluate_admin_access(user_ctx):
         return True
     return has_any_personnel_read_permission(int(user_ctx["user_id"]))

@@ -4,6 +4,8 @@ export type MeInfo = {
   is_documentation_viewer?: boolean;
   is_sysadmin_assistant?: boolean;
   assistant_permissions?: Record<string, boolean>;
+  has_working_contacts_read?: boolean;
+  ppr_stage_permissions?: Record<string, boolean>;
   must_change_password?: boolean;
   user_id?: number;
   role_id?: number;

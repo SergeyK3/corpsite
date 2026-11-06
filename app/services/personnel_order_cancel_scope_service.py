@@ -93,6 +93,12 @@ def _fetch_user_unit_id(conn: Connection, user_id: int) -> Optional[int]:
 
 def resolve_actor_scope_unit_ids(actor_user_id: int, *, conn: Optional[Connection] = None) -> Optional[Set[int]]:
     """Return actor org scope unit ids, or None when scope is unlimited."""
+    from app.security.sysadmin_assistant import _action, HR_SUPPORT
+    from app.security.admin_permissions import has_admin_permission
+    action = _action.get()
+    if (action and action["actor_user_id"] == int(actor_user_id)
+            and has_admin_permission(int(actor_user_id), HR_SUPPORT)):
+        return None
     try:
         if conn is not None:
             scope = org_units.compute_user_scope_unit_ids(int(actor_user_id), include_inactive=False)

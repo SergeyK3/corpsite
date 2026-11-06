@@ -1,6 +1,8 @@
 """Canonical PPR event builders for application write path (R5)."""
 from __future__ import annotations
 
+from decimal import Decimal
+
 from collections.abc import Mapping
 from dataclasses import asdict, is_dataclass
 from datetime import date, datetime
@@ -143,6 +145,8 @@ def build_section_event(
         for key in ("metadata", "provenance", "verification_status", "lifecycle_status"):
             raw.pop(key, None)
         def json_value(item: Any) -> Any:
+            if isinstance(item, Decimal):
+                return str(item)
             if isinstance(item, (date, datetime)):
                 return item.isoformat()
             if isinstance(item, dict):

@@ -70,12 +70,14 @@ export default function PprMigrationPageClient() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string>("");
   const [isHrHead, setIsHrHead] = useState(false);
+  const [roleTitle, setRoleTitle] = useState("руководитель кадровой службы");
 
   useEffect(() => { void (async () => {
     try {
       const me: MeInfo = await apiAuthMe();
-      if (String(me.role_code ?? "").toUpperCase() !== "HR_HEAD") { setMessage("Доступ к подготовке списка сотрудников разрешён только руководителю кадровой службы."); return; }
+      if (String(me.role_code ?? "").toUpperCase() !== "HR_HEAD" && !(me.is_sysadmin_assistant && me.ppr_stage_permissions?.["0"])) { setMessage("Недостаточно прав для подготовки списка сотрудников."); return; }
       setIsHrHead(true);
+      if (me.is_sysadmin_assistant) setRoleTitle("помощник системного администратора — кадровая поддержка");
       const response = await apiFetchJson<{ items: Batch[] }>("/personnel/ppr-migration/stage-0/source-batches");
       setBatches(response.items);
       if (response.items[0]) setBatchId(response.items[0].batch_id);
@@ -110,7 +112,7 @@ export default function PprMigrationPageClient() {
   return <main className="space-y-6">
     <header className="flex flex-wrap items-end justify-between gap-3 border-b border-zinc-200 pb-4 dark:border-zinc-800">
       <div><p className="text-sm text-zinc-500">Программа миграции личных карточек</p><h1 className="text-2xl font-semibold">Подготовка списка сотрудников</h1><p className="mt-1 max-w-3xl text-sm text-zinc-600 dark:text-zinc-400">Проверьте контрольный список, исправьте выявленные проблемы и зафиксируйте только допущенных сотрудников. На этом шаге данные личных карточек не переносятся и не изменяются.</p></div>
-      <span className="rounded-full border border-blue-300 bg-blue-50 px-3 py-1 text-sm font-medium text-blue-900 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-100">Роль: руководитель кадровой службы</span>
+      <span className="rounded-full border border-blue-300 bg-blue-50 px-3 py-1 text-sm font-medium text-blue-900 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-100">Роль: {roleTitle}</span>
     </header>
     <section className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
       <label className="block text-sm font-medium" htmlFor="stage0-batch">Контрольный список</label>

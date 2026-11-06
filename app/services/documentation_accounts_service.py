@@ -10,7 +10,7 @@ from app.services.security_audit_service import write_security_event
 
 def create_documentation_account(*, full_name: str, login: str, temporary_password: str,
                                  actor_user_id: int, profile_code: str = "DOCUMENTATION_VIEWER") -> dict:
-    from app.security.sysadmin_assistant import PERMISSIONS
+    from app.security.sysadmin_assistant import PERMISSIONS, WORKING_CONTACTS_READ
     if profile_code not in {"DOCUMENTATION_VIEWER", "SYSADMIN_ASSISTANT"}:
         raise ValueError("Unsupported standalone profile.")
     permissions = ["DOCUMENTATION_READ"] + (sorted(PERMISSIONS) if profile_code == "SYSADMIN_ASSISTANT" else [])
@@ -41,8 +41,8 @@ def create_documentation_account(*, full_name: str, login: str, temporary_passwo
             for code in permissions:
                 permission_id = conn.execute(text("""SELECT access_role_id FROM public.access_roles
                     WHERE code=:code AND is_active=TRUE AND access_level=:level AND level_rank=:rank"""),
-                    {"code": code, "level": "OBSERVER" if code == "DOCUMENTATION_READ" else "MANAGER",
-                     "rank": 10 if code == "DOCUMENTATION_READ" else 20}).scalar_one_or_none()
+                    {"code": code, "level": "OBSERVER" if code in {"DOCUMENTATION_READ", "PPR_MIGRATION_STATUS_READ", WORKING_CONTACTS_READ} else "MANAGER",
+                     "rank": 10 if code in {"DOCUMENTATION_READ", "PPR_MIGRATION_STATUS_READ", WORKING_CONTACTS_READ} else 20}).scalar_one_or_none()
                 if permission_id is None:
                     raise ValueError(f"Permission migration required: {code}")
                 permission_ids.append(permission_id)

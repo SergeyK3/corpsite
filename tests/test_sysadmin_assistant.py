@@ -38,7 +38,9 @@ def test_assistant_is_unlinked_and_does_not_receive_admin_capabilities(assistant
     assert user["is_sysadmin_assistant"] and not user["is_documentation_viewer"]
     assert user["employee_id"] is None
     assert all(user["assistant_permissions"].values())
-    for code in ("has_sysadmin_api", "has_personnel_admin", "has_user_access_admin", "is_privileged", "is_system_admin"):
+    assert user["has_personnel_admin"] and user["has_personnel_card_edit"]
+    assert all(user["ppr_stage_permissions"].values())
+    for code in ("has_sysadmin_api", "has_user_access_admin", "is_privileged", "is_system_admin"):
         assert not user[code]
 
 
@@ -55,8 +57,6 @@ def test_assistant_is_unlinked_and_does_not_receive_admin_capabilities(assistant
     ("POST", "/admin/personnel-order-templates/HIRE/draft/publish"),
     ("POST", "/admin/personnel-order-templates/HIRE/copies"),
     ("DELETE", "/directory/personnel-orders/71/hr-head"),
-    ("POST", "/directory/personnel-orders/71/void"),
-    ("POST", "/directory/personnel-orders/71/acknowledgements/clear"),
     ("PATCH", "/directory/employees/1"), ("DELETE", "/directory/employees/1"),
     ("POST", "/regular-tasks"), ("POST", "/directory/personnel/sync/apply"),
 ])
@@ -73,7 +73,7 @@ def test_all_declared_operations_require_separate_grants_and_allow_standard_guar
         require_personnel_admin_or_403(user)
         assert not reading._reading.get(), "Writes must not use the read-only bypass"
         return {"actor": assistant_policy._action.get()["actor_user_id"]}
-    for (method, path), permission in assistant_policy.OPERATIONS.items():
+    for (method, path), permission in sorted(assistant_policy.OPERATIONS.items(), key=lambda item: item[0][1].count("{")):
         probe.add_api_route(path, endpoint, methods=[method])
     client = TestClient(probe)
     for (method, path), permission in assistant_policy.OPERATIONS.items():
@@ -244,7 +244,7 @@ def test_operation_templates_exist():
 def test_create_assistant_account_has_only_specific_grants(monkeypatch):
     import app.services.documentation_accounts_service as accounts
     conn=MagicMock()
-    conn.execute.return_value.scalar_one_or_none.side_effect=[2,970001,100,101,102,103,104]
+    conn.execute.return_value.scalar_one_or_none.side_effect=[2,970001,*range(100,100+len(assistant_policy.PERMISSIONS)+1)]
     conn.execute.return_value.scalar_one.return_value=970002
     conn.execute.return_value.first.return_value=None
     @contextmanager
@@ -256,7 +256,7 @@ def test_create_assistant_account_has_only_specific_grants(monkeypatch):
         actor_user_id=2,profile_code="SYSADMIN_ASSISTANT")
     assert result["employee_id"] is None and result["must_change_password"]
     grants=[call for call in conn.execute.call_args_list if "INSERT INTO public.access_grants" in str(call.args[0])]
-    assert len(grants)==5
+    assert len(grants)==len(assistant_policy.PERMISSIONS)+1
     metadata=audit.call_args.kwargs["metadata"]
     assert metadata["role_code"]=="SYSADMIN_ASSISTANT"
     assert set(metadata["access_role_codes"])==assistant_policy.PERMISSIONS|{"DOCUMENTATION_READ"}

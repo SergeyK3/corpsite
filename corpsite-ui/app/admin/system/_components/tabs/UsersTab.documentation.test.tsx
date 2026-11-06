@@ -42,7 +42,8 @@ describe("Documentation accounts", () => {
     render(<CurrentUserProvider value={{ role_id: 2 }}><UsersTab /></CurrentUserProvider>);
     fireEvent.click(screen.getByRole("button", { name: "Создать аккаунт для руководства" }));
     fireEvent.change(screen.getByLabelText("Профиль"), { target: { value: "SYSADMIN_ASSISTANT" } });
-    expect(screen.getByText(/применять их к реальным сотрудникам/)).toBeInTheDocument();
+    expect(screen.getByText(/перенос карточек и Excel/)).toBeInTheDocument();
+    expect(screen.getByText(/удаляет только собственные черновики/)).toBeInTheDocument();
     fireEvent.change(screen.getByLabelText("Имя"), { target: { value: "Assistant" } });
     fireEvent.change(screen.getByLabelText("Логин"), { target: { value: "assistant" } });
     fireEvent.change(screen.getByLabelText("Временный пароль"), { target: { value: "Temporary123" } });

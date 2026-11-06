@@ -69,7 +69,7 @@ export default function PersonnelApplicationRegisterDrawer({
 }: Props) {
   const me = useCurrentUser();
   const canEditChecklist =
-    me?.is_system_admin === true || me?.is_privileged === true || String(me?.role_code ?? "").toUpperCase() === "HR_HEAD";
+    me?.has_personnel_admin === true || me?.is_system_admin === true || me?.is_privileged === true || String(me?.role_code ?? "").toUpperCase() === "HR_HEAD";
   const [iin, setIin] = React.useState("");
   const [preview, setPreview] = React.useState<PersonnelApplicationPreviewResponse | null>(null);
   const [previewLoading, setPreviewLoading] = React.useState(false);

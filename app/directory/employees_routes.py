@@ -14,6 +14,7 @@ from app.auth import get_current_user
 from app.db.engine import engine
 from app.security.directory_scope import is_privileged as _is_privileged
 from app.security.admin_permissions import HR_ENROLLMENT_MANAGER_CODE, has_admin_permission
+from app.security.sysadmin_assistant import has_hr_support
 from app.services.employee_hard_delete_service import (
     BULK_HARD_DELETE_MAX,
 )
@@ -735,7 +736,7 @@ def change_employee_assignment_route(
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
     actor_user_id = int(user["user_id"])
-    if not has_admin_permission(actor_user_id, HR_ENROLLMENT_MANAGER_CODE):
+    if not (has_admin_permission(actor_user_id, HR_ENROLLMENT_MANAGER_CODE) or has_hr_support(user)):
         raise HTTPException(
             status_code=403,
             detail=f"Permission required: {HR_ENROLLMENT_MANAGER_CODE}",
@@ -826,6 +827,7 @@ def correct_employee(
         actor_user_id = int(user["user_id"])
         if not (
             _is_privileged(user)
+            or has_hr_support(user)
             or has_admin_permission(actor_user_id, HR_ENROLLMENT_MANAGER_CODE)
         ):
             raise HTTPException(status_code=403, detail="Forbidden.")
@@ -906,6 +908,7 @@ def correct_employee_status(
         allowed = (
             _is_privileged(user)
             or role_code in {"ADMIN", "HR_HEAD"}
+            or has_hr_support(user)
             or has_admin_permission(actor_user_id, HR_ENROLLMENT_MANAGER_CODE)
         )
         if not allowed:
@@ -985,6 +988,7 @@ def list_employee_events(
         actor_user_id = int(user["user_id"])
         if not (
             _is_privileged(user)
+            or has_hr_support(user)
             or has_admin_permission(actor_user_id, HR_ENROLLMENT_MANAGER_CODE)
         ):
             raise HTTPException(status_code=403, detail="Forbidden.")

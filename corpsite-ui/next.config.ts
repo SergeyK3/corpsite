@@ -9,6 +9,8 @@ import type { NextConfig } from "next";
 const projectRoot = path.dirname(fileURLToPath(import.meta.url));
 
 const nextConfig: NextConfig = {
+  // Keep production source type checking strict; Vitest owns test-only files.
+  typescript: { tsconfigPath: "tsconfig.build.json" },
   // Keep client assets and navigation tied to the deployed source revision.
   deploymentId: process.env.NEXT_DEPLOYMENT_ID || execFileSync("git", ["rev-parse", "HEAD"], { cwd: projectRoot, encoding: "utf8" }).trim(),
   // Pin app root so Next.js ignores repo-root package-lock.json (ADR-INFRA-004).

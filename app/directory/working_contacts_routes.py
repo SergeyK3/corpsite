@@ -11,6 +11,7 @@ from app.db.engine import engine
 from app.org_scope.apply import apply_org_scope
 from app.org_scope.types import OrgScopeParams, OrgScopeStrategy
 from app.security.directory_scope import is_privileged as _is_privileged
+from app.security.sysadmin_assistant import has_assistant_permission, WORKING_CONTACTS_READ
 
 router = APIRouter()
 
@@ -130,7 +131,7 @@ def list_working_contacts(
     offset: int = Query(default=0, ge=0),
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    if not _is_privileged(user):
+    if not (_is_privileged(user) or has_assistant_permission(user, WORKING_CONTACTS_READ)):
         raise HTTPException(status_code=403, detail="Forbidden.")
 
     params: Dict[str, Any] = {
@@ -218,7 +219,7 @@ def get_working_contact(
     user_id: int,
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
-    if not _is_privileged(user):
+    if not (_is_privileged(user) or has_assistant_permission(user, WORKING_CONTACTS_READ)):
         raise HTTPException(status_code=403, detail="Forbidden.")
 
     row = _fetch_one(int(user_id))

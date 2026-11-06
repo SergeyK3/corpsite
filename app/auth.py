@@ -319,6 +319,22 @@ def _enrich_user_context(user: Dict[str, Any]) -> Dict[str, Any]:
         out["assistant_permissions"] = {
             code: has_admin_permission(int(out["user_id"]), code) for code in PERMISSIONS
         } if is_assistant(out) else {}
+        if is_assistant(out):
+            from app.security.sysadmin_assistant import HR_SUPPORT, CARD_EDIT, STAGE_PERMISSIONS
+            granted = out["assistant_permissions"]
+            out.update({
+                "has_personnel_admin": granted.get(HR_SUPPORT, False),
+                "has_hr_governance": False,
+                "has_personnel_card_edit": granted.get(CARD_EDIT, False),
+                "has_hr_enrollment_manager": granted.get(HR_SUPPORT, False),
+                "has_control_list_export": granted.get("CONTROL_LIST_EXPORT", False),
+                "has_ppr_migration_status_read": granted.get("PPR_MIGRATION_STATUS_READ", False),
+                "has_personnel_orders_archive": granted.get("PERSONNEL_ORDERS_ARCHIVE", False),
+                "has_personnel_orders_restore": granted.get("PERSONNEL_ORDERS_RESTORE", False),
+                "has_working_contacts_read": granted.get("ASSISTANT_WORKING_CONTACTS_READ", False),
+                "ppr_stage_permissions": {str(stage): granted.get(code, False)
+                                          for stage, code in STAGE_PERMISSIONS.items()},
+            })
         return out
     out["is_privileged"] = is_privileged(out)
     out["is_system_admin"] = int(out.get("role_id") or 0) == 2

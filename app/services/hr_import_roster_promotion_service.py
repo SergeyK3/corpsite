@@ -160,6 +160,13 @@ def _get_or_create_position_id(conn: Connection, position_name: str) -> int:
     if row:
         return int(row["position_id"])
 
+    # HR support may use existing directory values, never create a position
+    # indirectly through roster promotion. Other operators retain prior behavior.
+    from app.security.sysadmin_assistant import _action
+    if _action.get() is not None:
+        from fastapi import HTTPException
+        raise HTTPException(403, "SYSADMIN_ASSISTANT cannot create directory positions.")
+
     cols = {
         r[0]
         for r in conn.execute(
