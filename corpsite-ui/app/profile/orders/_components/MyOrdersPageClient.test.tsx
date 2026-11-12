@@ -23,12 +23,12 @@ vi.mock("@/components/PositionCabinetSectionShell", () => ({
 const kkOrder = {
   order_id: 1, order_number: "125-к", order_date: "2026-07-10",
   title: "Бала күтіміне байланысты демалыстан жұмысқа шығу туралы",
-  item_text: "Қазақша жеке тармақ", confirmation_status: "UNCONFIRMED" as const,
+  items: [{ item_number: 1, item_text: "Қазақша жеке тармақ" }], confirmation_status: "UNCONFIRMED" as const,
 };
 const ruOrder = {
   ...kkOrder,
   title: "О выходе на работу из отпуска по уходу за ребёнком",
-  item_text: "Русский личный пункт",
+  items: [{ item_number: 1, item_text: "Русский личный пункт" }],
 };
 
 beforeEach(() => { search = ""; });
@@ -37,7 +37,7 @@ afterEach(() => { cleanup(); list.mockReset(); detail.mockReset(); replace.mockR
 describe("MyOrdersPageClient", () => {
   it("fully localizes the list and detail chrome in Kazakh", async () => {
     list.mockResolvedValue({ status: "READY", orders: [kkOrder] });
-    detail.mockResolvedValue({ ...kkOrder, preamble: null, basis: null, warning: null });
+    detail.mockResolvedValue({ ...kkOrder, warning: null });
     render(<MyOrdersPageClient />);
 
     expect(await screen.findByRole("heading", { name: "Менің бұйрықтарым" })).toBeInTheDocument();
@@ -92,11 +92,11 @@ describe("MyOrdersPageClient", () => {
   it("uses the selected language for detail and close", async () => {
     search = "lang=ru";
     list.mockResolvedValue({ status: "READY", orders: [ruOrder] });
-    detail.mockResolvedValue({ ...ruOrder, preamble: "Русская преамбула", basis: "Русское основание", warning: "Предупреждение" });
+    detail.mockResolvedValue({ ...ruOrder, warning: "Предупреждение" });
     render(<MyOrdersPageClient />);
     fireEvent.click(await screen.findByRole("button", { name: "Открыть" }));
-    expect(await screen.findByText("Русская преамбула")).toBeInTheDocument();
-    expect(screen.getByText("Русское основание")).toBeInTheDocument();
+    expect(await screen.findByTestId("my-order-item-1")).toHaveTextContent("Русский личный пункт");
+    expect(screen.queryByText("Русская преамбула")).not.toBeInTheDocument();
     expect(detail).toHaveBeenCalledWith(1, "ru");
     fireEvent.click(screen.getByRole("button", { name: "Закрыть" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -105,30 +105,31 @@ describe("MyOrdersPageClient", () => {
     expect(screen.getByRole("button", { name: "Қазақша" })).toHaveClass("bg-white", "text-blue-700");
   });
 
-  it("keeps the corrected body identical in list/detail and shows tenure only in detail", async () => {
+  it("shows only the employee's items in list/detail without full-document links", async () => {
     search = "lang=ru";
     const body = "Разрешить сотруднику Иванова Алия Сериковна, должность: руководитель отдела кадров (отдел кадров) приступить к работе в связи с выходом из отпуска по уходу за ребёнком с 5 августа 2026 года.";
-    list.mockResolvedValue({ status: "READY", orders: [{ ...ruOrder, item_text: body }] });
-    detail.mockResolvedValue({ ...ruOrder, item_text: body, preamble: "В соответствии с Трудовым кодексом Республики Казахстан\nПРИКАЗЫВАЮ:", basis: "Основание: —", warning: null });
+    const items = [{ item_number: 1, item_text: body }, { item_number: 3, item_text: "Второй личный пункт" }];
+    list.mockResolvedValue({ status: "READY", orders: [{ ...ruOrder, items }] });
+    detail.mockResolvedValue({ ...ruOrder, items, warning: null });
     render(<MyOrdersPageClient />);
     expect(await screen.findByText(body)).toBeInTheDocument();
     expect(screen.queryByText("Стаж работы ещё не определён.")).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Открыть" }));
     expect((await screen.findByTestId("my-order-document")).textContent).toContain(body);
-    expect(screen.getByTestId("my-order-tenure-fallback")).toHaveTextContent("Стаж работы ещё не определён.");
-    expect(screen.getByLabelText("Преамбула приказа")).toHaveTextContent("ПРИКАЗЫВАЮ:");
+    expect(screen.getByTestId("my-order-item-3")).toHaveTextContent("Второй личный пункт");
+    expect(screen.getByTestId("my-order-document").querySelector("a")).toBeNull();
     for (const forbidden of ["Исполнитель", "С приказом ознакомлен", "Бұйрықпен таныстым", "Распечатать"]) {
       expect(screen.queryByText(forbidden, { exact: false })).not.toBeInTheDocument();
     }
   });
 
   it("does not silently substitute Russian content when Kazakh blocks are absent", async () => {
-    list.mockResolvedValue({ status: "READY", orders: [{ ...kkOrder, item_text: null }] });
-    detail.mockResolvedValue({ ...kkOrder, item_text: null, preamble: null, basis: null, warning: null });
+    list.mockResolvedValue({ status: "READY", orders: [{ ...kkOrder, items: [{ item_number: 1, item_text: null }] }] });
+    detail.mockResolvedValue({ ...kkOrder, items: [{ item_number: 1, item_text: null }], warning: null });
     render(<MyOrdersPageClient />);
     fireEvent.click(await screen.findByRole("button", { name: "Ашу" }));
     expect(await screen.findByText("Бұйрық тармағының мәтіні электрондық нұсқада жоқ")).toBeInTheDocument();
-    expect(screen.getByText("Бұйрықтың кіріспе мәтіні электрондық нұсқада жоқ")).toBeInTheDocument();
+    expect(screen.queryByText("Бұйрықтың кіріспе мәтіні электрондық нұсқада жоқ")).not.toBeInTheDocument();
     expect(screen.queryByText("RETURN_FROM_CHILDCARE_LEAVE")).not.toBeInTheDocument();
     expect(screen.queryByText("COMPOSITE")).not.toBeInTheDocument();
   });

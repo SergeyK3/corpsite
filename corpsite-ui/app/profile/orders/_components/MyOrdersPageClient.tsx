@@ -11,7 +11,7 @@ type UiText = {
   confirmed: string; unconfirmed: string;
   warning: string; watermark: string; loading: string; loadError: string; openError: string;
   empty: string; noDate: string; noNumber: string; language: string;
-  dialog: string; preamble: string; basis: string;
+  dialog: string;
 };
 
 const ui: Record<OrderLocale, UiText> = {
@@ -31,7 +31,6 @@ const ui: Record<OrderLocale, UiText> = {
     empty: "Жеке карточкаңызға қатысты бұйрықтар әзірге жоқ.",
     noDate: "Күні көрсетілмеген", noNumber: "көрсетілмеген",
     language: "Бұйрық мазмұнының тілі", dialog: "Бұйрықты қарау",
-    preamble: "Бұйрық преамбуласы", basis: "Бұйрықтың негіздемесі",
   },
   ru: {
     title: "Мои приказы",
@@ -49,13 +48,12 @@ const ui: Record<OrderLocale, UiText> = {
     empty: "Приказов, связанных с вашей личной карточкой, пока нет.",
     noDate: "Дата не указана", noNumber: "не указан",
     language: "Язык содержания приказа", dialog: "Просмотр приказа",
-    preamble: "Преамбула приказа", basis: "Основание приказа",
   },
 };
 
-const missingContent: Record<OrderLocale, { item: string; preamble: string; basis: string }> = {
-  kk: { item: "Бұйрық тармағының мәтіні электрондық нұсқада жоқ", preamble: "Бұйрықтың кіріспе мәтіні электрондық нұсқада жоқ", basis: "Негіздеме электрондық нұсқада жоқ" },
-  ru: { item: "Текст пункта приказа отсутствует в электронной версии", preamble: "Преамбула приказа отсутствует в электронной версии", basis: "Основание отсутствует в электронной версии" },
+const missingContent: Record<OrderLocale, string> = {
+  kk: "Бұйрық тармағының мәтіні электрондық нұсқада жоқ",
+  ru: "Текст пункта приказа отсутствует в электронной версии",
 };
 
 const normalizeLocale = (value: string | null): OrderLocale => value === "ru" ? "ru" : "kk";
@@ -93,7 +91,7 @@ export default function MyOrdersPageClient() {
 
   useEffect(() => {
     let alive = true;
-    setLoading(true);
+    queueMicrotask(() => { if (alive) setLoading(true); });
     getMyOrders(year || undefined, confirmation, locale)
       .then((response) => { if (alive) setOrders(response.orders); })
       .catch(() => alive && setError(ui[locale].loadError))
@@ -113,7 +111,7 @@ export default function MyOrdersPageClient() {
     try { setSelected(await getMyOrder(id, locale)); }
     catch { setError(ui[locale].openError); }
   };
-  const draft = selected?.confirmation_status === "UNCONFIRMED";
+  const unconfirmed = selected?.confirmation_status === "UNCONFIRMED";
 
   return <PositionCabinetSectionShell title={text.title}>
     <p className="mb-5 text-zinc-600 dark:text-zinc-400">{text.description}</p>
@@ -123,7 +121,7 @@ export default function MyOrdersPageClient() {
       <fieldset className="inline-flex overflow-hidden rounded-md border border-blue-600" aria-label={text.language} data-testid="my-orders-language-switcher"><legend className="sr-only">{text.language}</legend><button type="button" className={`px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 ${locale === "kk" ? "bg-blue-600 text-white" : "bg-white text-blue-700 hover:bg-blue-50 dark:bg-zinc-950 dark:text-blue-300 dark:hover:bg-blue-950"}`} aria-pressed={locale === "kk"} onClick={() => setLocale("kk")}>Қазақша</button><button type="button" className={`border-l border-blue-600 px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2 ${locale === "ru" ? "bg-blue-600 text-white" : "bg-white text-blue-700 hover:bg-blue-50 dark:bg-zinc-950 dark:text-blue-300 dark:hover:bg-blue-950"}`} aria-pressed={locale === "ru"} onClick={() => setLocale("ru")}>Русский</button></fieldset>
     </div>
     {error && <p role="alert">{error}</p>}
-    {loading ? <p>{text.loading}</p> : orders.length === 0 ? <div data-testid="my-orders-empty" className="rounded-xl border p-5">{text.empty}</div> : <div className="space-y-3" data-testid="my-orders-list">{orders.map((order) => <article key={order.order_id} className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-semibold">{order.title}</p><p>{dateText(order.order_date)} · № {order.order_number || text.noNumber}</p><p className="mt-2 text-zinc-600 dark:text-zinc-400">{compactItemText(order.item_text, locale) || missingContent[locale].item}</p><p className={order.confirmation_status === "CONFIRMED" ? "mt-2 text-green-700" : "mt-2 text-amber-700"}>{statusText(order.confirmation_status)}</p></div><button className="rounded-md bg-blue-600 px-3 py-2 font-medium text-white transition-colors hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2" onClick={() => open(order.order_id)}>{text.open}</button></div></article>)}</div>}
-    {selected && <div className="fixed inset-0 z-50 overflow-auto bg-black/40 p-4" role="dialog" aria-modal="true" aria-label={text.dialog}><article className="relative my-8 mx-auto max-w-3xl bg-white p-6 text-zinc-900 shadow dark:bg-zinc-950 dark:text-zinc-100" data-testid="my-order-document"><div className="mb-5 flex justify-end gap-2"><button className="rounded border px-3 py-2" onClick={() => setSelected(null)}>{text.close}</button></div>{draft && <><div className="mb-4 rounded border border-amber-500 bg-amber-50 p-3 text-amber-900">{selected.warning || text.warning}</div><div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rotate-[-28deg] text-4xl font-bold text-red-600/25" data-testid="my-order-unconfirmed-watermark">{text.watermark}</div></>}<p className="text-sm">{dateText(selected.order_date)} · № {selected.order_number || text.noNumber}</p><h2 className="mt-2 text-xl font-bold">{selected.title}</h2><p className={draft ? "mt-3 text-amber-700" : "mt-3 text-green-700"}>{statusText(selected.confirmation_status)}</p><section className="mt-6 whitespace-pre-wrap" aria-label={text.preamble}>{selected.preamble || missingContent[locale].preamble}</section><p className="mt-4 whitespace-pre-wrap">{selected.item_text || missingContent[locale].item}</p><p className="mt-4" data-testid="my-order-tenure-fallback">{selected.tenure_text || tenureFallback[locale]}</p><section className="mt-4 whitespace-pre-wrap" aria-label={text.basis}>{selected.basis || missingContent[locale].basis}</section></article></div>}
+    {loading ? <p>{text.loading}</p> : orders.length === 0 ? <div data-testid="my-orders-empty" className="rounded-xl border p-5">{text.empty}</div> : <div className="space-y-3" data-testid="my-orders-list">{orders.map((order) => <article key={order.order_id} className="rounded-xl border border-zinc-200 p-4 dark:border-zinc-800"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-semibold">{order.title}</p><p>{dateText(order.order_date)} · № {order.order_number || text.noNumber}</p>{order.items.map((item) => <p key={item.item_number} className="mt-2 whitespace-pre-wrap text-zinc-600 dark:text-zinc-400">{compactItemText(item.item_text, locale) || missingContent[locale]}</p>)}<p className={order.confirmation_status === "CONFIRMED" ? "mt-2 text-green-700" : "mt-2 text-amber-700"}>{statusText(order.confirmation_status)}</p></div><button className="rounded-md bg-blue-600 px-3 py-2 font-medium text-white transition-colors hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-600 focus-visible:ring-offset-2" onClick={() => open(order.order_id)}>{text.open}</button></div></article>)}</div>}
+    {selected && <div className="fixed inset-0 z-50 overflow-auto bg-black/40 p-4" role="dialog" aria-modal="true" aria-label={text.dialog}><article className="relative my-8 mx-auto max-w-3xl bg-white p-6 text-zinc-900 shadow dark:bg-zinc-950 dark:text-zinc-100" data-testid="my-order-document"><div className="mb-5 flex justify-end gap-2"><button className="rounded border px-3 py-2" onClick={() => setSelected(null)}>{text.close}</button></div>{unconfirmed && <><div className="mb-4 rounded border border-amber-500 bg-amber-50 p-3 text-amber-900">{selected.warning || text.warning}</div><div className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rotate-[-28deg] text-4xl font-bold text-red-600/25" data-testid="my-order-unconfirmed-watermark">{text.watermark}</div></>}<p className="text-sm">{dateText(selected.order_date)} · № {selected.order_number || text.noNumber}</p><h2 className="mt-2 text-xl font-bold">{selected.title}</h2><p className={unconfirmed ? "mt-3 text-amber-700" : "mt-3 text-green-700"}>{statusText(selected.confirmation_status)}</p><div className="mt-6 space-y-4">{selected.items.map((item) => <p key={item.item_number} className="whitespace-pre-wrap" data-testid={`my-order-item-${item.item_number}`}>{item.item_text || missingContent[locale]}</p>)}</div></article></div>}
   </PositionCabinetSectionShell>;
 }

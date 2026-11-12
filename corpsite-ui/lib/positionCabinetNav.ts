@@ -26,7 +26,7 @@ export const POSITION_CABINET_TAB_LABELS: Record<PositionCabinetSection, string>
   tasks: "Мои задачи",
   dashboards: "Дашборды",
   personal_card: "Личная карточка",
-  orders: "Приказы",
+  orders: "Кадровые приказы",
 };
 
 export function getPositionCabinetTabLabel(section: PositionCabinetSection): string {
