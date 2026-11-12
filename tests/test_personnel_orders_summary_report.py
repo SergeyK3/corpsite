@@ -215,14 +215,35 @@ def test_details_are_sorted_by_date_desc_then_number_then_stable_id_with_null_da
     assert [order["order_id"] for order in report["categories"][0]["orders"]] == [1, 2, 3, 4]
 
 
-def test_query_excludes_voided_archived_orders_and_voided_items():
+def test_query_excludes_archived_orders_and_inactive_items_but_includes_voided_orders():
     engine = _Engine([])
     build_personnel_orders_summary(engine)
 
     assert "po.archived_at IS NULL" in engine.connection.sql
-    assert "po.status <> :voided_status" in engine.connection.sql
-    assert engine.connection.params["voided_status"] == "VOIDED"
+    assert "po.status <> :voided_status" not in engine.connection.sql
     assert engine.connection.sql.count("item_status = :active_item_status") == 3
+
+
+def test_status_summary_counts_unique_composite_and_voided_orders_with_category_breakdown():
+    engine = _Engine([
+        _row(1, "HIRE", number="1", status="DRAFT"),
+        _row(2, "COMPOSITE", item_types=["HIRE", "HIRE"], status="READY_FOR_SIGNATURE"),
+        _row(2, "COMPOSITE", item_types=["HIRE", "HIRE"], status="READY_FOR_SIGNATURE"),
+        _row(3, "TRANSFER", number="3", order_date=date(2026, 1, 3), status="SIGNED"),
+        _row(4, "HIRE", number="4", status="VOIDED"),
+    ])
+    report = build_personnel_orders_summary(engine)
+
+    assert [row["code"] for row in report["statuses"]] == [
+        "DRAFT", "READY_FOR_SIGNATURE", "SIGNED", "REGISTERED", "VOIDED",
+    ]
+    assert [row["count"] for row in report["statuses"]] == [1, 1, 1, 0, 1]
+    assert [row["incomplete_count"] for row in report["statuses"]] == [1, 1, 0, 0, 1]
+    assert report["statuses"][1]["by_category"]["hire"] == {"count": 1, "incomplete_count": 1}
+    assert report["statuses"][4]["by_category"]["hire"]["count"] == 1
+    assert [row["count"] for row in report["categories"]] == [2, 0, 1, 0, 0]
+    assert report["total_count"] == 3  # Existing category summary excludes voided orders.
+    assert "LIMIT" not in engine.connection.sql  # The report has no journal pagination.
 
 
 def test_access_guard_runs_before_summary_service(monkeypatch):

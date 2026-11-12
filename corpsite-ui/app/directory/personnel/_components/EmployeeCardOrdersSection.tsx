@@ -30,7 +30,7 @@ export default function EmployeeCardOrdersSection({ employeeId }: Props) {
   const employeeNumericId = Number(employeeId);
   const ordersHref = buildPersonnelOrdersHref(
     Number.isFinite(employeeNumericId) && employeeNumericId > 0
-      ? { employee_id: employeeNumericId }
+      ? { employee_id: employeeNumericId, record_quality: "ALL" }
       : {},
   );
   const createOrderHref = `${ordersHref}${ordersHref.includes("?") ? "&" : "?"}create=1`;
@@ -46,7 +46,7 @@ export default function EmployeeCardOrdersSection({ employeeId }: Props) {
     setLoading(true);
     setError(null);
 
-    void listPersonnelOrders({ employee_id: employeeNumericId, limit: 10, offset: 0 })
+    void listPersonnelOrders({ employee_id: employeeNumericId, record_quality: "ALL", limit: 10, offset: 0 })
       .then((body) => {
         if (cancelled) return;
         setItems(Array.isArray(body.items) ? body.items : []);
@@ -101,6 +101,7 @@ export default function EmployeeCardOrdersSection({ employeeId }: Props) {
             const href = buildPersonnelOrdersHref({
               order_id: row.order_id,
               employee_id: employeeNumericId,
+              record_quality: "ALL",
             });
             return (
               <li key={row.order_id}>

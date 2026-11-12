@@ -1,5 +1,6 @@
 """Typed, document-only correction of personnel-order header requisites."""
 from __future__ import annotations
+import json
 import re
 from datetime import date
 from typing import Any, Optional
@@ -51,7 +52,14 @@ def patch_document_header(*, order_id:int, expected_document_revision:int, order
         if before==after:
             return {"header":after,"resulting_document_revision":int(order["document_revision"]),"document_review_state":get_document_review(order_id)["state"],"duplicate":duplicate,"audit_event_ids":[],"no_op":True}
         next_revision=int(order["document_revision"])+1
-        conn.execute(text("UPDATE personnel_orders SET order_number=:number,order_date=:date,source_title=:title,source_title_locale=:locale,document_revision=:rev WHERE order_id=:id"),{"number":order_number,"date":order_date,"title":source_title,"locale":source_title_locale,"rev":next_revision,"id":order_id})
+        storage = dict(order["storage_json"] or {})
+        previous_number = str(order["order_number"] or "").strip()
+        legacy_import = previous_number.upper().startswith(("CSV-PILOT-", "PERSONNEL-IMPORT-"))
+        if legacy_import and _number(previous_number) != _number(order_number):
+            storage.setdefault("import_source_order_number", previous_number)
+            storage.setdefault("import_source_id", f"legacy-personnel-import:{order_id}")
+            storage.update(technical_record=True, record_quality="TECHNICAL_RECORD")
+        conn.execute(text("UPDATE personnel_orders SET order_number=:number,order_date=:date,source_title=:title,source_title_locale=:locale,storage_json=CAST(:storage AS jsonb),document_revision=:rev WHERE order_id=:id"),{"number":order_number,"date":order_date,"title":source_title,"locale":source_title_locale,"storage":json.dumps(storage),"rev":next_revision,"id":order_id})
         ids=[append_personnel_order_lifecycle_audit(conn,order_id=order_id,action=LIFECYCLE_AUDIT_ACTION_HEADER_UPDATED,previous_status=order["status"],new_status=order["status"],previous_void_kind=None,new_void_kind=None,actor_user_id=actor_user_id,reason_code=reason_code,reason_text=reason_text,metadata_json={"before":before,"after":after,"expected_document_revision":expected_document_revision,"resulting_document_revision":next_revision,"duplicate_preview":duplicate})]
         latest=conn.execute(text("SELECT action FROM personnel_order_lifecycle_audit WHERE order_id=:id AND action IN ('DOCUMENT_CONFIRMED','DOCUMENT_REOPENED') ORDER BY created_at DESC,id DESC LIMIT 1"),{"id":order_id}).scalar()
         state="CONFIRMED" if latest=="DOCUMENT_CONFIRMED" else "NEEDS_REVIEW"

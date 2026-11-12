@@ -81,6 +81,13 @@ export type PersonnelOrdersSummaryCategory = {
   orders: PersonnelOrdersSummaryOrder[];
 };
 
+export type PersonnelOrdersSummaryStatus = {
+  code: string;
+  count: number;
+  incomplete_count: number;
+  by_category: Record<string, { count: number; incomplete_count: number }>;
+};
+
 export type PersonnelOrdersSummaryReport = {
   report_code: "personnel_orders_summary";
   report_name: string;
@@ -88,6 +95,7 @@ export type PersonnelOrdersSummaryReport = {
   filters: { date_from: string | null; date_to: string | null };
   period_note: string | null;
   categories: PersonnelOrdersSummaryCategory[];
+  statuses: PersonnelOrdersSummaryStatus[];
   total_count: number;
   total_incomplete_count: number;
 };

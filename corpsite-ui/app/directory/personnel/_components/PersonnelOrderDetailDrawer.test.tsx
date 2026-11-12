@@ -516,6 +516,70 @@ describe("PersonnelOrderDetailDrawer document tab", () => {
     expect(screen.queryByRole("tab", { name: "Реквизиты" })).not.toBeInTheDocument();
   });
 
+  it.each(["SIGNED", "REGISTERED"] as const)("offers the imported order requisites correction for %s", async (status) => {
+    const before: PersonnelOrderDetailResponse = {
+      ...detail,
+      order: { ...detail.order, status, order_number: "CSV-PILOT-47", storage_json: {} },
+    };
+    const after: PersonnelOrderDetailResponse = {
+      ...before,
+      order: { ...before.order, order_number: "DEMO-47", document_revision: 2,
+        storage_json: { import_source_order_number: "CSV-PILOT-47", technical_record: true, record_quality: "TECHNICAL_RECORD" } },
+    };
+    vi.mocked(getPersonnelOrder).mockResolvedValue(before);
+    vi.mocked(patchPersonnelOrderDocumentHeader).mockImplementationOnce(async () => {
+      vi.mocked(getPersonnelOrder).mockResolvedValue(after);
+      return { no_op: false, resulting_document_revision: 2 };
+    });
+    const onChanged = vi.fn();
+    render(<PersonnelOrderDetailDrawer orderId={42} open initialTab="data" onClose={vi.fn()} onChanged={onChanged} />);
+    const requisites = await screen.findByTestId("personnel-order-requisites");
+    fireEvent.change(within(requisites).getByLabelText("Номер приказа"), { target: { value: "DEMO-47" } });
+    fireEvent.change(within(requisites).getByLabelText("Причина исправления"), { target: { value: "ORIGINAL_VERIFIED" } });
+    fireEvent.change(within(requisites).getByLabelText("Пояснение"), { target: { value: "Checked synthetic original" } });
+    fireEvent.click(within(requisites).getByRole("button", { name: "Сохранить реквизиты" }));
+    await waitFor(() => expect(patchPersonnelOrderDocumentHeader).toHaveBeenCalledWith(42, expect.objectContaining({
+      order_number: "DEMO-47", reason_code: "ORIGINAL_VERIFIED", reason_text: "Checked synthetic original",
+    })));
+    await waitFor(() => expect(onChanged).toHaveBeenCalledWith(expect.objectContaining({ order: expect.objectContaining({ order_number: "DEMO-47" }) })));
+    expect(within(requisites).getByRole("alert")).toHaveTextContent("Реквизиты сохранены.");
+  });
+
+  it("does not claim success when the signed order is missing a correction reason", async () => {
+    vi.mocked(getPersonnelOrder).mockResolvedValue({ ...detail, order: { ...detail.order, status: "SIGNED", order_number: "CSV-PILOT-47", storage_json: {} } });
+    render(<PersonnelOrderDetailDrawer orderId={42} open initialTab="data" onClose={vi.fn()} />);
+    const requisites = await screen.findByTestId("personnel-order-requisites");
+    fireEvent.change(within(requisites).getByLabelText("Номер приказа"), { target: { value: "DEMO-47" } });
+    fireEvent.click(within(requisites).getByRole("button", { name: "Сохранить реквизиты" }));
+    expect(within(requisites).getByRole("alert")).toHaveTextContent("укажите причину и пояснение");
+    expect(patchPersonnelOrderDocumentHeader).not.toHaveBeenCalled();
+  });
+
+  it("names the 80-character reason limit before sending a request", async () => {
+    vi.mocked(getPersonnelOrder).mockResolvedValue({ ...detail, order: { ...detail.order, status: "SIGNED", order_number: "CSV-PILOT-47", storage_json: {} } });
+    render(<PersonnelOrderDetailDrawer orderId={42} open initialTab="data" onClose={vi.fn()} />);
+    const requisites = await screen.findByTestId("personnel-order-requisites");
+    fireEvent.change(within(requisites).getByLabelText("Номер приказа"), { target: { value: "935 тест" } });
+    fireEvent.change(within(requisites).getByLabelText("Причина исправления"), { target: { value: "X".repeat(81) } });
+    fireEvent.change(within(requisites).getByLabelText("Пояснение"), { target: { value: "Synthetic details" } });
+    fireEvent.click(within(requisites).getByRole("button", { name: "Сохранить реквизиты" }));
+    expect(within(requisites).getByRole("alert")).toHaveTextContent("Причина исправления: не более 80 символов");
+    expect(patchPersonnelOrderDocumentHeader).not.toHaveBeenCalled();
+  });
+
+  it("shows the server rejection instead of success", async () => {
+    vi.mocked(getPersonnelOrder).mockResolvedValue({ ...detail, order: { ...detail.order, status: "SIGNED", order_number: "CSV-PILOT-47", storage_json: {} } });
+    vi.mocked(patchPersonnelOrderDocumentHeader).mockRejectedValueOnce(new Error("DOCUMENT_REVISION_CONFLICT"));
+    render(<PersonnelOrderDetailDrawer orderId={42} open initialTab="data" onClose={vi.fn()} />);
+    const requisites = await screen.findByTestId("personnel-order-requisites");
+    fireEvent.change(within(requisites).getByLabelText("Номер приказа"), { target: { value: "DEMO-47" } });
+    fireEvent.change(within(requisites).getByLabelText("Причина исправления"), { target: { value: "CHECK" } });
+    fireEvent.change(within(requisites).getByLabelText("Пояснение"), { target: { value: "Synthetic check" } });
+    fireEvent.click(within(requisites).getByRole("button", { name: "Сохранить реквизиты" }));
+    await waitFor(() => expect(within(requisites).getByRole("alert")).toHaveTextContent("Приказ изменился после открытия карточки"));
+    expect(within(requisites).getByRole("alert")).not.toHaveTextContent("Реквизиты сохранены.");
+  });
+
   it("keeps the current editorial title separate from absent journal/import provenance", async () => {
     const editorial = templateEditorial("new");
     editorial.order_blocks = editorial.order_blocks.map((block) => block.block_type === "title" && block.locale === "kk"

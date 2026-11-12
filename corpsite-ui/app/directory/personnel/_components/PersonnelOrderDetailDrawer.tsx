@@ -26,6 +26,8 @@ import {
   isWritablePersonnelOrder,
   isPersonnelOrderApplied,
   mapPersonnelOrdersApiError,
+  PersonnelOrderDuplicateError,
+  personnelOrderDuplicateMessage,
   personnelOrderTypeLabel,
   personnelOrderSourceModeLabel,
   type PersonnelOrderDetailResponse,
@@ -53,6 +55,7 @@ import PersonnelOrderArchivedBadge from "./PersonnelOrderArchivedBadge";
 import PersonnelOrderEditorialTextEditor from "./PersonnelOrderEditorialTextEditor";
 import PersonnelOrderTemplateApplication from "./PersonnelOrderTemplateApplication";
 import PersonnelOrderHeaderEditor from "./PersonnelOrderHeaderEditor";
+import { isImportedPersonnelOrder } from "../_lib/personnelOrderImport";
 import PersonnelOrderItemEditor from "./PersonnelOrderItemEditor";
 import PersonnelOrderLifecycleActions from "./PersonnelOrderLifecycleActions";
 import PersonnelOrderStatusBadge from "./PersonnelOrderStatusBadge";
@@ -175,33 +178,49 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
   );
 }
 
-function PersonnelOrderDocumentHeaderForm({ detail, onSaved }: { detail: PersonnelOrderDetailResponse; onSaved: () => Promise<void> }) {
+function PersonnelOrderDocumentHeaderForm({ detail, onSaved }: { detail: PersonnelOrderDetailResponse; onSaved: (expectedNumber: string) => Promise<void> }) {
   const order = detail.order;
   const [number, setNumber] = React.useState(order.order_number || "");
   const [orderDate, setOrderDate] = React.useState(order.order_date || "");
-  const [title, setTitle] = React.useState(journalOrImportSourceTitle(order.storage_json).title);
-  const [locale, setLocaleState] = React.useState<SourceTitleLocale>(() => sourceTitleLocale(order.source_title_locale));
-  const setLocale = (value: unknown) => setLocaleState(sourceTitleLocale(value));
+  const [title, setTitle] = React.useState(order.source_title || "");
+  const [locale, setLocaleState] = React.useState<SourceTitleLocale | "">(() => order.source_title_locale || "");
+  const setLocale = (value: unknown) => setLocaleState(value ? sourceTitleLocale(value) : "");
   const [reasonCode, setReasonCode] = React.useState(""); const [reasonText, setReasonText] = React.useState("");
   const [message, setMessage] = React.useState<string | null>(null); const registered = ["REGISTERED", "SIGNED"].includes(order.status);
+  const [saving, setSaving] = React.useState(false);
   async function save() {
-    if (registered && (!reasonCode.trim() || !reasonText.trim())) { setMessage("Для зарегистрированного приказа укажите причину и пояснение."); return; }
+    if (saving) return;
+    setMessage(null);
+    const requestedNumber = number.trim();
+    if (!requestedNumber) { setMessage("Укажите номер приказа."); return; }
+    if (registered && (!reasonCode.trim() || !reasonText.trim())) { setMessage("Для подписанного или зарегистрированного приказа укажите причину и пояснение."); return; }
+    if (Array.from(requestedNumber).length > 200) { setMessage("Номер приказа: не более 200 символов."); return; }
+    if (Array.from(title).length > 2000) { setMessage("Исходное название: не более 2000 символов."); return; }
+    if (Array.from(reasonCode.trim()).length > 80) { setMessage("Причина исправления: не более 80 символов. Подробности укажите в поле «Пояснение»."); return; }
+    if (Array.from(reasonText.trim()).length > 2000) { setMessage("Пояснение: не более 2000 символов."); return; }
+    setSaving(true);
     try {
-      const duplicate = await previewPersonnelOrderHeaderDuplicate({ order_id: order.order_id, order_number: number, order_date: orderDate || null });
-      if (duplicate.blocking) { setMessage("Найден дублирующий номер приказа и дата."); return; }
+      const duplicate = await previewPersonnelOrderHeaderDuplicate({ order_id: order.order_id, order_number: requestedNumber, order_date: orderDate || null });
+      if (duplicate.blocking) { setMessage(personnelOrderDuplicateMessage(duplicate, orderDate)); return; }
       if (duplicate.warnings.length && !window.confirm("Есть приказ с тем же номером и другой датой. Продолжить?")) return;
-      await patchPersonnelOrderDocumentHeader(order.order_id, { expected_document_revision: order.document_revision ?? 1, order_number: number, order_date: orderDate || null, source_title: title || null, source_title_locale: locale as "kk" | "ru" | "unknown", reason_code: reasonCode || null, reason_text: reasonText || null });
-      setMessage("Реквизиты сохранены."); await onSaved();
-    } catch (error) { setMessage(String(error).includes("409") || String(error).includes("CONFLICT") ? "Приказ был изменён другим пользователем. Обновите данные и повторите действие." : "Не удалось сохранить реквизиты."); }
+      await patchPersonnelOrderDocumentHeader(order.order_id, { expected_document_revision: order.document_revision ?? 1, order_number: requestedNumber, order_date: orderDate || null, source_title: title || null, source_title_locale: locale || null, reason_code: reasonCode.trim() || null, reason_text: reasonText.trim() || null });
+      await onSaved(requestedNumber);
+      setMessage("Реквизиты сохранены.");
+    } catch (error) {
+      if (error instanceof PersonnelOrderDuplicateError) setMessage(error.message);
+      else if (String(error).includes("DOCUMENT_REVISION_CONFLICT")) setMessage("Приказ изменился после открытия карточки. Обновите её и повторите исправление.");
+      else if (String(error).includes("CORRECTION_REASON_REQUIRED")) setMessage("Укажите причину и пояснение исправления.");
+      else setMessage(mapPersonnelOrdersApiError(error, "Не удалось сохранить реквизиты."));
+    } finally { setSaving(false); }
   }
   return <section data-testid="personnel-order-requisites" className="space-y-3"><h3 className="text-sm font-semibold">Реквизиты</h3>
     <label className="block text-sm">Номер приказа<input aria-label="Номер приказа" value={number} onChange={e=>setNumber(e.target.value)} className="mt-1 w-full rounded border p-2" /></label>
     <label className="block text-sm">Дата приказа<input aria-label="Дата приказа" type="date" value={orderDate} onChange={e=>setOrderDate(e.target.value)} className="mt-1 w-full rounded border p-2" /></label>
     <label className="block text-sm">Исходное название<textarea aria-label="Исходное название" value={title} onChange={e=>setTitle(e.target.value)} className="mt-1 w-full rounded border p-2" /></label>
-    <label className="block text-sm">Язык исходного названия<select aria-label="Язык исходного названия" value={locale} onChange={e=>setLocale(e.target.value)} className="mt-1 w-full rounded border p-2"><option value="kk">Қазақша</option><option value="ru">Русский</option><option value="unknown">Неизвестен</option></select></label>
+    <label className="block text-sm">Язык исходного названия<select aria-label="Язык исходного названия" value={locale} onChange={e=>setLocale(e.target.value)} className="mt-1 w-full rounded border p-2"><option value="">Не указан</option><option value="kk">Қазақша</option><option value="ru">Русский</option><option value="unknown">Неизвестен</option></select></label>
     <label className="block text-sm">Причина исправления<input aria-label="Причина исправления" value={reasonCode} onChange={e=>setReasonCode(e.target.value)} className="mt-1 w-full rounded border p-2" /></label>
     <label className="block text-sm">Пояснение<textarea aria-label="Пояснение" value={reasonText} onChange={e=>setReasonText(e.target.value)} className="mt-1 w-full rounded border p-2" /></label>
-    <p className="text-xs text-zinc-500">Ревизия документа: {order.document_revision ?? 1}</p>{message ? <p role="alert">{message}</p> : null}<button type="button" onClick={()=>void save()} className="rounded bg-blue-600 px-3 py-2 text-sm text-white">Сохранить реквизиты</button></section>;
+    <p className="text-xs text-zinc-500">Ревизия документа: {order.document_revision ?? 1}</p>{message ? <p role="alert">{message}</p> : null}<button type="button" disabled={saving} onClick={()=>void save()} className="rounded bg-blue-600 px-3 py-2 text-sm text-white">Сохранить реквизиты</button></section>;
 }
 
 const DOCUMENT_ITEM_TYPES = [
@@ -708,6 +727,7 @@ export default function PersonnelOrderDetailDrawer({
                     <Field label="Причина исправления" value={String(order.storage_json?.correction_reason || "—")} />
                     <Field label="Пояснение" value={String(order.storage_json?.correction_explanation || "—")} />
                     <Field label="Источник" value={personnelOrderSourceModeLabel(order.source_mode)} />
+                    {isImportedPersonnelOrder(order.order_number, order.storage_json) ? <Field label="Технический номер импорта" value={String(order.storage_json?.import_source_order_number || order.order_number || "—")} /> : null}
                     <Field label="Статус восстановления" value={String(order.storage_json?.reconstruction_status || "—")} />
                   </dl>
                 </details>
@@ -746,6 +766,16 @@ export default function PersonnelOrderDetailDrawer({
                   </>
                 )}
               </section>
+
+              {detail && !order.is_archived && ["SIGNED", "REGISTERED"].includes(order.status) && isImportedPersonnelOrder(order.order_number, order.storage_json) ? (
+                <PersonnelOrderDocumentHeaderForm detail={detail} onSaved={async (expectedNumber) => {
+                  const next = await reload(order.order_id);
+                  if (!next || next.order.order_number !== expectedNumber) {
+                    throw new Error("Не удалось подтвердить новый номер по данным сервера. Обновите карточку и проверьте реквизиты.");
+                  }
+                  onChanged?.(next);
+                }} />
+              ) : null}
 
               {order.is_archived ? (
                 <section data-testid="personnel-order-archive-block">

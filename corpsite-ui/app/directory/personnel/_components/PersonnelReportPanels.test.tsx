@@ -131,6 +131,13 @@ const ordersSummary: PersonnelOrdersSummaryReport = {
     { code: "leave", name: "Отпуска", count: 0, incomplete_count: 0, orders: [] },
     { code: "other", name: "Прочие", count: 0, incomplete_count: 0, orders: [] },
   ],
+  statuses: [
+    { code: "DRAFT", count: 0, incomplete_count: 0, by_category: { hire: { count: 0, incomplete_count: 0 } } },
+    { code: "READY_FOR_SIGNATURE", count: 0, incomplete_count: 0, by_category: { hire: { count: 0, incomplete_count: 0 } } },
+    { code: "SIGNED", count: 2, incomplete_count: 1, by_category: { hire: { count: 2, incomplete_count: 1 }, termination: { count: 0, incomplete_count: 0 } } },
+    { code: "REGISTERED", count: 0, incomplete_count: 0, by_category: { hire: { count: 0, incomplete_count: 0 } } },
+    { code: "VOIDED", count: 1, incomplete_count: 1, by_category: { hire: { count: 1, incomplete_count: 1 }, termination: { count: 0, incomplete_count: 0 } } },
+  ],
   total_count: 2,
   total_incomplete_count: 1,
 };
@@ -285,5 +292,31 @@ describe("personnel report panels", () => {
     expect(
       screen.getByText(/При заданном периоде приказы без официальной даты не включаются/),
     ).toBeInTheDocument();
+  });
+
+  it("switches status and category summaries without clearing dates or category", async () => {
+    vi.mocked(getPersonnelOrdersSummary).mockResolvedValue(ordersSummary);
+    render(<PersonnelOrdersSummaryReportPanel />);
+    await screen.findByRole("button", { name: "Раскрыть категорию Приём" });
+    fireEvent.change(screen.getByLabelText("Дата с"), { target: { value: "2026-08-01" } });
+    fireEvent.change(screen.getByLabelText("Дата по"), { target: { value: "2026-08-31" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Категория" }), { target: { value: "hire" } });
+    await waitFor(() => expect(getPersonnelOrdersSummary).toHaveBeenLastCalledWith({ dateFrom: "2026-08-01", dateTo: "2026-08-31" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "По статусам" }));
+    expect(screen.getByRole("button", { name: "По статусам" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByLabelText("Дата с")).toHaveValue("2026-08-01");
+    expect(screen.getByLabelText("Дата по")).toHaveValue("2026-08-31");
+    expect(screen.getByRole("combobox", { name: "Категория" })).toHaveValue("hire");
+    expect(screen.getAllByRole("rowheader").map((row) => row.textContent)).toEqual([
+      "Черновик", "На подписи", "Подписан", "Зарегистрирован", "Аннулирован", "Всего",
+    ]);
+    expect(within(screen.getByRole("rowheader", { name: "Аннулирован" }).closest("tr")!).getAllByRole("cell").map((cell) => cell.textContent)).toEqual(["1", "1"]);
+    expect(screen.queryByRole("rowheader", { name: "Все статусы" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "По категориям" }));
+    expect(screen.getByRole("button", { name: "Раскрыть категорию Приём" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Раскрыть категорию Увольнение" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Дата с")).toHaveValue("2026-08-01");
   });
 });

@@ -8,6 +8,7 @@ from sqlalchemy import text
 
 from app.db.models.personnel_orders import (
     ITEM_STATUS_ACTIVE,
+    ORDER_STATUSES,
     ORDER_STATUS_VOIDED,
     ORDER_TYPE_COMPOSITE,
     ORDER_TYPE_HIRE,
@@ -53,9 +54,10 @@ ORDER_CATEGORY_BY_TYPE = {
 
 STATUS_LABELS = {
     "DRAFT": "Черновик",
-    "READY_FOR_SIGNATURE": "Готов к подписанию",
+    "READY_FOR_SIGNATURE": "На подписи",
     "SIGNED": "Подписан",
     "REGISTERED": "Зарегистрирован",
+    "VOIDED": "Аннулирован",
 }
 
 TYPE_LABELS = {
@@ -154,8 +156,8 @@ def _fetch_order_rows(
     date_from: date | None,
     date_to: date | None,
 ) -> list[dict[str, Any]]:
-    where_parts = ["po.archived_at IS NULL", "po.status <> :voided_status"]
-    params: dict[str, Any] = {"voided_status": ORDER_STATUS_VOIDED}
+    where_parts = ["po.archived_at IS NULL"]
+    params: dict[str, Any] = {}
     if date_from is not None:
         where_parts.append("po.order_date >= :date_from")
         params["date_from"] = date_from
@@ -222,9 +224,12 @@ def build_personnel_orders_summary(
         unique_orders[order["order_id"]] = order
     orders = sorted(unique_orders.values(), key=_order_sort_key)
 
+    # Keep the established category summary unchanged; status totals also include
+    # accessible voided orders from the same complete, unpaginated report query.
+    category_source = [order for order in orders if order["status"] != ORDER_STATUS_VOIDED]
     categories = []
     for code, name in CATEGORY_DEFINITIONS:
-        category_orders = [order for order in orders if order["category_code"] == code]
+        category_orders = [order for order in category_source if order["category_code"] == code]
         categories.append(
             {
                 "code": code,
@@ -238,6 +243,29 @@ def build_personnel_orders_summary(
                 "orders": category_orders,
             }
         )
+
+    statuses = []
+    for status in ORDER_STATUSES:
+        status_orders = [order for order in orders if order["status"] == status]
+        by_category = {}
+        for code, _name in CATEGORY_DEFINITIONS:
+            matching = [order for order in status_orders if order["category_code"] == code]
+            by_category[code] = {
+                "count": len(matching),
+                "incomplete_count": sum(
+                    order["order_number"] is None or order["order_date"] is None
+                    for order in matching
+                ),
+            }
+        statuses.append({
+            "code": status,
+            "count": len(status_orders),
+            "incomplete_count": sum(
+                order["order_number"] is None or order["order_date"] is None
+                for order in status_orders
+            ),
+            "by_category": by_category,
+        })
 
     timestamp = generated_at or datetime.now(timezone.utc)
     return {
@@ -254,6 +282,7 @@ def build_personnel_orders_summary(
             else None
         ),
         "categories": categories,
+        "statuses": statuses,
         "total_count": sum(category["count"] for category in categories),
         "total_incomplete_count": sum(category["incomplete_count"] for category in categories),
     }
