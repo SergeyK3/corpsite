@@ -105,6 +105,37 @@ export type PersonnelOrdersSummaryFilters = {
   dateTo?: string;
 };
 
+export type PersonnelEmployeeActionType = { code: string; label: string; count: number };
+export type PersonnelEmployeeOrder = {
+  order_id: number;
+  order_number: string | null;
+  order_date: string | null;
+  status: "SIGNED" | "REGISTERED";
+  status_label: string;
+  is_composite: boolean;
+  actions: PersonnelEmployeeActionType[];
+};
+export type PersonnelEmployeeActionsRow = {
+  employee_id: number;
+  full_name: string;
+  org_unit_id: number | null;
+  org_unit_name: string | null;
+  order_count: number;
+  ordinary_order_count: number;
+  composite_order_count: number;
+  action_count: number;
+  actions_by_type: PersonnelEmployeeActionType[];
+  orders: PersonnelEmployeeOrder[];
+};
+export type PersonnelEmployeeActionsReport = {
+  report_code: "personnel_employee_actions";
+  employees: PersonnelEmployeeActionsRow[];
+};
+
+export function getPersonnelEmployeeActionsReport(): Promise<PersonnelEmployeeActionsReport> {
+  return apiFetchJson<PersonnelEmployeeActionsReport>("/directory/personnel/reports/employee-actions");
+}
+
 export type StaffingReport = { data_quality: { requires_review: boolean; message: string | null }; metrics: { current_headcount: number; hired: number; terminated: number; average_headcount: number; average_formula: string; turnover_numerator: number; turnover_percent: number; turnover_reasons: Array<{ reason: string; count: number }> }; hired_items: Array<{ full_name: string; date: string; group_name?: string; unit_name?: string }>; terminated_items: Array<{ full_name: string; date: string; reason: string; group_name?: string; unit_name?: string }>; breakdown: Array<{ label: string; group_name?: string; current_headcount: number; average_headcount: number; hired: number; terminated: number; turnover_terminated: number; turnover_percent: number }> };
 export type StaffingReportFilters = { dateFrom: string; dateTo: string; groupId?: number; orgUnitId?: number; breakdown: "total" | "groups" | "units" };
 

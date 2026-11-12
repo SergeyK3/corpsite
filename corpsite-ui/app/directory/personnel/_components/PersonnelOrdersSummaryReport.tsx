@@ -55,11 +55,10 @@ function CategoryDetails({ category }: { category: PersonnelOrdersSummaryCategor
   );
 }
 
-export default function PersonnelOrdersSummaryReportPanel() {
+export default function PersonnelOrdersSummaryReportPanel({ mode = "categories" }: { mode?: "categories" | "statuses" }) {
   const [dateFrom, setDateFrom] = React.useState("");
   const [dateTo, setDateTo] = React.useState("");
   const [categoryCode, setCategoryCode] = React.useState("");
-  const [mode, setMode] = React.useState<"categories" | "statuses">("categories");
   const [report, setReport] = React.useState<PersonnelOrdersSummaryReport | null>(null);
   const [expanded, setExpanded] = React.useState<Set<string>>(() => new Set());
   const [loading, setLoading] = React.useState(true);
@@ -122,15 +121,6 @@ export default function PersonnelOrdersSummaryReportPanel() {
         <div>
           <div className="text-xs uppercase tracking-wide text-zinc-500">Отчёт</div>
           <h2 className="font-semibold">Общая сводка по приказам</h2>
-        </div>
-        <div className="flex flex-wrap gap-2" role="group" aria-label="Вид сводки">
-          {(["categories", "statuses"] as const).map((value) => (
-            <button key={value} type="button" aria-pressed={mode === value}
-              onClick={() => setMode(value)}
-              className={`rounded-lg border px-3 py-2 text-sm font-medium ${mode === value ? "border-blue-600 bg-blue-50 text-blue-800 dark:bg-blue-950 dark:text-blue-200" : "border-zinc-300 dark:border-zinc-700"}`}>
-              {value === "categories" ? "По категориям" : "По статусам"}
-            </button>
-          ))}
         </div>
         <div className="flex flex-wrap items-end gap-3">
           <label className="w-full space-y-1 text-sm sm:w-40">

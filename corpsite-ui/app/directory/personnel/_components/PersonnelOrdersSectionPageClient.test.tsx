@@ -17,8 +17,12 @@ vi.mock("./PersonnelOrdersPageClient", () => ({
   default: () => <div>Рабочее место кадровых приказов</div>,
 }));
 
+vi.mock("./PersonnelEmployeeActionsReport", () => ({
+  default: () => <div>Кадровые действия по сотрудникам</div>,
+}));
+
 vi.mock("./PersonnelOrdersSummaryReport", () => ({
-  default: () => <div>Общая сводка по приказам</div>,
+  default: ({ mode }: { mode: string }) => <><div>Общая сводка по приказам</div><span data-testid="orders-summary-mode">{mode}</span></>,
 }));
 
 afterEach(() => {
@@ -40,6 +44,17 @@ describe("PersonnelOrdersSectionPageClient", () => {
 
     expect(screen.getByRole("button", { name: "Отчёты" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByText("Общая сводка по приказам")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "По категориям" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "По статусам" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "По сотрудникам" })).toBeInTheDocument();
+    expect(screen.getByTestId("orders-summary-mode")).toHaveTextContent("categories");
+    expect(screen.queryByText("Кадровые действия по сотрудникам")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "По статусам" }));
+    expect(screen.getByTestId("orders-summary-mode")).toHaveTextContent("statuses");
+    fireEvent.click(screen.getByRole("button", { name: "По сотрудникам" }));
+    expect(screen.getByText("Кадровые действия по сотрудникам")).toBeInTheDocument();
+    expect(screen.queryByText("Общая сводка по приказам")).not.toBeInTheDocument();
     expect(screen.queryByText("Рабочее место кадровых приказов")).not.toBeInTheDocument();
     expect(navigation.replace).toHaveBeenCalledWith(
       "/directory/personnel/orders?status=SIGNED&view=reports",

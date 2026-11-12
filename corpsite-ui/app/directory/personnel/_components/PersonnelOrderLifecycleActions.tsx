@@ -152,7 +152,7 @@ export default function PersonnelOrderLifecycleActions({
             onClick={() => setConfirmRegister(true)}
             className="rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-900 disabled:opacity-50 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-100"
           >
-            Зарегистрировать
+            Зарегистрировать приказ
           </button>
         ) : null}
 

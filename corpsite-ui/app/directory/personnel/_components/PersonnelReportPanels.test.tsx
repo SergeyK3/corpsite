@@ -296,15 +296,14 @@ describe("personnel report panels", () => {
 
   it("switches status and category summaries without clearing dates or category", async () => {
     vi.mocked(getPersonnelOrdersSummary).mockResolvedValue(ordersSummary);
-    render(<PersonnelOrdersSummaryReportPanel />);
+    const view = render(<PersonnelOrdersSummaryReportPanel />);
     await screen.findByRole("button", { name: "Раскрыть категорию Приём" });
     fireEvent.change(screen.getByLabelText("Дата с"), { target: { value: "2026-08-01" } });
     fireEvent.change(screen.getByLabelText("Дата по"), { target: { value: "2026-08-31" } });
     fireEvent.change(screen.getByRole("combobox", { name: "Категория" }), { target: { value: "hire" } });
     await waitFor(() => expect(getPersonnelOrdersSummary).toHaveBeenLastCalledWith({ dateFrom: "2026-08-01", dateTo: "2026-08-31" }));
 
-    fireEvent.click(screen.getByRole("button", { name: "По статусам" }));
-    expect(screen.getByRole("button", { name: "По статусам" })).toHaveAttribute("aria-pressed", "true");
+    view.rerender(<PersonnelOrdersSummaryReportPanel mode="statuses" />);
     expect(screen.getByLabelText("Дата с")).toHaveValue("2026-08-01");
     expect(screen.getByLabelText("Дата по")).toHaveValue("2026-08-31");
     expect(screen.getByRole("combobox", { name: "Категория" })).toHaveValue("hire");
@@ -314,7 +313,7 @@ describe("personnel report panels", () => {
     expect(within(screen.getByRole("rowheader", { name: "Аннулирован" }).closest("tr")!).getAllByRole("cell").map((cell) => cell.textContent)).toEqual(["1", "1"]);
     expect(screen.queryByRole("rowheader", { name: "Все статусы" })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "По категориям" }));
+    view.rerender(<PersonnelOrdersSummaryReportPanel mode="categories" />);
     expect(screen.getByRole("button", { name: "Раскрыть категорию Приём" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Раскрыть категорию Увольнение" })).not.toBeInTheDocument();
     expect(screen.getByLabelText("Дата с")).toHaveValue("2026-08-01");

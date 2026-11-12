@@ -158,7 +158,7 @@ function PersonnelOrderAcknowledgements({ detail, onChanged }: { detail: Personn
               className="rounded border border-zinc-300 px-2 py-1 text-sm dark:border-zinc-700" />
             <button type="button" disabled={!value} className="rounded bg-blue-600 px-2 py-1 text-sm text-white disabled:opacity-50"
               onClick={async () => { if (current && current.acknowledged_on && current.acknowledged_on !== value && !window.confirm("Исправить дату ознакомления?")) return; await recordPersonnelOrderAcknowledgement(detail.order.order_id, item.employee_id!, value); await reload(); }}>
-              {current?.acknowledged_on ? "Исправить" : "Зарегистрировать"}
+              {current?.acknowledged_on ? "Исправить" : "Записать ознакомление"}
             </button>
             {current?.acknowledged_on ? <button type="button" className="rounded border border-red-300 px-2 py-1 text-sm text-red-700"
               onClick={async () => { if (!window.confirm("Очистить ошибочную дату ознакомления?")) return; await clearPersonnelOrderAcknowledgement(detail.order.order_id, item.employee_id!); await reload(); }}>Очистить</button> : null}

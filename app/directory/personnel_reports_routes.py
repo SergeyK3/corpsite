@@ -23,6 +23,7 @@ from app.services.personnel_orders_summary_report_service import (
     PersonnelOrdersSummaryFilterError,
     build_personnel_orders_summary,
 )
+from app.services.personnel_employee_actions_report_service import build_personnel_employee_actions_report
 from app.services.personnel_staffing_report_service import build_staffing_report
 
 from .common import as_http500
@@ -52,6 +53,20 @@ def preview_personnel_orders_summary(
         return build_personnel_orders_summary(engine, date_from=date_from, date_to=date_to)
     except PersonnelOrdersSummaryFilterError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise as_http500(exc)
+
+
+@router.get("/employee-actions")
+def preview_personnel_employee_actions(
+    user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+    """HR-only employee breakdown of linked signed and registered orders."""
+    try:
+        require_personnel_admin_or_403(user)
+        return build_personnel_employee_actions_report(engine)
     except HTTPException:
         raise
     except Exception as exc:
