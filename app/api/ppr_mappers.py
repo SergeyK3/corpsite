@@ -265,6 +265,7 @@ def _additional_response(
                 specialty=str(item.get("specialty") or ""),
                 category=str(item.get("category") or ""),
                 assigned_at=str(item.get("assigned_at") or ""),
+                valid_until=str(item.get("valid_until") or ""),
                 assigned_at_calculated=bool(item.get("assigned_at_calculated")),
                 review_status=str(item.get("review_status") or "REVIEW_REQUIRED"),
                 review_reason=str(item.get("review_reason")) if item.get("review_reason") else None,

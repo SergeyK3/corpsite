@@ -29,9 +29,14 @@ def save_categories(conn: Connection, *, person_id: int, employee_id: int, expec
         try: date.fromisoformat(assigned_at)
         except ValueError: raise ValueError("assigned_at must be a complete ISO date")
         old=prior.get(fingerprint, {})
+        valid_until=str(row.get("valid_until") or (old.get("valid_until") if fingerprint else "") or "").strip()
+        if valid_until:
+            try: date.fromisoformat(valid_until)
+            except ValueError: raise ValueError("valid_until must be a complete ISO date")
         provenance=dict(old.get("provenance") or {})
         provenance["override_origin"]="HR_CORRECTION"
         normalized.append({"specialty":specialty,"category":category,"assigned_at":assigned_at,
+                           "valid_until":valid_until,
                            "assigned_at_calculated":False,"review_status":"AUTO_READY","review_reason":None,
                            "provenance":provenance})
     profile["qualification_categories"]=normalized

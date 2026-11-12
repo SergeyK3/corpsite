@@ -24,6 +24,7 @@ from app.services.personnel_orders_summary_report_service import (
     build_personnel_orders_summary,
 )
 from app.services.personnel_employee_actions_report_service import build_personnel_employee_actions_report
+from app.services.personnel_qualification_categories_report_service import build_personnel_qualification_categories_report
 from app.services.personnel_staffing_report_service import build_staffing_report
 
 from .common import as_http500
@@ -31,6 +32,20 @@ from .rbac import compute_scope, require_personnel_admin_or_403, require_personn
 
 
 router = APIRouter(prefix="/personnel/reports", tags=["personnel-reports"])
+
+
+@router.get("/qualification-categories")
+def preview_personnel_qualification_categories(
+    user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+    """HR-only, read-only report based on personal-card category records."""
+    try:
+        require_personnel_admin_or_403(user)
+        return build_personnel_qualification_categories_report(engine)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise as_http500(exc)
 
 @router.get("/staffing")
 def personnel_staffing_report(date_from: date = Query(...), date_to: date = Query(...), group_id: int | None = Query(None, ge=1), org_unit_id: int | None = Query(None, ge=1), breakdown: str = Query("total"), user: dict[str, Any] = Depends(get_current_user)) -> dict[str, Any]:
