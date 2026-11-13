@@ -21,6 +21,7 @@ import type { EmployeeCreateFormValues } from "./EmployeeCreateForm";
 import {
   getEmployees,
   exportStaffExcel,
+  exportStaffReconciliationExcel,
   getPositions,
   getDepartments,
   mapApiErrorToMessage,
@@ -191,6 +192,7 @@ export default function EmployeesPageClient(props: Props) {
   );
   const [loading, setLoading] = React.useState(false);
   const [exporting, setExporting] = React.useState(false);
+  const [reconciliationExporting, setReconciliationExporting] = React.useState(false);
   const [exportMessage, setExportMessage] = React.useState<string | null>(null);
   const [search, setSearch] = React.useState(qText);
   const [error, setError] = React.useState<string | null>(
@@ -390,6 +392,19 @@ export default function EmployeesPageClient(props: Props) {
       setExportMessage(e instanceof Error ? e.message : "Не удалось выгрузить список в Excel.");
     } finally {
       setExporting(false);
+    }
+  }
+
+  async function handleReconciliationExport() {
+    if (!showStaffExport || reconciliationExporting) return;
+    setExportMessage(null);
+    setReconciliationExporting(true);
+    try {
+      await exportStaffReconciliationExcel();
+    } catch (e) {
+      setExportMessage(e instanceof Error ? e.message : "Не удалось выгрузить общий список для сверки.");
+    } finally {
+      setReconciliationExporting(false);
     }
   }
 
@@ -706,14 +721,20 @@ export default function EmployeesPageClient(props: Props) {
             <div className="mb-2 flex flex-wrap items-center gap-3 text-xs text-zinc-600 dark:text-zinc-400">
               <span>Всего: {data.total} · Показано: {data.items.length}</span>
               {showStaffExport ? (
-                <button
-                  type="button"
-                  onClick={() => void handleExport()}
-                  disabled={loading || exporting || !!error}
-                  className={EXCEL_BUTTON_CLASS}
-                >
-                  {exporting ? "Выгрузка…" : "Выгрузить в Excel"}
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={() => void handleExport()}
+                    disabled={loading || exporting || !!error}
+                    className={EXCEL_BUTTON_CLASS}
+                  >
+                    {exporting ? "Выгрузка…" : "Выгрузить в Excel"}
+                  </button>
+                  <button type="button" onClick={() => void handleReconciliationExport()}
+                    disabled={reconciliationExporting} className={EXCEL_BUTTON_CLASS}>
+                    {reconciliationExporting ? "Выгрузка…" : "Общий список для сверки (Excel)"}
+                  </button>
+                </>
               ) : null}
             </div>
             {exportMessage ? <p role="status" className="mb-3 text-sm">{exportMessage}</p> : null}
@@ -792,6 +813,9 @@ export default function EmployeesPageClient(props: Props) {
         open={statusCorrectionEmployee != null}
         fullName={String(statusCorrectionEmployee?.fio ?? "").trim()}
         currentStatus={String(statusCorrectionEmployee?.status ?? "active").toLowerCase() === "inactive" ? "not_working" : "working"}
+        currentAssignmentId={statusCorrectionEmployee?.current_assignment_id ?? null}
+        currentRate={statusCorrectionEmployee?.current_assignment_id == null || statusCorrectionEmployee.rate == null
+          ? null : Number(String(statusCorrectionEmployee.rate).replace(",", "."))}
         saving={statusCorrectionSaving}
         error={statusCorrectionError}
         onClose={() => {

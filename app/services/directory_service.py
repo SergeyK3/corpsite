@@ -376,17 +376,17 @@ def _employee_select_sql(emp_rel: str, emp_cols: List[str]) -> Tuple[str, Dict[s
         if current_position_available:
             join_sql += (
                 " LEFT JOIN LATERAL ("
-                " SELECT pa.assignment_id, pa.position_id, pa.org_unit_id,"
+                " SELECT pa.assignment_id, pa.position_id, pa.org_unit_id, pa.rate,"
                 " NULLIF(to_jsonb(pa)->>'manual_type_code','')::smallint AS manual_type_code"
+                " FROM (SELECT pa.*, COUNT(*) OVER () AS candidate_count"
                 " FROM public.person_assignments pa"
                 " WHERE pa.person_id = e.person_id"
                 " AND pa.active_flag IS TRUE"
                 " AND pa.is_primary IS TRUE"
                 " AND pa.lifecycle_status = 'active'"
                 " AND pa.start_date <= CURRENT_DATE"
-                " AND (pa.end_date IS NULL OR pa.end_date >= CURRENT_DATE)"
-                " ORDER BY pa.start_date DESC, pa.assignment_id DESC"
-                " LIMIT 1"
+                " AND (pa.end_date IS NULL OR pa.end_date >= CURRENT_DATE)) pa"
+                " WHERE pa.candidate_count = 1"
                 ") current_pa ON TRUE"
                 f" LEFT JOIN public.{pos_rel} current_p"
                 f" ON CAST(current_p.{pos_id_col} AS TEXT) = CAST(current_pa.position_id AS TEXT)"
@@ -451,6 +451,7 @@ def _employee_select_sql(emp_rel: str, emp_cols: List[str]) -> Tuple[str, Dict[s
         effective_type_expr = f"COALESCE(current_pa.manual_type_code, {position_type_expr})"
         select_parts.extend([
             "current_pa.assignment_id AS current_assignment_id",
+            "current_pa.rate AS current_assignment_rate",
             "current_pa.manual_type_code AS manual_type_code",
             f"{position_type_expr} AS position_type_code",
             f"{effective_type_expr} AS effective_type_code",
@@ -464,7 +465,7 @@ def _employee_select_sql(emp_rel: str, emp_cols: List[str]) -> Tuple[str, Dict[s
             select_parts.append("NULL AS effective_type_name")
     else:
         select_parts.extend([
-            "NULL AS current_assignment_id", "NULL AS manual_type_code",
+            "NULL AS current_assignment_id", "NULL AS current_assignment_rate", "NULL AS manual_type_code",
             "NULL AS position_type_code", "NULL AS effective_type_code",
             "NULL AS effective_type_name", "NULL AS type_source",
         ])
@@ -627,7 +628,7 @@ def _normalize_employee_joined(row: Dict[str, Any], emp_rel: str) -> Dict[str, A
             "parent_unit_id": parent_unit_id,
             "is_active": org_unit_is_active,
         },
-        "rate": row.get("e_rate"),
+        "rate": row.get("current_assignment_rate") if row.get("current_assignment_id") is not None else row.get("e_rate"),
         "status": status_norm,
         "date_from": row.get("e_date_from"),
         "date_to": row.get("e_date_to"),
@@ -1140,7 +1141,10 @@ def get_employee(
                 and (scope_unit_ids is None or r["org_unit_id"] in scope_unit_ids)
                 and (effective_scope is None or r["org_unit_id"] == effective_scope)]
         else:
-            active_assignment_id = _get_single_active_assignment_id(conn, person_id=person_id)
+            active_assignment_id = (
+                int(row["current_assignment_id"])
+                if row.get("current_assignment_id") is not None else None
+            )
 
     result = _normalize_employee_joined(dict(row), emp_rel)
     result["active_assignment_id"] = active_assignment_id
@@ -2244,6 +2248,9 @@ def correct_employee_status(
     target_is_active, target_operational_status = targets[normalized_status]
     normalized_reason = (reason or "").strip() or None
     normalized_comment = (comment or "").strip() or None
+    expected_assignment_id: Optional[int] = None,
+    expected_assignment_rate: Optional[float] = None,
+    employment_rate: Optional[float] = None,
 
     with engine.begin() as conn:
         row = conn.execute(text("""
@@ -2263,6 +2270,23 @@ def correct_employee_status(
 
         conn.execute(text("""
             UPDATE public.employees
+    if expected_assignment_id is not None:
+        if not normalized_reason:
+            raise HTTPException(status_code=422, detail="Correction reason is required.")
+        return _correct_employee_status_and_rate(
+            employee_id=target_id_text,
+            target_is_active=target_is_active,
+            target_operational_status=target_operational_status,
+            status=normalized_status,
+            expected_assignment_id=int(expected_assignment_id),
+            expected_assignment_rate=expected_assignment_rate,
+            employment_rate=employment_rate,
+            reason=normalized_reason,
+            comment=normalized_comment,
+            created_by=created_by,
+        )
+    if employment_rate is not None:
+        raise HTTPException(status_code=422, detail="Assignment ID is required for rate correction.")
             SET is_active=:is_active, operational_status=:operational_status, updated_at=NOW()
             WHERE employee_id=:employee_id
         """), {
@@ -2326,6 +2350,116 @@ def list_employee_events(
         "POSITION_CHANGE",
         "RATE_CHANGE",
     }
+def _correct_employee_status_and_rate(
+    *,
+    employee_id: str,
+    target_is_active: bool,
+    target_operational_status: str,
+    status: str,
+    expected_assignment_id: int,
+    expected_assignment_rate: Optional[float],
+    employment_rate: Optional[float],
+    reason: str,
+    comment: Optional[str],
+    created_by: int,
+) -> Dict[str, Any]:
+    """Correct exactly the current primary assignment shown in the roster."""
+    with engine.begin() as conn:
+        employee = conn.execute(text("""
+            SELECT employee_id, person_id, is_active, operational_status
+            FROM public.employees
+            WHERE CAST(employee_id AS TEXT) = :employee_id
+            FOR UPDATE
+        """), {"employee_id": employee_id}).mappings().first()
+        if employee is None:
+            raise HTTPException(status_code=404, detail="Employee not found.")
+        if employee["person_id"] is None:
+            raise HTTPException(status_code=409, detail="Employee has no linked assignment owner.")
+
+        assignments = conn.execute(text("""
+            SELECT assignment_id, org_unit_id, position_id, rate
+            FROM public.person_assignments
+            WHERE person_id=:person_id AND active_flag IS TRUE
+              AND is_primary IS TRUE AND lifecycle_status='active'
+              AND start_date<=CURRENT_DATE
+              AND (end_date IS NULL OR end_date>=CURRENT_DATE)
+            FOR UPDATE
+        """), {"person_id": int(employee["person_id"])}).mappings().all()
+        if len(assignments) != 1 or int(assignments[0]["assignment_id"]) != expected_assignment_id:
+            raise HTTPException(status_code=409, detail="Current primary assignment is missing or ambiguous; refresh the roster.")
+        assignment = assignments[0]
+        old_rate = Decimal(str(assignment["rate"])) if assignment["rate"] is not None else None
+        expected_rate = Decimal(str(expected_assignment_rate)) if expected_assignment_rate is not None else None
+        if old_rate != expected_rate:
+            raise HTTPException(status_code=409, detail="Assignment rate changed; refresh the roster.")
+        new_rate = Decimal(str(employment_rate)) if employment_rate is not None else old_rate
+        if new_rate is not None and (not new_rate.is_finite() or new_rate <= 0 or new_rate > Decimal("1.5")):
+            raise HTTPException(status_code=422, detail="employment_rate must be > 0 and <= 1.5.")
+
+        rate_changed = new_rate != old_rate
+        status_changed = (
+            bool(employee["is_active"]) != target_is_active
+            or str(employee["operational_status"] or "") != target_operational_status
+        )
+        if not rate_changed and not status_changed:
+            raise HTTPException(status_code=422, detail="No status or rate change detected.")
+        if rate_changed:
+            conn.execute(text("""
+                UPDATE public.person_assignments SET rate=:rate
+                WHERE assignment_id=:assignment_id
+            """), {"rate": new_rate, "assignment_id": expected_assignment_id})
+        conn.execute(text("""
+            UPDATE public.employees
+            SET is_active=:is_active, operational_status=:operational_status,
+                employment_rate=CASE WHEN :rate_changed THEN :rate ELSE employment_rate END,
+                updated_at=NOW()
+            WHERE employee_id=:employee_id
+        """), {
+            "employee_id": int(employee["employee_id"]),
+            "is_active": target_is_active,
+            "operational_status": target_operational_status,
+            "rate_changed": rate_changed,
+            "rate": new_rate,
+        })
+        changes: Dict[str, Dict[str, Any]] = {}
+        if status_changed:
+            changes["employment_status"] = {
+                "from": "working" if employee["is_active"] else "not_working", "to": status,
+            }
+            changes["operational_status"] = {
+                "from": employee["operational_status"], "to": target_operational_status,
+            }
+        if rate_changed:
+            changes["employment_rate"] = {
+                "from": float(old_rate) if old_rate is not None else None,
+                "to": float(new_rate) if new_rate is not None else None,
+            }
+        return _insert_employee_event(
+            conn,
+            employee_id=int(employee["employee_id"]),
+            event_type="CORRECTION",
+            event_class=get_event_class("CORRECTION"),
+            lifecycle_status="APPROVED",
+            metadata={
+                "domain": "assignment_status_rate",
+                "without_personnel_order": True,
+                "assignment_id": expected_assignment_id,
+                "reason": reason,
+                "changes": changes,
+            },
+            effective_date=date.today(),
+            from_org_unit_id=int(assignment["org_unit_id"]) if assignment["org_unit_id"] is not None else None,
+            from_position_id=int(assignment["position_id"]) if assignment["position_id"] is not None else None,
+            from_rate=float(old_rate) if old_rate is not None else None,
+            to_org_unit_id=int(assignment["org_unit_id"]) if assignment["org_unit_id"] is not None else None,
+            to_position_id=int(assignment["position_id"]) if assignment["position_id"] is not None else None,
+            to_rate=float(new_rate) if new_rate is not None else None,
+            order_ref=None,
+            comment=comment,
+            created_by=int(created_by),
+        )
+
+
     if event_type is not None:
         normalized_type = event_type.strip().upper()
         if normalized_type not in allowed_types:

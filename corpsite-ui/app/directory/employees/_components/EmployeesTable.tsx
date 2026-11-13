@@ -354,7 +354,7 @@ export default function EmployeesTable({
                             className={actionStatusCorrectionClass}
                             data-testid={`employee-status-correction-open-${employeeId}`}
                           >
-                            Исправить статус
+                            Исправить
                           </button>
                         ) : null}
                         {!directPersonalCardNav && !showCard2Button && !!employeeId ? (

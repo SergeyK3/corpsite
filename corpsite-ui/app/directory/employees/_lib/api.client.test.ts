@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { createUser, exportStaffExcel } from "./api.client";
+import { createUser, exportStaffExcel, exportStaffReconciliationExcel } from "./api.client";
 
 describe("createUser", () => {
   beforeEach(() => {
@@ -57,4 +57,16 @@ describe("exportStaffExcel", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 404 }));
     await expect(exportStaffExcel({ q: "missing" })).rejects.toThrow("Нет записей для выгрузки");
   });
+});
+
+it("downloads the reconciliation workbook without roster filters", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 200, blob: async () => new Blob(["xlsx"]) }));
+  vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: vi.fn(() => "blob:reconciliation"), revokeObjectURL: vi.fn() }));
+  const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+  await exportStaffReconciliationExcel();
+  const url = new URL(vi.mocked(fetch).mock.calls[0][0] as string, "http://localhost");
+  expect(url.pathname).toContain("/directory/employees/reconciliation.xlsx");
+  expect(url.search).toBe("");
+  expect(click).toHaveBeenCalledTimes(1);
+  click.mockRestore();
 });
