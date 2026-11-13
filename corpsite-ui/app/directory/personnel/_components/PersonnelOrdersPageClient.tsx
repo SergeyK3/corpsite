@@ -31,6 +31,7 @@ import {
   personnelOrderTypeLabel,
   type PersonnelOrderManualDraftCreateResult,
   type PersonnelOrderListItem,
+  type PersonnelOrderDetailResponse,
   type PersonnelOrdersFilters,
 } from "../_lib/personnelOrdersApi.client";
 
@@ -250,7 +251,14 @@ export default function PersonnelOrdersPageClient() {
     setDrawerOpen(true);
   }
 
-  function handleChanged() {
+  function handleChanged(detail: PersonnelOrderDetailResponse) {
+    setItems((current) => current.map((row) => row.order_id === detail.order.order_id ? {
+      ...row,
+      order_number: detail.order.order_number,
+      order_date: detail.order.order_date,
+      status: detail.order.status,
+      storage_json: detail.order.storage_json,
+    } : row));
     void load();
   }
 

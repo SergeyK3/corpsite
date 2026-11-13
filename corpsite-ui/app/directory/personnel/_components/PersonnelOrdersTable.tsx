@@ -11,6 +11,7 @@ import PersonnelOrderStatusBadge from "./PersonnelOrderStatusBadge";
 import PersonnelOrderArchivedBadge from "./PersonnelOrderArchivedBadge";
 import { personnelOrderCanonicalTitle } from "../_lib/personnelOrderCanonicalTitles";
 import { PERSONNEL_ORDER_PRINT_DOCUMENT_TITLES } from "../_lib/personnelOrderPrintViewModel";
+import { isImportedPersonnelOrder } from "../_lib/personnelOrderImport";
 
 export type PersonnelOrdersTableProps = {
   items: PersonnelOrderListItem[];
@@ -36,12 +37,6 @@ export function orderTypeTitle(row: PersonnelOrderListItem): string {
 function isTechnicalOrder(row: PersonnelOrderListItem): boolean {
   return row.storage_json?.technical_record === true
     && (row.storage_json?.record_quality === "TECHNICAL" || row.storage_json?.record_quality === "TECHNICAL_RECORD");
-}
-
-function isLegacyTechnicalCandidate(row: PersonnelOrderListItem): boolean {
-  if (isTechnicalOrder(row)) return false;
-  const number = String(row.order_number || "").trim().toUpperCase();
-  return number.startsWith("CSV-PILOT-") || number.startsWith("PERSONNEL-IMPORT-");
 }
 
 function isReconstructedForReview(row: PersonnelOrderListItem): boolean {
@@ -111,14 +106,13 @@ export function PersonnelOrdersTable({
             >
               <td className="whitespace-nowrap px-3 py-2 font-medium text-zinc-900 dark:text-zinc-100">
                 <div>{formatPersonnelOrderNumber(row.order_number)}</div>
-                {isTechnicalOrder(row) ? (
+                {isImportedPersonnelOrder(row.order_number, row.storage_json) ? (
+                  <div className="mt-1 inline-flex rounded border border-zinc-300 bg-zinc-50 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
+                    Импортирован
+                  </div>
+                ) : isTechnicalOrder(row) ? (
                   <div className="mt-1 inline-flex rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100">
                     Техническая запись
-                  </div>
-                ) : null}
-                {isLegacyTechnicalCandidate(row) ? (
-                  <div className="mt-1 inline-flex rounded border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-100">
-                    Техническая запись прежнего формата
                   </div>
                 ) : null}
                 {isReconstructedForReview(row) ? (

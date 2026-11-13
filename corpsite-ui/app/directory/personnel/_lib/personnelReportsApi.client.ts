@@ -81,6 +81,13 @@ export type PersonnelOrdersSummaryCategory = {
   orders: PersonnelOrdersSummaryOrder[];
 };
 
+export type PersonnelOrdersSummaryStatus = {
+  code: string;
+  count: number;
+  incomplete_count: number;
+  by_category: Record<string, { count: number; incomplete_count: number }>;
+};
+
 export type PersonnelOrdersSummaryReport = {
   report_code: "personnel_orders_summary";
   report_name: string;
@@ -88,6 +95,7 @@ export type PersonnelOrdersSummaryReport = {
   filters: { date_from: string | null; date_to: string | null };
   period_note: string | null;
   categories: PersonnelOrdersSummaryCategory[];
+  statuses: PersonnelOrdersSummaryStatus[];
   total_count: number;
   total_incomplete_count: number;
 };
@@ -96,6 +104,82 @@ export type PersonnelOrdersSummaryFilters = {
   dateFrom?: string;
   dateTo?: string;
 };
+
+export type PersonnelOrdersMonthlyType = "HIRE" | "TERMINATION" | "TRANSFER";
+
+export type PersonnelOrdersMonthlyDashboard = {
+  report_code: "personnel_orders_monthly_dashboard";
+  year: number;
+  as_of: string;
+  order_type: PersonnelOrdersMonthlyType | null;
+  months: Array<{ month: number; count: number; is_current: boolean }>;
+  total: number;
+};
+
+export type PersonnelTypeHeadcountReport = {
+  report_code: "personnel_type_headcount";
+  groups: Array<{ code: number | null; name: string; count: number }>;
+  unknown_employees: Array<{
+    employee_id: number;
+    full_name: string | null;
+    org_unit_name: string | null;
+    position_name: string | null;
+  }>;
+  total: number;
+};
+
+export function getPersonnelTypeHeadcountReport(): Promise<PersonnelTypeHeadcountReport> {
+  return apiFetchJson<PersonnelTypeHeadcountReport>("/directory/personnel/reports/personnel-type-headcount");
+}
+
+export type PersonnelHeadcountTrend = {
+  report_code: "personnel_headcount_trend";
+  year: number;
+  as_of: string;
+  history_complete: boolean;
+  months: Array<{
+    month: number;
+    date: string;
+    count: number | null;
+    source: "active_register" | "approved_employee_events" | null;
+    is_current: boolean;
+  }>;
+};
+
+export function getPersonnelHeadcountTrend(): Promise<PersonnelHeadcountTrend> {
+  return apiFetchJson<PersonnelHeadcountTrend>("/directory/personnel/reports/headcount-trend");
+}
+
+export type PersonnelEmployeeActionType = { code: string; label: string; count: number };
+export type PersonnelEmployeeOrder = {
+  order_id: number;
+  order_number: string | null;
+  order_date: string | null;
+  status: "SIGNED" | "REGISTERED";
+  status_label: string;
+  is_composite: boolean;
+  actions: PersonnelEmployeeActionType[];
+};
+export type PersonnelEmployeeActionsRow = {
+  employee_id: number;
+  full_name: string;
+  org_unit_id: number | null;
+  org_unit_name: string | null;
+  order_count: number;
+  ordinary_order_count: number;
+  composite_order_count: number;
+  action_count: number;
+  actions_by_type: PersonnelEmployeeActionType[];
+  orders: PersonnelEmployeeOrder[];
+};
+export type PersonnelEmployeeActionsReport = {
+  report_code: "personnel_employee_actions";
+  employees: PersonnelEmployeeActionsRow[];
+};
+
+export function getPersonnelEmployeeActionsReport(): Promise<PersonnelEmployeeActionsReport> {
+  return apiFetchJson<PersonnelEmployeeActionsReport>("/directory/personnel/reports/employee-actions");
+}
 
 export type StaffingReport = { data_quality: { requires_review: boolean; message: string | null }; metrics: { current_headcount: number; hired: number; terminated: number; average_headcount: number; average_formula: string; turnover_numerator: number; turnover_percent: number; turnover_reasons: Array<{ reason: string; count: number }> }; hired_items: Array<{ full_name: string; date: string; group_name?: string; unit_name?: string }>; terminated_items: Array<{ full_name: string; date: string; reason: string; group_name?: string; unit_name?: string }>; breakdown: Array<{ label: string; group_name?: string; current_headcount: number; average_headcount: number; hired: number; terminated: number; turnover_terminated: number; turnover_percent: number }> };
 export type StaffingReportFilters = { dateFrom: string; dateTo: string; groupId?: number; orgUnitId?: number; breakdown: "total" | "groups" | "units" };
@@ -132,6 +216,17 @@ export function getPersonnelOrdersSummary(
   const query = params.toString();
   return apiFetchJson<PersonnelOrdersSummaryReport>(
     `/directory/personnel/reports/orders-summary${query ? `?${query}` : ""}`,
+  );
+}
+
+export function getPersonnelOrdersMonthlyDashboard(
+  orderType?: PersonnelOrdersMonthlyType | null,
+): Promise<PersonnelOrdersMonthlyDashboard> {
+  const params = new URLSearchParams();
+  if (orderType) params.set("order_type", orderType);
+  const query = params.toString();
+  return apiFetchJson<PersonnelOrdersMonthlyDashboard>(
+    `/directory/personnel/reports/orders-monthly-dashboard${query ? `?${query}` : ""}`,
   );
 }
 

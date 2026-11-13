@@ -2,6 +2,7 @@
 "use client";
 
 import * as React from "react";
+import { apiFetchJson } from "@/lib/api";
 import {positionSignature,type PositionSaveResult} from "./positionSaveState";
 import PositionDetailsFields, {type PositionDetails} from "./PositionDetailsFields";
 
@@ -40,6 +41,14 @@ export default function PositionForm({
   onCancel,
 }: PositionFormProps) {
   const [values, setValues] = React.useState<PositionFormValues>(initialValues);
+  const [positionTypes, setPositionTypes] = React.useState<Array<{code:number;name:string}>>([]);
+  React.useEffect(() => {
+    let active = true;
+    apiFetchJson<{items:Array<{code:number;name:string}>}>("/directory/position-types")
+      .then(data => { if (active) setPositionTypes(data.items); })
+      .catch(() => { if (active) setPositionTypes([]); });
+    return () => { active = false; };
+  }, []);
 
   const [savedSignature,setSavedSignature]=React.useState<string|null>(null);
   const [submitError,setSubmitError]=React.useState<string|null>(null);
@@ -136,6 +145,15 @@ export default function PositionForm({
             </select>
           </div>
           <PositionDetailsFields value={values} onChange={details=>setValues(v=>({...v,...details}))} />
+          <div className="flex flex-col gap-2">
+            <label htmlFor="position-type" className="text-sm font-medium">Тип</label>
+            <select id="position-type" value={values.type_code??""}
+              onChange={e=>setValues(v=>({...v,type_code:e.target.value?Number(e.target.value):null}))}
+              className="h-11 rounded-lg border border-zinc-200 bg-zinc-100 px-4 dark:border-zinc-800 dark:bg-zinc-900">
+              <option value="">Не выбран</option>
+              {positionTypes.map(type=><option key={type.code} value={type.code}>{type.code} — {type.name}</option>)}
+            </select>
+          </div>
         </fieldset>
       </div>
 

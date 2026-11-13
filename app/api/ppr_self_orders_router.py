@@ -5,7 +5,6 @@ order must never reach an employee browser as a complete document.
 """
 from __future__ import annotations
 
-from datetime import date
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Query
@@ -21,11 +20,7 @@ router = APIRouter(prefix="/api/ppr/me/orders", tags=["ppr-self-orders"])
 _UNCONFIRMED_WARNING = (
     "Приказ ещё не подтверждён кадровой службой. Сведения могут быть уточнены после сверки с оригиналом."
 )
-_CONFIRMED_STATUSES = {"SIGNED", "REGISTERED", "VOIDED"}
-_TENURE_FALLBACK = {
-    "kk": "Жұмыс өтілі әлі анықталмаған.",
-    "ru": "Стаж работы ещё не определён.",
-}
+_VISIBLE_STATUSES = frozenset({"SIGNED", "REGISTERED"})
 _SELF_ITEM_TYPE_LABELS = {
     "kk": {
         "HIRE": "Жұмысқа қабылдау туралы",
@@ -81,7 +76,7 @@ def _employee_for_user(user: dict[str, Any]) -> tuple[Literal["READY", "NO_EMPLO
 
 
 def _confirmed(status: str, needs_review: bool, needs_docx_review: bool = False) -> bool:
-    return status in _CONFIRMED_STATUSES and not needs_review and not needs_docx_review
+    return status in _VISIBLE_STATUSES and not needs_review and not needs_docx_review
 
 
 def _safe_rows(
@@ -91,12 +86,17 @@ def _safe_rows(
     year: int | None = None,
     locale: Literal["kk", "ru"] = "kk",
 ):
-    """Select only the matching item and its effective editorial body.
+    """Select only signed/registered orders and the caller's own item bodies.
 
-    Neither header/item payloads nor editorial metadata are selected.  In
-    particular, this query cannot serialise another employee's item.
+    Full-document title, preamble, basis and attachments are deliberately not
+    selected: they may contain another employee's personal data.
     """
-    filters = ["poi.employee_id = :employee_id"]
+    filters = [
+        "poi.employee_id = :employee_id",
+        "po.status IN ('SIGNED', 'REGISTERED')",
+        "po.deleted_at IS NULL",
+        "po.archived_at IS NULL",
+    ]
     params: dict[str, Any] = {"employee_id": employee_id, "locale": locale}
     if order_id is not None:
         filters.append("po.order_id = :order_id")
@@ -107,17 +107,8 @@ def _safe_rows(
     where = " AND ".join(filters)
     statement = text(f"""
         SELECT po.order_id, po.order_number, po.order_date, po.order_type_code, po.status,
-               COALESCE(NULLIF(BTRIM(title.override_text), ''), NULLIF(BTRIM(title.generated_text), '')) AS title,
-               COALESCE(NULLIF(BTRIM(preamble.override_text), ''), NULLIF(BTRIM(preamble.generated_text), '')) AS preamble,
+               poi.item_number, poi.item_type_code,
                COALESCE(NULLIF(BTRIM(body.override_text), ''), NULLIF(BTRIM(body.generated_text), '')) AS item_text,
-               COALESCE(NULLIF(BTRIM(basis.override_text), ''), NULLIF(BTRIM(basis.generated_text), '')) AS basis,
-               ARRAY(
-                 SELECT own_item.item_type_code
-                 FROM public.personnel_order_items own_item
-                 WHERE own_item.order_id = po.order_id
-                   AND own_item.employee_id = :employee_id
-                 ORDER BY own_item.item_number ASC
-               ) AS employee_item_types,
                (
                  COALESCE(po.storage_json ->> 'reconstruction_status', '') = 'NEEDS_DOCX_REVIEW'
                  OR EXISTS (
@@ -147,14 +138,8 @@ def _safe_rows(
                ) AS document_review_action
         FROM public.personnel_order_items poi
         JOIN public.personnel_orders po ON po.order_id = poi.order_id
-        LEFT JOIN public.personnel_order_editorial_blocks title
-          ON title.order_id = po.order_id AND title.locale = :locale AND title.block_type = 'title'
-        LEFT JOIN public.personnel_order_editorial_blocks preamble
-          ON preamble.order_id = po.order_id AND preamble.locale = :locale AND preamble.block_type = 'preamble'
         LEFT JOIN public.personnel_order_item_editorial_blocks body
           ON body.order_item_id = poi.item_id AND body.locale = :locale AND body.block_type = 'body'
-        LEFT JOIN public.personnel_order_item_editorial_blocks basis
-          ON basis.order_item_id = poi.item_id AND basis.locale = :locale AND basis.block_type = 'basis'
         WHERE {where}
         ORDER BY po.order_date DESC NULLS LAST, po.order_number DESC NULLS LAST, po.order_id DESC, poi.item_number ASC
     """)
@@ -162,37 +147,35 @@ def _safe_rows(
         return conn.execute(statement, params).mappings().all()
 
 
-def _serialize(row: Any, *, locale: Literal["kk", "ru"], detail: bool = False) -> dict[str, Any]:
+def _serialize(rows: list[Any], *, locale: Literal["kk", "ru"], detail: bool = False) -> dict[str, Any]:
+    row = rows[0]
     explicit_review = str(row.get("document_review_action") or "")
     confirmed = explicit_review == "DOCUMENT_CONFIRMED" if explicit_review else _confirmed(
         str(row["status"]),
-        bool(row["needs_review"]),
-        bool(row.get("needs_docx_review")),
+        any(bool(item["needs_review"]) for item in rows),
+        any(bool(item.get("needs_docx_review")) for item in rows),
     )
-    title = str(row.get("title") or "").strip()
     labels_by_type = _SELF_ITEM_TYPE_LABELS[locale]
-    if not title or title == "COMPOSITE":
-        labels = [
-            labels_by_type.get(str(item_type), "Кадрлық бұйрық" if locale == "kk" else "Кадровый приказ")
-            for item_type in (row.get("employee_item_types") or [])
-        ]
-        if labels:
-            title = "; ".join(dict.fromkeys(labels))
-        else:
-            title = labels_by_type.get(str(row["order_type_code"]), "Кадрлық бұйрық" if locale == "kk" else "Кадровый приказ")
-    elif title in labels_by_type:
-        title = labels_by_type[title]
+    fallback = "Кадрлық бұйрық" if locale == "kk" else "Кадровый приказ"
+    title = "; ".join(dict.fromkeys(
+        labels_by_type.get(str(item["item_type_code"]), fallback) for item in rows
+    ))
+    items = [{"item_number": int(item["item_number"]), "item_text": item["item_text"]} for item in rows]
     result = {
         "order_id": int(row["order_id"]), "order_number": row["order_number"], "order_date": row["order_date"],
-        "title": title, "item_text": row["item_text"],
+        "title": title, "items": items,
         "confirmation_status": "CONFIRMED" if confirmed else "UNCONFIRMED",
     }
     if detail:
         result["warning"] = None if confirmed else _UNCONFIRMED_WARNING
-        result["preamble"] = row.get("preamble")
-        result["basis"] = row.get("basis")
-        result["tenure_text"] = _TENURE_FALLBACK[locale]
     return result
+
+
+def _group_orders(rows: list[Any]) -> list[list[Any]]:
+    grouped: dict[int, list[Any]] = {}
+    for row in rows:
+        grouped.setdefault(int(row["order_id"]), []).append(row)
+    return list(grouped.values())
 
 
 @router.get("", response_model=PprSelfOrderListResponse)
@@ -205,7 +188,7 @@ def list_my_orders(
     status, employee_id = _employee_for_user(user)
     if status != "READY":
         return PprSelfOrderListResponse(status=status)
-    rows = [_serialize(row, locale=locale) for row in _safe_rows(employee_id, year=year, locale=locale)]
+    rows = [_serialize(own_rows, locale=locale) for own_rows in _group_orders(_safe_rows(employee_id, year=year, locale=locale))]
     if confirmation != "all":
         expected = "CONFIRMED" if confirmation == "confirmed" else "UNCONFIRMED"
         rows = [row for row in rows if row["confirmation_status"] == expected]
@@ -224,6 +207,4 @@ def get_my_order(
     rows = _safe_rows(employee_id, order_id=order_id, locale=locale)
     if not rows:
         raise HTTPException(status_code=404, detail="Order not found")
-    # There is normally one item per employee/order.  The first stable item is
-    # the personal document view; no other items are disclosed.
-    return PprSelfOrderDetailResponse(**_serialize(rows[0], locale=locale, detail=True))
+    return PprSelfOrderDetailResponse(**_serialize(rows, locale=locale, detail=True))

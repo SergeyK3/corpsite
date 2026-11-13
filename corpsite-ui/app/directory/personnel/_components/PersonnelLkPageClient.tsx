@@ -281,11 +281,11 @@ export default function PersonnelLkPageClient() {
         <div className="flex flex-wrap gap-2">
           {canReadMigrationStatus ? (
             <Link
-              href="/directory/personnel/migration-status"
+              href="/directory/personnel/lk?view=reports&report=cards"
               className="rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700"
               data-testid="personnel-lk-migration-status-link"
             >
-              Сводка миграции личных карточек
+              Сводка по карточкам
             </Link>
           ) : null}
           <button

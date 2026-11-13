@@ -38,6 +38,15 @@ from app.services.position_dependencies_service import (
 router = APIRouter()
 
 
+@router.get("/position-types")
+def list_position_types(user: Dict[str, Any] = Depends(get_current_user)):
+    scope = compute_scope(int(user["user_id"]), user)
+    require_personnel_visibility_or_403(user, scope)
+    with engine.connect() as conn:
+        rows = conn.execute(text("SELECT code, name FROM public.position_types ORDER BY code")).mappings().all()
+    return {"items": [dict(row) for row in rows], "can_edit": _is_privileged(user)}
+
+
 class JobCatalogEdit(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     job_nameru: str = Field(min_length=1, max_length=500)
@@ -96,6 +105,7 @@ class PositionUpsert(BaseModel):
     model_config = ConfigDict(extra="forbid")
     name: str = Field(..., min_length=1, max_length=500)
     category: str = Field(..., min_length=1, max_length=50)
+    type_code: Optional[int] = Field(default=None, ge=1, le=4)
     name_kk: Optional[str] = Field(default=None, max_length=500)
     document_nominative_ru: Optional[str] = Field(default=None, max_length=500)
     document_possessive_kk: Optional[str] = Field(default=None, max_length=500)
@@ -564,11 +574,12 @@ def list_positions_crud(
         q_list = text(
             f"""
             {with_prefix}
-            SELECT p.*, NULLIF(BTRIM(to_jsonb(raw_position)->>'document_genitive_ru'),'') AS document_genitive_ru,
+            SELECT p.*, pt.name AS type_name, NULLIF(BTRIM(to_jsonb(raw_position)->>'document_genitive_ru'),'') AS document_genitive_ru,
                 ARRAY(SELECT a.alias_text FROM public.position_aliases a
                 WHERE a.position_id=p.position_id ORDER BY a.alias_id) AS aliases
             FROM public.position_directory p
             LEFT JOIN public.positions raw_position ON raw_position.position_id=p.position_id
+            LEFT JOIN public.position_types pt ON pt.code=p.type_code
             WHERE {where_sql}
             ORDER BY {order_sql}
             LIMIT :limit OFFSET :offset

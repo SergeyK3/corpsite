@@ -190,6 +190,11 @@ export function buildDirectorySidebarNavItems(
         title: "Должности",
         matchPrefixes: ["/directory/positions"],
       });
+      items.push({
+        href: "/directory/position-types",
+        title: "Тип",
+        matchPrefixes: ["/directory/position-types"],
+      });
     }
   }
   return items;
@@ -255,6 +260,7 @@ export function resolveDirectoryOrgTreeBasePath(pathname: string): string {
   if (pathname.startsWith("/directory/staff")) return "/directory/staff";
   if (pathname.startsWith("/directory/roles")) return "/directory/roles";
   if (pathname.startsWith("/directory/positions")) return "/directory/positions";
+  if (pathname.startsWith("/directory/position-types")) return "/directory/position-types";
   if (pathname.startsWith("/directory/contacts")) return "/directory/contacts";
   if (pathname.startsWith("/directory/personnel/lk")) return "/directory/personnel/lk";
   if (pathname.startsWith("/directory/personnel/applicants")) return "/directory/personnel/lk";

@@ -3,6 +3,7 @@ import * as React from "react";
 import {apiFetchJson} from "@/lib/api";
 
 export type PositionDetails = {
+  type_code?:number|null;
   name_kk?:string; document_nominative_ru?:string; document_possessive_kk?:string;
   translation_status?:"confirmed"|"needs_review"; document_form_status?:"confirmed"|"needs_review";
   record_kind?:"standalone"|"variant"|"search_synonym";job_code?:string;aliases?:string[];expected_revision?:number;

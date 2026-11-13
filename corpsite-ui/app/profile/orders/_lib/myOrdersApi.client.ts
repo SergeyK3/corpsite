@@ -5,19 +5,17 @@ import { resolveApiUrl } from "@/lib/apiBase";
 
 export type OrderLocale = "kk" | "ru";
 export type ConfirmationStatus = "CONFIRMED" | "UNCONFIRMED";
+export type MyOrderItem = { item_number: number; item_text: string | null };
 export type MyOrder = {
   order_id: number;
   order_number: string | null;
   order_date: string | null;
   title: string;
-  item_text: string | null;
+  items: MyOrderItem[];
   confirmation_status: ConfirmationStatus;
 };
 export type MyOrderDetail = MyOrder & {
   warning: string | null;
-  preamble: string | null;
-  basis: string | null;
-  tenure_text?: string | null;
 };
 export type MyOrdersResponse = {
   status: "READY" | "NO_EMPLOYEE_LINK" | "PERSON_NOT_LINKED" | "IDENTITY_AMBIGUOUS";

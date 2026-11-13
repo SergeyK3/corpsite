@@ -77,6 +77,9 @@ def normalize_qualification_category_entry(item: dict[str, Any]) -> dict[str, An
         "specialty": str(item.get("specialty") or "").strip(),
         "category": category,
         "assigned_at": str(item.get("assigned_at") or "").strip(),
+        # An explicit expiry may be present in a canonical record. Never derive
+        # it from the assignment date: category validity can vary by source.
+        "valid_until": str(item.get("valid_until") or "").strip(),
         "assigned_at_calculated": bool(item.get("assigned_at_calculated")),
         "review_status": str(item.get("review_status") or "REVIEW_REQUIRED").strip(),
         "review_reason": str(item.get("review_reason") or "").strip() or None,

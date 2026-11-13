@@ -108,6 +108,7 @@ class PprQualificationCategoryRecordResponse(BaseModel):
     specialty: str = ""
     category: str = ""
     assigned_at: str = ""
+    valid_until: str = ""
     assigned_at_calculated: bool = False
     review_status: str = "REVIEW_REQUIRED"
     review_reason: str | None = None

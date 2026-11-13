@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import PersonnelOrdersPageClient from "./PersonnelOrdersPageClient";
+import type { PersonnelOrderDetailResponse } from "../_lib/personnelOrdersApi.client";
 
 const navigation = vi.hoisted(() => ({
   params: "",
@@ -29,7 +30,21 @@ vi.mock("./PersonnelOrderCreateDialog", () => ({
   ),
 }));
 vi.mock("./PersonnelOrderDetailDrawer", () => ({
-  default: ({ onClose, open, orderId }: { onClose: () => void; open: boolean; orderId: number | null }) => open ? <div data-testid="personnel-order-drawer">Черновик {orderId}<button type="button" onClick={onClose}>Закрыть карточку</button></div> : null,
+  default: ({ onClose, onChanged, open, orderId }: { onClose: () => void; onChanged?: (detail: PersonnelOrderDetailResponse) => void; open: boolean; orderId: number | null }) => open ? (
+    <div data-testid="personnel-order-drawer">
+      Черновик {orderId}
+      <button type="button" onClick={onClose}>Закрыть карточку</button>
+      <button type="button" data-testid="simulate-requisites-saved" onClick={() => onChanged?.({
+        order: {
+          order_id: orderId ?? 9001, order_number: "DEMO-185", order_date: "2026-06-10",
+          order_type_code: "HIRE", order_class: "PERSONNEL", status: "SIGNED",
+          source_mode: "DIGITAL", created_by: 1,
+          storage_json: { import_source_order_number: "CSV-PILOT-185", technical_record: true, record_quality: "TECHNICAL_RECORD" },
+        },
+        items: [], localized_texts: [], attachments: [], prints: [], events: [],
+      })}>Simulate saved requisites</button>
+    </div>
+  ) : null,
 }));
 
 vi.mock("../_lib/personnelOrdersApi.client", async () => {
@@ -262,5 +277,26 @@ describe("PersonnelOrdersPageClient employee filter", () => {
     fireEvent.click(screen.getByRole("button", { name: "Очистить сотрудника" }));
     expect(input).toHaveValue("");
     expect(navigation.replace).toHaveBeenCalledWith("/directory/personnel/orders?record_quality=WORKING");
+  });
+
+  it("updates the saved import number in the journal without resetting filters", async () => {
+    navigation.params = "status=SIGNED&record_quality=ALL&order_type_code=HIRE&date_from=2026-06-01&date_to=2026-06-30";
+    const oldRow = { order_id: 9001, order_number: "CSV-PILOT-185", order_date: "2026-06-10", order_type_code: "HIRE", order_class: "PERSONNEL", status: "SIGNED", source_mode: "DIGITAL", created_by: 1, item_count: 1, employee_ids: [328], employee_names: ["Synthetic Employee"], storage_json: {} };
+    const newRow = { ...oldRow, order_number: "DEMO-185", storage_json: { import_source_order_number: "CSV-PILOT-185", technical_record: true, record_quality: "TECHNICAL_RECORD" } };
+    api.listPersonnelOrders.mockResolvedValue({ items: [oldRow], total: 1, limit: 200, offset: 0 });
+    render(<PersonnelOrdersPageClient />);
+    const row = await screen.findByTestId("personnel-order-row-9001");
+    fireEvent.click(row);
+    await screen.findByTestId("personnel-order-drawer");
+    api.listPersonnelOrders.mockResolvedValue({ items: [newRow], total: 1, limit: 200, offset: 0 });
+    fireEvent.click(screen.getByTestId("simulate-requisites-saved"));
+    await waitFor(() => expect(screen.getByTestId("personnel-order-row-9001")).toHaveTextContent("DEMO-185"));
+    fireEvent.click(screen.getByRole("button", { name: "Закрыть карточку" }));
+    const savedRow = await screen.findByTestId("personnel-order-row-9001");
+    expect(savedRow).toHaveTextContent("DEMO-185");
+    fireEvent.click(savedRow);
+    expect(await screen.findByTestId("personnel-order-drawer")).toHaveTextContent("9001");
+    expect(api.listPersonnelOrders).toHaveBeenLastCalledWith(expect.objectContaining({ status: "SIGNED", record_quality: "ALL", order_type_code: "HIRE", date_from: "2026-06-01", date_to: "2026-06-30" }));
+    expect(navigation.replace).not.toHaveBeenCalled();
   });
 });

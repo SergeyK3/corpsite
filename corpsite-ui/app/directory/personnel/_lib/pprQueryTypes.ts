@@ -226,6 +226,7 @@ export type PprQualificationCategoryRecordResponse = {
   specialty: string;
   category: "highest" | "first" | "second" | string;
   assigned_at: string;
+  valid_until?: string;
   assigned_at_calculated: boolean;
   review_status: "AUTO_READY" | "REVIEW_REQUIRED" | string;
   review_reason: string | null;

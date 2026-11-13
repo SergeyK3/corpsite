@@ -6,7 +6,6 @@ import { usePathname } from "next/navigation";
 
 import { isPersonnelControlListPath } from "../_lib/personnelControlListNav";
 import { useCurrentUser } from "@/lib/currentUser";
-import { canReadPprMigrationStatus } from "@/lib/pprMigrationStatusAccess";
 import {
   canSeeTestPersonnelApprovals,
   TEST_PERSONNEL_APPROVALS_HREF,
@@ -21,9 +20,9 @@ const BASE_ITEMS = [
     prefixes: ["/directory/personnel/lk", "/directory/personnel/applicants"],
   },
   {
-    href: "/directory/personnel/migration-status",
-    title: "Сводка",
-    prefixes: ["/directory/personnel/migration-status"],
+    href: "/directory/personnel/qualification-categories",
+    title: "Квалиф. категории",
+    prefixes: ["/directory/personnel/qualification-categories"],
   },
   { href: "/directory/personnel/onboarding", title: "Адаптация", prefixes: ["/directory/personnel/onboarding"] },
   { href: "/directory/personnel/orders", title: "Приказы", prefixes: ["/directory/personnel/orders"] },
@@ -65,7 +64,6 @@ export default function PersonnelSubNav() {
     <nav aria-label="Навигация кадровых процессов" className="flex flex-wrap gap-2">
       {BASE_ITEMS.map((item) => {
         if (journalOnly && item.href !== "/directory/personnel/journal") return null;
-        if (item.href === "/directory/personnel/migration-status" && !canReadPprMigrationStatus(me)) return null;
         const active = isBaseItemActive(pathname, item.prefixes, item.href);
         return (
           <Link

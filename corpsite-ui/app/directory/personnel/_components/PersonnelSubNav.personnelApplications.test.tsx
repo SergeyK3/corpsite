@@ -50,12 +50,15 @@ describe("PersonnelSubNav", () => {
     expect(screen.queryByRole("link", { name: "Кадровые обращения" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Отчёты" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Проверка биографии" })).not.toBeInTheDocument();
+    const topLinks = screen.getByRole("navigation", { name: "Навигация кадровых процессов" }).querySelectorAll("a");
+    const titles = Array.from(topLinks, (link) => link.textContent);
+    expect(titles[titles.indexOf("Личные карточки") + 1]).toBe("Квалиф. категории");
   });
 
-  it("places Сводка next to Личные карточки with the migration-status route", () => {
+  it("keeps the report inside Личные карточки without a top-level Сводка", () => {
     render(<PersonnelSubNav />);
-    const summary = screen.getByRole("link", { name: "Сводка" });
-    expect(summary).toHaveAttribute("href", "/directory/personnel/migration-status");
+    expect(screen.getByRole("link", { name: "Личные карточки" })).toHaveAttribute("href", "/directory/personnel/lk");
+    expect(screen.queryByRole("link", { name: "Сводка" })).not.toBeInTheDocument();
   });
 
   it("keeps the test-personnel approval route while using its shorter title", () => {

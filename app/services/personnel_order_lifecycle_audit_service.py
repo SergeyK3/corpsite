@@ -29,7 +29,9 @@ LIFECYCLE_AUDIT_TABLE = "personnel_order_lifecycle_audit"
 
 
 def personnel_order_lifecycle_audit_available(conn: Optional[Connection] = None) -> bool:
-    if not personnel_orders_available():
+    # A transaction-owned command must not inspect schema through a second
+    # engine connection (or observe another snapshot).
+    if conn is None and not personnel_orders_available():
         return False
 
     def _check(connection: Connection) -> bool:

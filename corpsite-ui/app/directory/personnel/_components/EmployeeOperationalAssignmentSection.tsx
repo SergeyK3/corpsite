@@ -6,6 +6,7 @@ import {
   correctEmployee,
   getEmployee,
   mapApiErrorToMessage,
+  updateEmployeeAssignmentType,
 } from "../../employees/_lib/api.client";
 import type { EmployeeDetails } from "../../employees/_lib/types";
 import { getOrgUnitsTree } from "../../org-units/_lib/api.client";
@@ -222,6 +223,26 @@ export default function EmployeeOperationalAssignmentSection({
     }
   }
 
+  async function handleTypeSave(manualTypeCode: number | null) {
+    const assignmentId = details?.active_assignment_id;
+    if (!employeeId || !assignmentId) {
+      setCorrectionError("Текущее основное назначение не найдено. Обновите карточку.");
+      return;
+    }
+    setCorrectionSaving(true);
+    setCorrectionError(null);
+    try {
+      await updateEmployeeAssignmentType(employeeId, assignmentId, manualTypeCode);
+      setCorrectionOpen(false);
+      onAssignmentChanged?.();
+      await loadAssignment();
+    } catch (e) {
+      setCorrectionError(mapApiErrorToMessage(e));
+    } finally {
+      setCorrectionSaving(false);
+    }
+  }
+
   if (loading) {
     return <div className="text-sm text-zinc-500">Загрузка организационного назначения…</div>;
   }
@@ -236,6 +257,7 @@ export default function EmployeeOperationalAssignmentSection({
         <SummaryField label="Группа отделений" value={groupName} />
         <SummaryField label="Отделение" value={employeeOrgUnitLabel(details)} />
         <SummaryField label="Кадровая должность" value={employeePositionLabel(details)} />
+        <SummaryField label="Тип" value={`${details?.type_name || "Не указан"} · ${details?.type_source === "manual" ? "Указан вручную" : "Из должности"}`} />
         <SummaryField
           label="Статус зачисления в Operational Directory"
           value={enrollmentStatusLabel(enrolled, active)}
@@ -298,6 +320,7 @@ export default function EmployeeOperationalAssignmentSection({
         error={correctionError}
         onClose={handleCloseCorrection}
         onSubmit={handleCorrectionSubmit}
+        onSaveType={handleTypeSave}
       />
 
       <ImportNormalizedRecordDrawer

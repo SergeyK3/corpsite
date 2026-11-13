@@ -41,6 +41,7 @@ from app.services.manual_assignment_change_service import (
     ManualAssignmentChangeError,
     change_employee_assignment,
 )
+from app.services.assignment_type_service import set_current_assignment_manual_type
 
 from .common import as_http500, call_service
 from .rbac import (
@@ -117,6 +118,11 @@ class EmployeeAssignmentChangeIn(BaseModel):
     start_date: date
     idempotency_key: str = Field(..., min_length=1, max_length=128)
     comment: Optional[str] = Field(default=None, max_length=2000)
+
+
+class EmployeeAssignmentTypeIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    manual_type_code: Optional[int] = Field(..., ge=1, le=4)
 
 
 class EmployeeCorrectOrgUnitIn(BaseModel):
@@ -774,6 +780,39 @@ def change_employee_assignment_route(
             status_code=409,
             detail={"code": "ASSIGNMENT_CHANGE_INTEGRITY_CONFLICT", "message": "Assignment change conflicted with current state."},
         ) from exc
+    except Exception as exc:
+        raise as_http500(exc)
+
+
+@router.patch("/employees/{employee_id}/assignments/{assignment_id}/type")
+def update_employee_assignment_type(
+    employee_id: int = Path(..., ge=1),
+    assignment_id: int = Path(..., ge=1),
+    body: EmployeeAssignmentTypeIn = ...,
+    user: Dict[str, Any] = Depends(get_current_user),
+) -> Dict[str, Any]:
+    actor_user_id = int(user["user_id"])
+    if not (
+        _is_privileged(user)
+        or has_admin_permission(actor_user_id, HR_ENROLLMENT_MANAGER_CODE)
+    ):
+        raise HTTPException(status_code=403, detail="Forbidden.")
+
+    try:
+        with engine.begin() as conn:
+            set_current_assignment_manual_type(
+                conn, employee_id=employee_id, assignment_id=assignment_id,
+                manual_type_code=body.manual_type_code,
+            )
+
+        item = svc_get_employee(
+            employee_id=str(employee_id), scope_unit_id=None, scope_unit_ids=None,
+        )
+        return {"item": item, "assignment_id": assignment_id}
+    except HTTPException:
+        raise
+    except IntegrityError as exc:
+        raise HTTPException(status_code=409, detail="Position type update conflicted with current state.") from exc
     except Exception as exc:
         raise as_http500(exc)
 

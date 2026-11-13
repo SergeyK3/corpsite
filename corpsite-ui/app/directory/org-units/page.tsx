@@ -2,14 +2,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 import OrgScopeFilter from "@/components/OrgScopeFilter";
 import ExportExcelButton from "@/components/ExportExcelButton";
 import { useCurrentUser } from "@/lib/currentUser";
 import { readOrgScopeFromSearchParams } from "@/lib/orgScope";
 
-import OrgUnitsTree, { nodeSearchText, type TreeNode, type TreeAction } from "./_components/OrgUnitsTree";
+import { nodeSearchText, type TreeNode } from "./_components/OrgUnitsTree";
 import {
   activateOrgUnit,
   createOrgUnit,
@@ -57,16 +57,38 @@ function flattenNodes(nodes: TreeNode[]): Array<{ id: string; title: string; typ
   return out;
 }
 
+type OrgUnitListRow = { node: TreeNode; parentTitle: string | null };
+
+function flattenListRows(nodes: TreeNode[]): OrgUnitListRow[] {
+  const rows: OrgUnitListRow[] = [];
+  const seen = new Set<string>();
+  function visit(items: TreeNode[], parentTitle: string | null) {
+    for (const node of items) {
+      if (seen.has(String(node.id))) continue;
+      seen.add(String(node.id));
+      rows.push({ node, parentTitle });
+      visit(node.children ?? [], node.title);
+    }
+  }
+  visit(nodes, null);
+  return rows;
+}
+
 export default function OrgUnitsPage() {
   const canManage = useCurrentUser()?.is_sysadmin_assistant !== true;
+  const router = useRouter();
   const sp = useSearchParams();
   const orgScope = useMemo(() => readOrgScopeFromSearchParams(sp), [sp]);
 
   const [nodes, setNodes] = useState<TreeNode[]>([]);
   const [inactiveIds, setInactiveIds] = useState<string[]>([]);
-  const [expandedIds, setExpandedIds] = useState<string[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [showInactive, setShowInactive] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [createName, setCreateName] = useState("");
+  const [createBusy, setCreateBusy] = useState(false);
+  const [createError, setCreateError] = useState("");
 
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errorText, setErrorText] = useState<string>("");
@@ -92,15 +114,10 @@ export default function OrgUnitsPage() {
       const data = await getOrgUnitsTree({
         include_inactive: true,
         org_group_id: orgScope.org_group_id ?? null,
-        org_unit_id: orgScope.org_unit_id ?? null,
       });
 
       setNodes(mapApiTreeNodesToUi(data.items));
       setInactiveIds(data.inactive_ids);
-
-      if (data.root_id != null) {
-        setExpandedIds((prev) => (prev.length ? prev : [String(data.root_id)]));
-      }
     } catch (e) {
       setErrorText(mapApiErrorToMessage(e));
       setNodes([]);
@@ -108,24 +125,36 @@ export default function OrgUnitsPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [orgScope.org_group_id, orgScope.org_unit_id]);
+  }, [orgScope.org_group_id]);
 
   useEffect(() => {
+    setNodes([]);
+    setInactiveIds([]);
+    setSelectedId(null);
     void loadTree();
   }, [loadTree]);
 
-  const handleToggle = (id: string, open: boolean) => {
-    setExpandedIds((prev) => {
-      if (open) {
-        if (prev.includes(id)) return prev;
-        return [...prev, id];
-      }
-      return prev.filter((x) => x !== id);
-    });
-  };
-
   const handleSelect = (id: string) => setSelectedId(id);
-  const handleResetExpand = () => setExpandedIds([]);
+  const selectedFilterId = orgScope.org_unit_id ? String(orgScope.org_unit_id) : "";
+  const listRows = useMemo(() => flattenListRows(nodes), [nodes]);
+  const filteredRows = useMemo(() => {
+    const query = searchQuery.trim().toLocaleLowerCase("ru").replaceAll("ё", "е");
+    return listRows.filter(({ node }) => {
+      if (selectedFilterId && String(node.id) !== selectedFilterId) return false;
+      if (!showInactive && !selectedFilterId && inactiveSet.has(String(node.id))) return false;
+      return !query || nodeSearchText(node).toLocaleLowerCase("ru").replaceAll("ё", "е").includes(query);
+    });
+  }, [listRows, selectedFilterId, showInactive, inactiveSet, searchQuery]);
+
+  function updateUnitFilter(id: string) {
+    const params = new URLSearchParams(sp.toString());
+    if (id) params.set("org_unit_id", id);
+    else params.delete("org_unit_id");
+    setSearchQuery("");
+    setSelectedId(null);
+    const query = params.toString();
+    router.replace(query ? `/directory/org-units?${query}` : "/directory/org-units");
+  }
 
   const selectedNode = useMemo(() => (selectedId ? findNodeById(nodes, selectedId) : null), [nodes, selectedId]);
   const parentId = useMemo(() => (selectedId ? findParentId(nodes, selectedId) : null), [nodes, selectedId]);
@@ -271,10 +300,7 @@ export default function OrgUnitsPage() {
   }, [closeMove, loadTree, moveTargetId, nodes, selectedNode]);
 
   // ---------------------------
-  // Create + Toggle active delegated from OrgUnitsTree
-  // FIX: сигнатуры должны совпадать с OrgUnitsTreeProps:
-  //   onCreateChild(parentId: string, name: string)
-  //   onToggleActive(id: string, makeActive: boolean)
+  // Create and activation actions remain available from the selected card.
   // ---------------------------
   const handleCreateChild = useCallback(
     async (parentId: string, name: string) => {
@@ -292,10 +318,6 @@ export default function OrgUnitsPage() {
 
         await loadTree();
 
-        setExpandedIds((prev) => {
-          const p = String(pid);
-          return prev.includes(p) ? prev : [...prev, p];
-        });
       } catch (e) {
         setErrorText(mapApiErrorToMessage(e));
         throw e;
@@ -350,93 +372,84 @@ export default function OrgUnitsPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, [renameOpen, moveOpen, closeRename, closeMove, submitRename, submitMove]);
 
-  // ---------------------------
-  // Tree actions (legacy): now only rename/move are handled here
-  // ---------------------------
-  const handleTreeAction = useCallback(
-    (id: string, action: TreeAction) => {
-      if (action === "rename") {
-        openRename(String(id));
-        return;
-      }
-      if (action === "move") {
-        openMove(String(id));
-        return;
-      }
-    },
-    [openMove, openRename]
-  );
-
   return (
-    <div className="h-[calc(100vh-64px)] w-full p-4">
-      <div className="flex h-full w-full gap-4">
-        {/* LEFT */}
-        <div className="flex w-[420px] shrink-0 flex-col">
-          <div className="mb-3">
-            <OrgScopeFilter basePath="/directory/org-units" className="w-full" />
-          </div>
-
-          <div className="mb-3 flex items-center justify-between">
-            <div className="text-sm font-medium">Отделения</div>
-            <ExportExcelButton filename="Отделения.xlsx" disabled={isLoading || !!errorText}
-              load={async () => {
-                const query = searchQuery.trim().toLocaleLowerCase("ru");
-                const rows: (string | number | null)[][] = [];
-                function walk(items: TreeNode[], parent: string | null = null) {
-                  for (const node of items) {
-                    if (!query || nodeSearchText(node).toLocaleLowerCase("ru").includes(query)) {
-                      rows.push([node.id, node.code ?? null, node.title, node.type, parent,
-                        inactiveSet.has(String(node.id)) ? "Неактивно" : "Активно"]);
-                    }
-                    walk(node.children ?? [], node.title);
-                  }
-                }
-                walk(nodes);
-                return { headers: ["ID", "Код", "Название", "Тип", "Родитель", "Статус"], rows };
-              }} />
-            <button
-              type="button"
-              className="rounded-lg border px-3 py-1 text-xs hover:bg-gray-50 disabled:opacity-50"
-              onClick={() => void loadTree()}
-              disabled={isLoading}
-              title="Обновить"
-            >
-              Обновить
-            </button>
-          </div>
-
-          {errorText ? (
-            <div className="mb-3 rounded-xl border border-red-200 dark:border-red-900/55 bg-red-50 dark:bg-red-950/35 p-3 text-sm text-red-700 dark:text-red-300">
-              <div className="font-medium">Ошибка</div>
-              <div className="mt-1 whitespace-pre-wrap">{errorText}</div>
-            </div>
-          ) : null}
-
-          {isLoading ? <div className="mb-3 rounded-xl border bg-white dark:bg-zinc-950 p-3 text-sm text-gray-600">Загрузка…</div> : null}
-
-          <div className="min-h-0 flex-1 overflow-auto">
-            <OrgUnitsTree
-              nodes={nodes}
-              expandedIds={expandedIds}
-              selectedId={selectedId}
-              inactiveIds={inactiveIds}
-              searchQuery={searchQuery}
-              can={{ add: canManage, rename: canManage, move: canManage, deactivate: canManage }}
-              onSelect={handleSelect}
-              onToggle={handleToggle}
-              onAction={handleTreeAction}
-              onCreateChild={handleCreateChild}
-              onToggleActive={handleToggleActive}
-              onSearch={setSearchQuery}
-              onResetExpand={handleResetExpand}
-              headerTitle="Подразделения"
-            />
-          </div>
+    <div className="mx-auto w-full max-w-[1440px] px-4 py-3">
+      <div className="rounded-2xl border border-zinc-200 bg-white dark:border-zinc-800 dark:bg-zinc-950">
+        <div className="border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
+          <h1 className="text-xl font-semibold">Отделения</h1>
         </div>
+        <div className="space-y-4 p-4">
+          <div className="flex flex-wrap items-end gap-3 rounded-xl border border-zinc-200 p-3 dark:border-zinc-800">
+            <OrgScopeFilter basePath="/directory/org-units" className="min-w-[210px] flex-1" resetParamsOnChange={["org_unit_id"]} />
+            <div className="min-w-[210px] flex-1 text-sm font-medium text-zinc-800 dark:text-zinc-200">
+              <label htmlFor="org-unit-filter">Отделение</label>
+              <select id="org-unit-filter" value={selectedFilterId} disabled={isLoading}
+                onChange={(event) => updateUnitFilter(event.target.value)}
+                className="mt-1 w-full rounded-md border border-zinc-200 bg-zinc-100 px-3 py-2 text-sm dark:border-zinc-800 dark:bg-zinc-900">
+                <option value="">Все</option>
+                {listRows.map(({ node }) => <option key={node.id} value={node.id}>{node.title} (ID {node.id})</option>)}
+              </select>
+            </div>
+            <label className="min-w-[240px] flex-[2] text-sm font-medium text-zinc-800 dark:text-zinc-200">
+              Поиск по названию, коду или ID
+              <input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Поиск по названию, коду или ID"
+                className="mt-1 w-full rounded-md border border-zinc-200 bg-zinc-100 px-3 py-2 text-sm dark:border-zinc-800 dark:bg-zinc-900" />
+            </label>
+            <label className="flex items-center gap-2 pb-2 text-sm text-zinc-700 dark:text-zinc-300">
+              <input type="checkbox" checked={showInactive} onChange={(event) => setShowInactive(event.target.checked)} />
+              Показывать неактивные
+            </label>
+          </div>
 
-        {/* RIGHT */}
-        <div className="min-h-0 flex-1 overflow-auto rounded-2xl border bg-white dark:bg-zinc-950 p-6 text-gray-900">
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-sm text-zinc-600 dark:text-zinc-400">Всего: {filteredRows.length}</p>
+            <div className="flex items-center gap-2">
+              <ExportExcelButton filename="Отделения.xlsx" disabled={isLoading || !!errorText}
+                load={async () => ({
+                  headers: ["ID", "Название", "Код", "Родитель", "Статус"],
+                  rows: filteredRows.map(({ node, parentTitle }) => [node.id, node.title, node.code ?? null,
+                    parentTitle, inactiveSet.has(String(node.id)) ? "Неактивно" : "Активно"]),
+                })} />
+              <button type="button" onClick={() => void loadTree()} disabled={isLoading}
+                className="rounded-lg border border-zinc-200 px-3 py-2 text-sm hover:bg-zinc-100 disabled:opacity-50 dark:border-zinc-800 dark:hover:bg-zinc-900">
+                Обновить
+              </button>
+            </div>
+          </div>
+
+          {errorText ? <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900/55 dark:bg-red-950/35 dark:text-red-300">Ошибка: {errorText}</div> : null}
+
+          <div className="flex min-w-0 flex-col gap-4 lg:flex-row">
+            <div className="min-w-0 flex-1 overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
+              <table className="w-full text-sm" data-testid="org-units-list">
+                <thead className="bg-zinc-50 text-left dark:bg-zinc-900"><tr>
+                  <th className="px-3 py-2 font-semibold">ID</th>
+                  <th className="px-3 py-2 font-semibold">Отделение</th>
+                  <th className="px-3 py-2 font-semibold">Код</th>
+                  <th className="px-3 py-2 font-semibold">Родитель</th>
+                  <th className="px-3 py-2 font-semibold">Статус</th>
+                </tr></thead>
+                <tbody>
+                  {filteredRows.map(({ node, parentTitle }) => <tr key={node.id} data-testid="org-unit-row"
+                    tabIndex={0} aria-selected={selectedId === String(node.id)}
+                    onClick={() => handleSelect(String(node.id))}
+                    onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); handleSelect(String(node.id)); } }}
+                    className="cursor-pointer border-t border-zinc-200 hover:bg-zinc-50 focus:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-zinc-800 dark:hover:bg-zinc-900 dark:focus:bg-zinc-900">
+                    <td className="px-3 py-2">{node.id}</td>
+                    <td className="px-3 py-2 font-medium">{node.title}</td>
+                    <td className="px-3 py-2">{node.code || "—"}</td>
+                    <td className="px-3 py-2">{parentTitle || "—"}</td>
+                    <td className="px-3 py-2">{inactiveSet.has(String(node.id)) ? "Неактивно" : "Активно"}</td>
+                  </tr>)}
+                  {!isLoading && filteredRows.length === 0 ? <tr><td colSpan={5} className="px-3 py-5 text-center text-zinc-500">Отделения не найдены.</td></tr> : null}
+                  {isLoading ? <tr><td colSpan={5} className="px-3 py-5 text-center text-zinc-500">Загрузка…</td></tr> : null}
+                </tbody>
+              </table>
+            </div>
+
+            {selectedNode ? <div className="min-w-0 rounded-xl border border-zinc-200 bg-white p-4 text-gray-900 dark:border-zinc-800 dark:bg-zinc-950 lg:w-[440px] lg:shrink-0">
+          <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <div className="text-sm text-gray-800">Карточка подразделения</div>
               {selectedNode ? (
@@ -449,13 +462,14 @@ export default function OrgUnitsPage() {
                     </span>
                   </div>
                 </div>
-              ) : (
-                <div className="mt-2 text-sm text-gray-800">Выберите подразделение в дереве слева.</div>
-              )}
+              ) : null}
             </div>
 
             {selectedNode ? (
-              <div className="flex shrink-0 items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                {canManage ? <>
+                <button type="button" onClick={() => { setCreateName(""); setCreateError(""); setCreateOpen(true); }}
+                  className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50">Добавить дочерний</button>
                 <button
                   type="button"
                   className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
@@ -496,6 +510,9 @@ export default function OrgUnitsPage() {
                     Деактивировать
                   </button>
                 )}
+                </> : null}
+                <button type="button" onClick={() => setSelectedId(null)}
+                  className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50">Закрыть</button>
               </div>
             ) : null}
           </div>
@@ -586,8 +603,40 @@ export default function OrgUnitsPage() {
               </div>
             </>
           ) : null}
+            </div> : null}
+          </div>
         </div>
       </div>
+
+      {createOpen && selectedNode ? <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4 dark:bg-black/55">
+        <form className="w-full max-w-[520px] rounded-2xl border bg-white p-4 shadow-lg dark:bg-zinc-950"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            if (!createName.trim()) { setCreateError("Название обязательно."); return; }
+            setCreateBusy(true);
+            setCreateError("");
+            try {
+              await handleCreateChild(String(selectedNode.id), createName);
+              setCreateOpen(false);
+            } catch (error) {
+              setCreateError(mapApiErrorToMessage(error));
+            } finally {
+              setCreateBusy(false);
+            }
+          }}>
+          <h2 className="text-sm font-medium">Добавить дочернее подразделение</h2>
+          <p className="mt-1 text-xs text-zinc-600">Родитель: {selectedNode.title}</p>
+          <label className="mt-3 block text-sm">Название
+            <input value={createName} onChange={(event) => setCreateName(event.target.value)} autoFocus
+              className="mt-1 w-full rounded-lg border px-3 py-2 text-sm" disabled={createBusy} />
+          </label>
+          {createError ? <p role="alert" className="mt-2 text-sm text-red-700">{createError}</p> : null}
+          <div className="mt-4 flex justify-end gap-2">
+            <button type="button" onClick={() => setCreateOpen(false)} disabled={createBusy} className="rounded-lg border px-3 py-2 text-sm">Отмена</button>
+            <button type="submit" disabled={createBusy || !createName.trim()} className="rounded-lg border bg-black px-3 py-2 text-sm text-white disabled:opacity-50">Создать</button>
+          </div>
+        </form>
+      </div> : null}
 
       {/* Rename modal */}
       {renameOpen ? (

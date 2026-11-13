@@ -102,6 +102,27 @@ async function apiPatchJson<T>(path: string, body?: unknown): Promise<T> {
   return (await res.json()) as T;
 }
 
+export type PositionTypeOption = { code: number; name: string };
+
+export async function getPositionTypes(): Promise<PositionTypeOption[]> {
+  const response = await apiGetJson<{ items: PositionTypeOption[] }>("/directory/position-types");
+  return response.items;
+}
+
+export async function updateEmployeeAssignmentType(
+  employeeId: string,
+  assignmentId: number,
+  manualTypeCode: number | null,
+): Promise<{ item: EmployeeDetails; assignment_id: number }> {
+  if (!employeeId.trim() || !Number.isSafeInteger(assignmentId) || assignmentId < 1) {
+    throw new Error("Current assignment is missing. Reload the card.");
+  }
+  return apiPatchJson(
+    `/directory/employees/${encodeURIComponent(employeeId)}/assignments/${assignmentId}/type`,
+    { manual_type_code: manualTypeCode },
+  );
+}
+
 async function apiDeleteJson<T>(path: string): Promise<T> {
   const res = await fetch(resolveApiUrl(path), {
     method: "DELETE",

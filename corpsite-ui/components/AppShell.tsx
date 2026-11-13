@@ -2,7 +2,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
 import { apiAuthMe } from "@/lib/api";
@@ -22,7 +22,6 @@ import {
   canAccessDirectoryRoute,
   canViewPersonnelTasksReadOnly,
   hasPersonnelVisibility,
-  shouldShowOrgUnitsPanel,
 } from "@/lib/visibilityNav";
 import OperationalOrdersNavIcon from "./OperationalOrdersNavIcon";
 import {
@@ -50,7 +49,6 @@ import type { MeInfo } from "@/lib/types";
 import { shouldShowPositionCabinetNav } from "@/lib/positionCabinetNav";
 import { resolveCabinetTitle } from "@/lib/userCabinetTitle";
 
-import OrgUnitsSidebarPanel from "./OrgUnitsSidebarPanel";
 import PositionCabinetLibraryLinks from "./PositionCabinetLibraryLinks";
 import PositionCabinetNav from "./PositionCabinetNav";
 
@@ -138,11 +136,16 @@ const EDUCATION_DIRECTORY_NAV: NavItem[] = [
   { href: "/directory/document-kinds", title: "Виды документов" },
 ];
 
-const SECONDARY_DIRECTORY_NAV: NavItem[] = [
+const DIRECTORY_REFERENCE_NAV: NavItem[] = [
   {
     href: "/directory/positions",
     title: "Должности",
     matchPrefixes: ["/directory/positions"],
+  },
+  {
+    href: "/directory/position-types",
+    title: "Тип",
+    matchPrefixes: ["/directory/position-types"],
   },
   {
     href: "/directory/medical-specialties",
@@ -159,20 +162,21 @@ const SECONDARY_DIRECTORY_NAV: NavItem[] = [
     title: "Типы деятельности",
     matchPrefixes: ["/directory/department-groups"],
   },
-  {
-    href: "/directory/org-units",
-    title: "Отделения",
-    matchPrefixes: ["/directory/org-units"],
-  },
 ];
+
+const ORG_UNITS_NAV_ITEM: NavItem = {
+  href: "/directory/org-units",
+  title: "Отделения",
+  matchPrefixes: ["/directory/org-units"],
+};
 
 function normalizeMsg(msg: string): string {
   const s = String(msg || "").trim();
   return s || "Ошибка";
 }
 
-function isUnauthorized(e: any): boolean {
-  return Number(e?.status ?? 0) === 401;
+function isUnauthorized(e: unknown): boolean {
+  return typeof e === "object" && e !== null && "status" in e && Number(e.status) === 401;
 }
 
 function isNavItemActive(pathname: string, item: NavItem): boolean {
@@ -271,60 +275,6 @@ function EducationSidebarGroup({ pathname }: { pathname: string }) {
   );
 }
 
-function RareSidebarGroup({ pathname }: { pathname: string }) {
-  const sectionActive = SECONDARY_DIRECTORY_NAV.some((item) => isNavItemActive(pathname, item));
-  const [open, setOpen] = useState<boolean>(sectionActive);
-
-  useEffect(() => {
-    if (sectionActive) setOpen(true);
-  }, [sectionActive]);
-
-  return (
-    <div className="space-y-1">
-      <button
-        type="button"
-        onClick={() => setOpen((prev) => !prev)}
-        className={[
-          "flex w-full items-center justify-between rounded-lg border px-2.5 py-1 text-left text-sm leading-tight transition",
-          sectionActive
-            ? "border-zinc-400 dark:border-zinc-600 bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-50"
-            : "border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 hover:bg-zinc-200 dark:hover:bg-zinc-700",
-        ].join(" ")}
-        aria-expanded={open}
-        aria-label="Показать дополнительные справочники"
-      >
-        <span className="text-base font-semibold leading-none">…</span>
-        <span className={["text-xs text-zinc-600 dark:text-zinc-400 transition-transform", open ? "rotate-180" : ""].join(" ")}>
-          ▾
-        </span>
-      </button>
-
-      {open ? (
-        <div className="ml-2 space-y-0.5 border-l border-zinc-200 dark:border-zinc-800 pl-2">
-          {SECONDARY_DIRECTORY_NAV.map((item) => {
-            const active = isNavItemActive(pathname, item);
-
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={[
-                  "block rounded-lg px-2.5 py-1 text-sm leading-tight transition",
-                  active
-                    ? "bg-zinc-200 dark:bg-zinc-800 text-zinc-900 dark:text-zinc-50"
-                    : "text-zinc-600 dark:text-zinc-400 hover:bg-zinc-200 dark:hover:bg-zinc-700 hover:text-zinc-900",
-                ].join(" ")}
-              >
-                {item.title}
-              </Link>
-            );
-          })}
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname() || "/tasks";
@@ -336,10 +286,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState<boolean>(!isLogin && !isPublicIntake);
   const [err, setErr] = useState<string | null>(null);
 
-  function redirectToLogin() {
+  const redirectToLogin = useCallback(() => {
     authLogout();
     router.replace("/login");
-  }
+  }, [router]);
 
   function onLogoutClick() {
     authLogout();
@@ -361,18 +311,19 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       try {
         const data = await apiAuthMe();
         setMe(data);
-      } catch (e: any) {
+      } catch (e: unknown) {
         if (isUnauthorized(e)) {
           redirectToLogin();
           return;
         }
-        setErr(normalizeMsg(e?.message || "Не удалось загрузить профиль"));
+        const message = typeof e === "object" && e !== null && "message" in e ? e.message : undefined;
+        setErr(normalizeMsg(String(message || "Не удалось загрузить профиль")));
         setMe(null);
       } finally {
         setLoading(false);
       }
     })();
-  }, [isLogin, isPublicIntake, router]);
+  }, [isLogin, isPublicIntake, redirectToLogin, router]);
 
   const cabinetTitle = useMemo(() => resolveCabinetTitle(me), [me]);
 
@@ -447,10 +398,6 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     if (!forbiddenNonAdminRoute) return;
     router.replace("/tasks");
   }, [isLogin, loading, isPrintPage, forbiddenNonAdminRoute, router]);
-
-  const showOrgUnitsPanel = useMemo(() => shouldShowOrgUnitsPanel(pathname, me), [me, pathname]);
-
-  const orgTreeBasePath = useMemo(() => resolveDirectoryOrgTreeBasePath(pathname), [pathname]);
 
   const showPositionCabinetNav = shouldShowPositionCabinetNav(pathname, { showPersonnelVisibility });
 
@@ -552,11 +499,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 <div className="space-y-1">
                   <SidebarNav pathname={pathname} items={sidebarNavItems} />
                   <EducationSidebarGroup pathname={pathname} />
-                  <RareSidebarGroup pathname={pathname} />
+                  <SidebarNav pathname={pathname} items={DIRECTORY_REFERENCE_NAV} />
+                  <SidebarNav pathname={pathname} items={[ORG_UNITS_NAV_ITEM]} />
                 </div>
               </div>
-
-              {showOrgUnitsPanel ? <OrgUnitsSidebarPanel basePath={orgTreeBasePath} /> : null}
             </aside>
 
             {renderMainSection(
@@ -575,10 +521,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <div className="rounded-2xl border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 p-1">
                 <div className="space-y-1">
                   <SidebarNav pathname={pathname} items={visibilityNavItems} />
+                  <SidebarNav pathname={pathname} items={[ORG_UNITS_NAV_ITEM]} />
                 </div>
               </div>
-
-              {showOrgUnitsPanel ? <OrgUnitsSidebarPanel basePath={orgTreeBasePath} /> : null}
             </aside>
 
             {renderMainSection(

@@ -61,6 +61,13 @@ class PprSelfOperationalAssignmentResponse(BaseModel):
     operational_assignment: PprSelfOperationalAssignmentDataResponse | None = None
 
 
+class PprSelfOrderItem(BaseModel):
+    """One item assigned to the authenticated employee."""
+
+    item_number: int
+    item_text: str | None = None
+
+
 class PprSelfOrderListItem(BaseModel):
     """Minimal, employee-safe order journal row (no personnel identifiers)."""
 
@@ -68,7 +75,7 @@ class PprSelfOrderListItem(BaseModel):
     order_number: str | None = None
     order_date: date | None = None
     title: str
-    item_text: str | None = None
+    items: list[PprSelfOrderItem] = Field(default_factory=list)
     confirmation_status: Literal["CONFIRMED", "UNCONFIRMED"]
 
 
@@ -78,12 +85,9 @@ class PprSelfOrderListResponse(BaseModel):
 
 
 class PprSelfOrderDetailResponse(PprSelfOrderListItem):
-    """A safe personal view of one order: one caller-owned item only."""
+    """A personal view of every caller-owned item, without full-document text."""
 
     warning: str | None = None
-    preamble: str | None = None
-    basis: str | None = None
-    tenure_text: str
 
 
 class _StrictSelfCommand(BaseModel):

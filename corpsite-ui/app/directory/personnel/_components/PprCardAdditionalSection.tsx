@@ -284,11 +284,13 @@ function QualificationCategoriesBlock({ items }: { items: PprQualificationCatego
           <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500">Специальность</th>
           <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500">Категория</th>
           <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500">Дата присвоения</th>
+          <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500">Действует до</th>
         </tr></thead>
         <tbody>{items.map((item, index) => <tr key={`ppr-category-${index}`} data-testid={`ppr-qualification-category-row-${index}`}>
           <td className="px-3 py-2 text-sm">{intakeAdditionalCellValue(item.specialty)}</td>
           <td className="px-3 py-2 text-sm">{CATEGORY_LABELS[item.category] ?? intakeAdditionalCellValue(item.category)}</td>
           <td className="px-3 py-2 text-sm">{intakeAdditionalCellValue(item.assigned_at)}{item.assigned_at_calculated ? " (рассчитана)" : ""}</td>
+          <td className="px-3 py-2 text-sm">{intakeAdditionalCellValue(item.valid_until)}</td>
         </tr>)}</tbody>
       </table>
     </div>
