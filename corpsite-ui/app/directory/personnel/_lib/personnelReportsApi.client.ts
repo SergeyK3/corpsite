@@ -105,6 +105,22 @@ export type PersonnelOrdersSummaryFilters = {
   dateTo?: string;
 };
 
+export type PersonnelTypeHeadcountReport = {
+  report_code: "personnel_type_headcount";
+  groups: Array<{ code: number | null; name: string; count: number }>;
+  unknown_employees: Array<{
+    employee_id: number;
+    full_name: string | null;
+    org_unit_name: string | null;
+    position_name: string | null;
+  }>;
+  total: number;
+};
+
+export function getPersonnelTypeHeadcountReport(): Promise<PersonnelTypeHeadcountReport> {
+  return apiFetchJson<PersonnelTypeHeadcountReport>("/directory/personnel/reports/personnel-type-headcount");
+}
+
 export type PersonnelEmployeeActionType = { code: string; label: string; count: number };
 export type PersonnelEmployeeOrder = {
   order_id: number;

@@ -52,18 +52,23 @@ def build_personnel_qualification_categories_report(db_engine: Any, *, today: da
         SELECT e.employee_id, e.person_id,
                COALESCE(NULLIF(BTRIM(p.full_name), ''), NULLIF(BTRIM(e.full_name), '')) AS full_name,
                ou.unit_id AS org_unit_id, ou.name AS org_unit_name,
+               COALESCE(current_assignment.manual_type_code, position.type_code) AS type_code,
+               position.name AS position_name,
                prm.additional_profile AS metadata_profile,
                intake.additional_profile AS intake_profile
         FROM public.employees e
         LEFT JOIN public.persons p ON p.person_id = e.person_id
         LEFT JOIN LATERAL (
-            SELECT pa.org_unit_id FROM public.person_assignments pa
+            SELECT pa.org_unit_id, pa.position_id, pa.manual_type_code
+            FROM public.person_assignments pa
             WHERE pa.person_id = e.person_id AND pa.active_flag IS TRUE
               AND pa.is_primary IS TRUE AND pa.lifecycle_status = 'active'
               AND pa.start_date <= :today
               AND (pa.end_date IS NULL OR pa.end_date >= :today)
             ORDER BY pa.start_date DESC, pa.assignment_id DESC LIMIT 1
         ) current_assignment ON TRUE
+        LEFT JOIN public.positions position
+          ON position.position_id = current_assignment.position_id
         LEFT JOIN public.org_units ou
           ON ou.unit_id = COALESCE(current_assignment.org_unit_id, e.org_unit_id)
         LEFT JOIN public.personnel_record_metadata prm ON prm.person_id = e.person_id
@@ -118,6 +123,8 @@ def build_personnel_qualification_categories_report(db_engine: Any, *, today: da
                 "full_name": str(row["full_name"] or ""),
                 "org_unit_id": int(row["org_unit_id"]) if row["org_unit_id"] is not None else None,
                 "org_unit_name": row["org_unit_name"],
+                "type_code": int(row["type_code"]) if row.get("type_code") is not None else None,
+                "position_name": row.get("position_name"),
                 "categories": categories,
                 "pending_categories": [],
             })

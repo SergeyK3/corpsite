@@ -200,7 +200,7 @@ export default function EmployeesTable({
 }: Props) {
   const page = Math.floor(offset / limit) + 1;
   const pages = Math.max(1, Math.ceil(Math.max(total, 1) / limit));
-  const colSpan = managementView ? 6 : 9;
+  const colSpan = managementView ? 7 : 9;
   const canSort = sortable && !!onSortColumn;
 
   const thClass =
@@ -235,6 +235,7 @@ export default function EmployeesTable({
               ) : null}
               {headerCell("ФИО", "fio", `min-w-[300px] ${thClass}`)}
               {!managementView ? null : headerCell("Должность", "position", `min-w-[220px] ${thClass}`)}
+              {managementView ? <th className={`min-w-[170px] ${thClass}`}>Тип</th> : null}
               {headerCell(
                 managementView ? "Отделение" : "Отдел",
                 "department",
@@ -290,6 +291,11 @@ export default function EmployeesTable({
                     {managementView ? (
                       <td className="px-3 py-1.5 text-[13px] leading-4 text-zinc-600 dark:text-zinc-400">
                         {getPositionName(it)}
+                      </td>
+                    ) : null}
+                    {managementView ? (
+                      <td className="px-3 py-1.5 text-[13px] leading-4 text-zinc-600 dark:text-zinc-400">
+                        {it.type_name || "Не указан"}
                       </td>
                     ) : null}
 

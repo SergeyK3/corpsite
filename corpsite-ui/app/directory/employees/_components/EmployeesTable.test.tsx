@@ -24,6 +24,16 @@ describe("EmployeesTable actions", () => {
     onChangePage: vi.fn(),
   };
 
+  it("shows the effective assignment type and an explicit missing value", () => {
+    render(<EmployeesTable {...baseProps} managementView items={[
+      { employee_id: 42, fio: "Первый", status: "active", type_name: "Врачи" },
+      { employee_id: 43, fio: "Второй", status: "active", type_name: null },
+    ] as any} />);
+    expect(screen.getByRole("columnheader", { name: "Тип" })).toBeInTheDocument();
+    expect(screen.getByText("Врачи")).toBeInTheDocument();
+    expect(screen.getByText("Не указан")).toBeInTheDocument();
+  });
+
   it("shows status correction next to the staff card action when permitted", () => {
     const onCorrectEmployeeStatus = vi.fn();
     render(

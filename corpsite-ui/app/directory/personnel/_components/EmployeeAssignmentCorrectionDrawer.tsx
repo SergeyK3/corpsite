@@ -9,6 +9,7 @@ import { useOrgUnitScopeOptions } from "@/lib/useOrgUnitScopeOptions";
 import { usePersonnelOrderPositionOptions } from "@/lib/usePersonnelOrderPositionOptions";
 import { getOrgUnitsTree } from "../../org-units/_lib/api.client";
 import type { EmployeeDetails } from "../../employees/_lib/types";
+import { getPositionTypes, type PositionTypeOption } from "../../employees/_lib/api.client";
 
 const CORRECTION_BASE_PATH = "/directory/personnel/employees/correction";
 
@@ -32,6 +33,7 @@ type Props = {
   error?: string | null;
   onClose: () => void;
   onSubmit: (values: EmployeeAssignmentCorrectionFormValues) => Promise<void> | void;
+  onSaveType?: (manualTypeCode: number | null) => Promise<void> | void;
 };
 
 function todayIsoDate(): string {
@@ -63,6 +65,7 @@ export default function EmployeeAssignmentCorrectionDrawer({
   error = null,
   onClose,
   onSubmit,
+  onSaveType,
 }: Props) {
   const [orgGroupId, setOrgGroupId] = React.useState<number | null>(null);
   const [orgUnitId, setOrgUnitId] = React.useState<number | null>(null);
@@ -76,6 +79,18 @@ export default function EmployeeAssignmentCorrectionDrawer({
   const [reason, setReason] = React.useState("");
   const [comment, setComment] = React.useState("");
   const [prefillDone, setPrefillDone] = React.useState(false);
+  const [positionTypes, setPositionTypes] = React.useState<PositionTypeOption[]>([]);
+  const [typeLoadError, setTypeLoadError] = React.useState(false);
+  const [manualTypeCode, setManualTypeCode] = React.useState<number | null>(null);
+
+  React.useEffect(() => {
+    if (!open) return;
+    let active = true;
+    getPositionTypes()
+      .then(items => { if (active) { setPositionTypes(items); setTypeLoadError(false); } })
+      .catch(() => { if (active) setTypeLoadError(true); });
+    return () => { active = false; };
+  }, [open]);
 
   const {
     options: orgUnitSelectOptions,
@@ -118,6 +133,7 @@ export default function EmployeeAssignmentCorrectionDrawer({
       setOrgGroupId(groupId);
       setOrgUnitId(Number.isFinite(orgUnit) && orgUnit > 0 ? orgUnit : null);
       setPositionId(Number.isFinite(position) && position > 0 ? position : null);
+      setManualTypeCode(details.manual_type_code ?? null);
       setFullName(currentFullName(details));
       setEmploymentRate(Number.isFinite(rate) && rate > 0 ? String(rate) : "1");
       setDateFrom(toInputDate((d.date_from ?? d.dateFrom) as string | null | undefined));
@@ -143,6 +159,11 @@ export default function EmployeeAssignmentCorrectionDrawer({
   }, [open, onClose, saving]);
 
   if (!open || !details) return null;
+
+  const inheritedTypeCode = details.position_type_code ?? details.position?.type_code ?? null;
+  const inheritedTypeName = positionTypes.find(item => item.code === inheritedTypeCode)?.name
+    ?? (details.type_source === "position" ? details.type_name : null)
+    ?? "Не указан";
 
   return (
     <div className="fixed inset-0 z-[60] flex" data-testid="assignment-correction-drawer">
@@ -272,6 +293,44 @@ export default function EmployeeAssignmentCorrectionDrawer({
                   ))}
                 </select>
               </label>
+
+              <div className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
+                <label className="grid gap-1">
+                  <span className="text-xs font-medium text-zinc-500">Тип</span>
+                  <select
+                    data-testid="assignment-correction-type"
+                    value={manualTypeCode ?? ""}
+                    onChange={e => setManualTypeCode(e.target.value ? Number(e.target.value) : null)}
+                    disabled={saving || typeLoadError}
+                    className="rounded-lg border border-zinc-300 px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950"
+                  >
+                    <option value="">Из должности: {inheritedTypeName}</option>
+                    {positionTypes.map(item => <option key={item.code} value={item.code}>{item.code} — {item.name}</option>)}
+                  </select>
+                </label>
+                <p className="mt-1 text-xs text-zinc-500" data-testid="assignment-correction-type-source">
+                  {manualTypeCode == null ? "Из должности" : "Указан вручную"}
+                </p>
+                <p className="mt-1 text-xs text-zinc-500">Тип сохраняется отдельно кнопкой «Сохранить тип».</p>
+                {typeLoadError ? <p className="mt-1 text-xs text-red-600">Не удалось загрузить справочник типов.</p> : null}
+                {onSaveType ? <div className="mt-2 flex flex-wrap gap-2">
+                  <button type="button" data-testid="assignment-correction-type-save"
+                    disabled={saving || typeLoadError || !details.active_assignment_id || manualTypeCode === (details.manual_type_code ?? null)}
+                    onClick={() => void onSaveType(manualTypeCode)}
+                    className="rounded border border-blue-600 px-3 py-1.5 text-sm text-blue-700 disabled:opacity-50">
+                    Сохранить тип
+                  </button>
+                  <button type="button" data-testid="assignment-correction-type-reset"
+                    disabled={saving || manualTypeCode == null}
+                    onClick={() => {
+                      setManualTypeCode(null);
+                      if (details.manual_type_code != null) void onSaveType(null);
+                    }}
+                    className="rounded border border-zinc-300 px-3 py-1.5 text-sm disabled:opacity-50">
+                    Вернуть тип из должности
+                  </button>
+                </div> : null}
+              </div>
 
               <label className="grid gap-1">
                 <span className="text-xs font-medium text-zinc-500">Статус *</span>

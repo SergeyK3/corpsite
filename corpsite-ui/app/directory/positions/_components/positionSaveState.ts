@@ -32,6 +32,7 @@ export const normalizePositionName=(value:string)=>value.replace(/ -/g,"-").repl
 export function positionValues(record: Partial<SavedPosition>): PositionFormValues {
   return {
     name:record.name??"",category:record.category??"other",expected_revision:record.revision??record.expected_revision,
+    type_code:record.type_code??null,
     name_kk:record.name_kk??"",document_nominative_ru:record.document_nominative_ru??record.name??"",
     document_possessive_kk:record.document_possessive_kk??"",translation_status:record.translation_status??"needs_review",
     document_form_status:record.document_form_status??"needs_review",record_kind:record.record_kind??"standalone",
@@ -50,7 +51,7 @@ function aliases(values:string[] = []) {
 
 export function positionSignature(values:PositionFormValues):string {
   return JSON.stringify([
-    normalizePositionName(values.name),values.category,
+    normalizePositionName(values.name),values.category,values.type_code??null,
     values.name_kk?.trim()??"",values.document_nominative_ru?.trim()||values.name.trim().replace(/\s+/g," "),values.document_possessive_kk?.trim()??"",
     values.translation_status??"needs_review",values.document_form_status??"needs_review",
     values.record_kind??"standalone",values.job_code?.trim()??"",aliases(values.aliases),

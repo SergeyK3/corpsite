@@ -141,6 +141,11 @@ const SECONDARY_DIRECTORY_NAV: NavItem[] = [
     matchPrefixes: ["/directory/positions"],
   },
   {
+    href: "/directory/position-types",
+    title: "Тип",
+    matchPrefixes: ["/directory/position-types"],
+  },
+  {
     href: "/directory/medical-specialties",
     title: "Медицинские специальности",
     matchPrefixes: ["/directory/medical-specialties"],

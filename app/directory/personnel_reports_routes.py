@@ -25,6 +25,7 @@ from app.services.personnel_orders_summary_report_service import (
 )
 from app.services.personnel_employee_actions_report_service import build_personnel_employee_actions_report
 from app.services.personnel_qualification_categories_report_service import build_personnel_qualification_categories_report
+from app.services.personnel_type_headcount_report_service import build_personnel_type_headcount_report
 from app.services.personnel_staffing_report_service import build_staffing_report
 
 from .common import as_http500
@@ -32,6 +33,20 @@ from .rbac import compute_scope, require_personnel_admin_or_403, require_personn
 
 
 router = APIRouter(prefix="/personnel/reports", tags=["personnel-reports"])
+
+
+@router.get("/personnel-type-headcount")
+def preview_personnel_type_headcount(
+    user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Organization-wide active register headcount with the existing HR report right."""
+    try:
+        require_personnel_admin_or_403(user)
+        return build_personnel_type_headcount_report()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise as_http500(exc)
 
 
 @router.get("/qualification-categories")

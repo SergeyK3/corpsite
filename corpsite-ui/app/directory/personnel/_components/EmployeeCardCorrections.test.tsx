@@ -52,6 +52,13 @@ vi.mock("@/lib/usePersonnelOrderPositionOptions", () => ({
 vi.mock("../../employees/_lib/api.client", () => ({
   correctEmployee: vi.fn(),
   getEmployee: vi.fn(),
+  getPositionTypes: vi.fn(async () => [
+    { code: 1, name: "Врачи" },
+    { code: 2, name: "Медсёстры и фельдшеры" },
+    { code: 3, name: "Санитарки" },
+    { code: 4, name: "Прочий персонал" },
+  ]),
+  updateEmployeeAssignmentType: vi.fn(),
   mapApiErrorToMessage: (e: unknown) => (e instanceof Error ? e.message : "Ошибка"),
 }));
 
@@ -61,7 +68,7 @@ vi.mock("../_lib/importApi.client", () => ({
   mapImportApiError: (_e: unknown, fallback: string) => fallback,
 }));
 
-import { correctEmployee, getEmployee } from "../../employees/_lib/api.client";
+import { correctEmployee, getEmployee, updateEmployeeAssignmentType } from "../../employees/_lib/api.client";
 
 const employeeDetails: EmployeeDetails = {
   employee_id: 1,
@@ -91,6 +98,40 @@ describe("EmployeeCardGeneralSection", () => {
 describe("EmployeeOperationalAssignmentSection", () => {
   beforeEach(() => {
     vi.mocked(getEmployee).mockResolvedValue(employeeDetails);
+  });
+
+  it("saves a manual type on the current assignment and resets inheritance", async () => {
+    let current: EmployeeDetails = {
+      ...employeeDetails,
+      active_assignment_id: 107,
+      position_type_code: 1,
+      type_code: 1,
+      type_name: "Врачи",
+      type_source: "position",
+      manual_type_code: null as number | null,
+    };
+    vi.mocked(getEmployee).mockImplementation(async () => current);
+    vi.mocked(updateEmployeeAssignmentType).mockImplementation(async (_id, _assignment, code) => {
+      current = { ...current, manual_type_code: code, type_code: code ?? 1,
+        type_name: code === 2 ? "Медсёстры и фельдшеры" : "Врачи",
+        type_source: code == null ? "position" : "manual" };
+      return { item: current, assignment_id: 107 };
+    });
+    render(<EmployeeOperationalAssignmentSection employeeId="1" onAssignmentChanged={vi.fn()} />);
+    fireEvent.click(await screen.findByTestId("assignment-correction-open"));
+    expect(await screen.findByTestId("assignment-correction-type-source")).toHaveTextContent("Из должности");
+    fireEvent.change(screen.getByTestId("assignment-correction-type"), { target: { value: "2" } });
+    fireEvent.click(screen.getByTestId("assignment-correction-type-save"));
+    await waitFor(() => expect(updateEmployeeAssignmentType).toHaveBeenCalledWith("1", 107, 2));
+    await waitFor(() => expect(screen.queryByTestId("assignment-correction-drawer")).not.toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("assignment-correction-open"));
+    expect(await screen.findByTestId("assignment-correction-type-source")).toHaveTextContent("Указан вручную");
+    expect(screen.getByTestId("assignment-correction-type")).toHaveValue("2");
+    fireEvent.click(screen.getByTestId("assignment-correction-type-reset"));
+    await waitFor(() => expect(updateEmployeeAssignmentType).toHaveBeenCalledWith("1", 107, null));
+    await waitFor(() => expect(screen.queryByTestId("assignment-correction-drawer")).not.toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("assignment-correction-open"));
+    expect(await screen.findByTestId("assignment-correction-type-source")).toHaveTextContent("Из должности");
   });
 
   it("shows assignment correction button instead of transfer", async () => {

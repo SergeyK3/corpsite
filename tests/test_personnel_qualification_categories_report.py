@@ -71,6 +71,7 @@ def test_report_includes_every_active_employee_and_matches_card_profile():
     rows = [
         {"employee_id": index, "person_id": index + 100, "full_name": f"Сотрудник {index}",
          "org_unit_id": 2 if index < 4 else 3, "org_unit_name": "А" if index < 4 else "Б",
+         "type_code": {1: 1, 2: 2, 3: 3, 4: 4, 5: None, 6: 1}[index],
          "metadata_profile": card_profiles[index + 100], "intake_profile": None}
         for index in range(1, 7)
     ]
@@ -81,6 +82,7 @@ def test_report_includes_every_active_employee_and_matches_card_profile():
     ]
     result = report_service.build_personnel_qualification_categories_report(_Engine(rows, pending), today=today)
     assert len(result["employees"]) == 6
+    assert [employee["type_code"] for employee in result["employees"]] == [1, 2, 3, 4, None, 1]
     assert [employee["categories"][0]["status"] for employee in result["employees"]] == [
         "ACTIVE", "EXPIRING_SOON", "EXPIRED", "NO_EXPIRY", "NO_CATEGORY", "EXPIRED"
     ]

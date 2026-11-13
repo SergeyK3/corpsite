@@ -59,6 +59,7 @@ export default function PositionDrawer({
   const initialValues=React.useMemo<PositionFormValues>(()=>({
     expected_revision:position?.revision,
     name:position?.name??'',category:normalizeCategory(position?.category),
+    type_code:position?.type_code??null,
     name_kk:position?.name_kk??'',
     document_nominative_ru:position?.document_nominative_ru??position?.name??'',
     document_possessive_kk:position?.document_possessive_kk??'',

@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from sqlalchemy import text
 
 EDITABLE = ('name_kk', 'document_nominative_ru', 'document_possessive_kk',
-            'translation_status', 'document_form_status', 'record_kind')
+            'translation_status', 'document_form_status', 'record_kind', 'type_code')
 
 
 def normalize_alias(value):
@@ -37,7 +37,7 @@ def resolve_existing_name(connection, name, exclude_id=None):
 
 
 def get_position(connection, position_id):
-    row = connection.execute(text('SELECT * FROM public.position_directory WHERE position_id=:id'),
+    row = connection.execute(text("SELECT p.*, pt.name AS type_name, NULLIF(BTRIM(to_jsonb(raw_position)->>'document_genitive_ru'),'') AS document_genitive_ru FROM public.position_directory p LEFT JOIN public.positions raw_position ON raw_position.position_id=p.position_id LEFT JOIN public.position_types pt ON pt.code=p.type_code WHERE p.position_id=:id"),
                              {'id': position_id}).mappings().first()
     if not row:
         raise HTTPException(404, 'Position not found.')
@@ -53,6 +53,10 @@ def save_details(connection, position_id, payload):
                              {'id': position_id}).mappings().one()
     supplied = payload.model_fields_set
     changes = {key: getattr(payload, key) for key in EDITABLE if key in supplied}
+    if 'type_code' in changes and changes['type_code'] is not None:
+        if not connection.execute(text('SELECT 1 FROM public.position_types WHERE code=:code'),
+                                  {'code': changes['type_code']}).first():
+            raise HTTPException(422, 'Unknown position type.')
     for key in ('name_kk', 'document_nominative_ru', 'document_possessive_kk'):
         if key in changes:
             changes[key] = (changes[key] or '').strip() or None

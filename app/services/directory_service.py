@@ -376,7 +376,8 @@ def _employee_select_sql(emp_rel: str, emp_cols: List[str]) -> Tuple[str, Dict[s
         if current_position_available:
             join_sql += (
                 " LEFT JOIN LATERAL ("
-                " SELECT pa.assignment_id, pa.position_id, pa.org_unit_id"
+                " SELECT pa.assignment_id, pa.position_id, pa.org_unit_id,"
+                " NULLIF(to_jsonb(pa)->>'manual_type_code','')::smallint AS manual_type_code"
                 " FROM public.person_assignments pa"
                 " WHERE pa.person_id = e.person_id"
                 " AND pa.active_flag IS TRUE"
@@ -443,6 +444,31 @@ def _employee_select_sql(emp_rel: str, emp_cols: List[str]) -> Tuple[str, Dict[s
             )
             for field in ("job_code", "job_nameru", "job_namekk", "job_namekk_doc"):
                 select_parts.append(f"job_catalog.{field} AS pos_{field}")
+    # Type belongs to the current primary assignment. A NULL override keeps
+    # the position lookup live, so dictionary edits appear on the next read.
+    if current_position_available:
+        position_type_expr = "NULLIF(to_jsonb(current_p)->>'type_code','')::smallint"
+        effective_type_expr = f"COALESCE(current_pa.manual_type_code, {position_type_expr})"
+        select_parts.extend([
+            "current_pa.assignment_id AS current_assignment_id",
+            "current_pa.manual_type_code AS manual_type_code",
+            f"{position_type_expr} AS position_type_code",
+            f"{effective_type_expr} AS effective_type_code",
+            "CASE WHEN current_pa.manual_type_code IS NOT NULL THEN 'manual' "
+            "WHEN current_pa.assignment_id IS NOT NULL THEN 'position' ELSE NULL END AS type_source",
+        ])
+        if ("position_types", "table") in _list_relations():
+            join_sql += f" LEFT JOIN public.position_types effective_pt ON effective_pt.code = {effective_type_expr}"
+            select_parts.append("effective_pt.name AS effective_type_name")
+        else:
+            select_parts.append("NULL AS effective_type_name")
+    else:
+        select_parts.extend([
+            "NULL AS current_assignment_id", "NULL AS manual_type_code",
+            "NULL AS position_type_code", "NULL AS effective_type_code",
+            "NULL AS effective_type_name", "NULL AS type_source",
+        ])
+
     org_unit_expr = "CASE WHEN current_pa.assignment_id IS NOT NULL THEN current_pa.org_unit_id ELSE e.org_unit_id END" if current_position_available else "e.org_unit_id"
     select_parts.append(f"{org_unit_expr} AS e_org_unit_id")
     # Org Units (canonical table)
@@ -569,6 +595,12 @@ def _normalize_employee_joined(row: Dict[str, Any], emp_rel: str) -> Dict[str, A
         "id": str(row.get("e_id")) if row.get("e_id") is not None else None,
         "person_id": int(row["e_person_id"]) if row.get("e_person_id") is not None else None,
         "has_current_assignment": bool(row.get("has_current_assignment")),
+        "current_assignment_id": row.get("current_assignment_id"),
+        "manual_type_code": row.get("manual_type_code"),
+        "position_type_code": row.get("position_type_code"),
+        "type_code": row.get("effective_type_code"),
+        "type_name": row.get("effective_type_name"),
+        "type_source": row.get("type_source"),
         "document_forms_ru": _employee_document_forms(row, "ru"),
         "document_forms_kk": _employee_document_forms(row, "kk"),
         "fio": fio,

@@ -43,6 +43,8 @@ type PositionDeleteAssessment = {
 };
 
 type PositionItem = {
+  type_code?: number|null;
+  type_name?: string|null;
   revision?: number;
   position_id?: number;
   id?: number;
@@ -454,11 +456,11 @@ export default function PositionsPageClient() {
         query: { ...filters, ...pagination },
       })), PAGE_SIZE);
     return {
-      headers: ["ID", "Название RU", "Название KK", "Категория", "Общий код", "Тип записи",
+      headers: ["ID", "Название RU", "Название KK", "Категория", "Тип", "Общий код", "Тип записи",
         "Общий вид RU", "Общий вид KK", "Варианты названия / поисковые синонимы",
         "Документная форма RU", "Документная форма KK", "Статус перевода", "Статус документной формы"],
       rows: rows.map((item) => [
-        positionIdOf(item), item.name ?? null, item.name_kk ?? null, item.category ?? null,
+        positionIdOf(item), item.name ?? null, item.name_kk ?? null, item.category ?? null, item.type_name ?? null,
         item.job_code ?? null, item.record_kind ?? null,
         item.family_name_ru ?? null, item.family_name_kk ?? null,
         item.aliases?.join("\n") ?? null,
@@ -919,6 +921,9 @@ export default function PositionsPageClient() {
                         Категория
                       </th>
                       <th scope="col" className="w-[170px] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
+                        Тип
+                      </th>
+                      <th scope="col" className="w-[170px] px-3 py-1 text-[10px] font-medium uppercase tracking-[0.08em] text-zinc-600 dark:text-zinc-400">
                         Действия
                       </th>
                     </tr>
@@ -927,13 +932,13 @@ export default function PositionsPageClient() {
                   <tbody>
                     {loading ? (
                       <tr>
-                        <td colSpan={5} className="px-3 py-2 text-[13px] text-zinc-600 dark:text-zinc-400">
+                        <td colSpan={6} className="px-3 py-2 text-[13px] text-zinc-600 dark:text-zinc-400">
                           Загрузка...
                         </td>
                       </tr>
                     ) : items.length === 0 ? (
                       <tr>
-                        <td colSpan={5} className="px-3 py-2 text-[13px] text-zinc-600 dark:text-zinc-400">
+                        <td colSpan={6} className="px-3 py-2 text-[13px] text-zinc-600 dark:text-zinc-400">
                           Записи не найдены.
                         </td>
                       </tr>
@@ -951,6 +956,9 @@ export default function PositionsPageClient() {
                           </td>
                           <td className="px-3 py-1 text-[13px] leading-4 text-zinc-600 dark:text-zinc-400">
                             <span className="block truncate" title={getCategoryLabel(item)}>{getCategoryLabel(item)}</span>
+                          </td>
+                          <td className="px-3 py-1 text-[13px] leading-4 text-zinc-600 dark:text-zinc-400">
+                            <span className="block truncate" title={item.type_name??""}>{item.type_name??"—"}</span>
                           </td>
                           <td className="px-3 py-1">
                             <div className="flex flex-wrap items-center gap-1">

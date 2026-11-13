@@ -20,6 +20,8 @@ export type QualificationEmployee = {
   full_name: string;
   org_unit_id: number | null;
   org_unit_name: string | null;
+  type_code?: number | null;
+  position_name?: string | null;
   categories: QualificationCategory[];
   pending_categories: string[];
 };

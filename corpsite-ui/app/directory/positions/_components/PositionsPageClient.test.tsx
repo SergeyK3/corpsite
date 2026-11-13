@@ -137,11 +137,11 @@ describe('positions Excel export', () => {
     fireEvent.click(screen.getByRole('button',{name:'Выгрузить в Excel'}));
     await waitFor(()=>expect(downloadTableExcel).toHaveBeenCalledOnce());
     const table = downloadTableExcel.mock.calls[0][0];
-    expect(table.rows[0]).toEqual([1,'Точный вариант',COMPACT_POSITION.name_kk,'leaders','CLINICAL_DEPARTMENT_HEAD',
+    expect(table.rows[0]).toEqual([1,'Точный вариант',COMPACT_POSITION.name_kk,'leaders',null,'CLINICAL_DEPARTMENT_HEAD',
       'variant',COMPACT_POSITION.family_name_ru,'Общий KK',COMPACT_POSITION.aliases[0],
       COMPACT_POSITION.document_nominative_ru,COMPACT_POSITION.document_possessive_kk,'confirmed','confirmed']);
-    expect(table.rows[1]).toEqual([2,'Без перевода',...Array(11).fill(null)]);
-    expect(table.headers).toHaveLength(13);
+    expect(table.rows[1]).toEqual([2,'Без перевода',...Array(12).fill(null)]);
+    expect(table.headers).toHaveLength(14);
   });
   it('reports an empty result without a download', async () => {
     searchParams = new URLSearchParams(); setup([]);
@@ -164,8 +164,9 @@ describe('positions Excel export', () => {
 
 describe('compact bilingual positions table',()=>{
   function mockDirectory(){
-    let current={...COMPACT_POSITION};
+    let current={...COMPACT_POSITION,type_code:1,type_name:'Врачи'};
     apiFetchJson.mockImplementation((path:string,options?:{method?:string;body?:Record<string,unknown>})=>{
+      if(path==='/directory/position-types')return Promise.resolve({items:[{code:1,name:'Врачи'},{code:2,name:'Медсёстры и фельдшеры'},{code:3,name:'Санитарки'},{code:4,name:'Прочий персонал'}]});
       if(path==='/directory/position-families')return Promise.resolve({items:[{job_code:COMPACT_POSITION.job_code,job_nameru:COMPACT_POSITION.family_name_ru,job_namekk:'Общее KK',job_namekk_doc:'Общая форма'}]});
       if(path==='/directory/positions/71'){
         if(options?.method==='PUT')current={...current,...options.body,revision:current.revision+1};
@@ -174,14 +175,14 @@ describe('compact bilingual positions table',()=>{
       return Promise.resolve({items:[current,{...COMPACT_POSITION,position_id:72,name:'Заведующий отделением химиотерапии 2',name_kk:null}],total:2});
     });
   }
-  it('has exactly five columns and one record per row, with no group or document titles',async()=>{
+  it('shows the type column and one record per row, with no group or document titles',async()=>{
     searchParams=new URLSearchParams();mockDirectory();
     renderWithMe({user_id:1,role_id:2,is_system_admin:true});
     const ru=await screen.findByText(COMPACT_POSITION.name);
-    expect(screen.getAllByRole('columnheader').map(h=>h.textContent?.trim())).toEqual(['ID','Название RU','Название KK','Категория','Действия']);
+    expect(screen.getAllByRole('columnheader').map(h=>h.textContent?.trim())).toEqual(['ID','Название RU','Название KK','Категория','Тип','Действия']);
     expect(screen.getAllByRole('row')).toHaveLength(3);
     const row=ru.closest('tr')!;const cells=within(row).getAllByRole('cell');
-    expect(cells).toHaveLength(5);
+    expect(cells).toHaveLength(6);
     expect(cells[1]).toHaveTextContent(COMPACT_POSITION.name);
     expect(cells[2]).toHaveTextContent(COMPACT_POSITION.name_kk);
     expect(ru).toHaveAttribute('title',COMPACT_POSITION.name);
@@ -203,17 +204,23 @@ describe('compact bilingual positions table',()=>{
     expect(screen.getByLabelText('Документная форма KK')).toHaveValue(COMPACT_POSITION.document_possessive_kk);
     expect(screen.getByLabelText('Общий вид должности')).toHaveValue(COMPACT_POSITION.job_code);
     expect(screen.getByLabelText('Тип записи')).toHaveValue('variant');
+    expect(screen.getByLabelText('Тип')).toHaveValue('1');
     expect(screen.getByLabelText(/Поисковые синонимы/)).toHaveValue(COMPACT_POSITION.aliases[0]);
+    fireEvent.change(screen.getByLabelText('Тип'),{target:{value:'2'}});
     fireEvent.click(screen.getByRole('button',{name:'Сохранить'}));
-    await waitFor(()=>expect(apiFetchJson).toHaveBeenCalledWith('/directory/positions/71',expect.objectContaining({method:'PUT',body:expect.objectContaining({name:COMPACT_POSITION.name,name_kk:COMPACT_POSITION.name_kk,document_possessive_kk:COMPACT_POSITION.document_possessive_kk,job_code:COMPACT_POSITION.job_code,expected_revision:7})})));
+    await waitFor(()=>expect(apiFetchJson).toHaveBeenCalledWith('/directory/positions/71',expect.objectContaining({method:'PUT',body:expect.objectContaining({name:COMPACT_POSITION.name,name_kk:COMPACT_POSITION.name_kk,document_possessive_kk:COMPACT_POSITION.document_possessive_kk,job_code:COMPACT_POSITION.job_code,type_code:2,expected_revision:7})})));
+    await screen.findByRole('button',{name:'Сохранено'});
+    fireEvent.click(within(screen.getByTestId('position-form')).getAllByRole('button',{name:'Закрыть'})[0]);
+    fireEvent.click(within((await screen.findByText(COMPACT_POSITION.name)).closest('tr')!).getByRole('button',{name:'Изменить'}));
+    expect(await screen.findByLabelText('Тип')).toHaveValue('2');
   });
-  it('keeps the admission checkbox in actions rather than adding a sixth column',async()=>{
+  it('keeps the admission checkbox in actions after the type column',async()=>{
     searchParams=new URLSearchParams('org_unit_id=74&position_scope=used');mockDirectory();
     renderWithMe({user_id:1,role_id:2,is_system_admin:true});
     const checkbox=await screen.findByRole('checkbox',{name:`Разрешена для приёма: ${COMPACT_POSITION.name}`});
     const cells=within(checkbox.closest('tr')!).getAllByRole('cell');
-    expect(cells).toHaveLength(5);expect(cells[4]).toContainElement(checkbox);
-    expect(screen.getAllByRole('columnheader')).toHaveLength(5);
+    expect(cells).toHaveLength(6);expect(cells[5]).toContainElement(checkbox);
+    expect(screen.getAllByRole('columnheader')).toHaveLength(6);
   });
 });
 
