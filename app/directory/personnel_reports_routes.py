@@ -23,9 +23,11 @@ from app.services.personnel_orders_summary_report_service import (
     PersonnelOrdersSummaryFilterError,
     build_personnel_orders_summary,
 )
+from app.services.personnel_orders_monthly_dashboard_service import build_personnel_orders_monthly_dashboard
 from app.services.personnel_employee_actions_report_service import build_personnel_employee_actions_report
 from app.services.personnel_qualification_categories_report_service import build_personnel_qualification_categories_report
 from app.services.personnel_type_headcount_report_service import build_personnel_type_headcount_report
+from app.services.personnel_headcount_trend_service import build_personnel_headcount_trend
 from app.services.personnel_staffing_report_service import build_staffing_report
 
 from .common import as_http500
@@ -43,6 +45,20 @@ def preview_personnel_type_headcount(
     try:
         require_personnel_admin_or_403(user)
         return build_personnel_type_headcount_report()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise as_http500(exc)
+
+
+@router.get("/headcount-trend")
+def preview_personnel_headcount_trend(
+    user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Read-only year-to-date headcount with the existing HR report right."""
+    try:
+        require_personnel_admin_or_403(user)
+        return build_personnel_headcount_trend(engine)
     except HTTPException:
         raise
     except Exception as exc:
@@ -82,6 +98,23 @@ def preview_personnel_orders_summary(
         require_personnel_admin_or_403(user)
         return build_personnel_orders_summary(engine, date_from=date_from, date_to=date_to)
     except PersonnelOrdersSummaryFilterError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise as_http500(exc)
+
+
+@router.get("/orders-monthly-dashboard")
+def preview_personnel_orders_monthly_dashboard(
+    order_type: str | None = Query(default=None),
+    user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Year-to-date unique orders with the same access rule as the orders summary."""
+    try:
+        require_personnel_admin_or_403(user)
+        return build_personnel_orders_monthly_dashboard(engine, order_type=order_type)
+    except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except HTTPException:
         raise

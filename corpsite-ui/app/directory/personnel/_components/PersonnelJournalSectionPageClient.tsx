@@ -6,22 +6,26 @@ import WorkspaceSectionTabs from "@/components/WorkspaceSectionTabs";
 import { useCurrentUser } from "@/lib/currentUser";
 import { canSeeHrProcessesNav } from "@/lib/personnelNav";
 import PersonnelJournalPageClient from "./PersonnelJournalPageClient";
+import PersonnelJournalDashboards from "./PersonnelJournalDashboards";
 import PersonnelTypeHeadcountReport from "./PersonnelTypeHeadcountReport";
 
 const SECTIONS = [
   { id: "journal", label: "Журнал" },
   { id: "reports", label: "Отчёты" },
+  { id: "dashboards", label: "Дашборды" },
 ] as const;
 
 export default function PersonnelJournalSectionPageClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const canSeeReport = canSeeHrProcessesNav(useCurrentUser());
-  const activeSection = canSeeReport && searchParams.get("view") === "reports" ? "reports" : "journal";
+  const requestedSection = searchParams.get("view");
+  const activeSection = canSeeReport && (requestedSection === "reports" || requestedSection === "dashboards")
+    ? requestedSection : "journal";
 
   function selectSection(sectionId: string) {
     const params = new URLSearchParams(searchParams.toString());
-    if (sectionId === "reports") params.set("view", "reports");
+    if (sectionId === "reports" || sectionId === "dashboards") params.set("view", sectionId);
     else params.delete("view");
     const query = params.toString();
     router.replace(`/directory/personnel/journal${query ? `?${query}` : ""}`);
@@ -34,8 +38,8 @@ export default function PersonnelJournalSectionPageClient() {
       activeSectionId={activeSection}
       onSelect={selectSection}
     /> : null}
-    {activeSection === "reports"
-      ? <PersonnelTypeHeadcountReport />
+    {activeSection === "reports" ? <PersonnelTypeHeadcountReport />
+      : activeSection === "dashboards" ? <PersonnelJournalDashboards />
       : <PersonnelJournalPageClient />}
   </div>;
 }

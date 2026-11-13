@@ -105,6 +105,17 @@ export type PersonnelOrdersSummaryFilters = {
   dateTo?: string;
 };
 
+export type PersonnelOrdersMonthlyType = "HIRE" | "TERMINATION" | "TRANSFER";
+
+export type PersonnelOrdersMonthlyDashboard = {
+  report_code: "personnel_orders_monthly_dashboard";
+  year: number;
+  as_of: string;
+  order_type: PersonnelOrdersMonthlyType | null;
+  months: Array<{ month: number; count: number; is_current: boolean }>;
+  total: number;
+};
+
 export type PersonnelTypeHeadcountReport = {
   report_code: "personnel_type_headcount";
   groups: Array<{ code: number | null; name: string; count: number }>;
@@ -119,6 +130,24 @@ export type PersonnelTypeHeadcountReport = {
 
 export function getPersonnelTypeHeadcountReport(): Promise<PersonnelTypeHeadcountReport> {
   return apiFetchJson<PersonnelTypeHeadcountReport>("/directory/personnel/reports/personnel-type-headcount");
+}
+
+export type PersonnelHeadcountTrend = {
+  report_code: "personnel_headcount_trend";
+  year: number;
+  as_of: string;
+  history_complete: boolean;
+  months: Array<{
+    month: number;
+    date: string;
+    count: number | null;
+    source: "active_register" | "approved_employee_events" | null;
+    is_current: boolean;
+  }>;
+};
+
+export function getPersonnelHeadcountTrend(): Promise<PersonnelHeadcountTrend> {
+  return apiFetchJson<PersonnelHeadcountTrend>("/directory/personnel/reports/headcount-trend");
 }
 
 export type PersonnelEmployeeActionType = { code: string; label: string; count: number };
@@ -187,6 +216,17 @@ export function getPersonnelOrdersSummary(
   const query = params.toString();
   return apiFetchJson<PersonnelOrdersSummaryReport>(
     `/directory/personnel/reports/orders-summary${query ? `?${query}` : ""}`,
+  );
+}
+
+export function getPersonnelOrdersMonthlyDashboard(
+  orderType?: PersonnelOrdersMonthlyType | null,
+): Promise<PersonnelOrdersMonthlyDashboard> {
+  const params = new URLSearchParams();
+  if (orderType) params.set("order_type", orderType);
+  const query = params.toString();
+  return apiFetchJson<PersonnelOrdersMonthlyDashboard>(
+    `/directory/personnel/reports/orders-monthly-dashboard${query ? `?${query}` : ""}`,
   );
 }
 

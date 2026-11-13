@@ -21,6 +21,10 @@ vi.mock("./PersonnelEmployeeActionsReport", () => ({
   default: () => <div>Кадровые действия по сотрудникам</div>,
 }));
 
+vi.mock("./PersonnelOrdersDashboards", () => ({
+  default: () => <div data-testid="orders-dashboards">Количество кадровых приказов по месяцам</div>,
+}));
+
 vi.mock("./PersonnelOrdersSummaryReport", () => ({
   default: ({ mode }: { mode: string }) => <><div>Общая сводка по приказам</div><span data-testid="orders-summary-mode">{mode}</span></>,
 }));
@@ -67,5 +71,18 @@ describe("PersonnelOrdersSectionPageClient", () => {
 
     expect(screen.getByRole("button", { name: "Отчёты" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByText("Общая сводка по приказам")).toBeInTheDocument();
+  });
+
+  it("opens dashboards after reports while keeping the orders journal as default", () => {
+    render(<PersonnelOrdersSectionPageClient />);
+    expect(screen.getAllByRole("button").map((button) => button.textContent)).toEqual([
+      "Кадровые приказы", "Отчёты", "Дашборды",
+    ]);
+    expect(screen.getByText("Рабочее место кадровых приказов")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Дашборды" }));
+    expect(navigation.replace).toHaveBeenCalledWith("/directory/personnel/orders?view=dashboards");
+    expect(screen.getByTestId("orders-dashboards")).toBeInTheDocument();
+    expect(screen.queryByText("Общая сводка по приказам")).not.toBeInTheDocument();
   });
 });
