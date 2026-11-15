@@ -75,8 +75,11 @@ async function currentAssignment(
 
 export async function loadPersonCardPdfDocument(personId: number, auth: PersonnelOrderPdfAuthContext): Promise<{ html: string; filename: string }> {
   if (!Number.isSafeInteger(personId) || personId <= 0) throw new PersonCardPdfDataError(422, "INVALID_PERSON_ID", "Некорректный идентификатор сотрудника.");
-  const [ppr, contactResponse, photoDataUrl] = await Promise.all([
-    json<PprCompositeReadResponse>(`/api/ppr/persons/${personId}`, auth),
+  const ppr = await json<PprCompositeReadResponse>(`/api/ppr/persons/${personId}`, auth);
+  if (ppr.metadata?.read_mode === "ppr_manager") {
+    throw new PersonCardPdfDataError(403, "FORBIDDEN", "PDF кадровой карточки доступен только отделу кадров.");
+  }
+  const [contactResponse, photoDataUrl] = await Promise.all([
     json<ContactsResponse>(`/api/ppr/persons/${personId}/contacts`, auth),
     photo(personId, auth),
   ]);

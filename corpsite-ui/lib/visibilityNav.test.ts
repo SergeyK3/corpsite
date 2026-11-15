@@ -13,7 +13,7 @@ import { buildVisibilityDirectoryNavItems } from "./personnelNav";
 
 describe("visibilityNav", () => {
   const admin: MeInfo = { user_id: 1, role_id: 2 };
-  const hrHead: MeInfo = { user_id: 8, role_id: 8, role_code: "HR_HEAD", has_personnel_admin: true };
+  const hrHead: MeInfo = { user_id: 8, role_id: 8, role_code: "HR_HEAD", has_personnel_admin: true, has_personnel_card_read: true };
   const observerWithAssignment: MeInfo = {
     user_id: 2,
     role_id: 3,
@@ -34,7 +34,7 @@ describe("visibilityNav", () => {
 
   it("HR head on position cabinet gets personnel sidebar items without sysadmin extras", () => {
     const items = buildVisibilityDirectoryNavItems(hrHead);
-    expect(items.map((item) => item.title)).toEqual(["Персонал", "Кадровые процессы"]);
+    expect(items.map((item) => item.title)).toEqual(["Персонал", "Кадровые процессы", "Миграция личных карточек", "Контакты"]);
     expect(shouldShowOrgUnitsPanel("/tasks", hrHead)).toBe(true);
     expect(canAccessDirectoryRoute("/directory/personnel/journal", hrHead)).toBe(true);
     expect(canAccessDirectoryRoute("/directory/staff", hrHead)).toBe(true);
@@ -57,6 +57,14 @@ describe("visibilityNav", () => {
     expect(canAccessDirectoryRoute("/directory/staff", observerWithAssignment)).toBe(true);
     expect(canAccessDirectoryRoute("/directory/personnel/journal", observerWithAssignment)).toBe(false);
     expect(canAccessDirectoryRoute("/tasks", observerWithAssignment)).toBe(false);
+  });
+
+  it("allows the Person card route for card readers without opening the HR section", () => {
+    const cardRoute = "/directory/personnel/persons/100/card";
+    expect(canAccessDirectoryRoute(cardRoute, observerWithAssignment)).toBe(false);
+    expect(canAccessDirectoryRoute(cardRoute, { ...observerWithAssignment, has_personnel_card_read: true })).toBe(true);
+    expect(canAccessDirectoryRoute("/directory/personnel/journal", { ...observerWithAssignment, has_personnel_card_read: true })).toBe(false);
+    expect(canAccessDirectoryRoute(cardRoute, hrHead)).toBe(true);
   });
 
   it("canAccessDirectoryRoute allows position cabinet stub sections without task read access", () => {

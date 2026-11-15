@@ -1,7 +1,6 @@
 """PPR composite read REST API (R7 — read-only)."""
 from __future__ import annotations
 
-import hmac
 from uuid import uuid4
 from typing import Any
 
@@ -27,17 +26,12 @@ from app.security.personnel_admin_guard import evaluate_personnel_admin_access
 from app.directory.common import as_http500
 from app.person_photos.application.manual_upload_service import register_manual_person_photo
 from app.person_photos.domain.models import RegisterManualPersonPhotoRequest
-from app.person_photos.infrastructure.photo_storage import (
-    read_canonical_photo,
-    sha256_hex,
-    validate_canonical_photo_bytes,
-)
-from app.person_photos.infrastructure.repository import PersonPhotoRepository
 from app.personnel_intake.domain.errors import PersonnelIntakeValidationError
 from app.ppr.application.config import assert_ppr_read_path_activation_allowed
 from app.ppr.domain.models import HR_RELATIONSHIP_CANDIDATE
 from app.ppr.read.query_service import PprQueryApplicationService
 from app.services.ppr_candidate_service import load_hire_defaults, save_intended_employment
+from app.services.ppr_person_photo_read_service import load_verified_person_photo
 from app.services.ppr_query_access_service import (
     assert_ppr_read_allowed_for_employee,
     assert_ppr_read_allowed_for_person,
@@ -45,11 +39,49 @@ from app.services.ppr_query_access_service import (
     include_sensitive_identity_fields,
     require_ppr_write_for_person,
     load_current_operational_assignment_for_person,
+    require_personnel_card_reader,
+    assert_personnel_card_scope_for_person,
+    is_full_personnel_card_reader,
 )
 
 router = APIRouter(prefix="/api/ppr", tags=["ppr"])
 
 _query_service = PprQueryApplicationService()
+
+
+def _card_response(composite, user: dict[str, Any], *, full_reader: bool) -> PprCompositeReadResponse:
+    mapped = composite_to_response(
+        composite,
+        read_mode="ppr" if full_reader else "ppr_manager",
+        source="ppr_query_api",
+        include_sensitive_identity=full_reader and include_sensitive_identity_fields(user),
+        include_military_restricted=full_reader and include_military_restricted_fields(user),
+        include_status_facts=full_reader and _include_additional_status_facts(user),
+    )
+    if full_reader:
+        return mapped
+    sections = {}
+    for code, section in mapped.sections.items():
+        active = [] if code == "PPR-MILITARY" else [
+            record.model_copy(update={
+                key: None for key in (
+                    "notes", "provenance", "metadata", "document_reference",
+                    "source_id", "employee_context_id",
+                ) if key in type(record).model_fields
+            }) for record in section.active
+        ]
+        sections[code] = section.model_copy(update={"active": active, "superseded": [], "voided": []})
+    return mapped.model_copy(update={
+        "sections": sections,
+        "events": None,
+        "identity": mapped.identity.model_copy(update={"match_key": "", "merge_chain": []}),
+        "additional": mapped.additional.model_copy(update={
+            "qualification_categories": [
+                category.model_copy(update={"source_fingerprint": None, "review_reason": None})
+                for category in mapped.additional.qualification_categories
+            ],
+        }),
+    })
 
 
 def _include_additional_status_facts(user: dict[str, Any]) -> bool:
@@ -65,31 +97,14 @@ def get_ppr_person_photo(
     """Return the active canonical Person photo through the protected PPR read path."""
     try:
         assert_ppr_read_path_activation_allowed()
+        full_reader = require_personnel_card_reader(user)
         summary = _query_service.load_summary(person_id=person_id)
-        assert_ppr_read_allowed_for_person(
-            user,
-            summary.person_id,
-            resolved_employee_id=summary.employee_id,
+        assert_personnel_card_scope_for_person(
+            user, summary.person_id, employee_id=summary.employee_id, full_reader=full_reader,
         )
 
-        from app.db.engine import engine
-
-        with engine.connect() as conn:
-            photo = PersonPhotoRepository(conn).get_active_photo(summary.person_id)
-        if photo is None or photo.mime_type != MIME_TYPE_JPEG:
-            raise HTTPException(status_code=404, detail="Person photo not found.")
-
-        try:
-            content = read_canonical_photo(photo.storage_rel_path)
-            if content is None:
-                raise FileNotFoundError
-            validate_canonical_photo_bytes(content)
-            if not hmac.compare_digest(
-                sha256_hex(content),
-                photo.checksum_sha256.strip().lower(),
-            ):
-                raise ValueError("Canonical photo checksum mismatch.")
-        except (OSError, ValueError, PersonnelIntakeValidationError):
+        content = load_verified_person_photo(summary.person_id)
+        if content is None:
             raise HTTPException(status_code=404, detail="Person photo not found.")
 
         return Response(
@@ -166,20 +181,12 @@ def get_ppr_composite_by_person(
     """Canonical PPR composite read by person_id (always PPR-native path)."""
     try:
         assert_ppr_read_path_activation_allowed()
+        full_reader = require_personnel_card_reader(user)
         composite = _query_service.load_by_person_id(person_id)
-        assert_ppr_read_allowed_for_person(
-            user,
-            composite.person_id,
-            resolved_employee_id=composite.employee_id,
+        assert_personnel_card_scope_for_person(
+            user, composite.person_id, employee_id=composite.employee_id, full_reader=full_reader,
         )
-        return composite_to_response(
-            composite,
-            read_mode="ppr",
-            source="ppr_query_api",
-            include_sensitive_identity=include_sensitive_identity_fields(user),
-            include_military_restricted=include_military_restricted_fields(user),
-            include_status_facts=_include_additional_status_facts(user),
-        )
+        return _card_response(composite, user, full_reader=full_reader)
     except HTTPException:
         raise
     except Exception as exc:
@@ -197,10 +204,13 @@ def get_ppr_person_operational_assignment(
     """Protected current operational assignment projection, rooted exclusively at Person."""
     try:
         assert_ppr_read_path_activation_allowed()
+        full_reader = require_personnel_card_reader(user)
         # Resolve/read authorization first; the projection performs the same
         # scoped employee read used by the operational assignment screen.
         composite = _query_service.load_by_person_id(person_id)
-        assert_ppr_read_allowed_for_person(user, composite.person_id, resolved_employee_id=composite.employee_id)
+        assert_personnel_card_scope_for_person(
+            user, composite.person_id, employee_id=composite.employee_id, full_reader=full_reader,
+        )
         return PprOperationalAssignmentResponse(
             **load_current_operational_assignment_for_person(user, composite.person_id)
         )
@@ -250,6 +260,8 @@ def get_ppr_hire_defaults_by_person(
     """Default HIRE order placement from intended employment (read-only)."""
     try:
         assert_ppr_read_path_activation_allowed()
+        if not is_full_personnel_card_reader(user):
+            raise HTTPException(status_code=403, detail="Personnel administration access required.")
         composite = _query_service.load_by_person_id(person_id)
         assert_ppr_read_allowed_for_person(
             user,
@@ -334,6 +346,8 @@ def get_ppr_person_applications(
     """Personnel Application episode history for a person (read-only)."""
     try:
         assert_ppr_read_path_activation_allowed()
+        if not is_full_personnel_card_reader(user):
+            raise HTTPException(status_code=403, detail="Personnel administration access required.")
         composite = _query_service.load_by_person_id(person_id)
         assert_ppr_read_allowed_for_person(
             user,
@@ -375,16 +389,10 @@ def get_ppr_composite_by_employee(
     """Transitional PPR composite read by employee_id (identity resolution applied)."""
     try:
         assert_ppr_read_path_activation_allowed()
+        full_reader = require_personnel_card_reader(user)
         assert_ppr_read_allowed_for_employee(user, employee_id)
         composite = _query_service.load_by_employee_id(employee_id)
-        return composite_to_response(
-            composite,
-            read_mode="ppr",
-            source="ppr_query_api",
-            include_sensitive_identity=include_sensitive_identity_fields(user),
-            include_military_restricted=include_military_restricted_fields(user),
-            include_status_facts=_include_additional_status_facts(user),
-        )
+        return _card_response(composite, user, full_reader=full_reader)
     except HTTPException:
         raise
     except Exception as exc:

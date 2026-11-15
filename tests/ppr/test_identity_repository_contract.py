@@ -105,6 +105,18 @@ def test_resolve_employee_id_with_linked_person(identity_person: int) -> None:
 
 
 @pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
+def test_person_read_keeps_the_unique_employee_context(identity_person: int) -> None:
+    with engine.begin() as conn:
+        employee_id = insert_employee(
+            conn, full_name=f"PPR Person Context {uuid4().hex[:8]}", person_id=identity_person,
+        )
+        result = SqlAlchemyIdentityRepository(conn).resolve_person_id(identity_person)
+    assert result.employee_id == employee_id
+    with engine.begin() as conn:
+        cleanup_person_graph(conn, person_ids=[], employee_ids=[employee_id])
+
+
+@pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
 def test_employee_not_found() -> None:
     require_ppr_schema()
     with engine.begin() as conn:

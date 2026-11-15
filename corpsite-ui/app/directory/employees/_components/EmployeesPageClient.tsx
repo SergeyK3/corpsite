@@ -749,6 +749,7 @@ export default function EmployeesPageClient(props: Props) {
               onChangePage={setPageOffset}
               showCard2Button={showHrImportCardLink}
               directPersonalCardNav={isStaffRoute}
+              returnToHref={sp.toString() ? `${routeBase}?${sp.toString()}` : routeBase}
               managementView={managementView}
               showAdminDelete={showStaffAdminDelete}
               deletingEmployeeId={deletingEmployeeId}

@@ -5,7 +5,7 @@
  * Prod (nginx /api):  NEXT_PUBLIC_API_BASE_URL=/api
  * SSR on VPS:         BACKEND_URL=http://127.0.0.1:8000 (direct to FastAPI, no /api)
  *
- * In development (or on localhost), relative `/api` is overridden to DEFAULT_DEV_BACKEND.
+ * In development, relative `/api` is overridden to DEFAULT_DEV_BACKEND.
  *
  * Client bundle MUST use static process.env.NEXT_PUBLIC_API_BASE_URL so Next.js
  * can inline the value at build time (dynamic process.env[name] is not inlined).
@@ -43,15 +43,8 @@ function isDevelopment(): boolean {
   return process.env.NODE_ENV === "development";
 }
 
-/** True when the UI is opened on a local dev host (works even under `next start`). */
-function isLocalFrontendHost(): boolean {
-  if (typeof window === "undefined") return false;
-  const host = window.location.hostname;
-  return host === "localhost" || host === "127.0.0.1";
-}
-
 function shouldOverrideRelativeApiForLocalDev(): boolean {
-  return isDevelopment() || isLocalFrontendHost();
+  return isDevelopment();
 }
 
 function isRelativeApiPrefix(base: string): boolean {

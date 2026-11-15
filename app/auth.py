@@ -390,6 +390,17 @@ def _enrich_user_context(user: Dict[str, Any]) -> Dict[str, Any]:
 
     out = enrich_user_with_personnel_visibility(out)
 
+    # Navigation mirrors the existing server-side card role gate. The target
+    # Person and department scope are still checked by each card API request.
+    from app.services.ppr_query_access_service import require_personnel_card_reader
+    try:
+        require_personnel_card_reader(out)
+        out["has_personnel_card_read"] = True
+    except HTTPException as exc:
+        if exc.status_code != 403:
+            raise
+        out["has_personnel_card_read"] = False
+
     can_view_all_tasks = False
     role_id = int(out.get("role_id") or 0)
     if uid > 0 and role_id > 0:

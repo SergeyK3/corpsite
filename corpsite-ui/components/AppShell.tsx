@@ -33,7 +33,6 @@ import {
   PERSONNEL_DIRECTORY_NAV_ITEM,
   PPR_MIGRATION_NAV_ITEM,
   WORKING_CONTACTS_NAV_ITEM,
-  resolveDirectoryOrgTreeBasePath,
   shouldShowPrimaryAdminNavItem,
 } from "@/lib/personnelNav";
 import {

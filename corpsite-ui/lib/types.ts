@@ -58,6 +58,8 @@ export type MeInfo = {
   has_personnel_orders_restore?: boolean;
   /** ADR-042 E1 — personnel directory / org sidebar visibility. */
   has_personnel_visibility?: boolean;
+  /** Role-level card read; each Person is checked against the user's scope by the API. */
+  has_personnel_card_read?: boolean;
   has_personnel_card_edit?: boolean;
   show_org_sidebar?: boolean;
   personnel_visibility?: PersonnelVisibilityInfo;

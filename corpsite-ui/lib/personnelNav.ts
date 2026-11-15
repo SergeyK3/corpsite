@@ -60,6 +60,11 @@ export function isPersonnelDirectoryRoute(pathname: string): boolean {
   );
 }
 
+/** Person card opened from the staff list; the API enforces subject scope. */
+export function isPersonnelCardRoute(pathname: string): boolean {
+  return /^\/directory\/personnel\/persons\/\d+\/card\/?$/.test(pathname);
+}
+
 export function isHrProcessesRoute(pathname: string): boolean {
   return (
     pathname === "/directory/personnel" ||

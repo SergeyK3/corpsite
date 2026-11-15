@@ -8,6 +8,7 @@ import {
   canSeePersonnelDirectoryNav,
   isHrProcessesRoute,
   isPersonnelDirectoryRoute,
+  isPersonnelCardRoute,
   PERSONNEL_DIRECTORY_NAV_ITEM,
 } from "./personnelNav";
 import { canSeeOperationalOrdersNav, isOperationalOrdersRoute } from "./operationalOrdersNav";
@@ -42,6 +43,7 @@ export function canAccessDirectoryRoute(pathname: string, me: MeInfo | null | un
   if (isIncomingInformationRoute(pathname)) return canAccessIncomingInformationRoute(me);
   if (canSeeAdminShell(me)) return true;
 
+  if (isPersonnelCardRoute(pathname)) return me?.has_personnel_card_read === true;
   if (isHrProcessesRoute(pathname)) return canSeeHrProcessesNav(me);
   if (isPersonnelDirectoryRoute(pathname)) return canSeePersonnelDirectoryNav(me);
   if (isOperationalOrdersRoute(pathname)) return canSeeOperationalOrdersNav(me);

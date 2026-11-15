@@ -6,7 +6,6 @@ import EmployeesTable from "./EmployeesTable";
 import {
   HR_DOSSIER_MISSING_EMPLOYEE_ID_TOOLTIP,
   OPEN_HR_DOSSIER_CTA,
-  OPEN_PERSONAL_CARD_CTA,
 } from "@/lib/personnelCardTerminology";
 
 describe("EmployeesTable actions", () => {
@@ -51,7 +50,7 @@ describe("EmployeesTable actions", () => {
     );
   });
 
-  it("staff «Персонал»: single «Открыть» link to canonical PPR card when person_id known", () => {
+  it("staff: preserves the task link and opens the selected Person card with list filters", () => {
     const onOpenEmployee = vi.fn();
     render(
       <EmployeesTable
@@ -60,21 +59,26 @@ describe("EmployeesTable actions", () => {
         onOpenEmployee={onOpenEmployee}
         managementView
         directPersonalCardNav
+        returnToHref="/directory/staff?q=Ivanov&org_unit_id=8"
       />,
     );
 
-    const openLink = screen.getByRole("link", { name: OPEN_PERSONAL_CARD_CTA });
-    expect(openLink).toHaveAttribute("href", "/directory/personnel/persons/501/card");
-    expect(openLink).toHaveTextContent("Открыть");
+    const openLink = screen.getByRole("link", { name: "Задачи" });
+    expect(openLink).toHaveAttribute("href", "/tasks");
+    expect(openLink).toHaveTextContent("Задачи");
+    expect(screen.getByRole("link", { name: "Личная карточка" })).toHaveAttribute(
+      "href", "/directory/personnel/persons/501/card?return_to=%2Fdirectory%2Fstaff%3Fq%3DIvanov%26org_unit_id%3D8",
+    );
     expect(screen.queryByRole("button", { name: "Открыть" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: OPEN_HR_DOSSIER_CTA })).not.toBeInTheDocument();
     expect(screen.queryByText("Карточка")).not.toBeInTheDocument();
 
+    openLink.addEventListener("click", event => event.preventDefault());
     fireEvent.click(openLink);
     expect(onOpenEmployee).not.toHaveBeenCalled();
   });
 
-  it("staff «Персонал»: falls back to employee compatibility route without person_id", () => {
+  it("staff: explains why the Person card is unavailable without person_id", () => {
     const onOpenEmployee = vi.fn();
     render(
       <EmployeesTable
@@ -85,13 +89,16 @@ describe("EmployeesTable actions", () => {
       />,
     );
 
-    const openLink = screen.getByRole("link", { name: OPEN_PERSONAL_CARD_CTA });
-    expect(openLink).toHaveAttribute("href", "/directory/personnel/employees/42/card");
-    expect(openLink).toHaveTextContent("Открыть");
+    const openLink = screen.getByRole("link", { name: "Задачи" });
+    expect(openLink).toHaveAttribute("href", "/tasks");
+    expect(openLink).toHaveTextContent("Задачи");
+    expect(screen.getByRole("button", { name: "Личная карточка недоступна: нет связи с Person" })).toBeDisabled();
+    expect(screen.getByText("Нет связи с личной карточкой")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Открыть" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: OPEN_HR_DOSSIER_CTA })).not.toBeInTheDocument();
     expect(screen.queryByText("Карточка")).not.toBeInTheDocument();
 
+    openLink.addEventListener("click", event => event.preventDefault());
     fireEvent.click(openLink);
     expect(onOpenEmployee).not.toHaveBeenCalled();
   });
@@ -108,7 +115,7 @@ describe("EmployeesTable actions", () => {
 
     const disabled = screen.getByRole("button", { name: HR_DOSSIER_MISSING_EMPLOYEE_ID_TOOLTIP });
     expect(disabled).toBeDisabled();
-    expect(screen.queryByRole("link", { name: OPEN_PERSONAL_CARD_CTA })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Задачи" })).not.toBeInTheDocument();
   });
 
   it("editable employees list keeps drawer «Открыть» button", () => {
@@ -122,7 +129,7 @@ describe("EmployeesTable actions", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Открыть" }));
     expect(onOpenEmployee).toHaveBeenCalledWith("42");
-    expect(screen.queryByRole("link", { name: OPEN_PERSONAL_CARD_CTA })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Задачи" })).not.toBeInTheDocument();
   });
 
   it("HR personnel journal keeps single card link as «Открыть»", () => {
