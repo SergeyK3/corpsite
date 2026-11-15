@@ -33,7 +33,7 @@ async function json<T>(path: string, auth: PersonnelOrderPdfAuthContext): Promis
 
 async function photo(personId: number, auth: PersonnelOrderPdfAuthContext): Promise<string | null> {
   try {
-    const response = await fetch(resolveApiUrl(`/api/ppr/persons/${personId}/photo`, { serverSide: true }), { headers: { ...headers(auth), Accept: "image/jpeg" }, cache: "no-store" });
+    const response = await fetch(resolveApiUrl(`/api/ppr/persons/${personId}/photo?for_export=true`, { serverSide: true }), { headers: { ...headers(auth), Accept: "image/jpeg" }, cache: "no-store" });
     if (!response.ok) return null;
     const bytes = Buffer.from(await response.arrayBuffer());
     return bytes.length && bytes[0] === 0xff && bytes[1] === 0xd8 ? `data:image/jpeg;base64,${bytes.toString("base64")}` : null;

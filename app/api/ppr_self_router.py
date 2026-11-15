@@ -88,7 +88,7 @@ def get_my_ppr_photo(user: dict[str, Any] = Depends(get_current_user)) -> Respon
     resolution = _self_access_service.resolve_for_user(user)
     if resolution.status != "READY" or resolution.composite is None:
         raise HTTPException(status_code=404, detail="Person photo not found.")
-    content = load_verified_person_photo(int(resolution.composite.person_id))
+    content = load_verified_person_photo(int(resolution.composite.person_id), user=user)
     if content is None:
         raise HTTPException(status_code=404, detail="Person photo not found.")
     return Response(
