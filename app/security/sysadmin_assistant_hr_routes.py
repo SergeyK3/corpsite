@@ -220,3 +220,8 @@ HR_OPERATIONS = {
     ('POST', '/personnel/ppr-migration/stage-3/training/runs/{run_id}/accept'): STAGE_PERMISSIONS[3],
     ('POST', '/personnel/ppr-migration/stage-3/training/runs/{run_id}/retry-accept'): STAGE_PERMISSIONS[3],
 }
+
+# Preview and audit reads only; the service denies assistant export/review/upload.
+HR_OPERATIONS.update({('GET', '/api/personnel-files' + route): HR_SUPPORT for route in (
+    '/persons/{person_id}', '/persons/{person_id}/history', '/versions/{version_id}/preview',
+)})

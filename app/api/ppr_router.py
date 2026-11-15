@@ -1,10 +1,9 @@
 """PPR composite read REST API (R7 — read-only)."""
 from __future__ import annotations
 
-from uuid import uuid4
 from typing import Any
 
-from fastapi import APIRouter, Depends, File, HTTPException, Path, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Path, Query, UploadFile
 from fastapi.responses import Response
 
 from app.api.ppr_errors import map_ppr_query_error
@@ -24,8 +23,6 @@ from app.db.models.person_photos import MAX_PHOTO_BYTE_SIZE, MIME_TYPE_JPEG
 from app.security.personnel_card_edit import require_personnel_card_edit_for_person
 from app.security.personnel_admin_guard import evaluate_personnel_admin_access
 from app.directory.common import as_http500
-from app.person_photos.application.manual_upload_service import register_manual_person_photo
-from app.person_photos.domain.models import RegisterManualPersonPhotoRequest
 from app.personnel_intake.domain.errors import PersonnelIntakeValidationError
 from app.ppr.application.config import assert_ppr_read_path_activation_allowed
 from app.ppr.domain.models import HR_RELATIONSHIP_CANDIDATE
@@ -93,6 +90,7 @@ def _include_additional_status_facts(user: dict[str, Any]) -> bool:
 def get_ppr_person_photo(
     person_id: int = Path(..., ge=1),
     user: dict[str, Any] = Depends(get_current_user),
+    for_export: bool = Query(False),
 ) -> Response:
     """Return the active canonical Person photo through the protected PPR read path."""
     try:
@@ -103,9 +101,13 @@ def get_ppr_person_photo(
             user, summary.person_id, employee_id=summary.employee_id, full_reader=full_reader,
         )
 
-        content = load_verified_person_photo(summary.person_id)
+        content = load_verified_person_photo(summary.person_id, user=user)
         if content is None:
             raise HTTPException(status_code=404, detail="Person photo not found.")
+
+        if for_export:
+            from app.personnel_files.service import authorize_photo_export
+            authorize_photo_export(user, summary.person_id)
 
         return Response(
             content=content,
@@ -130,7 +132,7 @@ async def post_ppr_person_photo(
     file: UploadFile = File(...),
     user: dict[str, Any] = Depends(get_current_user),
 ) -> dict[str, Any]:
-    """Upload a canonical JPEG for this exact Person card.
+    """Submit a JPEG for review for this exact Person card.
 
     The target is intentionally taken only from the route's ``person_id``;
     neither an employee identifier nor the client filename participates in
@@ -147,21 +149,11 @@ async def post_ppr_person_photo(
         if len(content) > MAX_PHOTO_BYTE_SIZE:
             raise HTTPException(status_code=422, detail="Photo exceeds 500 KB limit.")
 
-        result = register_manual_person_photo(
-            RegisterManualPersonPhotoRequest(
-                person_id=summary.person_id,
-                jpeg_content=content,
-                actor_user_id=int(user["user_id"]),
-                request_id=uuid4().hex,
-                correlation_id=f"ppr-person-photo-upload:{summary.person_id}",
-                allow_replace=True,
-            )
-        )
-        return {
-            "person_id": summary.person_id,
-            "person_photo_id": result.person_photo_id,
-            "status": result.status,
-        }
+        from app.personnel_files.service import submit
+        result = submit(user, summary.person_id, kind="photo", title="Фото лица",
+                        content=content, mime=MIME_TYPE_JPEG, filename=file.filename or "photo.jpg")
+        return {"person_id": summary.person_id, "version_id": result["version_id"], "status": "pending"}
+
     except PersonnelIntakeValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except HTTPException:

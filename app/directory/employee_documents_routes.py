@@ -36,6 +36,8 @@ class EmployeeDocumentCreateIn(BaseModel):
     document_type_id: int = Field(..., ge=1)
     document_kind_id: Optional[int] = Field(default=None, ge=1)
     medical_specialty_id: Optional[int] = Field(default=None, ge=1)
+    certificate_entry_id: Optional[int] = Field(default=None, ge=1)
+    specialty_name_at_issue: Optional[str] = Field(default=None, min_length=1, max_length=500)
     title: Optional[str] = Field(default=None, max_length=500)
     training_title: Optional[str] = Field(default=None, max_length=500)
     document_number: Optional[str] = Field(default=None, max_length=200)
@@ -253,6 +255,8 @@ def post_employee_document(
             document_type_id=payload.document_type_id,
             document_kind_id=payload.document_kind_id,
             medical_specialty_id=payload.medical_specialty_id,
+            certificate_entry_id=payload.certificate_entry_id,
+            specialty_name_at_issue=payload.specialty_name_at_issue,
             title=payload.title,
             training_title=payload.training_title,
             document_number=payload.document_number,
@@ -326,6 +330,8 @@ def delete_employee_document(
         if item is None:
             raise HTTPException(status_code=404, detail="Document not found.")
         return item
+    except EmployeeDocumentValidationError as e:
+        raise _validation_http422(e)
     except HTTPException:
         raise
     except Exception as e:

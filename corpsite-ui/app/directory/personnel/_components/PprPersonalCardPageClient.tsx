@@ -59,6 +59,7 @@ import PprQualificationCategoryEditor from "./PprQualificationCategoryEditor";
 import PprCardEventHistorySection from "./PprCardEventHistorySection";
 import PprCardApplicationsSection from "./PprCardApplicationsSection";
 import PprPersonPhoto from "./PprPersonPhoto";
+import PersonnelFilesPanel from "./PersonnelFilesPanel";
 import EmployeeOperationalAssignmentSection from "./EmployeeOperationalAssignmentSection";
 import EmployeeCardOrdersSection from "./EmployeeCardOrdersSection";
 import EmployeeOnboardingSection from "./EmployeeOnboardingSection";
@@ -175,6 +176,7 @@ export default function PprPersonalCardPageClient({
   const [fallbackEmployeeId, setFallbackEmployeeId] = React.useState<string | null>(null);
   const [migrationCells, setMigrationCells] = React.useState<Partial<Record<MigrationSection, MigrationCell>>>({});
   const [migrationUniverses, setMigrationUniverses] = React.useState<MigrationUniverse[]>([]);
+  const [fileRefresh, setFileRefresh] = React.useState(0);
   const [correctionMode, setCorrectionMode] = React.useState(false);
   const scrolledSectionRef = React.useRef<PprCardSectionId | null>(null);
 
@@ -392,7 +394,6 @@ export default function PprPersonalCardPageClient({
   const canCorrectCard = !selfMode && !managerView && (currentUser?.has_personnel_card_edit === true || currentUser?.is_documentation_viewer === true);
   const employmentBiographyEditable = !notMaterialized && canEditPprSections && canCorrectCard && correctionMode;
   const militaryEditable = !notMaterialized && canEditPprSections && canCorrectCard && correctionMode;
-  const canManagePhoto = Boolean(canCorrectCard && correctionMode);
 
   React.useEffect(() => {
     if (editCategory && canCorrectCard) setCorrectionMode(true);
@@ -430,9 +431,10 @@ export default function PprPersonalCardPageClient({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex min-w-0 flex-1 items-start gap-3">
             <PprPersonPhoto
+              key={fileRefresh}
               personId={resolvedPersonId}
               fullName={displayName}
-              canManagePhoto={canManagePhoto}
+              canManagePhoto={false}
               self={selfMode && ppr != null}
             />
             <div className="min-w-0">
@@ -540,6 +542,7 @@ export default function PprPersonalCardPageClient({
             ) : null}
 
             <PprCardSectionNav sections={visibleCardSections} />
+            <PersonnelFilesPanel personId={resolvedPersonId} fullName={displayName} onChanged={() => { setFileRefresh(value => value + 1); void loadCard(); }} />
 
             {canReadMigration && migrationUniverses.length > 1 ? (
               <label className="block text-sm" data-testid="ppr-migration-universe-selector">
