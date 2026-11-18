@@ -29,6 +29,7 @@ import {
   buildVisibilityDirectoryNavItems,
   HR_PROCESSES_NAV_ITEM,
   isHrProcessesRoute,
+  isPersonnelFileReviewRoute,
   isPersonnelDirectoryRoute,
   PERSONNEL_DIRECTORY_NAV_ITEM,
   PPR_MIGRATION_NAV_ITEM,
@@ -369,7 +370,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     !loading &&
     !!me &&
     !canAccessDirectoryRoute(pathname, me) &&
-    (isIncomingInformationRoute(pathname) || isForbiddenAdminRoute(pathname, me));
+    (isPersonnelFileReviewRoute(pathname) || isIncomingInformationRoute(pathname) || isForbiddenAdminRoute(pathname, me));
 
   const privilegedSysadminOnly =
     !isAdmin &&
