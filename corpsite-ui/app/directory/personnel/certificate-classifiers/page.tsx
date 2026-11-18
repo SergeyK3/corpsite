@@ -21,7 +21,7 @@ export default function CertificateClassifiersPage() {
   };
   const entryLabel = (id:number) => {const e=catalog?.entries.find(row => row.entry_id===id);return e ? `${e.specialty_name} · ${e.specialty_code} · ${e.edition_code}` : `№ ${id}`;};
   return <main className="mx-auto max-w-6xl space-y-5 p-5">
-    <Link href="/directory/personnel/file-review" className="underline">К проверке файлов</Link>
+    <Link href="/directory/personnel/file-review" className="underline">К проверке карточек</Link>
     <h1 className="text-2xl font-semibold">Редакции и соответствия специальностей</h1>
     <p>Централизованный справочник ведёт уполномоченный сотрудник отдела кадров с отдельным разрешением. Соответствие действует только в указанном направлении; совпадение названий не создаёт его автоматически.</p>
     {error ? <p role="alert" className="text-red-600">{error}</p> : null}{notice ? <p role="status">{notice}</p> : null}

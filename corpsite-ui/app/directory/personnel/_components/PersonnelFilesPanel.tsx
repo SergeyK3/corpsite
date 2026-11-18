@@ -153,11 +153,11 @@ export default function PersonnelFilesPanel({ personId, fullName, onChanged, que
 
   return <section id="personnel-files" className="my-5 rounded-lg border border-zinc-200 p-4 dark:border-zinc-800" aria-label="Фото и документы">
     <div className="flex flex-wrap items-center justify-between gap-3">
-      <h2 className="text-lg font-semibold">{queue ? "Проверка файлов сотрудников" : "Фото и документы"}</h2>
+      <h2 className="text-lg font-semibold">{queue ? "Проверка карточек" : "Фото и документы"}</h2>
       <div className="flex flex-wrap gap-2">
         {queue ? <Link className={buttonClass} href="/directory/personnel/certificate-classifiers">Редакции и соответствия специальностей</Link> : null}
         <button type="button" className={buttonClass} onClick={() => void load()} disabled={busy}>Обновить</button>
-        {!queue && data?.can_review ? <Link className={buttonClass} href="/directory/personnel/file-review">Очередь проверки</Link> : null}
+        {!queue && data?.can_review ? <Link className={buttonClass} href="/directory/personnel/file-review">Проверка карточек</Link> : null}
         {!queue && data && data.can_history ? <button className={buttonClass} type="button" disabled={busy} onClick={() => void run(async () => setHistory(await fileHistory(personId)))}>История действий</button> : null}
       </div>
     </div>

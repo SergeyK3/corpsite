@@ -17,7 +17,7 @@ const BASE_ITEMS = [
   {
     href: "/directory/personnel/lk",
     title: "Личные карточки",
-    prefixes: ["/directory/personnel/lk", "/directory/personnel/applicants"],
+    prefixes: ["/directory/personnel/lk", "/directory/personnel/applicants", PERSONNEL_FILE_REVIEW_HREF],
   },
   {
     href: "/directory/personnel/qualification-categories",
@@ -26,7 +26,6 @@ const BASE_ITEMS = [
   },
   { href: "/directory/personnel/onboarding", title: "Адаптация", prefixes: ["/directory/personnel/onboarding"] },
   { href: "/directory/personnel/orders", title: "Приказы", prefixes: ["/directory/personnel/orders"] },
-  { href: PERSONNEL_FILE_REVIEW_HREF, title: "Проверка файлов", prefixes: [PERSONNEL_FILE_REVIEW_HREF] },
   {
     href: "/directory/personnel/documents",
     title: "Реестр документов",
@@ -65,13 +64,13 @@ export default function PersonnelSubNav() {
   return (
     <nav aria-label="Навигация кадровых процессов" className="flex flex-wrap gap-2">
       {BASE_ITEMS.map((item) => {
-        if (item.href === PERSONNEL_FILE_REVIEW_HREF && !canSeePersonnelFileReviewNav(me)) return null;
-        if (!hrProcesses && item.href !== PERSONNEL_FILE_REVIEW_HREF && !(journalOnly && item.href === "/directory/personnel/journal")) return null;
+        const isCards = item.href === "/directory/personnel/lk";
+        if (!hrProcesses && !(isCards && canSeePersonnelFileReviewNav(me)) && !(journalOnly && item.href === "/directory/personnel/journal")) return null;
         const active = isBaseItemActive(pathname, item.prefixes, item.href);
         return (
           <Link
             key={item.href}
-            href={item.href}
+            href={isCards && !hrProcesses ? PERSONNEL_FILE_REVIEW_HREF : item.href}
             className={tabClassName(active)}
             aria-current={active ? "page" : undefined}
           >
