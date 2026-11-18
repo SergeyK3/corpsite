@@ -222,7 +222,7 @@ it("blocks a title response for the wrong version",async()=>{
   fireEvent.submit(screen.getByRole('button',{name:'Создать приказ'}).closest('form')!);expect(createManualPersonnelOrderDraft).not.toHaveBeenCalled();
 });
 
-async function selectType(type: "LEAVE.UNPAID.GRANT" | "LEAVE.CHILDCARE.GRANT" | "TRANSFER") {
+async function selectType(type: "LEAVE.UNPAID.GRANT" | "LEAVE.CHILDCARE.GRANT" | "TRANSFER" | "TERMINATION") {
   await chooseTypeInMenu(type);
   await waitFor(() => expect(getPersonnelOrderPublishedTemplateTitle).toHaveBeenLastCalledWith(type));
 }
@@ -539,7 +539,7 @@ it.each(PERSONNEL_ORDER_CREATE_TYPE_OPTIONS.map(option => option.value))("offers
   expect(screen.getByLabelText("Должность в тексте приказа (KK)")).toHaveValue("Ручная форма");
 });
 
-it.each(["LEAVE.CHILDCARE.GRANT", "LEAVE.UNPAID.GRANT"] as const)("autofills actual API Медсестра in create %s", async (type) => {
+it.each(["LEAVE.CHILDCARE.GRANT", "LEAVE.UNPAID.GRANT", "TERMINATION"] as const)("autofills actual API Медсестра in create %s", async (type) => {
   setup();
   vi.mocked(getEmployee).mockResolvedValue({ ...employeeDetail, position: { id: 27, name: "Медсестра", name_kk: "мейіргер",document_possessive_kk:"мейіргері" } });
   await selectType(type);
@@ -547,6 +547,43 @@ it.each(["LEAVE.CHILDCARE.GRANT", "LEAVE.UNPAID.GRANT"] as const)("autofills act
   await waitFor(() => expect(screen.getByLabelText("Должность в тексте приказа (KK)")).toHaveValue("мейіргері"));
   expect(screen.getByLabelText("Должность в тексте приказа (RU)")).toHaveValue("медсестра");
   expect(screen.queryByText(/Необходимо заполнить:/)).not.toBeInTheDocument();
+});
+
+it("requires termination reason beside its field and sends the confirmed KK title with the chosen reason", async () => {
+  setup();
+  vi.mocked(getEmployee).mockResolvedValue({ ...employeeDetail, position: { id: 27, name: "Медсестра", name_kk: "Мейіргер", document_possessive_kk: "мейіргері", translation_status: "confirmed", document_form_status: "confirmed" } });
+  await selectType("TERMINATION");
+  await selectEmployee();
+  fireEvent.change(screen.getByLabelText("Номер приказа"), {target:{value:"TEST-TERMINATION-1"}});
+  fireEvent.change(screen.getByLabelText("Дата приказа"), {target:{value:"2026-11-18"}});
+  fireEvent.change(screen.getByLabelText("Дата действия"), {target:{value:"2026-11-18"}});
+  expect(screen.getByLabelText("Должность на казахском языке (KK)")).toHaveValue("Мейіргер");
+  expect(screen.getByTestId("termination-required-fields").querySelector("#termination-reason-hint")).toHaveTextContent("Выберите причину расторжения трудового договора.");
+  expect(screen.getByRole("button", {name:"Создать приказ"})).toBeDisabled();
+  fireEvent.change(screen.getByLabelText("Причина расторжения трудового договора"), {target:{value:"EMPLOYEE_INITIATIVE"}});
+  vi.mocked(previewPersonnelOrderHeaderDuplicate).mockResolvedValue({blocking:false,warnings:[],candidates:[]});
+  vi.mocked(createManualPersonnelOrderDraft).mockResolvedValue({order_id:1} as never);
+  await waitFor(()=>expect(screen.getByRole("button", {name:"Создать приказ"})).toBeEnabled());
+  fireEvent.click(screen.getByRole("button", {name:"Создать приказ"}));
+  await waitFor(()=>expect(createManualPersonnelOrderDraft).toHaveBeenCalledWith(expect.objectContaining({
+    item_type_code:"TERMINATION",
+    document_subject_context:expect.objectContaining({document_position_kk:"Мейіргер"}),
+    item_payload:expect.objectContaining({termination_reason:"EMPLOYEE_INITIATIVE"}),
+  })));
+});
+
+it("shows a Russian hint beside a missing termination KK title and allows manual entry", async () => {
+  setup();
+  vi.mocked(getEmployee).mockResolvedValue({ ...employeeDetail, position: { id: 27, name: "Медсестра", name_kk: null, document_possessive_kk: null, translation_status: "needs_review" } });
+  await selectType("TERMINATION");
+  await selectEmployee();
+  const field = screen.getByLabelText("Должность на казахском языке (KK)");
+  expect(field).toHaveValue("");
+  expect(screen.getByTestId("termination-required-fields").querySelector("#termination-position-kk-hint")).toHaveTextContent("Заполните должность на казахском языке для текста приказа.");
+  expect(screen.getByRole("button", {name:"Создать приказ"})).toBeDisabled();
+  fireEvent.change(field, {target:{value:"Мейіргер"}});
+  expect(field).toHaveValue("Мейіргер");
+  expect(screen.getByTestId("termination-required-fields").querySelector("#termination-position-kk-hint")).not.toBeInTheDocument();
 });
 
 it.each(["LEAVE.CHILDCARE.GRANT", "LEAVE.UNPAID.GRANT"] as const)("uses arbitrary catalogue positions and warns only for missing KK in %s", async type => {

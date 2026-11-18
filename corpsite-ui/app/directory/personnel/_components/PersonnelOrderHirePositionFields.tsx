@@ -22,7 +22,10 @@ export default function PersonnelOrderHirePositionFields({value, positions: opti
   const [placement, setPlacement] = React.useState({left: 0, top: 0, width: 0, maxHeight: 192});
   const id = React.useId();
   const words = normalize(open ? fields[open === "ru" ? "name_ru" : "name_kk"] : "").split(/\s+/).filter(Boolean);
-  const found = options.filter(row => browseAll || words.every(word => normalize(`${row.name} ${row.name_kk || ""}`).includes(word)));
+  const found = options.filter(row =>
+    (open !== "kk" || Boolean(row.name_kk?.trim()))
+    && (browseAll || words.every(word => normalize(`${row.name} ${row.name_kk || ""}`).includes(word)))
+  );
   React.useEffect(() => {
     const close = (event: MouseEvent) => {
       const target = event.target as Node;
@@ -90,13 +93,14 @@ export default function PersonnelOrderHirePositionFields({value, positions: opti
           {!loading && !error && found.map((unit, rowIndex) => <button key={unit.id} id={`${listId}-${rowIndex}`} type="button" role="option" data-option-index={rowIndex}
             aria-selected={unit.id === value.id} tabIndex={-1} onMouseDown={event => event.preventDefault()} onClick={() => select(unit)}
             className={`block w-full px-3 py-2 text-left hover:bg-zinc-100 dark:hover:bg-zinc-800 ${rowIndex === index ? 'bg-zinc-100 dark:bg-zinc-800' : ''}`}>
-            {locale === "ru" ? unit.name : unit.name_kk || "Нет названия KK"}
+            {locale === "ru" ? unit.name : unit.name_kk}
           </button>)}
-          {!loading && !error && !found.length && <p className="p-2">Совпадений нет. Можно сохранить введённое название</p>}
+          {!loading && !error && !found.length && <p className="p-2">{locale === "kk" ? "Утверждённых названий KK не найдено. Запросите согласование перевода." : "Совпадений нет. Можно сохранить введённое название"}</p>}
         </div>, document.body)}
       </div>;
     })}</div>
     {loading && !open ? <p role="status">Загружаются должности…</p> : null}
     {error ? <p role="alert">Не удалось загрузить справочник должностей. Сохранённый текст оставлен без изменений.</p> : null}
+    {!loading && !error && value.id != null && !value.kk.trim() ? <p role="status" className="text-sm text-amber-700">Для выбранной должности нет утверждённого названия KK. Запросите согласование перевода.</p> : null}
   </fieldset>;
 }
