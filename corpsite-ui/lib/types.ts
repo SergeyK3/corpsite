@@ -48,6 +48,8 @@ export type MeInfo = {
   has_hr_governance?: boolean;
   /** Exact effective permission used by manual assignment change. */
   has_hr_enrollment_manager?: boolean;
+  /** GET /auth/me — permission to review personnel files (subject scope remains server-enforced). */
+  has_personnel_files_review?: boolean;
   /** WP-CL-004 — exact effective permission for the control-list XLSX export. */
   has_control_list_export?: boolean;
   /** WP-PPR-MIG-005D — exact read grant for the migration-status report. */
