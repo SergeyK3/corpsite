@@ -222,7 +222,7 @@ export default function PersonnelFilesPanel({ personId, fullName, onChanged, que
       <div className="flex gap-2"><button type="submit" className={buttonClass} disabled={busy}>{busy ? "Обработка…" : "Отправить кадровику"}</button>{replacement ? <button type="button" className={buttonClass} onClick={() => { setReplacement(null); setTitle(""); }}>Отменить замену</button> : null}</div>
     </form> : null}
     {selected ? <div role="dialog" aria-modal="true" aria-label="Просмотр файла" className="fixed inset-0 z-[60] overflow-y-auto bg-white p-5 dark:bg-zinc-950">
-      <div className="flex flex-wrap items-center justify-between gap-3"><h3>{selected.title}</h3><button type="button" className={buttonClass} onClick={() => setSelected(null)}>Закрыть просмотр</button></div>
+      <div className="flex flex-wrap items-center justify-between gap-3"><h3>{selected.title} · версия {selected.version_no} · {states[selected.state]}</h3><button type="button" className={buttonClass} onClick={() => setSelected(null)}>Закрыть просмотр</button></div>
       <div className="my-3 flex items-center gap-3"><button type="button" className={buttonClass} disabled={page <= 1} onClick={() => setPage(p => p - 1)}>Предыдущая</button><span>{page} / {selected.page_count}</span><button type="button" className={buttonClass} disabled={page >= selected.page_count} onClick={() => setPage(p => p + 1)}>Следующая</button></div>
       {preview ? <Image src={preview} width={1400} height={1800} alt={`Страница ${page} документа ${selected.title}`} unoptimized className="mx-auto h-auto max-h-none w-full max-w-4xl object-contain" /> : <p role="status">Загрузка страницы…</p>}
     </div> : null}
