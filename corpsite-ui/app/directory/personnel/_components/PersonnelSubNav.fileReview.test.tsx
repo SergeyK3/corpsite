@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { MeInfo } from "@/lib/types";
@@ -20,7 +20,7 @@ describe("Personnel file review navigation", () => {
 
     render(<><PersonnelSubNav /><PersonnelLkSubNav activeTab="review" /></>);
 
-    const parent = screen.getByRole("navigation", { name: "Навигация кадровых процессов" }).getByRole("link", { name: "Личные карточки" });
+    const parent = within(screen.getByRole("navigation", { name: "Навигация кадровых процессов" })).getByRole("link", { name: "Личные карточки" });
     expect(parent).toHaveAttribute("aria-current", "page");
     expect(parent).toHaveClass("bg-blue-600", "text-white");
     const nested = screen.getByRole("navigation", { name: "Личные карточки" });
@@ -48,7 +48,7 @@ describe("Personnel file review navigation", () => {
 
     render(<><PersonnelSubNav /><PersonnelLkSubNav activeTab="review" /></>);
 
-    expect(screen.getByRole("navigation", { name: "Навигация кадровых процессов" }).getByRole("link", { name: "Личные карточки" })).toHaveAttribute("href", pathname);
+    expect(within(screen.getByRole("navigation", { name: "Навигация кадровых процессов" })).getByRole("link", { name: "Личные карточки" })).toHaveAttribute("href", pathname);
     expect(screen.getByRole("navigation", { name: "Личные карточки" }).querySelectorAll("a")).toHaveLength(1);
     expect(screen.getByRole("link", { name: "Проверка карточек" })).toHaveAttribute("aria-current", "page");
   });
