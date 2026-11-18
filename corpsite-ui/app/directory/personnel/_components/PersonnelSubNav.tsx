@@ -10,7 +10,7 @@ import {
   canSeeTestPersonnelApprovals,
   TEST_PERSONNEL_APPROVALS_HREF,
 } from "@/lib/testPersonnelDeletionNav";
-import { canSeeHrProcessesNav, canSeePersonnelJournalNav } from "@/lib/personnelNav";
+import { canSeeHrProcessesNav, canSeePersonnelFileReviewNav, canSeePersonnelJournalNav, PERSONNEL_FILE_REVIEW_HREF } from "@/lib/personnelNav";
 
 const BASE_ITEMS = [
   { href: "/directory/personnel/journal", title: "Кадровый журнал", prefixes: ["/directory/personnel/journal"] },
@@ -26,6 +26,7 @@ const BASE_ITEMS = [
   },
   { href: "/directory/personnel/onboarding", title: "Адаптация", prefixes: ["/directory/personnel/onboarding"] },
   { href: "/directory/personnel/orders", title: "Приказы", prefixes: ["/directory/personnel/orders"] },
+  { href: PERSONNEL_FILE_REVIEW_HREF, title: "Проверка файлов", prefixes: [PERSONNEL_FILE_REVIEW_HREF] },
   {
     href: "/directory/personnel/documents",
     title: "Реестр документов",
@@ -58,12 +59,14 @@ export default function PersonnelSubNav() {
   const pathname = usePathname() || "";
   const me = useCurrentUser();
   const controlListActive = isPersonnelControlListPath(pathname);
-  const journalOnly = canSeePersonnelJournalNav(me) && !canSeeHrProcessesNav(me);
+  const hrProcesses = canSeeHrProcessesNav(me);
+  const journalOnly = canSeePersonnelJournalNav(me) && !hrProcesses;
 
   return (
     <nav aria-label="Навигация кадровых процессов" className="flex flex-wrap gap-2">
       {BASE_ITEMS.map((item) => {
-        if (journalOnly && item.href !== "/directory/personnel/journal") return null;
+        if (item.href === PERSONNEL_FILE_REVIEW_HREF && !canSeePersonnelFileReviewNav(me)) return null;
+        if (!hrProcesses && item.href !== PERSONNEL_FILE_REVIEW_HREF && !(journalOnly && item.href === "/directory/personnel/journal")) return null;
         const active = isBaseItemActive(pathname, item.prefixes, item.href);
         return (
           <Link
@@ -76,7 +79,7 @@ export default function PersonnelSubNav() {
           </Link>
         );
       })}
-      {!journalOnly ? <Link
+      {hrProcesses ? <Link
         href="/directory/personnel/import"
         className={tabClassName(controlListActive)}
         aria-current={controlListActive ? "page" : undefined}
