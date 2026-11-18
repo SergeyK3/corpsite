@@ -1,5 +1,5 @@
 import * as React from "react";
-import { render, screen, fireEvent, waitFor, cleanup } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor, cleanup, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import PersonnelFilesPanel from "./PersonnelFilesPanel";
 import * as api from "../_lib/personnelFilesApi.client";
@@ -16,6 +16,26 @@ beforeEach(() => { vi.clearAllMocks();
   vi.mocked(api.registryCertificates).mockResolvedValue({items:[]});
 });
 describe("personnel file operations", () => {
+  it("identifies approved and returned versions of the same certificate in the viewer", async () => {
+    const approved = { ...file, title: "Вымышленный сертификат A", version_id: "a-v4", version_no: 4, state: "approved" as const };
+    const returned = { ...file, title: "Вымышленный сертификат A", version_id: "a-v3-x", version_no: 3, state: "returned" as const, original_name: "fictional-incompatible-X.pdf" };
+    vi.mocked(api.listFiles).mockResolvedValue({ items: [approved, returned], can_upload: false, can_review: false });
+    vi.mocked(api.fileBlob).mockResolvedValue(new Blob(["preview"], { type: "image/png" }));
+    Object.defineProperty(URL, "createObjectURL", { configurable: true, value: vi.fn(() => "blob:preview") });
+    Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: vi.fn() });
+    render(<PersonnelFilesPanel personId={1} fullName="Тест" />);
+
+    const approvedArticle = (await screen.findAllByRole("article"))[0];
+    fireEvent.click(within(approvedArticle).getByRole("button", { name: "Просмотреть" }));
+    expect(within(screen.getByRole("dialog", { name: "Просмотр файла" })).getByRole("heading", { name: "Вымышленный сертификат A · версия 4 · Одобрен" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Закрыть просмотр" }));
+
+    fireEvent.click(screen.getByLabelText("Показывать предыдущие версии"));
+    const returnedArticle = screen.getAllByRole("article")[1];
+    fireEvent.click(within(returnedArticle).getByRole("button", { name: "Просмотреть" }));
+    expect(within(screen.getByRole("dialog", { name: "Просмотр файла" })).getByRole("heading", { name: "Вымышленный сертификат A · версия 3 · Возвращён" })).toBeInTheDocument();
+  });
+
   it("shows a leader previews without original download, print or approval", async () => {
     vi.mocked(api.listFiles).mockResolvedValue({ items: [file], can_upload: false, can_review: false });
     render(<PersonnelFilesPanel personId={1} fullName="Тест" />);
