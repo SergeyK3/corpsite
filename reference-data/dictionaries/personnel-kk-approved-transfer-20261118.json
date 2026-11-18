@@ -1,0 +1,621 @@
+{
+  "schema_version": 1,
+  "kind": "personnel-kk-approved-transfer",
+  "approval_date": "2026-11-18",
+  "approval": {
+    "positions_28": "User approved all 28 KK names in positions-kk-for-approval.md without changes.",
+    "position_27": "User approved name_kk Мейіргер and document_possessive_kk мейіргері.",
+    "org_unit": "Previously approved KK title for Многопрофильный медицинский центр."
+  },
+  "target": {
+    "site": "mmc.004.kz",
+    "database": "corpsite",
+    "profile": "production-baseline-read-only-20261118"
+  },
+  "sources": [
+    "reference-data/dictionaries/positions-kk-approved-20261118.json",
+    "reference-data/dictionaries/local-review-20261026.json",
+    "reference-data/org_units_name_kk.json"
+  ],
+  "scope": "29 existing position rows and one existing org-unit row; IDs explicitly mapped from local source to target; fail on any drift",
+  "positions": [
+    {
+      "source_local_id": 731,
+      "expected": {
+        "position_id": 116,
+        "name": "Бухгалтер по учету основных средств",
+        "name_kk": "Негізгі құралдарды есепке алу жөніндегі бухгалтер",
+        "document_possessive_kk": null,
+        "translation_status": "needs_review",
+        "document_form_status": "needs_review",
+        "revision": 1,
+        "category": "other",
+        "record_kind": "standalone",
+        "type_code": 4,
+        "job_code": null
+      },
+      "set": {
+        "name_kk": "Негізгі құралдарды есепке алу жөніндегі бухгалтер",
+        "translation_status": "confirmed"
+      }
+    },
+    {
+      "source_local_id": 732,
+      "expected": {
+        "position_id": 119,
+        "name": "гардеробщица",
+        "name_kk": "Гардеробшы",
+        "document_possessive_kk": null,
+        "translation_status": "needs_review",
+        "document_form_status": "needs_review",
+        "revision": 1,
+        "category": "other",
+        "record_kind": "standalone",
+        "type_code": 4,
+        "job_code": null
+      },
+      "set": {
+        "name_kk": "Гардеробшы",
+        "translation_status": "confirmed"
+      }
+    },
+    {
+      "source_local_id": 733,
+      "expected": {
+        "position_id": 120,
+        "name": "Зав. ГО и ЧС",
+        "name_kk": "Азаматтық қорғаныс және төтенше жағдайлар жөніндегі меңгеруші",
+        "document_possessive_kk": null,
+        "translation_status": "needs_review",
+        "document_form_status": "needs_review",
+        "revision": 1,
+        "category": "other",
+        "record_kind": "standalone",
+        "type_code": 4,
+        "job_code": null
+      },
+      "set": {
+        "name_kk": "Азаматтық қорғаныс және төтенше жағдайлар жөніндегі меңгеруші",
+        "translation_status": "confirmed"
+      }
+    },
+    {
+      "source_local_id": 734,
+      "expected": {
+        "position_id": 123,
+        "name": "инженер радиационной безопасности",
+        "name_kk": "Радиациялық қауіпсіздік жөніндегі инженер",
+        "document_possessive_kk": null,
+        "translation_status": "needs_review",
+        "document_form_status": "needs_review",
+        "revision": 1,
+        "category": "other",
+        "record_kind": "standalone",
+        "type_code": 4,
+        "job_code": null
+      },
+      "set": {
+        "name_kk": "Радиациялық қауіпсіздік жөніндегі инженер",
+        "translation_status": "confirmed"
+      }
+    },
+    {
+      "source_local_id": 735,
+      "expected": {
+        "position_id": 122,
+        "name": "инженер по охране труда и ОБ",
+        "name_kk": "Еңбекті қорғау және қауіпсіздік техникасы жөніндегі инженер",
+        "document_possessive_kk": null,
+        "translation_status": "needs_review",
+        "document_form_status": "needs_review",
+        "revision": 1,
+        "category": "other",
+        "record_kind": "standalone",
+        "type_code": 4,
+        "job_code": null
+      },
+      "set": {
+        "name_kk": "Еңбекті қорғау және қауіпсіздік техникасы жөніндегі инженер",
+        "translation_status": "confirmed"
+      }
+    },
+    {
+      "source_local_id": 736,
+      "expected": {
+        "position_id": 124,
+        "name": "кислородчик",
+        "name_kk": "Ауа бөлу аппаратшысы",
+        "document_possessive_kk": null,
+        "translation_status": "needs_review",
+        "document_form_status": "needs_review",
+        "revision": 1,
+        "category": "other",
+        "record_kind": "standalone",
+        "type_code": 4,
+        "job_code": null
+      },
+      "set": {
+        "name_kk": "Ауа бөлу аппаратшысы",
+        "translation_status": "confirmed"
+      }
+    },
+    {
+      "source_local_id": 737,
+      "expected": {
+        "position_id": 125,
+        "name": "лаборант гамма установки",
+        "name_kk": "Гамма-қондырғы зертханашысы",
+        "document_possessive_kk": null,
+        "translation_status": "needs_review",
+        "document_form_status": "needs_review",
+        "revision": 1,
+        "category": "medical",
+        "record_kind": "standalone",
+        "type_code": 2,
+        "job_code": null
+      },
+      "set": {
+        "name_kk": "Гамма-қондырғы зертханашысы",
+        "translation_status": "confirmed"
+      }
+    },
+    {
+      "source_local_id": 738,
+      "expected": {
+        "position_id": 130,
+        "name": "медсестра операционная",
+        "name_kk": "Операция мейіргері",
+        "document_possessive_kk": null,
+        "translation_status": "needs_review",
+        "document_form_status": "needs_review",
+        "revision": 1,
+        "category": "medical",
+        "record_kind": "standalone",
+        "type_code": 2,
+        "job_code": null
+      },
+      "set": {
+        "name_kk": "Операция мейіргері",
+        "translation_status": "confirmed"
+      }
+    },
+    {
+      "source_local_id": 739,
+      "expected": {
+        "position_id": 133,
+        "name": "медсестра постовая",
+        "name_kk": "Палаталық мейіргер",
+        "document_possessive_kk": null,
+        "translation_status": "needs_review",
+        "document_form_status": "needs_review",
+        "revision": 1,
+        "category": "medical",
+        "record_kind": "standalone",
+        "type_code": 2,
+        "job_code": null
+      },
+      "set": {
+        "name_kk": "Палаталық мейіргер",
+        "translation_status": "confirmed"
+      }
+    },
+    {
+      "source_local_id": 740,
+      "expected": {
+        "position_id": 135,
+        "name": "медсестра УЗИ кабинета",
+        "name_kk": "УДЗ кабинетінің мейіргері",
+        "document_possessive_kk": null,
+        "translation_status": "needs_review",
+        "document_form_status": "needs_review",
+        "revision": 1,
+        "category": "medical",
+        "record_kind": "standalone",
+        "type_code": 2,
+        "job_code": null
+      },
+      "set": {
+        "name_kk": "УДЗ кабинетінің мейіргері",
+        "translation_status": "confirmed"
+      }
+    },
+    {
+      "source_local_id": 741,
+      "expected": {
+        "position_id": 126,
+        "name": "маляр",
+        "name_kk": "Сырлаушы",
+        "document_possessive_kk": null,
+        "translation_status": "needs_review",
+        "document_form_status": "needs_review",
+        "revision": 1,
+        "category": "other",
+        "record_kind": "standalone",
+        "type_code": 4,
+        "job_code": null
+      },
+      "set": {
+        "name_kk": "Сырлаушы",
+        "translation_status": "confirmed"
+      }
+    },
+    {
+      "source_local_id": 742,
+      "expected": {
+        "position_id": 131,
+        "name": "медсестра перевязочная",
+        "name_kk": "Таңу мейіргері",
+        "document_possessive_kk": null,
+        "translation_status": "needs_review",
+        "document_form_status": "needs_review",
+        "revision": 1,
+        "category": "medical",
+        "record_kind": "standalone",
+        "type_code": 2,
+        "job_code": null
+      },
+      "set": {
+        "name_kk": "Таңу мейіргері",
+        "translation_status": "confirmed"
+      }
+    },
+    {
+      "source_local_id": 743,
+      "expected": {
+        "position_id": 128,
+        "name": "медсестра амбулаторного приема",
+        "name_kk": "Амбулаториялық қабылдау мейіргері",
+        "document_possessive_kk": null,
+        "translation_status": "needs_review",
+        "document_form_status": "needs_review",
+        "revision": 1,
+        "category": "medical",
+        "record_kind": "standalone",
+        "type_code": 2,
+        "job_code": null
+      },
+      "set": {
+        "name_kk": "Амбулаториялық қабылдау мейіргері",
+        "translation_status": "confirmed"
+      }
+    },
+    {
+      "source_local_id": 744,
+      "expected": {
+        "position_id": 134,
+        "name": "медсестра стоматологического кабинета",
+        "name_kk": "Стоматологиялық кабинет мейіргері",
+        "document_possessive_kk": null,
+        "translation_status": "needs_review",
+        "document_form_status": "needs_review",
+        "revision": 1,
+        "category": "medical",
+        "record_kind": "standalone",
+        "type_code": 2,
+        "job_code": null
+      },
+      "set": {
+        "name_kk": "Стоматологиялық кабинет мейіргері",
+        "translation_status": "confirmed"
+      }
+    },
+    {
+      "source_local_id": 745,
+      "expected": {
+        "position_id": 127,
+        "name": "медицинский техник",
+        "name_kk": "Медициналық техник",
+        "document_possessive_kk": null,
+        "translation_status": "needs_review",
+        "document_form_status": "needs_review",
+        "revision": 1,
+        "category": "other",
+        "record_kind": "standalone",
+        "type_code": 4,
+        "job_code": null
+      },
+      "set": {
+        "name_kk": "Медициналық техник",
+        "translation_status": "confirmed"
+      }
+    },
+    {
+      "source_local_id": 746,
+      "expected": {
+        "position_id": 132,
+        "name": "медсестра по инф.контролю",
+        "name_kk": "Инфекциялық бақылау жөніндегі мейіргер",
+        "document_possessive_kk": null,
+        "translation_status": "needs_review",
+        "document_form_status": "needs_review",
+        "revision": 1,
+        "category": "medical",
+        "record_kind": "standalone",
+        "type_code": 2,
+        "job_code": null
+      },
+      "set": {
+        "name_kk": "Инфекциялық бақылау жөніндегі мейіргер",
+        "translation_status": "confirmed"
+      }
+    },
+    {
+      "source_local_id": 747,
+      "expected": {
+        "position_id": 129,
+        "name": "медсестра массажистка",
+        "name_kk": "Медициналық массажист",
+        "document_possessive_kk": null,
+        "translation_status": "needs_review",
+        "document_form_status": "needs_review",
+        "revision": 1,
+        "category": "medical",
+        "record_kind": "standalone",
+        "type_code": 2,
+        "job_code": null
+      },
+      "set": {
+        "name_kk": "Медициналық массажист",
+        "translation_status": "confirmed"
+      }
+    },
+    {
+      "source_local_id": 748,
+      "expected": {
+        "position_id": 136,
+        "name": "Оператор для обработки мед. документаций",
+        "name_kk": "Медициналық құжаттаманы өңдеу операторы",
+        "document_possessive_kk": null,
+        "translation_status": "needs_review",
+        "document_form_status": "needs_review",
+        "revision": 1,
+        "category": "other",
+        "record_kind": "standalone",
+        "type_code": 4,
+        "job_code": null
+      },
+      "set": {
+        "name_kk": "Медициналық құжаттаманы өңдеу операторы",
+        "translation_status": "confirmed"
+      }
+    },
+    {
+      "source_local_id": 749,
+      "expected": {
+        "position_id": 137,
+        "name": "подсобный рабочий",
+        "name_kk": "Қосалқы жұмысшы",
+        "document_possessive_kk": null,
+        "translation_status": "needs_review",
+        "document_form_status": "needs_review",
+        "revision": 1,
+        "category": "other",
+        "record_kind": "standalone",
+        "type_code": 4,
+        "job_code": null
+      },
+      "set": {
+        "name_kk": "Қосалқы жұмысшы",
+        "translation_status": "confirmed"
+      }
+    },
+    {
+      "source_local_id": 750,
+      "expected": {
+        "position_id": 139,
+        "name": "рабочий (штукатур-маляр)",
+        "name_kk": "Жұмысшы (сылақшы-сырлаушы)",
+        "document_possessive_kk": null,
+        "translation_status": "needs_review",
+        "document_form_status": "needs_review",
+        "revision": 1,
+        "category": "other",
+        "record_kind": "standalone",
+        "type_code": 4,
+        "job_code": null
+      },
+      "set": {
+        "name_kk": "Жұмысшы (сылақшы-сырлаушы)",
+        "translation_status": "confirmed"
+      }
+    },
+    {
+      "source_local_id": 751,
+      "expected": {
+        "position_id": 140,
+        "name": "регистратор рентгенархива",
+        "name_kk": "Рентген архивінің тіркеушісі",
+        "document_possessive_kk": null,
+        "translation_status": "needs_review",
+        "document_form_status": "needs_review",
+        "revision": 1,
+        "category": "other",
+        "record_kind": "standalone",
+        "type_code": 4,
+        "job_code": null
+      },
+      "set": {
+        "name_kk": "Рентген архивінің тіркеушісі",
+        "translation_status": "confirmed"
+      }
+    },
+    {
+      "source_local_id": 752,
+      "expected": {
+        "position_id": 142,
+        "name": "санитарка палатная",
+        "name_kk": "Палаталық санитар",
+        "document_possessive_kk": null,
+        "translation_status": "needs_review",
+        "document_form_status": "needs_review",
+        "revision": 1,
+        "category": "other",
+        "record_kind": "standalone",
+        "type_code": 3,
+        "job_code": null
+      },
+      "set": {
+        "name_kk": "Палаталық санитар",
+        "translation_status": "confirmed"
+      }
+    },
+    {
+      "source_local_id": 753,
+      "expected": {
+        "position_id": 143,
+        "name": "санитар-уборщица",
+        "name_kk": "Санитар-тазалаушы",
+        "document_possessive_kk": null,
+        "translation_status": "needs_review",
+        "document_form_status": "needs_review",
+        "revision": 1,
+        "category": "other",
+        "record_kind": "standalone",
+        "type_code": 3,
+        "job_code": null
+      },
+      "set": {
+        "name_kk": "Санитар-тазалаушы",
+        "translation_status": "confirmed"
+      }
+    },
+    {
+      "source_local_id": 754,
+      "expected": {
+        "position_id": 144,
+        "name": "Слесарь по кислородной установке",
+        "name_kk": "Оттегі қондырғысы жөніндегі слесарь",
+        "document_possessive_kk": null,
+        "translation_status": "needs_review",
+        "document_form_status": "needs_review",
+        "revision": 1,
+        "category": "other",
+        "record_kind": "standalone",
+        "type_code": 4,
+        "job_code": null
+      },
+      "set": {
+        "name_kk": "Оттегі қондырғысы жөніндегі слесарь",
+        "translation_status": "confirmed"
+      }
+    },
+    {
+      "source_local_id": 755,
+      "expected": {
+        "position_id": 145,
+        "name": "техник по вентиляции и отоплению",
+        "name_kk": "Желдету және жылыту жөніндегі техник",
+        "document_possessive_kk": null,
+        "translation_status": "needs_review",
+        "document_form_status": "needs_review",
+        "revision": 1,
+        "category": "other",
+        "record_kind": "standalone",
+        "type_code": 4,
+        "job_code": null
+      },
+      "set": {
+        "name_kk": "Желдету және жылыту жөніндегі техник",
+        "translation_status": "confirmed"
+      }
+    },
+    {
+      "source_local_id": 756,
+      "expected": {
+        "position_id": 146,
+        "name": "техник по кислороду",
+        "name_kk": "Оттегі жөніндегі техник",
+        "document_possessive_kk": null,
+        "translation_status": "needs_review",
+        "document_form_status": "needs_review",
+        "revision": 1,
+        "category": "other",
+        "record_kind": "standalone",
+        "type_code": 4,
+        "job_code": null
+      },
+      "set": {
+        "name_kk": "Оттегі жөніндегі техник",
+        "translation_status": "confirmed"
+      }
+    },
+    {
+      "source_local_id": 757,
+      "expected": {
+        "position_id": 147,
+        "name": "техник по ремонту оборудования",
+        "name_kk": "Жабдықтарды жөндеу жөніндегі техник",
+        "document_possessive_kk": null,
+        "translation_status": "needs_review",
+        "document_form_status": "needs_review",
+        "revision": 1,
+        "category": "other",
+        "record_kind": "standalone",
+        "type_code": 4,
+        "job_code": null
+      },
+      "set": {
+        "name_kk": "Жабдықтарды жөндеу жөніндегі техник",
+        "translation_status": "confirmed"
+      }
+    },
+    {
+      "source_local_id": 758,
+      "expected": {
+        "position_id": 118,
+        "name": "врач ординатор",
+        "name_kk": "Ординатор дәрігер",
+        "document_possessive_kk": "ординатор дәрігер",
+        "translation_status": "needs_review",
+        "document_form_status": "needs_review",
+        "revision": 2,
+        "category": "medical",
+        "record_kind": "standalone",
+        "type_code": 1,
+        "job_code": null
+      },
+      "set": {
+        "name_kk": "Ординатор дәрігер",
+        "translation_status": "confirmed"
+      }
+    },
+    {
+      "source_local_id": 27,
+      "expected": {
+        "position_id": 27,
+        "name": "Медсестра",
+        "name_kk": "Мейіргер",
+        "document_possessive_kk": "мейіргері",
+        "translation_status": "needs_review",
+        "document_form_status": "needs_review",
+        "revision": 1,
+        "category": "medical",
+        "record_kind": "variant",
+        "type_code": 2,
+        "job_code": "NURSE"
+      },
+      "set": {
+        "name_kk": "Мейіргер",
+        "document_possessive_kk": "мейіргері",
+        "translation_status": "confirmed",
+        "document_form_status": "confirmed"
+      }
+    }
+  ],
+  "org_units": [
+    {
+      "source_local_code": "ORG_MAIN",
+      "expected": {
+        "unit_id": 1,
+        "code": "mmc_root",
+        "name": "Многопрофильный медицинский центр",
+        "name_kk": null,
+        "parent_unit_id": null,
+        "group_id": null
+      },
+      "set": {
+        "name_kk": "Көпсалалы медицина орталығы"
+      }
+    }
+  ]
+}

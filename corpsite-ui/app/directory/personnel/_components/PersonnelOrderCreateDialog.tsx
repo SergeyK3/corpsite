@@ -249,6 +249,9 @@ export default function PersonnelOrderCreateDialog({
   const departmentText=departmentValues(department),selectedOrgUnit=department.unit,org=departmentText.name_ru;
   const [orgUnitOptions, setOrgUnitOptions] = React.useState<OrgUnitSelectOption[]>([]);
   const [position, setPosition] = React.useState("");
+  const [terminationPositionKk, setTerminationPositionKk] = React.useState("");
+  const [terminationReason, setTerminationReason] = React.useState("");
+  const terminationPositionKkEdited = React.useRef(false);
   const [hirePositionKk,setHirePositionKk]=React.useState("");
   const [hirePositionManual,setHirePositionManual]=React.useState<HirePositionManualForms>({ru:false,kk:false});
   const [documentPosition, setDocumentPosition] = React.useState<DocumentPosition | null>(null);
@@ -284,6 +287,7 @@ export default function PersonnelOrderCreateDialog({
   const restoreFocusRef = React.useRef<HTMLElement | null>(null);
 
   const cessation = type === "CONCURRENT_DUTY_END";
+  const termination = type === "TERMINATION";
   const concurrent = type === "CONCURRENT_DUTY_START" || cessation;
   const simpleAllowance = type === "SUPPLEMENTARY_PAY";
   const [simpleAllowanceBasis, setSimpleAllowanceBasis] = React.useState({basis_ru:"Личное заявление",basis_kk:"Жеке өтініш"});
@@ -437,6 +441,10 @@ export default function PersonnelOrderCreateDialog({
     missing(!recallFields.basis_ru.trim(), "Заполните основание RU.", "Негізді RU тілінде толтырыңыз.");
     missing(!recallFields.basis_kk.trim(), "Заполните основание KZ.", "Негізді KZ тілінде толтырыңыз.");
   }
+  if (termination) {
+    missing(!terminationPositionKk.trim(), "Заполните должность на казахском языке для текста приказа.", "Заполните должность на казахском языке для текста приказа.");
+    missing(!terminationReason.trim(), "Выберите причину расторжения трудового договора.", "Выберите причину расторжения трудового договора.");
+  }
   if (childcare) {
     missing(!applicationDate, "Укажите дату заявления.", "Өтініш күнін көрсетіңіз.");
     missing(!certificateDate, "Укажите дату выдачи свидетельства о рождении.", "Туу туралы куәліктің берілген күнін көрсетіңіз.");
@@ -493,6 +501,7 @@ export default function PersonnelOrderCreateDialog({
     employeeContextOwner.current=null;
     positionChoiceOwner.current=null;
     setDocumentPosition(null);setDepartment(blankDepartment());setPosition("");setKk(blankForms());
+    setTerminationPositionKk("");terminationPositionKkEdited.current=false;
     editedEmployeeDatives.current.clear();editedPositionForms.current.clear();recallEdited.current.clear();ruGenitiveEdited.current=false;
     setAllowanceRecipient(blankAllowanceRecipient());
     setTransferFields({position_ru:"",position_kk:"",org_unit_ru:"",org_unit_kk:"",rate:"",basis_ru:"",basis_kk:""});
@@ -510,6 +519,7 @@ export default function PersonnelOrderCreateDialog({
     if(!keepPosition())setDocumentPosition(null);
     const hasAssignment = selected.has_current_assignment ?? Boolean(selected.active_assignment_id || (recall && selected.position && selected.org_unit));
     if (!keepPosition()) setPosition(hasAssignment ? selected.position?.job_nameru || selected.position?.name || "" : "");
+    if (!terminationPositionKkEdited.current) setTerminationPositionKk(hasAssignment && selected.position?.translation_status !== "needs_review" ? selected.position?.job_namekk || selected.position?.name_kk || "" : "");
     const forms = documentForms(selected, hasAssignment ? selected.org_unit : null);
     if(!sameEmployee)setDepartment(departmentFromUnit(hasAssignment&&selected.org_unit?{...selected.org_unit,document_genitive_kk:selected.org_unit.document_genitive_kk||forms.org_unit_document_genitive_kk}:null));
     if (cessation) {
@@ -681,6 +691,7 @@ export default function PersonnelOrderCreateDialog({
     setPublishedTitleError(null);
     setTitle("");
     setStart("");
+    setTerminationReason("");setTerminationPositionKk("");terminationPositionKkEdited.current=false;
     setHirePositionKk("");setHirePositionManual({ru:false,kk:false});
     setHireDetails(emptyHireDetails());
     setHireBasis(newHireBasis());
@@ -728,7 +739,7 @@ export default function PersonnelOrderCreateDialog({
         item_type_code: type,
         employee_id: manualHire || manualDocumentSubject ? null : linkedEmployee?.id ? Number(linkedEmployee.id) : null,
         unresolved_subject: manualHire ? {full_name:hireFullName,org_unit_name:org,position_name:position,specialty:""} : manualDocumentSubject ? {full_name:personalDataOrder ? personalDataDoc.source_employee_name : educationOrder ? educationDoc.source_employee_name : serviceLengthDoc.source_employee_name,org_unit_name:"",position_name:"",specialty:""} : manualName ? {full_name:manualName,org_unit_name:org,position_name:position,specialty:""} : undefined,
-        document_subject_context: { document_department:department, document_position_id: documentPosition?.id ?? null, document_position_kk: type === "HIRE" ? hirePositionKk : documentPosition ? (recall ? recallFields.recall_position_kk : documentPosition.name_kk ?? "") : null, document_position_nominative_ru: documentPosition ? kk.position_document_nominative_ru : null, document_position_possessive_kk: documentPosition ? kk.position_document_possessive_kk : null, org_unit_name: org || null, position_name: position || null, document_org_unit_id: selectedOrgUnit?.unit_id ?? null, document_org_unit_kk: recall ? recallFields.recall_org_unit_kk : selectedOrgUnit?.name_kk ?? null, document_org_unit_genitive_kk: kk.org_unit_document_genitive_kk },
+        document_subject_context: { document_department:department, document_position_id: documentPosition?.id ?? null, document_position_kk: termination ? terminationPositionKk.trim() : type === "HIRE" ? hirePositionKk : documentPosition ? (recall ? recallFields.recall_position_kk : documentPosition.name_kk || null) : null, document_position_nominative_ru: documentPosition ? kk.position_document_nominative_ru : null, document_position_possessive_kk: documentPosition ? kk.position_document_possessive_kk : null, org_unit_name: org || null, position_name: position || null, document_org_unit_id: selectedOrgUnit?.unit_id ?? null, document_org_unit_kk: recall ? recallFields.recall_org_unit_kk : selectedOrgUnit?.name_kk ?? null, document_org_unit_genitive_kk: kk.org_unit_document_genitive_kk },
         effective_date: periodLeave ? start : effective,
         period_start: periodLeave ? start : null,
         period_end: periodLeave ? end : null,
@@ -755,6 +766,7 @@ export default function PersonnelOrderCreateDialog({
             },
       };
       if (manualHire) Object.assign(request.item_payload, {new_employee: {...hireName}});
+      if (termination) Object.assign(request.item_payload, {termination_reason: terminationReason.trim()});
       if (type === "HIRE") Object.assign(request.item_payload, {
         hire_details: hireDetailsPayload(hireDetails),
         hire_position_manual_forms:hirePositionManual,
@@ -841,6 +853,7 @@ export default function PersonnelOrderCreateDialog({
           onCustomChange={recall ? value => {setPosition(value);setDocumentPosition(null);positionChoiceOwner.current=employee?.id?String(employee.id):employee?.fio?`manual:${employee.fio}`:null;} : undefined}
           onSelect={selected => {
             setDocumentPosition(selected); positionChoiceOwner.current=employee?.id?String(employee.id):employee?.fio?`manual:${employee.fio}`:null; setPosition(selected.name);
+             if (termination) {setTerminationPositionKk(selected.name_kk || "");terminationPositionKkEdited.current=false;}
             const forms=resolvePersonnelOrderDocumentForms(selected);
             setKk(current=>({...current,...forms}));
             editedPositionForms.current.add("position_document_nominative_ru");editedPositionForms.current.add("position_document_possessive_kk");
@@ -939,6 +952,10 @@ export default function PersonnelOrderCreateDialog({
                 <Field label="ФИО в исходном падеже (KK)"><input aria-label="ФИО в исходном падеже (KK)" className={inputClassName} value={ablativeKk} onChange={e=>setAblativeKk(e.target.value)}/></Field>
               </section> : null}
               {employee && transfer ? <Field label="ФИО в винительном падеже (RU)"><input aria-label="ФИО в винительном падеже (RU)" value={kk.employee_full_name_accusative_ru} onChange={e=>setKk(current=>({...current,employee_full_name_accusative_ru:e.target.value}))} className={inputClassName}/>{!kk.employee_full_name_accusative_ru.trim() ? <p role="alert">Нет подтверждённого ФИО в винительном падеже (RU). Заполните вручную.</p> : null}</Field> : null}
+              {termination && employee ? <section className="space-y-3 sm:col-span-2" data-testid="termination-required-fields">
+                <Field label="Должность на казахском языке (KK)"><input aria-label="Должность на казахском языке (KK)" value={terminationPositionKk} onChange={e=>{terminationPositionKkEdited.current=true;setTerminationPositionKk(e.target.value);}} aria-invalid={!terminationPositionKk.trim()} aria-describedby={!terminationPositionKk.trim() ? "termination-position-kk-hint" : undefined} className={inputClassName}/>{!terminationPositionKk.trim() ? <p id="termination-position-kk-hint" role="alert" className="text-xs text-amber-700">Заполните должность на казахском языке для текста приказа.</p> : null}</Field>
+                <Field label="Причина расторжения трудового договора"><select aria-label="Причина расторжения трудового договора" value={terminationReason} onChange={e=>setTerminationReason(e.target.value)} aria-invalid={!terminationReason.trim()} aria-describedby={!terminationReason.trim() ? "termination-reason-hint" : undefined} className={inputClassName}><option value="">Выберите причину</option><option value="EMPLOYEE_INITIATIVE">По инициативе работника</option></select>{!terminationReason.trim() ? <p id="termination-reason-hint" role="alert" className="text-xs text-amber-700">Выберите причину расторжения трудового договора.</p> : null}</Field>
+              </section> : null}
               {employee && (serviceArea || simpleAllowance)?<PersonnelOrderAllowanceRecipient employee={employee} value={allowanceRecipient} onChange={setAllowanceRecipient}/>:null}
               {simpleAllowance ? <section data-testid="simple-allowance-fields" className="space-y-3 sm:col-span-2">
                 <PersonnelOrderAllowancePercent value={replacementFields.allowance_percent} onChange={value=>setReplacementFields(current=>({...current,allowance_percent:value}))} inputClassName={inputClassName}/>
