@@ -76,6 +76,10 @@ export const PERSONNEL_DIRECTORY_NAV_HREF = "/directory/staff";
 export const HR_PROCESSES_NAV_HREF = "/directory/personnel/journal";
 export const PERSONNEL_FILE_REVIEW_HREF = "/directory/personnel/file-review";
 
+export function isPersonnelFileReviewRoute(pathname: string): boolean {
+  return pathname === PERSONNEL_FILE_REVIEW_HREF || pathname.startsWith(`${PERSONNEL_FILE_REVIEW_HREF}/`);
+}
+
 export function canSeePersonnelFileReviewNav(me: MeInfo | null | undefined): boolean {
   return me?.has_personnel_files_review === true;
 }
