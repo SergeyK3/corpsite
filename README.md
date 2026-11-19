@@ -60,14 +60,10 @@ Pytest использует **только** `TEST_DATABASE_URL` (обязате
 Кратко:
 
 ```bash
-# создать БД (один раз)
-psql "postgresql://postgres:postgres@127.0.0.1:5432/postgres" -c "CREATE DATABASE corpsite_test;"
-
-# миграции на test DB
-DATABASE_URL=postgresql+psycopg2://postgres:postgres@127.0.0.1:5432/corpsite_test alembic upgrade head
-
-# тесты (TEST_DATABASE_URL в .env)
-python -m pytest -q
+# TEST_DATABASE_URL: локальная corpsite_test, пользователь с правом CREATEDB.
+# Команда создаёт одноразовую БД, загружает начальные данные,
+# применяет миграции и удаляет БД после тестов.
+python -m scripts.run_isolated_test_db -- -q
 ```
 
 ## Использование
