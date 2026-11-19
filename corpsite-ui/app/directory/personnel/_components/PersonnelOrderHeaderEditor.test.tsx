@@ -65,7 +65,7 @@ describe("PersonnelOrderHeaderEditor signatory requisites", () => {
     expect(screen.queryByText('Основание',{exact:true})).not.toBeInTheDocument();
     expect(screen.queryByText('Комментарий',{exact:true})).not.toBeInTheDocument();
     fireEvent.change(screen.getByTestId('personnel-order-type-select'),{target:{value:'TRANSFER'}});
-    fireEvent.click(screen.getByRole('button',{name:'Сохранить заголовок',exact:true}));
+    fireEvent.click(screen.getByRole('button',{name:'Сохранить заголовок'}));
     await waitFor(()=>expect(updatePersonnelOrder).toHaveBeenCalledExactlyOnceWith(order.order_id,{order_type_code:'TRANSFER'}));
     expect(order.basis_summary).toBe('TEST основание заголовка');
     expect(order.comment).toBe('TEST сохранённый комментарий');

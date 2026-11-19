@@ -8,7 +8,7 @@ vi.mock("@/lib/api", () => ({ apiFetchJson: vi.fn() }));
 const api = vi.mocked(apiFetchJson);
 
 const run = (status = "DRY_RUN_COMPLETED", pausedOperation?: string) => ({
-  run: { stage_run_id: 73, stage0_cohort_run_id: 9, status, current_position: 1, paused_operation: pausedOperation },
+  run: { stage_run_id: 73, stage0_cohort_run_id: 9, status, current_position: 1, paused_operation: pausedOperation, stopped_participant_id: undefined as number | undefined },
   counts: { COMPLETED: 0, SKIPPED_BY_DECISION: 0 },
   participants: [{
     stage_run_participant_id: 11, position: 1, employee_id: 101, person_id: 201, status: "PENDING",

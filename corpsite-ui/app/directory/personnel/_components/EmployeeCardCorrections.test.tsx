@@ -1,3 +1,4 @@
+import { employeeFixture } from "../../employees/_lib/employeeTestFixtures";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -70,7 +71,7 @@ vi.mock("../_lib/importApi.client", () => ({
 
 import { correctEmployee, getEmployee, updateEmployeeAssignmentType } from "../../employees/_lib/api.client";
 
-const employeeDetails: EmployeeDetails = {
+const employeeDetails: EmployeeDetails = employeeFixture({
   employee_id: 1,
   fio: "Иванов Иван Иванович",
   status: "active",
@@ -80,7 +81,7 @@ const employeeDetails: EmployeeDetails = {
   date_from: "2024-01-15",
   date_to: null,
   is_active: true,
-} as EmployeeDetails;
+}) as EmployeeDetails;
 
 afterEach(() => {
   cleanup();

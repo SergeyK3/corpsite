@@ -1,8 +1,8 @@
+import { employeeFixture } from "../_lib/employeeTestFixtures";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import EmployeesPageClient from "./EmployeesPageClient";
-import { OPEN_PERSONAL_CARD_CTA } from "@/lib/personnelCardTerminology";
 import { getEmployees } from "../_lib/api.client";
 
 const pushMock = vi.fn();
@@ -28,7 +28,7 @@ vi.mock("./EmployeeCreateDrawer", () => ({
 
 vi.mock("../_lib/api.client", () => ({
   getEmployees: vi.fn(async () => ({
-    items: [{ employee_id: 42, fio: "Иванов Иван", status: "active", employment_rate: 1 }],
+    items: [employeeFixture({ employee_id: 42, person_id: 501, fio: "Иванов Иван", status: "active", employment_rate: 1 })],
     total: 1,
   })),
   getPositions: vi.fn(async () => ({ items: [] })),
@@ -45,11 +45,11 @@ const baseProps = {
   pageTitle: "Персонал",
   readOnly: true,
   managementView: true,
-  initialFilters: { status: "all", limit: 50, offset: 0 },
+  initialFilters: { status: "all" as const, limit: 50, offset: 0 },
   initialDepartments: [],
   initialPositions: [],
   initialEmployees: {
-    items: [{ employee_id: 42, fio: "Иванов Иван", status: "active", employment_rate: 1 }],
+    items: [employeeFixture({ employee_id: 42, person_id: 501, fio: "Иванов Иван", status: "active", employment_rate: 1 })],
     total: 1,
   },
   initialError: null,
@@ -70,23 +70,23 @@ describe("EmployeesPageClient staff canonical navigation", () => {
   it("does not render working drawer on /directory/staff", async () => {
     render(<EmployeesPageClient {...baseProps} />);
 
-    expect(await screen.findByRole("link", { name: OPEN_PERSONAL_CARD_CTA })).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "Личная карточка" })).toBeInTheDocument();
     expect(screen.queryByTestId("employee-drawer")).not.toBeInTheDocument();
   });
 
   it("shows only one «Открыть» action linking to PPR card", async () => {
     render(<EmployeesPageClient {...baseProps} />);
 
-    const links = await screen.findAllByRole("link", { name: OPEN_PERSONAL_CARD_CTA });
+    const links = await screen.findAllByRole("link", { name: "Личная карточка" });
     expect(links).toHaveLength(1);
-    expect(links[0]).toHaveAttribute("href", "/directory/personnel/employees/42/card");
+    expect(links[0]).toHaveAttribute("href", "/directory/personnel/persons/501/card?return_to=%2Fdirectory%2Fstaff");
     expect(screen.queryByText("Карточка")).not.toBeInTheDocument();
   });
 
   it("never mounts drawer shell on staff page", async () => {
     render(<EmployeesPageClient {...baseProps} />);
 
-    await screen.findByRole("link", { name: OPEN_PERSONAL_CARD_CTA });
+    await screen.findByRole("link", { name: "Личная карточка" });
     expect(screen.queryByTestId("employee-drawer")).not.toBeInTheDocument();
     expect(screen.queryByText("Карточка")).not.toBeInTheDocument();
   });
@@ -94,7 +94,7 @@ describe("EmployeesPageClient staff canonical navigation", () => {
   it("requests backend order and does not send a page-local sort override", async () => {
     render(<EmployeesPageClient {...baseProps} />);
 
-    await screen.findByRole("link", { name: OPEN_PERSONAL_CARD_CTA });
+    await screen.findByRole("link", { name: "Личная карточка" });
     const args = vi.mocked(getEmployees).mock.calls.at(-1)?.[0];
     expect(args).not.toHaveProperty("sort");
     expect(args).not.toHaveProperty("order");

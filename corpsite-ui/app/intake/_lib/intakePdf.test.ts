@@ -1,3 +1,4 @@
+import { intakeEducationFixture, intakeTrainingFixture } from "./intakeTestFixtures";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 
 import { emptyIntakeDraftPayload, type IntakeDraftPayload } from "./intakeApi.client";
@@ -28,7 +29,7 @@ function samplePayload() {
   payload.personal.birth_date = "1990-05-15";
   payload.contacts.mobile_phone = "+77001234567";
   payload.education = [
-    {
+    intakeEducationFixture({
       education_type: "basic",
       institution: "КазНУ",
       year_from: "2018-09-01",
@@ -37,10 +38,10 @@ function samplePayload() {
       qualification: "Бакалавр",
       document_type: "diploma",
       diploma_number: "123",
-    },
+    }),
   ];
   payload.training = [
-    {
+    intakeTrainingFixture({
       institution: "Центр обучения",
       course_name: "Первая помощь",
       year_from: "2024-01-10",
@@ -49,7 +50,7 @@ function samplePayload() {
       document_number: "ПО-1",
       hours: "24",
       hours_is_manual: false,
-    },
+    }),
   ];
   payload.military.status = "Призывник";
   return payload;
@@ -516,7 +517,9 @@ describe("intakePdfOpen client", () => {
       headers: { "Content-Type": "application/pdf" },
     })));
     vi.stubGlobal("URL", { createObjectURL: vi.fn(() => "blob:pdf"), revokeObjectURL: vi.fn() });
-    vi.spyOn(window, "setTimeout").mockImplementation((() => 1) as typeof window.setTimeout);
+    const timeoutHandle = setTimeout(() => {}, 0);
+    clearTimeout(timeoutHandle);
+    vi.spyOn(window, "setTimeout").mockImplementation(() => timeoutHandle);
 
     const { downloadIntakePdfByApplicationId } = await import("./intakePdfOpen.client");
     await downloadIntakePdfByApplicationId(225);

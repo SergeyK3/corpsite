@@ -28,7 +28,7 @@ describe("PersonnelOrdersTable", () => {
     const { rerender } = render(<PersonnelOrdersTable items={[sampleRow]} />);
     expect(screen.getByRole("columnheader", {name: "Тип приказа"})).toBeInTheDocument();
     expect(screen.queryByRole("columnheader", {name: "Исходное название"})).not.toBeInTheDocument();
-    expect(screen.queryByRole("columnheader", {name: "Тип", exact: true})).not.toBeInTheDocument();
+    expect(screen.queryByRole("columnheader", {name: "Тип"})).not.toBeInTheDocument();
     expect(within(screen.getByTestId("personnel-order-row-101")).getAllByText("Жұмысқа қабылдау туралы")).toHaveLength(1);
     expect(screen.queryByText(sampleRow.source_title!)).not.toBeInTheDocument();
     rerender(

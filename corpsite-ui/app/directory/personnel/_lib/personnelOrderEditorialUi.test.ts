@@ -144,6 +144,7 @@ describe("personnelOrderEditorialUi", () => {
         item_type_code: "HIRE",
         item_status: "ACTIVE",
         employee_name: "Петрова Анна",
+        payload: {},
       },
     ];
     const kkSections = buildEditorialDocumentSections(state, items, "kk");

@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import ImportRosterPromotionPanel from "./ImportRosterPromotionPanel";
@@ -140,24 +140,24 @@ describe("ImportRosterPromotionPanel analysis UX", () => {
     render(<ImportRosterPromotionPanel batchId={7} />);
     const filters = await screen.findByTestId("roster-promotion-filters");
 
-    fireEvent.change(screen.getByPlaceholderText("Поиск по ФИО", { container: filters }), {
+    fireEvent.change(within(filters).getByPlaceholderText("Поиск по ФИО"), {
       target: { value: "новик" },
     });
     expect(screen.getByTestId("roster-promotion-filter-count")).toHaveTextContent("Показано 1 из 4");
 
-    fireEvent.change(screen.getByPlaceholderText("Поиск по ФИО", { container: filters }), {
+    fireEvent.change(within(filters).getByPlaceholderText("Поиск по ФИО"), {
       target: { value: "" },
     });
-    fireEvent.change(screen.getByPlaceholderText("Поиск по ИИН", { container: filters }), {
+    fireEvent.change(within(filters).getByPlaceholderText("Поиск по ИИН"), {
       target: { value: "210987" },
     });
     expect(screen.getByTestId("roster-promotion-filter-count")).toHaveTextContent("Показано 1 из 4");
     expect(screen.getByText("Петров Петр")).toBeInTheDocument();
 
-    fireEvent.change(screen.getByPlaceholderText("Поиск по ИИН", { container: filters }), {
+    fireEvent.change(within(filters).getByPlaceholderText("Поиск по ИИН"), {
       target: { value: "" },
     });
-    fireEvent.change(screen.getByDisplayValue("Все статусы", { container: filters }), {
+    fireEvent.change(within(filters).getByDisplayValue("Все статусы"), {
       target: { value: "would_create" },
     });
     expect(screen.getByTestId("roster-promotion-filter-count")).toHaveTextContent("Показано 1 из 4");

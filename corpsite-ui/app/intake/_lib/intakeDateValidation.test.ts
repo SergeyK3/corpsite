@@ -1,3 +1,5 @@
+import { intakeEmploymentFixture } from "./intakeTestFixtures";
+import { intakeEducationFixture, intakeTrainingFixture, intakeRelativeFixture } from "./intakeTestFixtures";
 import { describe, expect, it } from "vitest";
 
 import { emptyIntakeDraftPayload } from "./intakeApi.client";
@@ -47,7 +49,7 @@ describe("intakeDateValidation", () => {
     const payload = emptyIntakeDraftPayload();
     payload.personal.birth_date = "1990-05-20";
     payload.education = [
-      {
+      intakeEducationFixture({
         education_type: "basic",
         institution: "КазНУ",
         year_from: "2014",
@@ -55,7 +57,7 @@ describe("intakeDateValidation", () => {
         specialty: "",
         qualification: "",
         diploma_number: "",
-      },
+      }),
     ];
 
     const issues = collectIntakeDateValidationIssues(payload);
@@ -68,20 +70,20 @@ describe("intakeDateValidation", () => {
   it("builds contextual labels for training and relatives", () => {
     const payload = emptyIntakeDraftPayload();
     payload.training = [
-      {
+      intakeTrainingFixture({
         institution: "Центр",
         year: "2020",
         course_name: "Актуальные вопросы ОЗ",
         hours: "",
-      },
+      }),
     ];
     payload.relatives = [
-      {
+      intakeRelativeFixture({
         relationship: "мать",
         full_name: "Макалкина Татьяна Владимировна",
         birth_year: "1970",
         work_place: "",
-      },
+      }),
     ];
 
     const issues = collectIntakeDateValidationIssues(payload);
@@ -94,7 +96,7 @@ describe("intakeDateValidation", () => {
   it("does not duplicate identical field issues", () => {
     const payload = emptyIntakeDraftPayload();
     payload.education = [
-      {
+      intakeEducationFixture({
         education_type: "basic",
         institution: "КазНУ",
         year_from: "2014",
@@ -102,7 +104,7 @@ describe("intakeDateValidation", () => {
         specialty: "",
         qualification: "",
         diploma_number: "",
-      },
+      }),
     ];
 
     const issues = collectIntakeDateValidationIssues(payload);
@@ -114,7 +116,7 @@ describe("intakeDateValidation", () => {
     const payload = emptyIntakeDraftPayload();
     payload.personal.birth_date = "1990-05-20";
     payload.education = [
-      {
+      intakeEducationFixture({
         education_type: "basic",
         institution: "КазНУ",
         year_from: "2014-09-01",
@@ -122,27 +124,27 @@ describe("intakeDateValidation", () => {
         specialty: "",
         qualification: "",
         diploma_number: "",
-      },
+      }),
     ];
     payload.training = [
-      {
+      intakeTrainingFixture({
         institution: "Центр",
         year_from: "2021-03-10",
         year_to: "2021-03-10",
         course_name: "Охрана труда",
         hours: "8",
         hours_is_manual: false,
-      },
+      }),
     ];
-    payload.relatives = [{ relationship: "мать", full_name: "Иванова", birth_year: "1965-04-12", work_place: "" }];
+    payload.relatives = [intakeRelativeFixture({ relationship: "мать", full_name: "Иванова", birth_year: "1965-04-12", work_place: "" })];
     payload.employment_biography = [
-      {
+      intakeEmploymentFixture({
         organization: "ООО Альфа",
         position: "Инженер",
         year_from: "2020-01-15",
         year_to: "2024-08-01",
         reason_for_leaving: "",
-      },
+      }),
     ];
 
     expect(collectIntakeDateValidationIssues(payload)).toEqual([]);
@@ -152,7 +154,7 @@ describe("intakeDateValidation", () => {
   it("blocks submit when training end date is before start date", () => {
     const payload = emptyIntakeDraftPayload();
     payload.training = [
-      {
+      intakeTrainingFixture({
         institution: "Учебный центр охраны труда",
         course_name: "Охрана труда и техника безопасности",
         year_from: "2024-07-10",
@@ -161,7 +163,7 @@ describe("intakeDateValidation", () => {
         document_number: "ОТ-178-01",
         hours: "40",
         hours_is_manual: true,
-      },
+      }),
     ];
 
     const issues = collectIntakeDateValidationIssues(payload);
@@ -177,7 +179,7 @@ describe("intakeDateValidation", () => {
   it("allows valid training period for application 178 corrected dates", () => {
     const payload = emptyIntakeDraftPayload();
     payload.training = [
-      {
+      intakeTrainingFixture({
         institution: "Учебный центр охраны труда",
         course_name: "Охрана труда и техника безопасности",
         year_from: "2024-05-10",
@@ -186,7 +188,7 @@ describe("intakeDateValidation", () => {
         document_number: "ОТ-178-01",
         hours: "40",
         hours_is_manual: true,
-      },
+      }),
     ];
 
     expect(collectIntakeDateValidationIssues(payload)).toEqual([]);
@@ -195,7 +197,7 @@ describe("intakeDateValidation", () => {
   it("blocks submit when education end date is before start date", () => {
     const payload = emptyIntakeDraftPayload();
     payload.education = [
-      {
+      intakeEducationFixture({
         education_type: "basic",
         institution: "КазНУ",
         year_from: "2022-09-01",
@@ -203,7 +205,7 @@ describe("intakeDateValidation", () => {
         specialty: "",
         qualification: "",
         diploma_number: "",
-      },
+      }),
     ];
 
     const issues = collectIntakeDateValidationIssues(payload);
@@ -214,17 +216,17 @@ describe("intakeDateValidation", () => {
   it("blocks submit when employment end date is before start date", () => {
     const payload = emptyIntakeDraftPayload();
     payload.employment_biography = [
-      {
+      intakeEmploymentFixture({
         organization: "ООО Альфа",
         position: "Инженер",
         year_from: "2024-08-01",
         year_to: "2024-01-15",
         reason_for_leaving: "",
-      },
+      }),
     ];
 
     const issues = collectIntakeDateValidationIssues(payload);
-    expect(issues[0]?.field).toBe("employment_biography[0].year_to");
+    expect(issues[0]?.field).toBe("employment_biography[0].end_date");
     expect(issues[0]?.message).toContain("Дата окончания не может быть раньше даты начала");
   });
 });

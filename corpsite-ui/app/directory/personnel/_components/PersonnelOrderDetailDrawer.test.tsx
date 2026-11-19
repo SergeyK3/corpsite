@@ -340,7 +340,7 @@ describe("PersonnelOrderDetailDrawer document tab", () => {
     await waitFor(() => expect(getEmployees).toHaveBeenCalled());
     fireEvent.click(screen.getByRole("button", { name: /Selected employee/ }));
     fireEvent.change(screen.getByLabelText("Должность в приказе 9"), { target: { value: "Document doctor" } });
-    await screen.findByRole("option", {name:"Document unit",exact:true});
+    await screen.findByRole("option", {name:"Document unit"});
     fireEvent.change(screen.getByLabelText("Подразделение 9"), { target: { value: "91" } });
     fireEvent.change(screen.getByLabelText("Специальность 9"), { target: { value: "Neurology" } });
     fireEvent.change(screen.getByLabelText("Дата действия 9"), { target: { value: "2026-09-03" } });

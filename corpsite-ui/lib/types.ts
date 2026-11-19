@@ -67,6 +67,8 @@ export type MeInfo = {
   can_view_all_tasks?: boolean;
   /** OO-UI-001 — operational orders read access projection. */
   has_operational_orders_read?: boolean;
+  /** Legacy projection; archive access is determined by operational_orders_permissions. */
+  has_operational_order_archive_review?: boolean;
   operational_orders_permissions?: {
     intake_create?: boolean;
     intake_read?: boolean;
@@ -81,6 +83,7 @@ export type MeInfo = {
     assign_signing_authority?: boolean;
     mark_ready_for_signature?: boolean;
     return_from_signature?: boolean;
+    archive_review?: boolean;
   };
   /** WP-II — aggregate read projection used for navigation and direct-route access. */
   has_incoming_information_read?: boolean;

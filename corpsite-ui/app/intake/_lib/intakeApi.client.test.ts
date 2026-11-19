@@ -5,6 +5,7 @@ import { emptyIntakeEducationEntry, normalizeIntakeEducationEntry } from "./inta
 import { isIntakeRecordId } from "./intakeRecordId";
 import { emptyIntakeRelativeEntry } from "./intakeRelatives";
 import { emptyIntakeTrainingEntry, normalizeIntakeTrainingEntry } from "./intakeTraining";
+import { intakeRelativeFixture } from "./intakeTestFixtures";
 
 function tokenError(code: string) {
   return { status: 403, details: { detail: { code, message: "internal detail" } } };
@@ -55,8 +56,8 @@ describe("canonical payload form adapter", () => {
   it("serializes an edited relative using v2 names and keeps its record id", () => {
     const source = toIntakeFormPayload({
       ...emptyIntakeDraftPayload(),
-      relatives: [{ record_id: "a0ed72da-6ccf-4ef2-8d4a-3bb2c9097c08", relationship: "жена", relationship_other: null, full_name: "Садыкова Айгерим Туржановна", birth_date: "1996-11-21", workplace: "домохозяйка" }],
-    } as IntakeDraftPayload);
+      relatives: [intakeRelativeFixture({ record_id: "a0ed72da-6ccf-4ef2-8d4a-3bb2c9097c08", relationship: "жена", relationship_other: "", full_name: "Садыкова Айгерим Туржановна", birth_date: "1996-11-21", workplace: "домохозяйка" })],
+    });
     const payload = source;
     const canonical = toCanonicalIntakeV2(payload) as { relatives: Array<Record<string, unknown>> };
     expect(canonical.relatives[0]).toMatchObject({ record_id: "a0ed72da-6ccf-4ef2-8d4a-3bb2c9097c08", birth_date: "1996-11-21", workplace: "домохозяйка" });

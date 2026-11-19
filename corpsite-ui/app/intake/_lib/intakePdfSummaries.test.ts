@@ -1,3 +1,4 @@
+import { intakeTrainingFixture } from "./intakeTestFixtures";
 import { describe, expect, it } from "vitest";
 
 import { emptyIntakeDraftPayload } from "./intakeApi.client";
@@ -37,7 +38,7 @@ describe("intakePdfSummaries training", () => {
   it("uses shared trainingSummary logic with explicit as-of date", () => {
     const payload = emptyIntakeDraftPayload();
     payload.training = [
-      {
+      intakeTrainingFixture({
         institution: "Org",
         course_name: "Safety",
         year_from: "2022-03-10",
@@ -46,7 +47,7 @@ describe("intakePdfSummaries training", () => {
         document_number: "C-1",
         hours: "",
         hours_is_manual: false,
-      },
+      }),
     ];
 
     const summaries = buildIntakePdfTrainingSummaries(payload, AS_OF);
@@ -68,7 +69,7 @@ describe("intakePdfSummaryHtml", () => {
     const completedAt = addCalendarMonths(addCalendarYears(AS_OF, -5), 3);
     const payload = emptyIntakeDraftPayload();
     payload.training = [
-      {
+      intakeTrainingFixture({
         institution: "Org",
         course_name: "Скорая помощь",
         year_from: completedAt,
@@ -77,7 +78,7 @@ describe("intakePdfSummaryHtml", () => {
         document_number: "X-1",
         hours: "16",
         hours_is_manual: true,
-      },
+      }),
     ];
     const training = buildIntakePdfTrainingSummaries(payload, AS_OF);
     const hoursHtml = buildIntakePdfTrainingHoursSummaryHtml(training.trainingHours);

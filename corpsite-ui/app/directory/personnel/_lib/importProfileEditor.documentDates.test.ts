@@ -17,6 +17,7 @@ function baseProfile(): ImportProfile {
       sex: "",
       department_source: "",
       position_raw: "",
+      experience_raw: "",
       employment_rate: null,
       nationality: "",
       phone_raw: "",
@@ -32,6 +33,7 @@ function baseProfile(): ImportProfile {
     notes_raw: "",
     status: "",
     review_status: "",
+    portfolio_totals: {},
   };
 }
 

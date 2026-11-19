@@ -1,3 +1,4 @@
+import { intakeEmploymentFixture } from "./intakeTestFixtures";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -15,20 +16,20 @@ describe("employmentTenureApi.client", () => {
 
   it("prepares API records with record_id and normalized dates", () => {
     const prepared = prepareEmploymentTenureRecords([
-      {
+      intakeEmploymentFixture({
         record_id: "row-a",
-        organization_original: "A", organization_normalized: null, position_original: "", position_normalized: null,
+        organization_original: "A", organization_normalized: "", position_original: "", position_normalized: "",
         start_date: "01.09.1993", end_date: "25.07.1994",
-      },
-      {
+      }),
+      intakeEmploymentFixture({
         organization_original: "B", organization_normalized: "", position_original: "", position_normalized: "",
         start_date: "01.01.2020", end_date: null,
-      },
+      }, 1),
     ]);
 
     expect(prepared[0]).toEqual({
       record_id: "row-a",
-      organization_original: "A", organization_normalized: null, position_original: "", position_normalized: null,
+      organization_original: "A", organization_normalized: "", position_original: "", position_normalized: "",
       start_date: "1993-09-01", end_date: "1994-07-25",
     });
     expect(prepared[1].record_id).toBe("legacy-1");

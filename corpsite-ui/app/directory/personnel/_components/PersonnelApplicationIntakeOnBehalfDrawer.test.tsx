@@ -1,3 +1,5 @@
+import { intakeEmploymentFixture } from "../../../intake/_lib/intakeTestFixtures";
+import { intakeEducationFixture } from "../../../intake/_lib/intakeTestFixtures";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -34,6 +36,7 @@ function buildSessionPayload(): IntakeDraftPayload {
       citizenship: "Республика Казахстан",
       nationality: "казах",
       personnel_number: "",
+      photo_file_id: "",
     },
     contacts: {
       mobile_phone: "+77001234567",
@@ -42,7 +45,7 @@ function buildSessionPayload(): IntakeDraftPayload {
       residence_address: "",
     },
     education: [
-      {
+      intakeEducationFixture({
         education_type: "basic",
         institution: "КазНУ",
         year_from: "2018-09-01",
@@ -50,18 +53,18 @@ function buildSessionPayload(): IntakeDraftPayload {
         specialty: "IT",
         qualification: "Бакалавр",
         diploma_number: "123",
-      },
+      }),
     ],
     training: [],
     relatives: [],
     employment_biography: [
-      {
+      intakeEmploymentFixture({
         organization: "Клиника А",
         position: "Медсестра",
         year_from: "2020-01-15",
         year_to: "2024-08-01",
         reason_for_leaving: "Переезд",
-      },
+      }),
     ],
     military: {
       status: "",
