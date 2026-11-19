@@ -21,10 +21,12 @@ from app.services.personnel_orders_editorial.repository import (
     find_block,
     load_item_blocks,
     load_items,
+    load_bases,
     load_order_blocks,
     update_item_block_override,
     update_order_block_override,
 )
+from app.services.personnel_order_termination_reason import termination_basis_is_explicit, termination_reason_basis_text
 from app.services.personnel_order_archive_guard import assert_order_not_archived
 from app.services.personnel_orders_editorial.write_lock import ensure_draft_writable
 from app.services.personnel_orders_query_service import PersonnelOrderValidationError
@@ -39,6 +41,10 @@ def get_editorial_state(order_id: int) -> Dict[str, Any]:
         items = load_items(conn, order_id)
         order_blocks = load_order_blocks(conn, order_id)
         item_blocks = load_item_blocks(conn, order_id=order_id)
+        reasoned_termination_items = {int(item["item_id"]): payload_dict(item.get("payload"))
+                                      for item in items if str(item["item_type_code"]).upper() == "TERMINATION"
+                                      and payload_dict(item.get("payload")).get("termination_reason")}
+        termination_bases = load_bases(conn, list(reasoned_termination_items)) if editable else {}
 
         item_groups: List[Dict[str, Any]] = []
         blocks_by_item: Dict[int, List[Dict[str, Any]]] = {}
@@ -52,6 +58,16 @@ def get_editorial_state(order_id: int) -> Dict[str, Any]:
                 serialize_block(b, scope="item", editable=editable)
                 for b in blocks_by_item.get(item_id, [])
             ]
+            payload = reasoned_termination_items.get(item_id)
+            if editable and payload and not termination_basis_is_explicit(termination_bases.get(item_id)) and not isinstance(payload.get("basis"), str):
+                for block in group_blocks:
+                    if block["block_type"] != ITEM_BLOCK_TYPE_BASIS or (block.get("override_text") or "").strip():
+                        continue
+                    generated = str(block.get("generated_text") or "").lower()
+                    if not generated or ("личн" in generated and "заявлен" in generated) or ("жеке" in generated and "өтініш" in generated):
+                        replacement = termination_reason_basis_text(payload["termination_reason"], block["locale"])
+                        block["generated_text"] = replacement
+                        block["effective_text"] = replacement
             if item['item_type_code'] == 'HIRE':
                 from app.services.personnel_order_hire_position_quotes import hire_generated_body_without_position_quotes
                 for block in group_blocks:

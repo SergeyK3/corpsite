@@ -139,12 +139,25 @@ def _score_positions(name: str, cols: List[str]) -> int:
 
 def _best_relation(score_fn, min_score: int) -> Tuple[Optional[str], List[str], int]:
     rels = _list_relations("public")
+    # Inspect the schema once. Looking up every column of every relation in a
+    # separate transaction made a single employee search issue hundreds of
+    # catalog queries before its actual COUNT and page queries.
+    with engine.connect() as conn:
+        columns = conn.execute(text("""
+            SELECT table_name, column_name
+            FROM information_schema.columns
+            WHERE table_schema = :schema
+            ORDER BY table_name, ordinal_position
+        """), {"schema": "public"}).all()
+    columns_by_relation: Dict[str, List[str]] = {}
+    for name, column in columns:
+        columns_by_relation.setdefault(name, []).append(column)
     best_name: Optional[str] = None
     best_cols: List[str] = []
     best_score = -1
 
     for name, _kind in rels:
-        cols = _get_columns(name, "public")
+        cols = columns_by_relation.get(name, [])
         if not cols:
             continue
         score = score_fn(name, cols)

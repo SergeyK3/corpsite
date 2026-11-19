@@ -9,10 +9,12 @@ export function recipientFromAssignment(employee:EmployeeDTO,assignment?:NonNull
  const position=assignment&&assignment.position_id===employee.position?.id?{...assignment.position,...employee.position}:assignment?.position||employee.position;
  const unit=assignment&&assignment.org_unit_id===employee.org_unit?.unit_id?{...assignment.org_unit,...employee.org_unit}:assignment?.org_unit||employee.org_unit;
  const ru=position?.job_nameru||position?.name||'';const unitRu=unit?.name||'';
+ const positionProposal=calculateKazakhPositionPossessive(position?.job_namekk||position?.name_kk);
+ const unitProposal=calculateKazakhOrgUnitGenitive(unit?.name_kk);
  return {assignment_id:assignment?.assignment_id,position_id:assignment?.position_id||employee.position?.id||undefined,org_unit_id:assignment?.org_unit_id||employee.org_unit?.unit_id||undefined,
   position_ru:ru,org_unit_ru:unitRu,position_dative_ru:russianReferenceCase(ru,'dative'),org_unit_genitive_ru:russianReferenceCase(unitRu,'genitive'),
-  position_kk:firstNonEmpty(position?.document_possessive_kk,('job_namekk_doc' in (position||{})?(position as {job_namekk_doc?:string}).job_namekk_doc:''),calculateKazakhPositionPossessive(position?.job_namekk||position?.name_kk).value),
-  org_unit_kk:firstNonEmpty(unit?.document_genitive_kk,calculateKazakhOrgUnitGenitive(unit?.name_kk).value)};
+  position_kk:position&&'document_form_status' in position&&position.document_form_status==='needs_review'?'':firstNonEmpty(position?.document_possessive_kk,('job_namekk_doc' in (position||{})?(position as {job_namekk_doc?:string}).job_namekk_doc:''),positionProposal.needsReview?'':positionProposal.value),
+  org_unit_kk:firstNonEmpty(unit?.document_genitive_kk,unitProposal.needsReview?'':unitProposal.value)};
 }
 export function recipientBlockers(value:AllowanceRecipient,employee:EmployeeDTO|null,requireUnitCase=true,requireKkPosition=true):string[]{
  const labels:Record<string,string>={position_ru:'Должность получателя (RU)',org_unit_ru:'Подразделение получателя (RU)',position_kk:'Должность получателя (KK)',org_unit_kk:'Подразделение получателя (KK)',org_unit_genitive_ru:'Подразделение получателя для текста (RU)'};

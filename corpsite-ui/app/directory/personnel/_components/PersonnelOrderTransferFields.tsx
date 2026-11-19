@@ -17,7 +17,7 @@ export type TransferFields = {
   position_genitive_ru?: string; org_unit_genitive_ru?: string; total_rate?: string; remaining_rate?: string; assignment_id?: number;
   position_id?: number; org_unit_id?: number; basis_type?: PersonnelOrderBasisType;
 };
-type Option = { id: string; ru: string; kk: string; documentKK?: string; searchText?: string };
+type Option = { id: string; ru: string; kk: string; documentKK?: string; needsReview?: boolean; searchText?: string };
 type Job = { job_nameru?: string; job_namekk?: string; job_namekk_doc?: string; legacy_position_ids?: number[] };
 const inputClass = "mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-900";
 const basisTypes: PersonnelOrderBasisType[] = ["PERSONAL_APPLICATION", "MEMO", "MANAGEMENT_SUBMISSION", "MEDICAL_CONCLUSION", "COMMISSION_PROTOCOL", "COURT_ACT"];
@@ -88,7 +88,7 @@ export default function PersonnelOrderTransferFields({ value, onChange, orgUnits
     async function load() {
       const [positionResult, jobResult] = await Promise.allSettled([
         (async () => {
-          const rows: { position_id: number; name: string; name_kk?: string; document_possessive_kk?: string }[] = [];
+          const rows: { position_id: number; name: string; name_kk?: string; document_possessive_kk?: string; document_form_status?: string }[] = [];
           let offset = 0;
           while (true) {
             const response = await getPositions({ limit: 1000, offset });
@@ -104,7 +104,7 @@ export default function PersonnelOrderTransferFields({ value, onChange, orgUnits
       if (jobResult.status === "fulfilled") for (const job of jobResult.value.items) for (const id of job.legacy_position_ids || []) jobs.set(id, job);
       if (positionResult.status === "fulfilled") setPositions(positionResult.value.map(row => {
         const job = jobs.get(row.position_id);
-        return { id: String(row.position_id), ru: job?.job_nameru?.trim() || row.name?.trim() || "", kk: job?.job_namekk?.trim() || row.name_kk?.trim() || "", documentKK: job?.job_namekk_doc?.trim() || row.document_possessive_kk?.trim() || "", searchText: row.name?.trim() || "" };
+        return { id: String(row.position_id), ru: job?.job_nameru?.trim() || row.name?.trim() || "", kk: job?.job_namekk?.trim() || row.name_kk?.trim() || "", documentKK: job?.job_namekk_doc?.trim() || row.document_possessive_kk?.trim() || "", needsReview:row.document_form_status==='needs_review', searchText: row.name?.trim() || "" };
       }));
       if (positionResult.status === "rejected" || jobResult.status === "rejected") setError("Не удалось загрузить весь справочник должностей RU/KK. Повторно откройте форму или введите недостающие значения вручную.");
       setLoading(false);
@@ -112,10 +112,18 @@ export default function PersonnelOrderTransferFields({ value, onChange, orgUnits
     void load();
     return () => { cancelled = true; };
   }, []);
-  const units = orgUnits.map(unit => ({ id: String(unit.unit_id), ru: unit.name.trim(), kk: (documentFormsKK ? unit.document_genitive_kk?.trim() || (autoCaseForms?calculateKazakhOrgUnitGenitive(unit.name_kk).value:'') : "") || unit.name_kk?.trim() || "" }));
+  const units = orgUnits.map(unit => {
+    const proposal=autoCaseForms?calculateKazakhOrgUnitGenitive(unit.name_kk):null;
+    const documentKK=documentFormsKK ? unit.document_genitive_kk?.trim() || (proposal&&!proposal.needsReview?proposal.value:'') : '';
+    return { id: String(unit.unit_id), ru: unit.name.trim(), kk: documentFormsKK&&autoCaseForms ? documentKK : documentKK || unit.name_kk?.trim() || "" };
+  });
   function choose(kind: "position" | "org_unit" | "basis", option: Option, locale: "ru" | "kk", previousText: string) {
-    if (documentFormsKK && kind === "position" && option.documentKK) option = {...option,kk:option.documentKK};
-    else if(documentFormsKK&&autoCaseForms&&kind==='position')option={...option,kk:calculateKazakhPositionPossessive(option.kk).value};
+    if (documentFormsKK && kind === "position" && option.needsReview) option={...option,kk:''};
+    else if (documentFormsKK && kind === "position" && option.documentKK) option = {...option,kk:option.documentKK};
+    else if(documentFormsKK&&autoCaseForms&&kind==='position'){
+      const proposal=calculateKazakhPositionPossessive(option.kk);
+      option={...option,kk:proposal.needsReview?'':proposal.value};
+    }
     const idKey = kind === "basis" ? "basis_type" : `${kind}_id` as "position_id" | "org_unit_id";
     onChange(current => {
       const same = String(current[idKey] ?? "") === option.id;

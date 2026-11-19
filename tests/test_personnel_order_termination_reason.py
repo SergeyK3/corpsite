@@ -12,7 +12,15 @@ from app.services import personnel_orders_command_service as command_service
 from app.services import personnel_orders_query_service as query_service
 from app.services.personnel_order_template_application_service import _render
 from app.services.personnel_order_template_specs import get_personnel_order_template_spec
-from app.services.personnel_order_termination_reason import EMPLOYEE_INITIATIVE, termination_reason_text
+from app.services.personnel_order_kazakh_name import document_name_kk
+from app.services.personnel_order_termination_reason import (
+    CONTRACT_EXPIRATION,
+    EMPLOYEE_INITIATIVE,
+    EMPLOYER_INITIATIVE,
+    termination_basis_is_manual,
+    termination_reason_basis_text,
+    termination_reason_text,
+)
 from app.services.personnel_orders_editorial.position_dictionary import document_nominative_personnel_order_position, localized_personnel_order_position
 from app.services.personnel_orders_editorial.generators import format_personnel_order_date_numeric
 
@@ -29,6 +37,29 @@ class _Engine:
 
     def begin(self):
         return nullcontext(self.connection)
+
+
+def test_kazakh_document_name_order_is_conservative():
+    assert document_name_kk("Фидахметова Нургул Маметовна") == "Нургул Маметовна Фидахметова"
+    assert document_name_kk("Фидахметова Нургул Маметовна", name={"first_name": "Нургул", "middle_name": "Маметовна", "last_name": "Фидахметова"}) == "Нургул Маметовна Фидахметова"
+    assert document_name_kk("Алия Ким") == "Алия Ким"
+
+
+@pytest.mark.parametrize(("code", "ru", "kk"), [
+    (EMPLOYEE_INITIATIVE, "по инициативе работника", "жұмыскердің бастамасы бойынша"),
+    (EMPLOYER_INITIATIVE, "по инициативе работодателя", "жұмыс берушінің бастамасы бойынша"),
+    (CONTRACT_EXPIRATION, "В связи с истечением срока трудового договора", "Еңбек шарты мерзімінің аяқталуына байланысты"),
+])
+def test_termination_reason_and_separate_basis_are_bilingual(code, ru, kk):
+    assert termination_reason_text(code, "ru") == ru
+    assert termination_reason_text(code, "kk") == kk
+    assert ru.casefold() in termination_reason_basis_text(code, "ru").casefold()
+    assert kk.casefold() in termination_reason_basis_text(code, "kk").casefold()
+    assert termination_basis_is_manual(code) == (code != EMPLOYEE_INITIATIVE)
+
+
+def test_legacy_termination_reason_remains_verbatim():
+    assert termination_reason_text("по соглашению сторон", "ru") == "по соглашению сторон"
 
 
 def test_employee_initiative_reason_has_bilingual_rendering_for_template_preview():

@@ -183,6 +183,7 @@ function renderBasis(
     : resolveLocalizedLines(entry, language));
   if(model.documentTypeCode==='HIRE'&&!rawLines.length)return '';
   const isChildcareReturn = String(model.documentTypeCode).toUpperCase() === "RETURN_FROM_CHILDCARE_LEAVE";
+  const isTermination = String(model.documentTypeCode).toUpperCase() === "TERMINATION";
   const joined = rawLines.join(" ").toLocaleLowerCase(language === "kk" ? "kk-KZ" : "ru-RU");
   const personalApplication = language === "kk"
     ? joined.includes("жеке") && joined.includes("өтініш")
@@ -200,7 +201,7 @@ function renderBasis(
 
   const headings = dictionaries
     .map((dict) => `<div>${escapePersonnelOrderPrintHtml(
-      isChildcareReturn ? (language === "kk" ? "Негіз" : "Основание") : dict.basis,
+      isChildcareReturn || isTermination ? (language === "kk" ? "Негіз" : "Основание") : dict.basis,
     )}:</div>`)
     .join("");
   const list = lines

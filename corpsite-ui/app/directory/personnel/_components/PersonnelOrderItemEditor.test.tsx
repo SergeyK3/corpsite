@@ -499,7 +499,7 @@ describe("PersonnelOrderItemEditor unpaid-leave period", () => {
 });
 
 describe("PersonnelOrderItemEditor TERMINATION", () => {
-  it("updates a historical TERMINATION employee without active search and preserves its item data", async () => {
+  it.each(["EMPLOYEE_INITIATIVE", "EMPLOYER_INITIATIVE", "CONTRACT_EXPIRATION"])("updates a historical TERMINATION with %s and reopens it without losing item data", async reason => {
     const originalPayload = {
       org_unit_id: 17,
       org_unit_name: "Архивное подразделение",
@@ -514,7 +514,7 @@ describe("PersonnelOrderItemEditor TERMINATION", () => {
       items: [{
         item_id: 12, order_id: 1, item_number: 1, item_type_code: "TERMINATION",
         item_status: "ACTIVE", employee_id: 999, employee_name: "Уволенный сотрудник",
-        effective_date: "2026-09-30", payload: { ...originalPayload, termination_reason: "EMPLOYEE_INITIATIVE" },
+        effective_date: "2026-09-30", payload: { ...originalPayload, termination_reason: reason },
       }], localized_texts: [], events: [], acknowledgements: [], applications: [],
     } as any;
     vi.mocked(updatePersonnelOrderItem).mockResolvedValue(savedDetail);
@@ -530,7 +530,7 @@ describe("PersonnelOrderItemEditor TERMINATION", () => {
     expect(screen.getByTestId("personnel-order-employee-id-input")).toHaveAttribute("readonly");
     expect(screen.getByDisplayValue("2026-09-30")).toBeInTheDocument();
     fireEvent.change(screen.getByTestId("personnel-order-termination-reason-input"), {
-      target: { value: "EMPLOYEE_INITIATIVE" },
+      target: { value: reason },
     });
     fireEvent.click(screen.getByRole("button", { name: "Сохранить пункт" }));
 
@@ -540,7 +540,7 @@ describe("PersonnelOrderItemEditor TERMINATION", () => {
       payload: expect.objectContaining({
         ...originalPayload,
         basis_ids: ["application-1"],
-        termination_reason: "EMPLOYEE_INITIATIVE",
+        termination_reason: reason,
       }),
     })));
     expect(getEmployees).not.toHaveBeenCalled();
@@ -548,9 +548,30 @@ describe("PersonnelOrderItemEditor TERMINATION", () => {
 
     rerender(<PersonnelOrderItemEditor orderId={1} items={savedDetail.items} onChanged={onChanged} />);
     fireEvent.click(screen.getByRole("button", { name: "Редактировать" }));
-    expect(await screen.findByTestId("personnel-order-termination-reason-input")).toHaveValue("EMPLOYEE_INITIATIVE");
+    expect(await screen.findByTestId("personnel-order-termination-reason-input")).toHaveValue(reason);
   });
-
+  it("shows and preserves a legacy free-text reason when the item is reopened", async () => {
+    const legacyReason = "по соглашению сторон";
+    const item = {item_id: 15, order_id: 1, item_number: 1, item_type_code: "TERMINATION", item_status: "ACTIVE",
+      employee_id: 999, employee_name: "Уволенный сотрудник", effective_date: "2026-09-30", payload: {termination_reason: legacyReason}} as any;
+    vi.mocked(updatePersonnelOrderItem).mockResolvedValue({order:{order_id:1},items:[item]} as any);
+    render(<PersonnelOrderItemEditor orderId={1} items={[item]} onChanged={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Редактировать" }));
+    expect(await screen.findByTestId("personnel-order-termination-reason-input")).toHaveValue(legacyReason);
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить пункт" }));
+    await waitFor(() => expect(updatePersonnelOrderItem).toHaveBeenCalledWith(1, 15, expect.objectContaining({payload: expect.objectContaining({termination_reason: legacyReason})})));
+  });
+  it("allows direct typing over a historical employee without a change button", async () => {
+    render(<PersonnelOrderItemEditor orderId={1} items={[{
+      item_id: 14, order_id: 1, item_number: 1, item_type_code: "TERMINATION", item_status: "ACTIVE",
+      employee_id: 999, employee_name: "Уволенный сотрудник", effective_date: "2026-09-30", payload: {},
+    } as any]} onChanged={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: "Редактировать" }));
+    expect(screen.getByTestId("personnel-order-employee-search-input")).toHaveValue("Уволенный сотрудник");
+    fireEvent.change(screen.getByTestId("personnel-order-employee-search-input"),{target:{value:"Другой"}});
+    expect(screen.getByTestId("personnel-order-employee-search-input")).toBeInTheDocument();
+    expect(screen.getByTestId("personnel-order-employee-id-input")).toBeInTheDocument();
+  });
   it("proposes employee initiative from PERSONAL_APPLICATION without writing until save", async () => {
     const item = {
       item_id: 13, order_id: 1, item_number: 1, item_type_code: "TERMINATION", item_status: "ACTIVE",

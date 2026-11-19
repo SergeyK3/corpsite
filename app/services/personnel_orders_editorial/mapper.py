@@ -52,6 +52,11 @@ def pick_payload_value(payload: Mapping[str, Any], *keys: str) -> Any:
 
 def build_item_ctx(item: Mapping[str, Any], employee_name: Optional[str]) -> Dict[str, Any]:
     payload = payload_dict(item.get("payload"))
+    from app.services.personnel_order_kazakh_name import document_name_kk
+    employee_snapshot = payload_dict(payload.get("employee"))
+    name_snapshot = payload_dict(employee_snapshot.get("name"))
+    source_employee_name = name_snapshot.get("canonical") or pick_payload_value(payload, "source_employee_name") or employee_name
+    employee_name_kk = document_name_kk(source_employee_name or "", name=name_snapshot)
     document_forms_kk = payload_dict(payload.get("document_forms_kk"))
     document_forms_ru = payload_dict(payload.get("document_forms_ru"))
     assignment = payload_dict(payload.get("to_assignment") or payload.get("assignment"))
@@ -90,7 +95,8 @@ def build_item_ctx(item: Mapping[str, Any], employee_name: Optional[str]) -> Dic
         "item_type_code": item.get("item_type_code"),
         "recall_payload": payload if item.get("item_type_code") == "LEAVE.ANNUAL.RECALL" else None,
         "childcare_payload": payload if item.get("item_type_code") == "LEAVE.CHILDCARE.GRANT" else None,
-        "employee_name": employee_name or pick_payload_value(payload, "source_employee_name"),
+        "employee_name": source_employee_name,
+        "employee_name_kk": employee_name_kk,
         "employee_full_name_accusative_ru": confirmed_transfer_accusative(payload),
         "effective_date": iso_date(item.get("effective_date")),
         "org_unit_name": org_unit_name,
