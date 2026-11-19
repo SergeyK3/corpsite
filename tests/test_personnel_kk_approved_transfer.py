@@ -43,7 +43,8 @@ def test_approved_package_matches_28_source_rows_and_extra_approvals():
 def test_approved_checksum_accepts_windows_line_endings():
     path = ROOT / "runtime" / f"personnel-kk-transfer-crlf-{uuid4().hex}.json"
     try:
-        path.write_bytes(PACKAGE.read_bytes().replace(b"\n", b"\r\n"))
+        canonical = PACKAGE.read_bytes().replace(b"\r\n", b"\n")
+        path.write_bytes(canonical.replace(b"\n", b"\r\n"))
         assert read_package(path)[1] == read_package(PACKAGE)[1]
     finally:
         path.unlink(missing_ok=True)
