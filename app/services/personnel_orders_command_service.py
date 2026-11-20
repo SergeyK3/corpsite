@@ -25,6 +25,7 @@ from app.db.models.personnel_orders import (
     ORDER_STATUS_SIGNED,
     ORDER_STATUS_VOIDED,
     ORDER_TYPE_COMPOSITE,
+    ORDER_TYPE_HIRE,
     SOURCE_MODE_DIGITAL,
     SOURCE_MODE_PAPER,
 )
@@ -1324,6 +1325,20 @@ def update_personnel_order_item(
         except Exception:
             pass
         advance_personnel_order_evidence_scopes_tx(conn, tokens=scope_tokens)
+        if template is None and str(merged_type) == ORDER_TYPE_HIRE and conn.execute(
+            text("""
+                SELECT EXISTS (
+                    SELECT 1 FROM public.personnel_applications
+                    WHERE personnel_order_id = :order_id AND application_source = 'electronic'
+                )
+            """), {"order_id": int(order_id)}
+        ).scalar_one():
+            from app.services.personnel_orders_editorial.generation_service import generate_editorial
+
+            generate_editorial(
+                int(order_id), user_id=actor_user_id or order["created_by"],
+                conn=conn, scope={"item_id": int(item_id)},
+            )
 
     return get_personnel_order(int(order_id))
 

@@ -1,4 +1,5 @@
 """Electronic HIRE contract on the disposable PostgreSQL database."""
+from contextlib import nullcontext
 from datetime import UTC, date, datetime
 from decimal import Decimal
 import json
@@ -14,6 +15,7 @@ from app.personnel_applications.application.hire_order_draft_service import crea
 from app.personnel_applications.application.registration_service import register_personnel_application
 from app.personnel_applications.domain.errors import PersonnelApplicationHireOrderError
 from app.services.personnel_order_hire_from_person_service import validate_hire_person_candidate
+from app.services import personnel_orders_command_service as order_commands
 from app.services import personnel_order_template_application_service as templates
 from app.services.tasks_service import _is_task_visible_to_user, attach_allowed_actions, load_task_full
 from app.services.personnel_orders_apply_service import apply_personnel_order_in_conn
@@ -106,6 +108,44 @@ def test_electronic_hire_draft_generates_editorial_from_flat_item_payload():
             assert "инженер" in body["ru"].lower()
             expected_kk_unit = item["payload"]["org_unit_title_kk"] or item["payload"]["source_org_unit_name"]
             assert expected_kk_unit in body["kk"]
+        finally:
+            txn.rollback()
+
+
+def test_electronic_hire_name_clarification_refreshes_saved_text_without_template_application(monkeypatch):
+    with engine.connect() as conn:
+        txn = conn.begin()
+        try:
+            application, hr, _, _, _ = _setup(conn)
+            _complete_card(conn, application.person_id)
+            order = create_hire_order_draft_for_application(
+                conn, application_id=application.application_id, created_by_user_id=hr)
+            item = conn.execute(text("""
+                SELECT item_id, payload FROM public.personnel_order_items WHERE order_id=:order_id
+            """), {"order_id": order.personnel_order_id}).mappings().one()
+
+            class SharedTransactionEngine:
+                def begin(self):
+                    return nullcontext(conn)
+
+            monkeypatch.setattr(order_commands, "engine", SharedTransactionEngine())
+            monkeypatch.setattr(order_commands, "get_personnel_order", lambda _order_id: {})
+            order_commands.update_personnel_order_item(
+                order_id=order.personnel_order_id, item_id=item["item_id"], actor_user_id=hr,
+                payload={**item["payload"], "employee_full_name_accusative_ru": "Тестову Айгуль",
+                         "hire_basis": {"ru": "заявление", "kk": "өтініш"}},
+            )
+            body = dict(conn.execute(text("""
+                SELECT locale, generated_text FROM public.personnel_order_item_editorial_blocks
+                WHERE order_item_id=:item_id AND block_type='body'
+            """), {"item_id": item["item_id"]}).all())
+            assert "Тестову Айгуль" in body["ru"]
+            assert "[ФИО" not in body["ru"]
+            assert "0,75" in body["ru"] and "0,75" in body["kk"]
+            assert conn.execute(text("""
+                SELECT count(*) FROM public.personnel_order_template_applications
+                WHERE order_id=:order_id
+            """), {"order_id": order.personnel_order_id}).scalar_one() == 0
         finally:
             txn.rollback()
 
