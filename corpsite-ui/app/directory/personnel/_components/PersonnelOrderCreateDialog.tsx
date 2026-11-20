@@ -69,6 +69,7 @@ type Props = {
   open: boolean;
   onClose: () => void;
   onCreated: (result: PersonnelOrderManualDraftCreateResult) => void;
+  onHireRequested?: () => void;
   itemContext?: {orderId: number; itemTypeCode: string; template: PersonnelPublishedTemplateVariant; employeeIds: number[];items?: PersonnelOrderDetailResponse['items']; sourceTitleLocale?: "ru" | "kk" | "unknown" | null};
   onItemAdded?: (result: PersonnelOrderDetailResponse) => void;
   initialEmployeeId?: number | null;
@@ -186,6 +187,7 @@ export default function PersonnelOrderCreateDialog({
   open,
   onClose,
   onCreated,
+  onHireRequested,
   itemContext, onItemAdded,
   initialEmployeeId = null,
   initialEmployeeQuery = null,
@@ -677,6 +679,7 @@ export default function PersonnelOrderCreateDialog({
   if (!open) return null;
 
   function changeType(nextType: string, versionId?: number) {
+    if (nextType === "HIRE" && !itemContext) { onHireRequested?.(); return; }
     setSelectedVersion(versionId);
     ++templateId.current;
     setType(nextType);

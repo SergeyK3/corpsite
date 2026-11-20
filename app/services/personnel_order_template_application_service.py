@@ -159,6 +159,21 @@ def _values(conn:Any,item:Mapping[str,Any],template:Mapping[str,Any]|None=None):
   values["org_unit.title_ru"]=str(unit.get("name") or "")
   values["org_unit.title_kk"]=str(unit.get("name_kk") or "")
   values["org_unit.document_genitive_kk"]=str(unit.get("document_genitive_kk") or "")
+ if str(item["item_type_code"]) == "HIRE":
+  from app.services.personnel_order_hire_wording import hire_department_destination_kk, hire_position_accusative_ru
+  from app.services.personnel_order_transfer_name import confirmed_transfer_accusative
+  values["employee.full_name.kk"] = _name(payload,employee)
+  values["org_unit.destination_kk"] = hire_department_destination_kk(values["org_unit.title_kk"])
+  ru_body = str((template or {}).get("body_template_ru") or "")
+  if "Принять на работу {{employee.full_name}}" in ru_body:
+   values["employee.full_name.hire_ru"] = confirmed_transfer_accusative(payload)
+   if not values["employee.full_name.hire_ru"]:
+    raise TemplateApplicationError("Уточните вручную ФИО в винительном падеже RU для приказа о приёме")
+  if "на должность {{position.title_ru}}" in ru_body:
+   manual = payload.get("hire_position_manual_forms")
+   manual_ru = saved_ru if isinstance(manual, Mapping) and manual.get("ru") is True else ""
+   try: values["position.title_ru"] = hire_position_accusative_ru(values["position.title_ru"], manual_ru)
+   except ValueError as exc: raise TemplateApplicationError(str(exc)) from exc
  if unpaid:
   try: p=unpaid_leave_period(payload)
   except UnpaidLeaveContractError as exc: raise TemplateApplicationError(str(exc)) from exc
@@ -245,6 +260,9 @@ def _render(template:Mapping[str,Any],values:Mapping[str,str], *, draft_preview:
   if template.get('item_type_code') == 'HIRE' and key in ('body_template_ru', 'body_template_kk'):
    from app.services.personnel_order_hire_position_quotes import hire_body_template_without_position_quotes
    value = hire_body_template_without_position_quotes(value)
+   if key == 'body_template_kk':
+    from app.services.personnel_order_hire_wording import hire_body_template_with_department
+    value = hire_body_template_with_department(value)
   if template.get('item_type_code') == 'PERSONAL_DATA_CHANGE':
    from app.services.personnel_order_personal_data_contract import adapt_identity_date_clause
    value = adapt_identity_date_clause(value, values)
@@ -258,6 +276,10 @@ def _render(template:Mapping[str,Any],values:Mapping[str,str], *, draft_preview:
        and re.search(r'Перевести\s*$', source_text[:match.start()], re.IGNORECASE)
        and token in {'employee.full_name', 'employee.full_name_dative_ru', 'employee.full_name_accusative_ru'}):
     token = 'employee.full_name_accusative_ru'
+   if (template.get('item_type_code') == 'HIRE' and key == 'body_template_ru'
+       and re.search(r'Принять\s+на\s+работу\s*$', source_text[:match.start()], re.IGNORECASE)
+       and token == 'employee.full_name'):
+    token = 'employee.full_name.hire_ru'
    value=values.get(f"{token}.{'kk' if key.endswith('_kk') else 'ru'}",values.get(token,""))
    value=format_template_rate(str(template['item_type_code']),token,value)
    missing.add(token) if not value.strip() and token not in optional_tokens and not token.startswith("basis.application_") else None

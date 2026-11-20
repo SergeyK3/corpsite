@@ -151,8 +151,21 @@ def _transfer_general_and_contacts(
     birth_date = parse_date_value(personal.get("birth_date"))
     if full_name:
         conn.execute(
-            text("UPDATE public.persons SET full_name = :full_name WHERE person_id = :person_id"),
-            {"full_name": full_name, "person_id": int(person_id)},
+            text("""
+                UPDATE public.persons
+                SET full_name = :full_name,
+                    last_name = COALESCE(NULLIF(BTRIM(:last_name), ''), last_name),
+                    first_name = COALESCE(NULLIF(BTRIM(:first_name), ''), first_name),
+                    middle_name = COALESCE(NULLIF(BTRIM(:middle_name), ''), middle_name)
+                WHERE person_id = :person_id
+            """),
+            {
+                "full_name": full_name,
+                "last_name": str(personal.get("last_name") or ""),
+                "first_name": str(personal.get("first_name") or ""),
+                "middle_name": str(personal.get("middle_name") or ""),
+                "person_id": int(person_id),
+            },
         )
     if birth_date is not None:
         conn.execute(
