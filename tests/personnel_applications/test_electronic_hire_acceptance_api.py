@@ -61,6 +61,14 @@ def test_hire_approval_is_visible_in_task_inbox_only_to_appointed_head():
         visa = client.post(f"/directory/electronic-hire/applications/{application.application_id}/visa",
                            json={"decision": "rejected", "explanation": "Тестовое пояснение"})
         assert visa.status_code == 200, visa.text
+        approvals = client.get("/directory/electronic-hire/approvals")
+        assert approvals.status_code == 200, approvals.text
+        saved_visa = next(item["current_visa"] for item in approvals.json()["items"]
+                          if item["application_id"] == application.application_id)
+        assert saved_visa["decided_by_user_id"] == head
+        assert saved_visa["decided_by_name"]
+        assert saved_visa["decided_at"]
+        assert saved_visa["explanation"] == "Тестовое пояснение"
         rejected = client.get("/tasks", params={"scope": "mine", "status_filter": "rejected",
                                                 "period_id": period_id})
         assert rejected.status_code == 200, rejected.text

@@ -72,10 +72,11 @@ def conditions_hash(application: dict[str, Any]) -> str:
 
 def current_visa(conn: Connection, application: dict[str, Any]) -> dict[str, Any] | None:
     row = conn.execute(text("""
-        SELECT visa_id, decision, explanation, conditions_hash, conditions,
-               decided_by_user_id, decided_at
-        FROM public.electronic_hire_visas
-        WHERE application_id = :id ORDER BY visa_id DESC LIMIT 1
+        SELECT v.visa_id, v.decision, v.explanation, v.conditions_hash, v.conditions,
+               v.decided_by_user_id, u.full_name AS decided_by_name, v.decided_at
+        FROM public.electronic_hire_visas v
+        JOIN public.users u ON u.user_id=v.decided_by_user_id
+        WHERE v.application_id = :id ORDER BY v.visa_id DESC LIMIT 1
     """), {"id": application["application_id"]}).mappings().first()
     if row is None:
         return None

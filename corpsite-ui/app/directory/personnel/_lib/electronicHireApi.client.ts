@@ -55,7 +55,8 @@ export function sendElectronicHireLinkTelegram(applicationId: number) {
 
 export type HireApprovalItem = { application_id: number; full_name: string; org_unit: string;
   position: string; employment_rate: number | string; planned_start_date: string;
-  current_visa: {decision: string; is_current: boolean; explanation?: string | null} | null };
+  current_visa: {decision: string; is_current: boolean; explanation?: string | null;
+    decided_by_user_id: number; decided_by_name: string | null; decided_at: string} | null };
 
 export function listHireApprovals() {
   return apiFetchJson<{items: HireApprovalItem[]}>(`${base}/approvals`);
