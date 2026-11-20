@@ -287,7 +287,7 @@ export default function PersonnelOrdersPageClient() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <a href="/directory/personnel/hire-approvals" className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium dark:border-zinc-700">Визы руководителя</a>
+          <a href="/directory/personnel/hire-approvals" className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium dark:border-zinc-700">Согласование заявлений</a>
           <button type="button" onClick={() => setCreateOpen(true)}
             className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium dark:border-zinc-700"
             data-testid="personnel-order-create-button">Создать приказ</button>
