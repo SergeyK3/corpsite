@@ -24,6 +24,7 @@ from app.personnel_applications.application.electronic_hire_service import (
     ensure_approval_task, load_electronic_hire, missing_card_fields, queue_approval_notification,
 )
 from app.services.personnel_order_hire_from_person_service import validate_hire_person_candidate
+from app.services.personnel_orders_editorial.generation_service import generate_editorial
 from app.services.personnel_order_evidence_scope_service import (
     advance_personnel_order_evidence_scopes_tx,
     create_personnel_order_evidence_scope_tx,
@@ -150,6 +151,7 @@ def _create_draft_hire_order(
         },
     )
     advance_personnel_order_evidence_scopes_tx(conn, tokens=[scope_token])
+    generate_editorial(int(order_id), user_id=created_by_user_id, conn=conn)
     return int(order_id)
 
 

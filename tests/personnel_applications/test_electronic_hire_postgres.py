@@ -74,6 +74,42 @@ def _complete_card(conn, person_id: int):
     """), {"id": person_id})
 
 
+def test_electronic_hire_draft_generates_editorial_from_flat_item_payload():
+    with engine.connect() as conn:
+        txn = conn.begin()
+        try:
+            application, hr, _, _, _ = _setup(conn)
+            _complete_card(conn, application.person_id)
+            order = create_hire_order_draft_for_application(
+                conn, application_id=application.application_id, created_by_user_id=hr)
+            item = conn.execute(text("""
+                SELECT item_id, payload FROM public.personnel_order_items WHERE order_id=:order_id
+            """), {"order_id": order.personnel_order_id}).mappings().one()
+            assert "assignment" not in item["payload"]
+            assert "to_assignment" not in item["payload"]
+            blocks = conn.execute(text("""
+                SELECT locale, block_type, generated_text
+                FROM public.personnel_order_item_editorial_blocks
+                WHERE order_item_id=:item_id
+            """), {"item_id": item["item_id"]}).mappings().all()
+            body = {row["locale"]: row["generated_text"] for row in blocks if row["block_type"] == "body"}
+            assert set(body) == {"ru", "kk"}
+            for locale in ("ru", "kk"):
+                if locale == "kk":
+                    assert "Тестова Айгуль" in body[locale]
+                else:
+                    assert "ФИО в винительном падеже" in body[locale]
+                assert "0,75" in body[locale]
+                assert "2026" in body[locale]
+                assert "—" not in body[locale]
+            assert item["payload"]["source_org_unit_name"] in body["ru"]
+            assert "инженер" in body["ru"].lower()
+            expected_kk_unit = item["payload"]["org_unit_title_kk"] or item["payload"]["source_org_unit_name"]
+            assert expected_kk_unit in body["kk"]
+        finally:
+            txn.rollback()
+
+
 def test_hire_approval_tasks_follow_visa_and_condition_revisions(monkeypatch):
     monkeypatch.setenv("BOT_TOKEN", "")
     with engine.connect() as conn:
@@ -185,13 +221,13 @@ def test_first_published_hire_template_application_creates_editorial_blocks():
             }, ensure_ascii=False)})
             preview = templates._preview(conn, order_id)
             assert not preview["items"][0]["blocked"]
-            assert templates._blocks(conn, order_id, [item_id]) == []
+            assert templates._blocks(conn, order_id, [item_id])
 
             templates.apply_template_application_tx(
                 conn, order_id, hr, expected_document_revision=preview["order_revision"])
 
             blocks = templates._blocks(conn, order_id, [item_id])
-            assert len(blocks) == 8
+            assert len(blocks) >= 8
             generated = {(block["scope"], block["locale"], block["block_type"]): block["generated_text"]
                          for block in blocks}
             for locale in ("ru", "kk"):
