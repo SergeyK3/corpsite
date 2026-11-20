@@ -8,7 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
 from app.db.models.personnel_orders import ORDER_TYPE_HIRE
-from app.ppr.domain.models import HR_RELATIONSHIP_CANDIDATE
+from app.ppr.domain.models import HR_RELATIONSHIP_CANDIDATE, HR_RELATIONSHIP_FORMER_EMPLOYEE
 from app.services.personnel_orders_command_service import PersonnelOrderValidationError
 
 
@@ -127,7 +127,7 @@ def validate_hire_person_candidate(conn: Connection, person_id: int) -> Dict[str
         )
 
     hr_context = _load_ppr_context(conn, person_id)
-    if hr_context is not None and hr_context != HR_RELATIONSHIP_CANDIDATE:
+    if hr_context is not None and hr_context not in {HR_RELATIONSHIP_CANDIDATE, HR_RELATIONSHIP_FORMER_EMPLOYEE}:
         raise PersonnelOrderValidationError(
             f"Person {person_id} hr_relationship_context={hr_context!r} is not CANDIDATE."
         )

@@ -398,6 +398,8 @@ def create_personnel_order_route(
     """Create a personnel order in DRAFT status."""
     try:
         require_personnel_admin_or_403(user)
+        if payload.order_type_code == "HIRE":
+            raise HTTPException(422, {"code": "APPLICATION_REQUIRED", "message": "Приём на работу начинается с электронного заявления."})
         return call_service(
             create_personnel_order_draft,
             created_by=_require_user_id(user),

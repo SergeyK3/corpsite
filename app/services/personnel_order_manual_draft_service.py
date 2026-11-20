@@ -129,6 +129,11 @@ def prepare_manual_item_payload(conn: Any, *, item_type_code: str, employee_id: 
     for key in ("document_forms_ru", "document_forms_kk"):
         if key in (item_payload or {}):
             base_payload[key] = {**base_payload.get(key, {}), **dict(item_payload[key])}
+    if item_type_code == "TERMINATION":
+        reason = str((item_payload or {}).get("termination_reason") or (item_payload or {}).get("reason") or "").strip()
+        if not reason:
+            raise PersonnelOrderValidationError("Укажите причину расторжения трудового договора.")
+        base_payload["termination_reason"] = reason
     if item_type_code == "LEAVE.UNPAID.GRANT":
         from app.services.personnel_order_unpaid_leave_contract import unpaid_leave_period
 
@@ -236,7 +241,16 @@ def prepare_manual_item_payload(conn: Any, *, item_type_code: str, employee_id: 
             specialty_values(item_type_code, base_payload, selected_texts or {})
         except ValueError as exc:
             raise PersonnelOrderValidationError(str(exc)) from exc
+    if item_type_code == "TERMINATION" and document_subject_context is not None:
+        # The position picker may send an empty KK title while the confirmed
+        # catalog title is available. An empty picker value is not a manual
+        # override for this required termination template field.
+        document_subject_context = dict(document_subject_context)
+        if not str(document_subject_context.get("document_position_kk") or "").strip():
+            document_subject_context["document_position_kk"] = None
     out = apply_document_position(conn, apply_document_department(conn, base_payload, document_subject_context), document_subject_context)
+    if item_type_code == "TERMINATION" and not str(out.get("position_title_kk") or "").strip():
+        raise PersonnelOrderValidationError("Заполните должность на казахском языке для текста приказа.")
     if item_type_code == "HIRE":
         if 'hire_position_manual_forms' in (item_payload or {}):
             from app.services.personnel_order_hire_terms import normalize_hire_position_manual_forms
@@ -262,6 +276,8 @@ def prepare_manual_item_payload(conn: Any, *, item_type_code: str, employee_id: 
 
 
 def create_manual_draft(*, created_by: int, template_version_id: int | None = None, order_number: str, order_date: date, source_title: str, source_title_locale: str, item_type_code: str, employee_id: Optional[int], effective_date: date, period_start: Optional[date] = None, period_end: Optional[date] = None, item_payload: Optional[Mapping[str, Any]] = None, unresolved_subject: Optional[Mapping[str, Any]] = None, document_subject_context: Optional[Mapping[str, Any]] = None) -> dict[str, Any]:
+    if item_type_code == "HIRE":
+        raise PersonnelOrderValidationError("Приём на работу начинается с электронного заявления.")
     number = str(order_number or "").strip()
     title = str(source_title or "").strip()
     if not number or not title:

@@ -167,10 +167,10 @@ def issue_intake_link(
     reissue: bool = False,
 ) -> IssueIntakeLinkResult:
     """Issue a new protected intake link for an application."""
-    _require_application(conn, application_id)
+    application = _require_application(conn, application_id)
     repo = SqlAlchemyPersonnelIntakeRepository(conn)
     now = _now_utc()
-    expires_at = now + timedelta(days=_intake_link_ttl_days())
+    expires_at = now + (timedelta(hours=24) if application.application_source == "electronic" else timedelta(days=_intake_link_ttl_days()))
 
     active = repo.get_active_link_for_application(application_id)
     if active is not None and not reissue:

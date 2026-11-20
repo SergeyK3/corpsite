@@ -68,6 +68,7 @@ import PersonnelOrderMedicalSpecialtyPicker from "./PersonnelOrderMedicalSpecial
 import {blankDepartment,departmentFromUnit,departmentValues} from "../_lib/personnelOrderDepartment";
 import PersonnelOrderAllowanceRecipient, {blankAllowanceRecipient,recipientBlockers} from "./PersonnelOrderAllowanceRecipient";
 import { russianEmployeeDativeForOrder, russianEmployeeGenitiveForOrder, savedRussianEmployeeNameForm } from "../_lib/personnelOrderRussianWording";
+import { russianTransferAccusative, TRANSFER_ACCUSATIVE_WARNING } from "../_lib/personnelOrderTransferAccusative";
 import {
   mapEmployeesResponseToSearchOptions,
   requireEmployeeIdForItemType,
@@ -756,7 +757,7 @@ export default function PersonnelOrderItemEditor({
         ...(itemTypeCode === "LEAVE.CHILDCARE.GRANT" ? { employee_full_name_dative_ru: savedRussianEmployeeNameForm(details, "dative"), employee_full_name_genitive_ru: ruGenitiveEdited.current ? prev.employee_full_name_genitive_ru : russianEmployeeGenitiveForOrder(details), position_document_nominative_ru: editedPositionForms.current.has("position_document_nominative_ru") ? prev.position_document_nominative_ru : positionForms.position_document_nominative_ru } : {}),
       }));
       if (itemTypeCode === "CONCURRENT_DUTY_START") fillConcurrentEmployeeForms(details);
-      if (itemTypeCode === "TRANSFER") setPayloadDraft(prev => ({...prev, employee_full_name_accusative_ru: savedRussianEmployeeNameForm(details, "accusative")}));
+      if (itemTypeCode === "TRANSFER" || itemTypeCode === "HIRE") setPayloadDraft(prev => ({...prev, employee_full_name_accusative_ru: manualEmployeeForms.current.has("employee_full_name_accusative_ru") ? prev.employee_full_name_accusative_ru : russianTransferAccusative(details)}));
       if (config?.showCurrentPlacement) {
         setCurrentPlacement(await resolveCurrentPlacementView(selected).catch(() => null));
       } else {
@@ -764,6 +765,7 @@ export default function PersonnelOrderItemEditor({
       }
     } catch {
       if (selectionRevision !== employeeSelectionRevision.current) return;
+      if (itemTypeCode === "TRANSFER" || itemTypeCode === "HIRE") setPayloadDraft(prev => ({...prev, employee_full_name_accusative_ru: manualEmployeeForms.current.has("employee_full_name_accusative_ru") ? prev.employee_full_name_accusative_ru : russianTransferAccusative({fio: option.full_name})}));
       if (itemTypeCode === "CONCURRENT_DUTY_START") {
         fillConcurrentEmployeeForms(null);
         setCurrentPlacement(null);
@@ -793,7 +795,7 @@ export default function PersonnelOrderItemEditor({
       if (revision !== employeeSelectionRevision.current) return;
       setDocumentEmployee(details);
       if (formType === "CONCURRENT_DUTY_START") fillConcurrentEmployeeForms(details);
-      if (formType === "TRANSFER") setPayloadDraft(prev => ({...prev, employee_full_name_accusative_ru: manualEmployeeForms.current.has("employee_full_name_accusative_ru") ? prev.employee_full_name_accusative_ru : prev.employee_full_name_accusative_ru || savedRussianEmployeeNameForm(details, "accusative")}));
+      if (formType === "TRANSFER" || formType === "HIRE") setPayloadDraft(prev => ({...prev, employee_full_name_accusative_ru: manualEmployeeForms.current.has("employee_full_name_accusative_ru") ? prev.employee_full_name_accusative_ru : prev.employee_full_name_accusative_ru || russianTransferAccusative(details)}));
       const option = employeeDtoToSearchOption(details);
       if (!option.full_name && fallbackName) {
         option.full_name = fallbackName;
@@ -1133,7 +1135,10 @@ export default function PersonnelOrderItemEditor({
       const preservedPayload = {...savedPayload};
       if(changingSubject) for(const key of ["new_employee","person_id","unresolved_subject","source_employee_name","source_position_name","source_org_unit_name","position_name","org_unit_name","document_position","document_org_unit","document_forms_ru","document_forms_kk","position_title_ru","position_title_kk","org_unit_title_kk","assignment_id","position_id","job_code","allowance_recipient","recall_position_kk","recall_org_unit_kk"])delete preservedPayload[key];
       const payload = { ...preservedPayload, ...buildItemPayload(backendType, payloadForSave) };
-      if (backendType === "HIRE" && !pendingNewEmployee) delete payload.new_employee;
+      // An electronic applicant already has a person card. Keep that link and
+      // do not submit a second, conflicting "new employee" identity.
+      if (backendType === "HIRE" && (!pendingNewEmployee || payload.person_id != null)) delete payload.new_employee;
+      if (backendType === "HIRE" && payload.person_id != null) delete payload.unresolved_subject;
       if(changingSubject)payload.source_employee_name=employeeQuery;
 
       for (const key of ["document_forms_ru", "document_forms_kk"] as const) {
@@ -1177,7 +1182,7 @@ export default function PersonnelOrderItemEditor({
         ...(backendType === "CONCURRENT_DUTY_START" && payloadDraft.concurrent_template_version_id ? {template_version_id: payloadDraft.concurrent_template_version_id} : {}),
         item_type_code: backendType,
         employee_id: resolvedEmployeeId,
-        unresolved_subject:backendType==='PERSONAL_DATA_CHANGE'?personalDataOrderPayload(payloadDraft.personal_data_document||emptyPersonalDataDraft()).unresolved_subject:payloadDraft.unresolved_subject,
+        unresolved_subject:backendType==='PERSONAL_DATA_CHANGE'?personalDataOrderPayload(payloadDraft.personal_data_document||emptyPersonalDataDraft()).unresolved_subject:backendType==='HIRE' && payload.person_id != null?undefined:payloadDraft.unresolved_subject,
         effective_date: backendType === "PERSONAL_DATA_CHANGE" ? payloadDraft.personal_data_document?.effective_date : backendType === "EDUCATION_INFORMATION_CHANGE" ? payloadDraft.education_document?.effective_date : backendType === "SERVICE_LENGTH_CHANGE" ? payloadDraft.service_length_document?.effective_date : backendType === "QUALIFICATION_CATEGORY" ? payloadDraft.category_document?.effective_date : isLeave ? leaveStart : effectiveDate || null,
         period_start: isLeave ? leaveStart : null,
         period_end: isLeave ? leaveEnd : null,
@@ -1688,7 +1693,7 @@ export default function PersonnelOrderItemEditor({
     }
     return (
       <div className="grid gap-3 sm:grid-cols-2">
-        {itemTypeCode === "TRANSFER" ? <FormField label="ФИО в винительном падеже (RU)"><input aria-label="ФИО в винительном падеже (RU)" value={payloadDraft.employee_full_name_accusative_ru || ""} onChange={e => updatePayloadField("employee_full_name_accusative_ru", e.target.value)} className={FIELD_INPUT_CLASS}/>{!payloadDraft.employee_full_name_accusative_ru?.trim() ? <p role="alert">Нет подтверждённого ФИО в винительном падеже (RU). Заполните вручную.</p> : null}</FormField> : null}
+        {itemTypeCode === "TRANSFER" || itemTypeCode === "HIRE" ? <FormField label="ФИО в винительном падеже (RU)"><input aria-label="ФИО в винительном падеже (RU)" value={payloadDraft.employee_full_name_accusative_ru || ""} onChange={e => updatePayloadField("employee_full_name_accusative_ru", e.target.value)} className={FIELD_INPUT_CLASS}/>{!payloadDraft.employee_full_name_accusative_ru?.trim() ? <p role="alert">{TRANSFER_ACCUSATIVE_WARNING}</p> : null}</FormField> : null}
         {formConfig?.showTargetRate && formConfig.showTargetPlacement ? (
           <FormField label="Новая ставка">
             <input

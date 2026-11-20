@@ -2,6 +2,6 @@
 
 
 def format_template_rate(item_type_code: str, token: str, value: str) -> str:
-    if item_type_code in {"TRANSFER", "CONCURRENT_DUTY_START"} and token in {"rate", "concurrent.rate", "total.rate"}:
+    if item_type_code in {"HIRE", "TRANSFER", "CONCURRENT_DUTY_START"} and token in {"rate", "concurrent.rate", "total.rate"}:
         return value.replace(".", ",")
     return value
