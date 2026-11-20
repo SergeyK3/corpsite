@@ -8,6 +8,7 @@ from app.db.engine import engine
 from app.services.personnel_order_template_validation import validate_template_texts
 from app.services.personnel_order_rate_format import format_template_rate
 from app.services.personnel_orders_editorial.service import get_editorial_state
+from app.services.personnel_orders_editorial.basis_policy import resolve_basis_required
 from app.services.personnel_orders_editorial.position_dictionary import document_nominative_personnel_order_position, localized_personnel_order_position
 from app.services.personnel_order_termination_reason import termination_reason_text
 from app.services.personnel_order_unpaid_leave_contract import UnpaidLeaveContractError, format_leave_date, period_clause_kk, period_clause_ru, period_text, unpaid_leave_period
@@ -361,11 +362,30 @@ def apply_template_application_tx(conn: Any, order_id: int, actor_user_id: int, 
     before = _blocks(conn, order_id, [int(x["item_id"]) for x in items])
     for lang in ("ru", "kk"):
         for block in ("title", "preamble"):
-            conn.execute(text("UPDATE public.personnel_order_editorial_blocks SET generated_text=:v,override_text=NULL,revision=revision+1,updated_at=now() WHERE order_id=:id AND locale=:l AND block_type=:b"), {"v": preview["order_proposed"][f"{block}_{lang}"], "id": order_id, "l": lang, "b": block})
+            conn.execute(text("""
+                INSERT INTO public.personnel_order_editorial_blocks
+                    (order_id, locale, block_type, generated_text, generated_at)
+                VALUES (:id, :l, :b, :v, now())
+                ON CONFLICT (order_id, locale, block_type) DO UPDATE
+                SET generated_text=EXCLUDED.generated_text, override_text=NULL,
+                    generated_at=now(), revision=public.personnel_order_editorial_blocks.revision+1,
+                    updated_at=now()
+            """), {"v": preview["order_proposed"][f"{block}_{lang}"], "id": order_id, "l": lang, "b": block})
+    item_types = {int(item["item_id"]): str(item["item_type_code"]) for item in items}
     for entry in preview["items"]:
         for lang in ("ru", "kk"):
             for block in ("body", "basis"):
-                conn.execute(text("UPDATE public.personnel_order_item_editorial_blocks SET generated_text=:v,override_text=NULL,revision=revision+1,updated_at=now() WHERE order_item_id=:id AND locale=:l AND block_type=:b"), {"v": entry["proposed"][f"{block}_{lang}"], "id": entry["order_item_id"], "l": lang, "b": block})
+                conn.execute(text("""
+                    INSERT INTO public.personnel_order_item_editorial_blocks
+                        (order_item_id, locale, block_type, generated_text, generated_at, basis_required)
+                    VALUES (:id, :l, :b, :v, now(), :basis_required)
+                    ON CONFLICT (order_item_id, locale, block_type) DO UPDATE
+                    SET generated_text=EXCLUDED.generated_text, override_text=NULL,
+                        generated_at=now(), revision=public.personnel_order_item_editorial_blocks.revision+1,
+                        updated_at=now()
+                """), {"v": entry["proposed"][f"{block}_{lang}"], "id": entry["order_item_id"],
+                       "l": lang, "b": block,
+                       "basis_required": block == "basis" and resolve_basis_required(item_types[entry["order_item_id"]])[0]})
     if AUDIT_INSERT_HOOK:
         AUDIT_INSERT_HOOK()
     # One history row per exact version; old multi-item snapshots remain readable.
