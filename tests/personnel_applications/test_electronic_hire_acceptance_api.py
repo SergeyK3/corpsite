@@ -11,6 +11,7 @@ from app.db.engine import engine
 from app.main import app
 from app.personnel_applications.application import electronic_hire_service as hire
 from app.personnel_applications.application.hire_order_draft_service import create_hire_order_draft_for_application
+from app.services.personnel_order_hire_wording import hire_position_accusative_ru
 from tests.personnel_applications.test_electronic_hire_postgres import _complete_card, _setup
 from tests.ppr.conftest import insert_employee
 
@@ -54,7 +55,7 @@ def test_search_excludes_active_and_api_print_uses_actual_fields():
             assert "01.12.2026" in text_value
         assert details["org_unit_ru"] in rendered["ru"]
         assert (details["org_unit_kk"] or details["org_unit_ru"]) in rendered["kk"]
-        assert (details["position_document_ru"] or details["position_ru"]) in rendered["ru"]
+        assert hire_position_accusative_ru(details["position_document_ru"] or details["position_ru"]).casefold() in rendered["ru"].casefold()
         assert (details["position_document_kk"] or details["position_kk"] or details["position_ru"]) in rendered["kk"]
     finally:
         app.dependency_overrides.pop(get_current_user, None)
@@ -76,7 +77,7 @@ def test_http_stale_visa_foreign_head_and_signed_copy(tmp_path, monkeypatch):
             INSERT INTO public.org_units(name, code)
             VALUES ('Другое тестовое отделение', :code) RETURNING unit_id
         """), {"code": f"EHA-FOREIGN-{uuid4().hex[:8]}"}).scalar_one())
-        foreign_role = int(conn.execute(text("SELECT role_id FROM public.roles WHERE code='QM_HEAD'")).scalar_one())
+        foreign_role = int(conn.execute(text("SELECT role_id FROM public.roles WHERE code='EMPLOYEE'")).scalar_one())
         foreign_head = int(conn.execute(text("""
             INSERT INTO public.users(full_name, role_id, unit_id, is_active, login)
             VALUES ('Тестовый чужой руководитель', :role, :unit, TRUE, :login)
