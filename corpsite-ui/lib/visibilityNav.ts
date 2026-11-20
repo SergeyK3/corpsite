@@ -41,6 +41,9 @@ export function canViewPersonnelTasksReadOnly(me: MeInfo | null | undefined): bo
 }
 
 export function canAccessDirectoryRoute(pathname: string, me: MeInfo | null | undefined): boolean {
+  // The approval API scopes applications to the current department head.
+  // Heads can have an EMPLOYEE primary role without HR cabinet access.
+  if (pathname === "/directory/personnel/hire-approvals") return me != null;
   if (isPersonnelFileReviewRoute(pathname)) {
     return canSeePersonnelFileReviewNav(me);
   }

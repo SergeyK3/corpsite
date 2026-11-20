@@ -74,6 +74,12 @@ describe("visibilityNav", () => {
     expect(canAccessDirectoryRoute(cardRoute, hrHead)).toBe(true);
   });
 
+  it("lets an authenticated department head open the scoped hire approval page", () => {
+    expect(canAccessDirectoryRoute("/directory/personnel/hire-approvals", observerPlain)).toBe(true);
+    expect(canAccessDirectoryRoute("/directory/personnel/hire-approvals", null)).toBe(false);
+    expect(canAccessDirectoryRoute("/directory/personnel/orders", observerPlain)).toBe(false);
+  });
+
   it("canAccessDirectoryRoute allows position cabinet stub sections without task read access", () => {
     expect(canAccessDirectoryRoute("/dashboards", observerWithAssignment)).toBe(true);
     expect(canAccessDirectoryRoute("/profile/personal-card", observerWithAssignment)).toBe(true);
