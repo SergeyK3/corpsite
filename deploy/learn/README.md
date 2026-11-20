@@ -2,9 +2,12 @@
 
 Application source SHA (`APP_SOURCE_SHA`):
 `3f545d63f01b001640447d6088603aad12a41f36`.
-Deployment procedure SHA (`DEPLOY_FILES_SHA`): the later commit that adds
-`deploy/learn/` and `scripts/learn/`; record its full SHA from the publication
-report. These are separate identifiers. The frontend artifact must be built
+Published procedure baseline SHA:
+`528ed8e2485ce95bc52d4cfee9b9e6d3fc65060b`.
+Deployment procedure SHA (`DEPLOY_FILES_SHA`): the current published commit
+on `origin/feature/learning-site`; record its full SHA when packaging. It may
+be newer than the procedure baseline after corrections. These are separate
+identifiers. The frontend artifact must be built
 from `APP_SOURCE_SHA`; the deployment files are overlaid from
 `DEPLOY_FILES_SHA`. Do not label the resulting mixed release as a single Git
 checkout.
@@ -84,10 +87,32 @@ need **new, independent** values, but no learn bot or delivery worker is started
    `npm run build` there. Keep the learn release path distinct from production.
    Build the frontend in a detached checkout at `APP_SOURCE_SHA` so the artifact
    manifest's `git_rev` records the application source, not the procedure commit.
+   Set `NEXT_DEPLOYMENT_ID` to the same full SHA. `next.config.ts` otherwise
+   calls Git at runtime, which fails in a release without `.git`.
+
+   ```sh
+   APP_SOURCE_SHA=3f545d63f01b001640447d6088603aad12a41f36
+   PROCEDURE_BASE_SHA=528ed8e2485ce95bc52d4cfee9b9e6d3fc65060b
+   DEPLOY_FILES_SHA=$(git rev-parse origin/feature/learning-site)
+   test "$(git rev-parse "$APP_SOURCE_SHA^{commit}")" = "$APP_SOURCE_SHA"
+   git merge-base --is-ancestor "$PROCEDURE_BASE_SHA" "$DEPLOY_FILES_SHA"
+   git worktree add --detach ./learn-app-build "$APP_SOURCE_SHA"
+   cd ./learn-app-build
+   export NEXT_PUBLIC_APP_ENV=production NEXT_PUBLIC_API_BASE_URL=/api
+   export NEXT_DEPLOYMENT_ID="$APP_SOURCE_SHA"
+   ./scripts/build_frontend_artifact.sh
+   ```
+
+   Build the artifact on Linux with the release's Node major version. A
+   Windows build of this SHA contains an absolute Playwright junction and
+   cannot be extracted or run reliably on Linux. The Linux build has a
+   relative `.next/node_modules/playwright-*` link; install Linux runtime
+   dependencies at the matching release path before starting Next.js.
 4. Put independent secrets and the learn DB URL in
    `/etc/corpsite-learn/backend.env` (copy the example, owner
    `corpsite-learn`, mode `0600`). The two DB URL variables must be identical.
-   Put frontend variables in its own private env file. Replace every
+   Put frontend variables in its own private env file, including the same
+   `NEXT_DEPLOYMENT_ID=APP_SOURCE_SHA`. Replace every
    `REPLACE_*` value; the preflight rejects placeholders and reused application
    secrets. Check both release SHAs, free
    ports 8003/3003, storage ownership/modes, DB identity, scanner, and the
