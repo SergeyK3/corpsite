@@ -1,0 +1,29 @@
+[Unit]
+Description=Corpsite Learn frontend
+After=network-online.target corpsite-learn-backend.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=corpsite-learn
+Group=corpsite-learn
+WorkingDirectory=/opt/projects/corpsite-learn/app/corpsite-ui
+EnvironmentFile=/etc/corpsite-learn/frontend.env
+ExecStartPre=/opt/projects/corpsite-learn/app/scripts/check_frontend_build.sh
+ExecStart=/usr/bin/npm run start --silent
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+KillMode=mixed
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=full
+ProtectHome=yes
+IPAddressDeny=any
+IPAddressAllow=localhost
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=corpsite-learn-frontend
+
+[Install]
+WantedBy=multi-user.target
