@@ -6,6 +6,7 @@ import { usePersonnelOrderPositionOptions } from "@/lib/usePersonnelOrderPositio
 import { getActiveIntakeLink, issueIntakeLink, reissueIntakeLink } from "../_lib/personnelApplicationsApi.client";
 import {
   checkElectronicHire, createElectronicHire, createElectronicHireOrderDraft, getElectronicHire,
+  getHireUnitApprovalMode, recordHirePaperConfirmation,
   listElectronicHireApplications, printElectronicHire,
   retryElectronicHireNotification, searchFormerCandidates, sendElectronicHireLinkTelegram, updateElectronicHireConditions,
   uploadElectronicHireSignedCopy, type FormerCandidate,
@@ -40,9 +41,28 @@ export default function ElectronicHireApplicationDrawer({ open, onClose }: Props
   const [existing, setExisting] = React.useState<Array<{application_id: number; full_name: string; status: string}>>([]);
   const [orderId, setOrderId] = React.useState<number | null>(null);
   const [notification, setNotification] = React.useState("");
+  const [approvalMode, setApprovalMode] = React.useState<"paper" | "electronic">("paper");
+  const [targetMode, setTargetMode] = React.useState<"paper" | "electronic" | null>(null);
+  const [savedUnitId, setSavedUnitId] = React.useState<number | null>(null);
+  const [modeReason, setModeReason] = React.useState("");
+  const [paperApprover, setPaperApprover] = React.useState("");
+  const [paperDate, setPaperDate] = React.useState(today);
+  const [paperNote, setPaperNote] = React.useState("");
+  const [paperAttachmentId, setPaperAttachmentId] = React.useState<number | null>(null);
+  const [paperResult, setPaperResult] = React.useState("");
+  const [paperAttachmentHref, setPaperAttachmentHref] = React.useState("");
   const { options: units } = useOrgUnitScopeOptions(null, open);
   const unit = units.find(row => row.unit_id === unitId);
   const { scopedOptions: positions } = usePersonnelOrderPositionOptions({ enabled: open, orgUnitId: unitId, orgGroupId: unit?.group_id ?? null, allowedOnly: true });
+
+  React.useEffect(() => {
+    if (!open || unitId == null) { setTargetMode(null); return; }
+    let active = true;
+    setTargetMode(null);
+    void getHireUnitApprovalMode(unitId).then(result => { if (active) setTargetMode(result.approval_mode); })
+      .catch(() => { if (active) { setTargetMode(null); setError("Не удалось получить порядок согласования отделения."); } });
+    return () => { active = false; };
+  }, [open, unitId]);
 
   React.useEffect(() => { if (open) void listElectronicHireApplications().then(result => setExisting(result.items)).catch(() => {}); }, [open]);
 
@@ -66,6 +86,12 @@ export default function ElectronicHireApplicationDrawer({ open, onClose }: Props
       setIin(String(app.iin || "")); setFullName(String(app.full_name || ""));
       setReceived(String(app.application_received_at || "")); setStart(String(app.planned_start_date || ""));
       setUnitId(Number(app.intended_org_unit_id) || null); setPositionId(Number(app.intended_position_id) || null);
+      setSavedUnitId(Number(app.intended_org_unit_id) || null);
+      setApprovalMode(app.approval_mode === "electronic" ? "electronic" : "paper");
+      const paper = app.current_paper_confirmation as {is_current?: boolean; approver_name?: string; approved_on?: string;
+        note?: string; recorded_by_name?: string; recorded_at?: string; attachment_id?: number} | null;
+      setPaperResult(paper?.is_current ? `Согласовано на бумаге: ${paper.approver_name}, ${paper.approved_on}. Внёс: ${paper.recorded_by_name}, ${paper.recorded_at ? new Date(paper.recorded_at).toLocaleString("ru-RU", {timeZone: "Asia/Qyzylorda"}) : ""}. ${paper.note || ""}` : "");
+      setPaperAttachmentHref(paper?.is_current && paper.attachment_id ? `/api/directory/electronic-hire/applications/${id}/signed-copy/${paper.attachment_id}` : "");
       setRate(String(app.intended_employment_rate || "1")); setChecked(Boolean(app.candidate_checked_at));
       setOrderId(Number(app.personnel_order_id) || null);
       const note = app.notification as {status?: string; last_error?: string | null} | null;
@@ -86,6 +112,8 @@ export default function ElectronicHireApplicationDrawer({ open, onClose }: Props
         planned_start_date: start, org_unit_id: unitId, position_id: positionId,
         employment_rate: Number(rate.replace(",", ".")), org_group_id: unit?.group_id });
       setApplicationId(result.application_id); setPersonId(result.person_id);
+      setSavedUnitId(unitId); setApprovalMode(result.approval_mode);
+      setPaperResult(""); setPaperAttachmentHref("");
       setPrintText(await printElectronicHire(result.application_id));
       try { const issued = await issueIntakeLink(result.application_id); setLink(issued.intake_url_path); } catch { /* HR may issue later. */ }
     } catch (e) { setError(message(e)); } finally { setBusy(false); }
@@ -106,7 +134,7 @@ export default function ElectronicHireApplicationDrawer({ open, onClose }: Props
     try {
       const result = await createElectronicHireOrderDraft(applicationId);
       setOrderId(result.personnel_order_id);
-      setNotification(result.notification.status);
+      setNotification(result.notification.status === "paper" ? "Согласование на бумаге: электронная задача не создаётся" : result.notification.status);
     } catch (e) { setError(message(e)); } finally { setBusy(false); }
   }
 
@@ -114,9 +142,25 @@ export default function ElectronicHireApplicationDrawer({ open, onClose }: Props
     if (applicationId == null || unitId == null || positionId == null) return;
     setBusy(true); setError("");
     try {
-      await updateElectronicHireConditions(applicationId, {org_unit_id: unitId, position_id: positionId,
-        employment_rate: Number(rate.replace(",", ".")), planned_start_date: start});
-      setPrintText(await printElectronicHire(applicationId)); setChecked(false); setNotification("Ожидает повторного согласования");
+      const updated = await updateElectronicHireConditions(applicationId, {org_unit_id: unitId, position_id: positionId,
+        employment_rate: Number(rate.replace(",", ".")), planned_start_date: start,
+        mode_change_reason: savedUnitId !== unitId ? modeReason : undefined}) as {approval_mode: "paper" | "electronic"};
+      setSavedUnitId(unitId); setApprovalMode(updated.approval_mode); setModeReason(""); setPaperResult(""); setPaperAttachmentHref("");
+      setPrintText(await printElectronicHire(applicationId)); setChecked(false);
+      setNotification(updated.approval_mode === "electronic" ? "Ожидает повторного согласования" : "Требуется новое бумажное подтверждение");
+    } catch (e) { setError(message(e)); } finally { setBusy(false); }
+  }
+
+  async function confirmPaper() {
+    if (applicationId == null) return;
+    setBusy(true); setError("");
+    try {
+      const result = await recordHirePaperConfirmation(applicationId, {
+        approver_name: paperApprover, approved_on: paperDate, note: paperNote,
+        attachment_id: paperAttachmentId,
+      }) as {approver_name: string; approved_on: string; recorded_by_user_id: number; recorded_at: string; attachment_id?: number};
+      setPaperResult(`Согласовано на бумаге: ${result.approver_name}, ${result.approved_on}. Отметка внесена ${new Date(result.recorded_at).toLocaleString("ru-RU", {timeZone: "Asia/Qyzylorda"})}.`);
+      setPaperAttachmentHref(result.attachment_id ? `/api/directory/electronic-hire/applications/${applicationId}/signed-copy/${result.attachment_id}` : "");
     } catch (e) { setError(message(e)); } finally { setBusy(false); }
   }
 
@@ -142,16 +186,22 @@ export default function ElectronicHireApplicationDrawer({ open, onClose }: Props
         <label className="block text-sm">Дата рождения<input type="date" className={field} value={birthDate} onChange={e => setBirthDate(e.target.value)} /></label>
         <div className="grid gap-3 sm:grid-cols-2"><label className="text-sm">Дата заявления<input type="date" required className={field} value={received} onChange={e => setReceived(e.target.value)} /></label><label className="text-sm">Планируемая дата начала<input type="date" required className={field} value={start} onChange={e => setStart(e.target.value)} /></label></div>
         <label className="block text-sm">Отделение<select required className={field} value={unitId ?? ""} onChange={e => { setUnitId(Number(e.target.value) || null); setPositionId(null); }}><option value="">Выберите отделение</option>{units.map(row => <option key={row.unit_id} value={row.unit_id}>{row.name}</option>)}</select></label>
+        {unitId && <p className="rounded bg-blue-50 p-2 text-sm">{targetMode === null ? "Загрузка порядка согласования…" : targetMode === "electronic" ? "Требуется электронное согласование" : "Согласование на бумаге"}</p>}
         <label className="block text-sm">Должность<select required className={field} value={positionId ?? ""} onChange={e => setPositionId(Number(e.target.value) || null)}><option value="">Выберите должность</option>{positions.map(row => <option key={row.id} value={row.id}>{row.label}</option>)}</select></label>
         <label className="block text-sm">Ставка<input required type="number" step="0.01" min="0.01" max="2" className={field} value={rate} onChange={e => setRate(e.target.value)} /></label>
-        <button disabled={busy || unitId == null || positionId == null} className="rounded bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">Сформировать заявление</button>
+        <button disabled={busy || unitId == null || positionId == null || targetMode === null} className="rounded bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">Сформировать заявление</button>
       </form> : <div className="space-y-5">
         <p className="rounded bg-emerald-50 p-3 text-sm text-emerald-800">Заявление №{applicationId} сохранено. Личная карточка: {personId}.</p>
+        <p className="rounded bg-blue-50 p-3 text-sm">Порядок заявления: {approvalMode === "electronic" ? "Требуется электронное согласование" : "Согласование на бумаге"}</p>
         <details className="rounded border p-3"><summary className="cursor-pointer font-medium">Изменить условия приёма</summary><div className="mt-3 space-y-3">
           <label className="block text-sm">Отделение<select className={field} value={unitId ?? ""} onChange={e => { setUnitId(Number(e.target.value) || null); setPositionId(null); }}><option value="">Выберите отделение</option>{units.map(row => <option key={row.unit_id} value={row.unit_id}>{row.name}</option>)}</select></label>
+          {savedUnitId !== unitId && <div className="rounded border border-amber-300 bg-amber-50 p-3 text-sm">
+            <p>Для целевого отделения: {targetMode === null ? "загрузка порядка согласования…" : targetMode === "electronic" ? "требуется электронное согласование" : "согласование на бумаге"}. После сохранения заявление перейдёт на этот порядок.</p>
+            <label className="block">Причина смены отделения<input className={field} value={modeReason} onChange={e => setModeReason(e.target.value)} /></label>
+          </div>}
           <label className="block text-sm">Должность<select className={field} value={positionId ?? ""} onChange={e => setPositionId(Number(e.target.value) || null)}><option value="">Выберите должность</option>{positions.map(row => <option key={row.id} value={row.id}>{row.label}</option>)}</select></label>
           <div className="grid gap-2 sm:grid-cols-2"><label className="text-sm">Ставка<input className={field} type="number" min="0.01" max="2" step="0.01" value={rate} onChange={e => setRate(e.target.value)} /></label><label className="text-sm">Начало работы<input className={field} type="date" value={start} onChange={e => setStart(e.target.value)} /></label></div>
-          <button disabled={busy || unitId == null || positionId == null} className="rounded border px-3 py-2 text-sm" onClick={() => void saveConditions()}>Сохранить условия</button>
+          <button disabled={busy || unitId == null || positionId == null || (savedUnitId !== unitId && (targetMode === null || !modeReason.trim()))} className="rounded border px-3 py-2 text-sm" onClick={() => void saveConditions()}>Сохранить условия</button>
         </div></details>
         <div className="flex flex-wrap gap-2"><button className="rounded border px-3 py-2" onClick={() => setLocale("ru")}>Русский</button><button className="rounded border px-3 py-2" onClick={() => setLocale("kk")}>Қазақша</button><button className="rounded border px-3 py-2" onClick={openPrint}>Печать</button><button className="rounded border px-3 py-2" onClick={() => { void printElectronicHire(applicationId).then(setPrintText).catch(e => setError(message(e))); }}>Обновить после исправлений в ЛК</button></div>
         {printText && <pre className="whitespace-pre-wrap rounded border bg-zinc-50 p-5 font-serif text-base leading-7">{printText[locale]}</pre>}
@@ -159,13 +209,26 @@ export default function ElectronicHireApplicationDrawer({ open, onClose }: Props
         <p className="text-xs text-zinc-600">Эта отметка не является электронной подписью.</p>
         <label className="block text-sm">Подписанное бумажное заявление (PDF или фото)<input type="file" accept="application/pdf,image/jpeg,image/png" className="mt-1 block" onChange={e => { const file = e.target.files?.[0]; if (file) void uploadElectronicHireSignedCopy(applicationId, file).then(r => setUploaded(r.file_name)).catch(err => setError(message(err))); }} /></label>
         {uploaded && <p className="text-sm text-emerald-700">Прикреплено: {uploaded}</p>}
+        {approvalMode === "paper" && <section className="space-y-2 rounded border p-3 text-sm">
+          <h3 className="font-semibold">Подтверждение бумажного согласования</h3>
+          {paperResult ? <p className="rounded bg-emerald-50 p-2 text-emerald-800">{paperResult}</p> : <>
+            <label className="block">Кто согласовал<input className={field} value={paperApprover} onChange={e => setPaperApprover(e.target.value)} /></label>
+            <label className="block">Дата согласования<input type="date" className={field} value={paperDate} onChange={e => setPaperDate(e.target.value)} /></label>
+            <label className="block">Примечание<textarea className={field} value={paperNote} onChange={e => setPaperNote(e.target.value)} /></label>
+            <label className="block">Скан или фото согласования (необязательно)<input type="file" accept="application/pdf,image/jpeg,image/png"
+              onChange={e => { const file = e.target.files?.[0]; if (file) void uploadElectronicHireSignedCopy(applicationId, file)
+                .then(r => { setPaperAttachmentId(r.attachment_id); setUploaded(r.file_name); }).catch(err => setError(message(err))); }} /></label>
+            <button disabled={busy || !paperApprover.trim()} className="rounded bg-emerald-700 px-3 py-2 text-white disabled:opacity-50" onClick={() => void confirmPaper()}>Сохранить подтверждение</button>
+          </>}
+          {paperAttachmentHref && <a className="text-blue-700 underline" href={paperAttachmentHref} target="_blank" rel="noreferrer">Открыть скан согласования</a>}
+        </section>}
         <div className="flex flex-wrap gap-2"><a className="rounded bg-zinc-900 px-3 py-2 text-sm text-white" href={`/directory/personnel/persons/${personId}/card`} target="_blank" rel="noreferrer">Создать / восстановить ЛК</a><button className="rounded border px-3 py-2 text-sm" onClick={() => setAssist(true)}>Заполнить с кадровиком</button><button className="rounded border px-3 py-2 text-sm" onClick={() => void issue(Boolean(link))}>Выдать ссылку на 24 часа</button></div>
         {link && <div className="rounded border bg-zinc-50 p-3 text-sm"><p>Ссылка для кандидата: <a className="underline" href={link}>{window.location.origin}{link}</a></p><button className="mt-2 underline" onClick={() => void issue(true)}>Перевыпустить ссылку</button></div>}
         {link && <button className="rounded border px-3 py-2 text-sm" onClick={() => { void sendElectronicHireLinkTelegram(applicationId).then(result => setNotification(result.status === "sent" ? "Ссылка отправлена кандидату" : result.last_error || "Доставка не удалась")).catch(e => setError(message(e))); }}>Отправить ссылку через Telegram</button>}
         <div className="border-t pt-4"><button disabled={busy} className="rounded bg-zinc-900 px-4 py-2 text-sm text-white disabled:opacity-50" onClick={() => void createOrder()}>Сформировать приказ</button>
           {orderId && <p className="mt-2 text-sm">Проект приказа №{orderId} · <a className="underline" href={`/directory/personnel/orders?order_id=${orderId}`}>Открыть проект</a></p>}
           {notification && <p className="mt-2 text-sm">Уведомление: {notification}</p>}
-          {orderId && notification !== "sent" && <button className="mt-2 text-sm underline" onClick={() => { void retryElectronicHireNotification(applicationId).then(r => setNotification(r.status === "sent" ? "sent" : r.last_error || r.status)).catch(e => setError(message(e))); }}>Повторить отправку руководителю</button>}
+          {approvalMode === "electronic" && orderId && notification !== "sent" && <button className="mt-2 text-sm underline" onClick={() => { void retryElectronicHireNotification(applicationId).then(r => setNotification(r.status === "sent" ? "sent" : r.last_error || r.status)).catch(e => setError(message(e))); }}>Повторить отправку согласующему</button>}
         </div>
       </div>}
     </aside>

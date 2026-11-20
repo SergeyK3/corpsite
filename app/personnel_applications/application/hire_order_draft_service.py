@@ -174,7 +174,7 @@ def create_hire_order_draft_for_application(
                 "Application already has a linked personnel order.",
                 code="ORDER_ALREADY_LINKED",
             )
-        if electronic is not None:
+        if electronic is not None and electronic["approval_mode"] == "electronic":
             ensure_approval_task(conn, electronic)
         return HireOrderDraftResult(
             application_id=application_id,
@@ -231,7 +231,7 @@ def create_hire_order_draft_for_application(
         personnel_order_id=order_id,
         now=now,
     )
-    if electronic is not None:
+    if electronic is not None and electronic["approval_mode"] == "electronic":
         ensure_approval_task(conn, load_electronic_hire(conn, application_id))
         queue_approval_notification(conn, application_id)
     return HireOrderDraftResult(

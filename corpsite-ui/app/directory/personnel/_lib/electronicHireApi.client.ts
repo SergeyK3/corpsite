@@ -14,7 +14,8 @@ export function searchFormerCandidates(q: string) {
 }
 
 export function createElectronicHire(payload: ElectronicHireCreate) {
-  return apiFetchJson<{ application_id: number; person_id: number; card_href: string; action: string }>(`${base}/applications`, {
+  return apiFetchJson<{ application_id: number; person_id: number; card_href: string; action: string;
+    approval_mode: "paper" | "electronic" }>(`${base}/applications`, {
     method: "POST", body: payload,
   });
 }
@@ -31,6 +32,15 @@ export function getElectronicHire(applicationId: number) {
   return apiFetchJson<Record<string, unknown>>(`${base}/applications/${applicationId}`);
 }
 
+export function getHireUnitApprovalMode(unitId: number) {
+  return apiFetchJson<{approval_mode: "paper" | "electronic"}>(`${base}/units/${unitId}/approval-mode`);
+}
+
+export function recordHirePaperConfirmation(applicationId: number, body: {approver_name: string;
+  approved_on: string; note?: string; attachment_id?: number | null}) {
+  return apiFetchJson(`${base}/applications/${applicationId}/paper-confirmation`, {method: "POST", body});
+}
+
 export function listElectronicHireApplications() {
   return apiFetchJson<{items: Array<{application_id: number; person_id: number; full_name: string;
     status: string; planned_start_date: string; personnel_order_id: number | null}>}>(`${base}/applications`);
@@ -41,7 +51,7 @@ export function createElectronicHireOrderDraft(applicationId: number) {
 }
 
 export function updateElectronicHireConditions(applicationId: number, payload: {org_unit_id: number; position_id: number;
-  employment_rate: number; planned_start_date: string}) {
+  employment_rate: number; planned_start_date: string; mode_change_reason?: string}) {
   return apiFetchJson(`${base}/applications/${applicationId}/conditions`, {method: "PATCH", body: payload});
 }
 
@@ -54,11 +64,15 @@ export function sendElectronicHireLinkTelegram(applicationId: number) {
 }
 
 export type HireVisa = {visa_id?: number; decision: string; is_current: boolean; explanation?: string | null;
-  decided_by_user_id: number; decided_by_name: string | null; decided_at: string};
+  decided_by_user_id: number; decided_by_name: string | null; decided_at: string;
+  kind?: "paper"; recorded_by_name?: string; approved_on?: string; attachment_id?: number | null};
 
-export type HireApprovalItem = { application_id: number; full_name: string; org_unit: string;
+export type HireApprovalItem = { application_id: number; application_type: string; application_type_label: string;
+  approval_mode?: "paper" | "electronic"; full_name: string; org_unit: string;
   position: string; employment_rate: number | string; planned_start_date: string;
-  current_visa: HireVisa | null; visa_history?: HireVisa[] };
+  current_visa: HireVisa | null; visa_history?: HireVisa[];
+  paper_history?: Array<{confirmation_id: number; approver_name: string; approved_on: string; note?: string; attachment_id?: number | null;
+    recorded_by_name: string; recorded_at: string; is_current: boolean}> };
 
 export function listHireApprovals(applicationId?: number) {
   const target = applicationId && applicationId > 0 ? `?application_id=${applicationId}` : "";

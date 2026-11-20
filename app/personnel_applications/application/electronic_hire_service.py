@@ -13,6 +13,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
 from app.services.personnel_orders_editorial.generators import _format_rate_value
+from app.medical_org_groups import SLUG_CLINICAL, SLUG_PARACLINICAL, group_by_id
 
 
 class ElectronicHireError(ValueError):
@@ -28,13 +29,14 @@ def load_electronic_hire(conn: Connection, application_id: int, *, lock: bool = 
                a.intended_org_unit_id, a.intended_position_id,
                a.intended_employment_rate, a.personnel_order_id,
                a.contact_mobile_phone, a.contact_email,
-               e.planned_start_date, e.candidate_checked_at, e.conditions_version,
+               e.planned_start_date, e.candidate_checked_at, e.conditions_version, e.approval_mode,
                p.full_name, p.iin,
                ou.name AS org_unit_ru,
                NULLIF(to_jsonb(ou)->>'name_kk', '') AS org_unit_kk,
                NULLIF(to_jsonb(ou)->>'document_genitive_ru', '') AS org_unit_genitive_ru,
                NULLIF(to_jsonb(ou)->>'document_genitive_kk', '') AS org_unit_genitive_kk,
-               pos.name AS position_ru,
+               pos.name AS position_ru, pos.type_code AS position_type_code,
+               ou.group_id AS org_unit_group_id,
                NULLIF(to_jsonb(pos)->>'name_kk', '') AS position_kk,
                NULLIF(to_jsonb(pos)->>'document_nominative_ru', '') AS position_document_ru,
                NULLIF(to_jsonb(pos)->>'document_possessive_kk', '') AS position_document_kk
@@ -85,6 +87,66 @@ def current_visa(conn: Connection, application: dict[str, Any]) -> dict[str, Any
     return result
 
 
+def configured_approval_mode(conn: Connection, org_unit_id: int) -> str:
+    row = conn.execute(text("""
+        SELECT u.unit_id, COALESCE(m.mode, 'paper') AS mode
+        FROM public.org_units u LEFT JOIN public.hire_approval_unit_modes m USING (unit_id)
+        WHERE u.unit_id=:id AND u.is_active=TRUE
+    """), {"id": org_unit_id}).mappings().first()
+    if row is None:
+        raise ElectronicHireError("Отделение не найдено или неактивно.", "UNIT_NOT_FOUND")
+    return str(row["mode"])
+
+
+def current_paper_confirmation(conn: Connection, application: dict[str, Any]) -> dict[str, Any] | None:
+    row = conn.execute(text("""
+        SELECT c.confirmation_id, c.approver_name, c.approved_on, c.note,
+               c.attachment_id, c.conditions_hash, c.recorded_by_user_id,
+               u.full_name AS recorded_by_name, c.recorded_at
+        FROM public.electronic_hire_paper_confirmations c
+        JOIN public.users u ON u.user_id=c.recorded_by_user_id
+        WHERE c.application_id=:id ORDER BY c.confirmation_id DESC LIMIT 1
+    """), {"id": application["application_id"]}).mappings().first()
+    return {**dict(row), "is_current": row["conditions_hash"] == conditions_hash(application)} if row else None
+
+
+def record_paper_confirmation(conn: Connection, application_id: int, *, actor_user_id: int,
+                              approver_name: str, approved_on: date, note: str | None,
+                              attachment_id: int | None = None) -> dict[str, Any]:
+    app = load_electronic_hire(conn, application_id, lock=True)
+    if app["approval_mode"] != "paper":
+        raise ElectronicHireError("Для заявления требуется электронная виза.", "ELECTRONIC_APPROVAL_REQUIRED")
+    if app["status"] in {"completed", "cancelled", "withdrawn"}:
+        raise ElectronicHireError("Заявление закрыто.", "APPLICATION_CLOSED")
+    name = approver_name.strip()
+    if not name:
+        raise ElectronicHireError("Укажите, кто согласовал заявление на бумаге.", "APPROVER_REQUIRED")
+    if attachment_id is not None:
+        exists = conn.execute(text("""
+            SELECT 1 FROM public.electronic_hire_attachments
+            WHERE attachment_id=:attachment AND application_id=:application
+        """), {"attachment": attachment_id, "application": application_id}).scalar_one_or_none()
+        if not exists:
+            raise ElectronicHireError("Файл не относится к этому заявлению.", "ATTACHMENT_INVALID")
+    old = current_paper_confirmation(conn, app)
+    if old and old["is_current"]:
+        if (old["approver_name"], old["approved_on"], old["note"], old["attachment_id"]) == (name, approved_on, note, attachment_id):
+            return old
+        raise ElectronicHireError("Бумажное согласование уже подтверждено. Для новой отметки измените условия заявления.", "PAPER_ALREADY_CONFIRMED")
+    row = conn.execute(text("""
+        INSERT INTO public.electronic_hire_paper_confirmations
+            (application_id, conditions_hash, conditions, approver_name, approved_on,
+             note, attachment_id, recorded_by_user_id)
+        VALUES (:id, :hash, CAST(:conditions AS jsonb), :name, :approved_on,
+                :note, :attachment, :actor)
+        RETURNING confirmation_id, approver_name, approved_on, note, attachment_id,
+                  recorded_by_user_id, recorded_at
+    """), {"id": application_id, "hash": conditions_hash(app),
+           "conditions": json.dumps(conditions(app)), "name": name, "approved_on": approved_on,
+           "note": note, "attachment": attachment_id, "actor": actor_user_id}).mappings().one()
+    return {**dict(row), "is_current": True}
+
+
 def require_current_approval(conn: Connection, order_id: int) -> None:
     row = conn.execute(text("""
         SELECT a.application_id FROM public.personnel_applications a
@@ -108,9 +170,14 @@ def require_current_approval(conn: Connection, order_id: int) -> None:
               "planned_start_date": str(item["effective_date"]) if item["effective_date"] else None}
     if actual != expected or int(payload.get("person_id") or 0) != int(application["person_id"]):
         raise ElectronicHireError("Условия проекта отличаются от согласованного заявления.", "ORDER_CONDITIONS_MISMATCH")
-    visa = current_visa(conn, application)
-    if visa is None or not visa["is_current"] or visa["decision"] != "approved":
-        raise ElectronicHireError("Требуется актуальная положительная виза руководителя.", "APPROVAL_REQUIRED")
+    if application["approval_mode"] == "paper":
+        confirmation = current_paper_confirmation(conn, application)
+        if confirmation is None or not confirmation["is_current"]:
+            raise ElectronicHireError("Требуется актуальное подтверждение бумажного согласования.", "PAPER_APPROVAL_REQUIRED")
+    else:
+        visa = current_visa(conn, application)
+        if visa is None or not visa["is_current"] or visa["decision"] != "approved":
+            raise ElectronicHireError("Требуется актуальная положительная электронная виза.", "APPROVAL_REQUIRED")
 
 
 def order_has_hire_item(conn: Connection, order_id: int) -> bool:
@@ -159,7 +226,8 @@ def render_application(conn: Connection, application_id: int) -> dict[str, str]:
 
 
 def update_conditions(conn: Connection, application_id: int, *, org_unit_id: int, position_id: int,
-                      employment_rate: Decimal, planned_start_date: date) -> dict[str, Any]:
+                      employment_rate: Decimal, planned_start_date: date,
+                      actor_user_id: int | None = None, mode_change_reason: str | None = None) -> dict[str, Any]:
     app = load_electronic_hire(conn, application_id, lock=True)
     if app["status"] in {"completed", "cancelled", "withdrawn"}:
         raise ElectronicHireError("Заявление закрыто.", "APPLICATION_CLOSED")
@@ -175,6 +243,11 @@ def update_conditions(conn: Connection, application_id: int, *, org_unit_id: int
                  "planned_start_date": str(planned_start_date)}
     if conditions(app) == requested:
         return app
+    new_mode = app["approval_mode"]
+    if int(app["intended_org_unit_id"]) != org_unit_id:
+        if actor_user_id is None or not (mode_change_reason or "").strip():
+            raise ElectronicHireError("Подтвердите смену отделения и порядок согласования целевого отделения.", "MODE_CHANGE_ACK_REQUIRED")
+        new_mode = configured_approval_mode(conn, org_unit_id)
     conn.execute(text("""
         UPDATE public.personnel_applications
         SET intended_org_unit_id=:unit, intended_position_id=:position,
@@ -184,9 +257,16 @@ def update_conditions(conn: Connection, application_id: int, *, org_unit_id: int
     conn.execute(text("""
         UPDATE public.electronic_hire_applications
         SET planned_start_date=:start, conditions_version=conditions_version+1, candidate_checked_at=NULL,
-            candidate_checked_by_user_id=NULL, updated_at=now()
+            candidate_checked_by_user_id=NULL, approval_mode=:mode, updated_at=now()
         WHERE application_id=:id
-    """), {"start": planned_start_date, "id": application_id})
+    """), {"start": planned_start_date, "mode": new_mode, "id": application_id})
+    if int(app["intended_org_unit_id"]) != org_unit_id:
+        conn.execute(text("""
+            INSERT INTO public.hire_approval_mode_audit
+                (unit_id, application_id, old_mode, new_mode, changed_by_user_id, reason)
+            VALUES (:unit, :application, :old, :new, :actor, :reason)
+        """), {"unit": org_unit_id, "application": application_id, "old": app["approval_mode"],
+               "new": new_mode, "actor": actor_user_id, "reason": mode_change_reason.strip()})
     updated = load_electronic_hire(conn, application_id)
     if updated["personnel_order_id"] is not None:
         item = conn.execute(text("""
@@ -218,8 +298,9 @@ def update_conditions(conn: Connection, application_id: int, *, org_unit_id: int
         from app.personnel_applications.application.hire_approval_task_service import archive_superseded_hire_tasks
         archive_superseded_hire_tasks(conn, application_id=application_id,
                                       current_fingerprint=conditions_hash(updated))
-        ensure_approval_task(conn, updated)
-        queue_approval_notification(conn, application_id)
+        if new_mode == "electronic":
+            ensure_approval_task(conn, updated)
+            queue_approval_notification(conn, application_id)
     return updated
 
 
@@ -253,17 +334,64 @@ def missing_card_fields(conn: Connection, person_id: int, application_id: int) -
     return [label for key, label in required if not row[key]]
 
 
-def resolve_unit_head(conn: Connection, org_unit_id: int) -> int | None:
-    row = conn.execute(text("""
-        SELECT m.user_id FROM public.org_unit_managers m
+def resolve_approval_recipient(conn: Connection, application: dict[str, Any]) -> int:
+    """One source of truth for tasks, notices, listing, reading and decisions."""
+    if application["approval_mode"] != "electronic":
+        raise ElectronicHireError("Для заявления действует бумажное согласование.", "PAPER_APPROVAL_MODE")
+    # A started approval round has an explicit recipient. Preserve it until the
+    # conditions change; the next fingerprint is routed by the current catalog.
+    existing = conn.execute(text("""
+        SELECT h.head_user_id, u.is_active
+        FROM public.electronic_hire_approval_tasks h
+        JOIN public.users u ON u.user_id=h.head_user_id
+        WHERE h.application_id=:id AND h.conditions_hash=:hash
+    """), {"id": application["application_id"], "hash": conditions_hash(application)}).mappings().first()
+    if existing is not None:
+        if not existing["is_active"]:
+            raise ElectronicHireError("Назначенный согласующий сейчас неактивен. Обновите назначение и условия заявления.",
+                                      "APPROVER_INACTIVE")
+        return int(existing["head_user_id"])
+    group = group_by_id(int(application["org_unit_group_id"] or 0))
+    if group is None:
+        raise ElectronicHireError("Для отделения не определена группа. Уточните справочник подразделений.",
+                                  "UNIT_GROUP_REQUIRED")
+    medical = group.slug in {SLUG_CLINICAL, SLUG_PARACLINICAL}
+    if medical:
+        category = application["position_type_code"]
+        if category not in {1, 2, 3}:
+            raise ElectronicHireError(
+                "Для медицинского отделения у должности не задана категория: врач, средний или младший медперсонал.",
+                "POSITION_TYPE_REQUIRED")
+        manager_type = "HEAD" if category == 1 else "SENIOR_NURSE"
+        role_label = "руководитель отделения" if category == 1 else "старшая медицинская сестра"
+    else:
+        manager_type = "HEAD"
+        role_label = "руководитель отделения"
+    rows = conn.execute(text("""
+        SELECT DISTINCT m.user_id FROM public.org_unit_managers m
         JOIN public.users u ON u.user_id=m.user_id
-        WHERE m.unit_id=:unit AND upper(btrim(m.manager_type))='HEAD'
+        WHERE m.unit_id=:unit AND upper(btrim(m.manager_type))=:manager_type
           AND m.is_active=TRUE AND u.is_active=TRUE
           AND (m.date_from IS NULL OR m.date_from <= CURRENT_DATE)
           AND (m.date_to IS NULL OR m.date_to >= CURRENT_DATE)
-        ORDER BY m.date_from DESC NULLS LAST, m.manager_id DESC LIMIT 1
-    """), {"unit": org_unit_id}).mappings().first()
-    return int(row["user_id"]) if row else None
+    """), {"unit": application["intended_org_unit_id"], "manager_type": manager_type}).mappings().all()
+    if not rows:
+        raise ElectronicHireError(f"Не назначен согласующий: {role_label}.", "APPROVER_NOT_CONFIGURED")
+    if len(rows) != 1:
+        raise ElectronicHireError(f"Назначено несколько согласующих ({role_label}). Уточните назначения отделения.",
+                                  "APPROVER_AMBIGUOUS")
+    return int(rows[0]["user_id"])
+
+
+def resolve_unit_head(conn: Connection, org_unit_id: int) -> int | None:
+    """Legacy helper retained for callers that need a non-authorizing lookup."""
+    rows = conn.execute(text("""
+        SELECT DISTINCT m.user_id FROM public.org_unit_managers m JOIN public.users u ON u.user_id=m.user_id
+        WHERE m.unit_id=:unit AND upper(btrim(m.manager_type))='HEAD' AND m.is_active AND u.is_active
+          AND (m.date_from IS NULL OR m.date_from <= CURRENT_DATE)
+          AND (m.date_to IS NULL OR m.date_to >= CURRENT_DATE)
+    """), {"unit": org_unit_id}).scalars().all()
+    return int(rows[0]) if len(rows) == 1 else None
 
 
 def ensure_approval_task(conn: Connection, application: dict[str, Any]) -> dict[str, Any]:
@@ -271,9 +399,7 @@ def ensure_approval_task(conn: Connection, application: dict[str, Any]) -> dict[
     from app.personnel_applications.application.hire_approval_task_service import (
         ensure_hire_approval_task, finish_hire_approval_task,
     )
-    head = resolve_unit_head(conn, int(application["intended_org_unit_id"]))
-    if head is None:
-        raise ElectronicHireError("У отделения нет активного руководителя для согласования.", "HEAD_NOT_CONFIGURED")
+    head = resolve_approval_recipient(conn, application)
     creator = conn.execute(text("""
         SELECT created_by FROM public.personnel_orders WHERE order_id=:id
     """), {"id": application["personnel_order_id"]}).scalar_one()
@@ -290,9 +416,11 @@ def ensure_approval_task(conn: Connection, application: dict[str, Any]) -> dict[
 
 def queue_approval_notification(conn: Connection, application_id: int) -> dict[str, Any]:
     app = load_electronic_hire(conn, application_id)
+    if app["approval_mode"] != "electronic":
+        return {"status": "paper", "recipient_user_id": None}
     fingerprint = conditions_hash(app)
-    head = resolve_unit_head(conn, int(app["intended_org_unit_id"]))
-    status = "pending" if head is not None else "no_manager"
+    head = resolve_approval_recipient(conn, app)
+    status = "pending"
     row = conn.execute(text("""
         INSERT INTO public.electronic_hire_notifications
             (application_id, conditions_hash, recipient_user_id, status)
@@ -312,9 +440,9 @@ def retry_approval_notification(conn: Connection, application_id: int) -> dict[s
     notification = queue_approval_notification(conn, application_id)
     if notification["status"] == "sent":
         return notification
-    head = resolve_unit_head(conn, int(app["intended_org_unit_id"]))
-    if head is None:
+    if app["approval_mode"] != "electronic":
         return notification
+    head = resolve_approval_recipient(conn, app)
     row = conn.execute(text("""
         UPDATE public.electronic_hire_notifications
         SET status='pending', recipient_user_id=:head, last_error=NULL, updated_at=now()
@@ -335,6 +463,8 @@ def send_telegram_text(chat_id: int, message: str, *, bot_token: str) -> None:
 
 def dispatch_approval_notification(conn: Connection, application_id: int) -> dict[str, Any]:
     app = load_electronic_hire(conn, application_id)
+    if app["approval_mode"] != "electronic":
+        return {"status": "paper", "recipient_user_id": None}
     row = conn.execute(text("""
         SELECT n.notification_id, n.status, n.recipient_user_id, n.attempts,
                u.telegram_id
@@ -382,17 +512,19 @@ def record_visa(conn: Connection, application_id: int, *, actor_user_id: int,
         raise ElectronicHireError("Заявление закрыто.", "APPLICATION_CLOSED")
     if app["personnel_order_id"] is None:
         raise ElectronicHireError("Проект приказа ещё не создан.", "ORDER_DRAFT_REQUIRED")
-    head = resolve_unit_head(conn, int(app["intended_org_unit_id"]))
+    head = resolve_approval_recipient(conn, app)
     if head != actor_user_id:
-        raise ElectronicHireError("Вы не являетесь руководителем выбранного отделения.", "HEAD_ACCESS_DENIED")
+        raise ElectronicHireError("Вы не назначены согласующим для этого заявления.", "HEAD_ACCESS_DENIED")
     if decision not in {"approved", "rejected"}:
         raise ElectronicHireError("Выберите согласие или отказ.", "DECISION_INVALID")
     if decision == "rejected" and not (explanation or "").strip():
         raise ElectronicHireError("При отказе требуется пояснение.", "EXPLANATION_REQUIRED")
     task = ensure_approval_task(conn, app)
     latest = current_visa(conn, app)
-    if latest and latest["is_current"] and latest["decision"] == decision and latest["explanation"] == (explanation or None):
-        return latest
+    if latest and latest["is_current"]:
+        if latest["decision"] == decision and latest["explanation"] == (explanation or None):
+            return latest
+        raise ElectronicHireError("Решение по текущим условиям уже сохранено.", "VISA_ALREADY_RECORDED")
     row = conn.execute(text("""
         INSERT INTO public.electronic_hire_visas
             (application_id, decision, explanation, conditions_hash, conditions, decided_by_user_id)

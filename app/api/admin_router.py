@@ -79,6 +79,7 @@ from app.services.personnel_visibility_service import (
 from app.services.security_audit_service import list_security_events
 from app.services.telegram_health_service import get_telegram_health
 from app.api.admin_org_units_routes import router as admin_org_units_router
+from app.api.admin_hire_approval_routes import router as admin_hire_approval_router
 from app.services.personnel_order_template_catalog_service import list_personnel_order_template_catalog
 from app.services.personnel_order_template_draft_service import TemplateDraftError, copy_template, list_templates, list_versions, create_draft_from_working_copy, get_draft, get_published, get_editor_base, preview_draft, save_draft, publish_draft
 
@@ -88,6 +89,7 @@ from app.api.admin_schemas import PersonnelOrderTemplateTypeChange
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 router.include_router(admin_org_units_router)
+router.include_router(admin_hire_approval_router)
 
 
 def _value_error_to_http(exc: ValueError) -> HTTPException:

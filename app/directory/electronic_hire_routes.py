@@ -17,7 +17,8 @@ from app.db.engine import engine
 from app.directory.rbac import require_personnel_admin_or_403
 from app.personnel_applications.application.electronic_hire_service import (
     ElectronicHireError, conditions_hash, current_visa, dispatch_approval_notification, load_electronic_hire, mark_candidate_checked,
-    record_visa, render_application, resolve_unit_head, retry_approval_notification, update_conditions,
+    record_visa, render_application, resolve_approval_recipient, retry_approval_notification, update_conditions,
+    configured_approval_mode, current_paper_confirmation, record_paper_confirmation,
 )
 from app.personnel_applications.application.registration_service import register_personnel_application
 from app.personnel_applications.domain.errors import (
@@ -64,11 +65,29 @@ class ElectronicHireConditionsIn(BaseModel):
     position_id: int = Field(ge=1)
     employment_rate: Decimal = Field(gt=0, le=2)
     planned_start_date: date
+    mode_change_reason: str | None = None
 
 
 class VisaIn(BaseModel):
     decision: str
     explanation: str | None = None
+
+
+class PaperConfirmationIn(BaseModel):
+    approver_name: str = Field(min_length=1)
+    approved_on: date
+    note: str | None = None
+    attachment_id: int | None = None
+
+
+@router.get("/units/{unit_id}/approval-mode")
+def get_hire_unit_approval_mode(unit_id: int, user: dict = Depends(get_current_user)) -> dict:
+    _hr_user_id(user)
+    try:
+        with engine.connect() as conn:
+            return {"unit_id": unit_id, "approval_mode": configured_approval_mode(conn, unit_id)}
+    except ElectronicHireError as exc:
+        raise _error(exc) from exc
 
 
 @router.get("/former-candidates")
@@ -109,13 +128,14 @@ def create_electronic_hire(body: ElectronicHireCreateIn, user: dict = Depends(ge
             )
             if result.action == "created":
                 conn.execute(text("""
-                    INSERT INTO public.electronic_hire_applications (application_id, planned_start_date)
-                    VALUES (:id, :start)
-                """), {"id": result.application_id, "start": body.planned_start_date})
+                    INSERT INTO public.electronic_hire_applications (application_id, planned_start_date, approval_mode)
+                    VALUES (:id, :start, :mode)
+                """), {"id": result.application_id, "start": body.planned_start_date,
+                       "mode": configured_approval_mode(conn, body.org_unit_id)})
             app = load_electronic_hire(conn, result.application_id)
             return {"application_id": result.application_id, "person_id": result.person_id,
                     "card_href": result.card_href, "action": result.action,
-                    "planned_start_date": app["planned_start_date"]}
+                    "planned_start_date": app["planned_start_date"], "approval_mode": app["approval_mode"]}
     except ElectronicHireError as exc:
         raise _error(exc) from exc
     except ActiveEmployeeBlocksRegistrationError as exc:
@@ -156,7 +176,15 @@ def get_electronic_hire(application_id: int, user: dict = Depends(get_current_us
                 FROM public.electronic_hire_notifications
                 WHERE application_id=:id AND conditions_hash=:hash
             """), {"id": application_id, "hash": conditions_hash(app)}).mappings().first()
-            return {**app, "current_visa": visa, "notification": dict(notification) if notification else None}
+            recipient_error = None
+            if app["approval_mode"] == "electronic" and not (visa and visa["is_current"]):
+                try:
+                    resolve_approval_recipient(conn, app)
+                except ElectronicHireError as exc:
+                    recipient_error = str(exc)
+            return {**app, "current_visa": visa, "current_paper_confirmation": current_paper_confirmation(conn, app),
+                    "recipient_error": recipient_error,
+                    "notification": dict(notification) if notification else None}
     except ElectronicHireError as exc:
         raise _error(exc) from exc
 
@@ -164,12 +192,13 @@ def get_electronic_hire(application_id: int, user: dict = Depends(get_current_us
 @router.patch("/applications/{application_id}/conditions")
 def patch_electronic_hire_conditions(application_id: int, body: ElectronicHireConditionsIn,
                                    user: dict = Depends(get_current_user)) -> dict:
-    _hr_user_id(user)
+    actor = _hr_user_id(user)
     try:
         with engine.begin() as conn:
             result = update_conditions(conn, application_id, org_unit_id=body.org_unit_id,
                                      position_id=body.position_id, employment_rate=body.employment_rate,
-                                     planned_start_date=body.planned_start_date)
+                                     planned_start_date=body.planned_start_date,
+                                     actor_user_id=actor, mode_change_reason=body.mode_change_reason)
         if result["personnel_order_id"] is not None:
             with engine.begin() as conn:
                 dispatch_approval_notification(conn, application_id)
@@ -216,6 +245,20 @@ def post_electronic_hire_order_draft(application_id: int, user: dict = Depends(g
         raise HTTPException(422, {"code": getattr(exc, "code", "ORDER_DRAFT_INVALID"), "message": str(exc)}) from exc
 
 
+@router.post("/applications/{application_id}/paper-confirmation")
+def post_hire_paper_confirmation(application_id: int, body: PaperConfirmationIn,
+                                 user: dict = Depends(get_current_user)) -> dict:
+    actor = _hr_user_id(user)
+    try:
+        with engine.begin() as conn:
+            return record_paper_confirmation(conn, application_id, actor_user_id=actor,
+                                             approver_name=body.approver_name,
+                                             approved_on=body.approved_on, note=body.note,
+                                             attachment_id=body.attachment_id)
+    except ElectronicHireError as exc:
+        raise _error(exc) from exc
+
+
 @router.get("/applications/{application_id}/visas")
 def list_electronic_hire_visas(application_id: int, user: dict = Depends(get_current_user)) -> dict:
     _hr_user_id(user)
@@ -247,6 +290,8 @@ def get_electronic_hire_by_order(order_id: int, user: dict = Depends(get_current
             WHERE application_id=:id ORDER BY visa_id DESC
         """), {"id": app["application_id"]}).mappings().all()
         return {"application_id": app["application_id"], "full_name": app["full_name"],
+                "approval_mode": app["approval_mode"],
+                "current_paper_confirmation": current_paper_confirmation(conn, app),
                 "current_visa": current_visa(conn, app),
                 "visas": [{**dict(visa), "is_current": visa["conditions_hash"] == conditions_hash(app)} for visa in visas]}
 
@@ -268,27 +313,71 @@ def list_head_electronic_hire_approvals(application_id: int | None = None,
     actor = user.get("user_id") or user.get("id")
     if not actor:
         raise HTTPException(401, "Unauthorized")
+    try:
+        require_personnel_admin_or_403(user)
+        is_hr = True
+    except HTTPException:
+        is_hr = False
     with engine.connect() as conn:
         rows = conn.execute(text("""
             SELECT a.application_id FROM public.personnel_applications a
             JOIN public.electronic_hire_applications e USING (application_id)
-            JOIN public.org_unit_managers m ON m.unit_id=a.intended_org_unit_id
-            JOIN public.users u ON u.user_id=m.user_id
             WHERE a.personnel_order_id IS NOT NULL
               AND a.status NOT IN ('cancelled', 'withdrawn', 'expired')
-              AND m.user_id=:actor AND upper(btrim(m.manager_type))='HEAD'
-              AND m.is_active=TRUE AND u.is_active=TRUE
-              AND (m.date_from IS NULL OR m.date_from <= CURRENT_DATE)
-              AND (m.date_to IS NULL OR m.date_to >= CURRENT_DATE)
+              AND ((:is_hr AND e.approval_mode='paper') OR
+                   (e.approval_mode='electronic' AND
+                    (EXISTS (SELECT 1 FROM public.org_unit_managers m
+                           WHERE m.unit_id=a.intended_org_unit_id AND m.user_id=:actor
+                             AND m.is_active=TRUE AND (m.date_from IS NULL OR m.date_from<=CURRENT_DATE)
+                             AND (m.date_to IS NULL OR m.date_to>=CURRENT_DATE))
+                   OR EXISTS (SELECT 1 FROM public.electronic_hire_approval_tasks t
+                              WHERE t.application_id=a.application_id AND t.head_user_id=:actor))))
             ORDER BY CASE WHEN a.application_id=:target THEN 0 ELSE 1 END,
                      a.application_id DESC LIMIT 100
-        """), {"actor": int(actor), "target": application_id or 0}).mappings().all()
+        """), {"actor": int(actor), "target": application_id or 0, "is_hr": is_hr}).mappings().all()
         items = []
         for row in rows:
             app = load_electronic_hire(conn, int(row["application_id"]))
-            if resolve_unit_head(conn, int(app["intended_org_unit_id"])) != int(actor):
+            if app["approval_mode"] == "paper":
+                paper = current_paper_confirmation(conn, app)
+                if paper is None or not paper["is_current"]:
+                    continue
+                paper_history = conn.execute(text("""
+                    SELECT c.confirmation_id, c.approver_name, c.approved_on, c.note, c.attachment_id,
+                           c.conditions_hash, c.recorded_by_user_id,
+                           u.full_name AS recorded_by_name, c.recorded_at
+                    FROM public.electronic_hire_paper_confirmations c
+                    JOIN public.users u ON u.user_id=c.recorded_by_user_id
+                    WHERE c.application_id=:id ORDER BY c.confirmation_id DESC
+                """), {"id": app["application_id"]}).mappings().all()
+                items.append({"application_id": app["application_id"], "full_name": app["full_name"],
+                              "application_type": "hire", "application_type_label": "Приём на работу",
+                              "approval_mode": "paper", "org_unit": app["org_unit_ru"],
+                              "position": app["position_ru"], "employment_rate": app["intended_employment_rate"],
+                              "planned_start_date": app["planned_start_date"],
+                              "current_visa": {"visa_id": -paper["confirmation_id"], "decision": "approved",
+                                               "is_current": True, "explanation": paper["note"],
+                                               "decided_by_user_id": paper["recorded_by_user_id"],
+                                               "decided_by_name": paper["approver_name"],
+                                               "decided_at": paper["recorded_at"],
+                                               "approved_on": paper["approved_on"],
+                                               "attachment_id": paper["attachment_id"],
+                                               "recorded_by_name": paper["recorded_by_name"], "kind": "paper"},
+                              "visa_history": [],
+                              "paper_history": [{**dict(p), "is_current": p["conditions_hash"] == conditions_hash(app)} for p in paper_history]})
                 continue
             visa = current_visa(conn, app)
+            assigned_current = False
+            try:
+                assigned_current = resolve_approval_recipient(conn, app) == int(actor)
+            except ElectronicHireError:
+                pass
+            historical_task = conn.execute(text("""
+                SELECT EXISTS (SELECT 1 FROM public.electronic_hire_approval_tasks
+                    WHERE application_id=:id AND head_user_id=:actor AND decision IS NOT NULL)
+            """), {"id": app["application_id"], "actor": int(actor)}).scalar_one()
+            if not assigned_current and not (historical_task and visa and visa["is_current"]):
+                continue
             if app["status"] == "completed" and (visa is None or not visa["is_current"]):
                 continue
             history = conn.execute(text("""
@@ -298,13 +387,25 @@ def list_head_electronic_hire_approvals(application_id: int | None = None,
                 JOIN public.users u ON u.user_id=v.decided_by_user_id
                 WHERE v.application_id=:id ORDER BY v.visa_id DESC
             """), {"id": app["application_id"]}).mappings().all()
+            paper_history = conn.execute(text("""
+                SELECT c.confirmation_id, c.approver_name, c.approved_on, c.note, c.attachment_id,
+                       c.conditions_hash, c.recorded_by_user_id,
+                       u.full_name AS recorded_by_name, c.recorded_at
+                FROM public.electronic_hire_paper_confirmations c
+                JOIN public.users u ON u.user_id=c.recorded_by_user_id
+                WHERE c.application_id=:id ORDER BY c.confirmation_id DESC
+            """), {"id": app["application_id"]}).mappings().all()
             items.append({"application_id": app["application_id"], "full_name": app["full_name"],
+                          "application_type": "hire", "application_type_label": "Приём на работу",
+                          "approval_mode": "electronic",
                           "org_unit": app["org_unit_ru"], "position": app["position_ru"],
                           "employment_rate": app["intended_employment_rate"],
                           "planned_start_date": app["planned_start_date"],
                           "current_visa": visa,
                           "visa_history": [{**dict(row), "is_current": row["conditions_hash"] == conditions_hash(app)}
-                                           for row in history]})
+                                           for row in history],
+                          "paper_history": [{**dict(p), "is_current": p["conditions_hash"] == conditions_hash(app)}
+                                            for p in paper_history]})
         return {"items": items}
 
 

@@ -28,10 +28,11 @@ from app.personnel_intake.domain.errors import PersonnelIntakeTokenError
 from tests.ppr.conftest import insert_employee
 
 
-def _setup(conn, *, former: bool = False):
+def _setup(conn, *, former: bool = False, unit_id: int | None = None,
+           position_id: int | None = None, approval_mode: str = "electronic"):
     user = int(conn.execute(text("SELECT user_id FROM public.users WHERE is_active=TRUE ORDER BY user_id LIMIT 1")).scalar_one())
-    unit = int(conn.execute(text("SELECT unit_id FROM public.org_units ORDER BY unit_id LIMIT 1")).scalar_one())
-    position = int(conn.execute(text("SELECT position_id FROM public.positions ORDER BY position_id LIMIT 1")).scalar_one())
+    unit = unit_id or int(conn.execute(text("SELECT unit_id FROM public.org_units WHERE group_id=3 ORDER BY unit_id LIMIT 1")).scalar_one())
+    position = position_id or int(conn.execute(text("SELECT position_id FROM public.positions ORDER BY position_id LIMIT 1")).scalar_one())
     existing_head = conn.execute(text("SELECT user_id FROM public.org_unit_managers WHERE unit_id=:unit AND manager_type='HEAD' AND is_active=TRUE"), {"unit": unit}).scalar_one_or_none()
     if existing_head is None:
         conn.execute(text("INSERT INTO public.org_unit_managers(unit_id,user_id,manager_type,is_active) VALUES (:unit,:user,'HEAD',TRUE)"), {"unit": unit, "user": user})
@@ -58,7 +59,7 @@ def _setup(conn, *, former: bool = False):
         idempotency_key=None, registered_by_user_id=user, actor_id=f"user:{user}",
         application_source="electronic",
     )
-    conn.execute(text("INSERT INTO public.electronic_hire_applications(application_id, planned_start_date) VALUES (:id, '2026-12-01')"), {"id": result.application_id})
+    conn.execute(text("INSERT INTO public.electronic_hire_applications(application_id, planned_start_date, approval_mode) VALUES (:id, '2026-12-01', :mode)"), {"id": result.application_id, "mode": approval_mode})
     return result, user, unit, position, employee
 
 
