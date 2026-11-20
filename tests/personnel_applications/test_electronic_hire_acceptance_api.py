@@ -56,7 +56,7 @@ def test_search_excludes_active_and_api_print_uses_actual_fields():
         assert details["org_unit_ru"] in rendered["ru"]
         assert (details["org_unit_kk"] or details["org_unit_ru"]) in rendered["kk"]
         assert hire_position_accusative_ru(details["position_document_ru"] or details["position_ru"]).casefold() in rendered["ru"].casefold()
-        assert (details["position_document_kk"] or details["position_kk"] or details["position_ru"]) in rendered["kk"]
+        assert (details["position_document_kk"] or details["position_kk"] or details["position_ru"]).casefold() in rendered["kk"].casefold()
     finally:
         app.dependency_overrides.pop(get_current_user, None)
 
