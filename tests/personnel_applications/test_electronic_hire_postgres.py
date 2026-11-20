@@ -9,11 +9,13 @@ from sqlalchemy import text
 
 from app.db.engine import engine
 from app.personnel_applications.application import electronic_hire_service as hire
+from app.personnel_applications.application.hire_approval_task_service import current_hire_task_period
 from app.personnel_applications.application.hire_order_draft_service import create_hire_order_draft_for_application
 from app.personnel_applications.application.registration_service import register_personnel_application
 from app.personnel_applications.domain.errors import PersonnelApplicationHireOrderError
 from app.services.personnel_order_hire_from_person_service import validate_hire_person_candidate
 from app.services import personnel_order_template_application_service as templates
+from app.services.tasks_service import _is_task_visible_to_user, attach_allowed_actions, load_task_full
 from app.services.personnel_orders_apply_service import apply_personnel_order_in_conn
 from app.services.personnel_orders_command_service import (
     PersonnelOrderValidationError,
@@ -65,6 +67,90 @@ def _complete_card(conn, person_id: int):
         VALUES (:id, '+77001234567')
         ON CONFLICT (person_id) DO UPDATE SET mobile_phone=EXCLUDED.mobile_phone
     """), {"id": person_id})
+
+
+def test_hire_approval_tasks_follow_visa_and_condition_revisions(monkeypatch):
+    monkeypatch.setenv("BOT_TOKEN", "")
+    with engine.connect() as conn:
+        txn = conn.begin()
+        try:
+            application, head, unit, position, _ = _setup(conn)
+            _complete_card(conn, application.person_id)
+            created = create_hire_order_draft_for_application(
+                conn, application_id=application.application_id, created_by_user_id=head)
+            assert created.personnel_order_id > 0
+            first = conn.execute(text("""
+                SELECT h.task_id, h.conditions_hash, s.code, t.description, t.period_id
+                FROM public.electronic_hire_approval_tasks h
+                JOIN public.tasks t USING(task_id)
+                JOIN public.task_statuses s ON s.status_id=t.status_id
+                WHERE h.application_id=:id
+            """), {"id": application.application_id}).mappings().one()
+            assert first["code"] == "IN_PROGRESS"
+            assert all(value in first["description"] for value in
+                       ("Тестова Айгуль", "Отделение:", "Должность:", "0,75", "01.12.2026"))
+            assert first["period_id"] == current_hire_task_period(conn)["period_id"]
+            task = load_task_full(conn, task_id=int(first["task_id"]))
+            assert task["electronic_hire_application_id"] == application.application_id
+            assert _is_task_visible_to_user(conn, current_user_id=head,
+                                            current_role_id=int(task["executor_role_id"]), task_row=task)
+            other = conn.execute(text("""
+                INSERT INTO public.users(full_name, role_id, unit_id, is_active, login)
+                VALUES ('Вымышленный другой сотрудник', :role, :unit, TRUE, :login)
+                RETURNING user_id
+            """), {"role": task["executor_role_id"], "unit": unit,
+                   "login": f"eha-other-{uuid4().hex}"}).scalar_one()
+            assert not _is_task_visible_to_user(conn, current_user_id=int(other),
+                                                current_role_id=int(task["executor_role_id"]), task_row=task)
+            assert attach_allowed_actions(task=task, current_user_id=head,
+                                          current_role_id=int(task["executor_role_id"]))["allowed_actions"] == []
+
+            replay = create_hire_order_draft_for_application(
+                conn, application_id=application.application_id, created_by_user_id=head)
+            assert replay.idempotent_replay
+            assert conn.execute(text("SELECT count(*) FROM public.electronic_hire_approval_tasks WHERE application_id=:id"),
+                                {"id": application.application_id}).scalar_one() == 1
+
+            hire.record_visa(conn, application.application_id, actor_user_id=head,
+                             decision="rejected", explanation="Тестовое пояснение")
+            rejected = load_task_full(conn, task_id=int(first["task_id"]))
+            assert rejected["status_code"] == "REJECTED"
+            assert rejected["electronic_hire_decision"] == "rejected"
+            assert rejected["electronic_hire_explanation"] == "Тестовое пояснение"
+
+            hire.update_conditions(conn, application.application_id, org_unit_id=unit, position_id=position,
+                                   employment_rate=Decimal("0.50"), planned_start_date=date(2026, 12, 2))
+            second = conn.execute(text("""
+                SELECT h.task_id, h.conditions_hash, s.code FROM public.electronic_hire_approval_tasks h
+                JOIN public.tasks t USING(task_id) JOIN public.task_statuses s ON s.status_id=t.status_id
+                WHERE h.application_id=:id ORDER BY h.task_id DESC LIMIT 1
+            """), {"id": application.application_id}).mappings().one()
+            assert second["task_id"] != first["task_id"] and second["conditions_hash"] != first["conditions_hash"]
+            assert second["code"] == "IN_PROGRESS"
+            assert load_task_full(conn, task_id=int(first["task_id"]))["status_code"] == "REJECTED"
+            hire.update_conditions(conn, application.application_id, org_unit_id=unit, position_id=position,
+                                   employment_rate=Decimal("0.50"), planned_start_date=date(2026, 12, 2))
+            assert conn.execute(text("SELECT count(*) FROM public.electronic_hire_approval_tasks WHERE application_id=:id"),
+                                {"id": application.application_id}).scalar_one() == 2
+            hire.record_visa(conn, application.application_id, actor_user_id=head,
+                             decision="approved", explanation="Согласовано для теста")
+            assert load_task_full(conn, task_id=int(second["task_id"]))["status_code"] == "DONE"
+
+            hire.update_conditions(conn, application.application_id, org_unit_id=unit, position_id=position,
+                                   employment_rate=Decimal("0.75"), planned_start_date=date(2026, 12, 1))
+            assert hire.current_visa(conn, hire.load_electronic_hire(conn, application.application_id))["is_current"] is False
+            assert conn.execute(text("SELECT count(*) FROM public.electronic_hire_approval_tasks WHERE application_id=:id"),
+                                {"id": application.application_id}).scalar_one() == 3
+            third = conn.execute(text("SELECT max(task_id) FROM public.electronic_hire_approval_tasks WHERE application_id=:id"),
+                                 {"id": application.application_id}).scalar_one()
+            assert load_task_full(conn, task_id=int(third))["status_code"] == "IN_PROGRESS"
+            hire.update_conditions(conn, application.application_id, org_unit_id=unit, position_id=position,
+                                   employment_rate=Decimal("0.60"), planned_start_date=date(2026, 12, 3))
+            assert load_task_full(conn, task_id=int(third))["status_code"] == "ARCHIVED"
+            assert conn.execute(text("SELECT count(*) FROM public.electronic_hire_approval_tasks WHERE application_id=:id"),
+                                {"id": application.application_id}).scalar_one() == 4
+        finally:
+            txn.rollback()
     conn.execute(text("""
         INSERT INTO public.person_education(person_id, education_kind, institution_name)
         SELECT :id, code, 'Вымышленный учебный центр'

@@ -20,7 +20,9 @@ from app.personnel_applications.domain.status import (
     APPLICATION_STATUS_ORDER_DRAFT_CREATED,
 )
 from app.personnel_applications.infrastructure.repository import SqlAlchemyPersonnelApplicationRepository
-from app.personnel_applications.application.electronic_hire_service import load_electronic_hire, missing_card_fields, queue_approval_notification
+from app.personnel_applications.application.electronic_hire_service import (
+    ensure_approval_task, load_electronic_hire, missing_card_fields, queue_approval_notification,
+)
 from app.services.personnel_order_hire_from_person_service import validate_hire_person_candidate
 from app.services.personnel_order_evidence_scope_service import (
     advance_personnel_order_evidence_scopes_tx,
@@ -170,6 +172,8 @@ def create_hire_order_draft_for_application(
                 "Application already has a linked personnel order.",
                 code="ORDER_ALREADY_LINKED",
             )
+        if electronic is not None:
+            ensure_approval_task(conn, electronic)
         return HireOrderDraftResult(
             application_id=application_id,
             personnel_order_id=int(app.personnel_order_id),
@@ -226,6 +230,7 @@ def create_hire_order_draft_for_application(
         now=now,
     )
     if electronic is not None:
+        ensure_approval_task(conn, load_electronic_hire(conn, application_id))
         queue_approval_notification(conn, application_id)
     return HireOrderDraftResult(
         application_id=application_id,

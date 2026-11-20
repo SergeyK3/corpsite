@@ -267,6 +267,7 @@ export default function TaskDetailPanel({
   );
   const selectedStatus = React.useMemo(() => statusTextOf(selectedItem), [selectedItem]);
   const selectedReportUiState = React.useMemo(() => computeReportUiState(selectedItem), [selectedItem]);
+  const hireApplicationId = Number(selectedItem?.electronic_hire_application_id || 0);
   const selectedExecutorRole = React.useMemo(() => executorRoleLabelOf(selectedItem), [selectedItem]);
   const selectedExecutorPerson = React.useMemo(() => executorPersonLabelOf(selectedItem), [selectedItem]);
   const resolvedReportLink = React.useMemo(
@@ -308,14 +309,14 @@ export default function TaskDetailPanel({
                 {selectedStatus}
               </div>
 
-              <div
+              {hireApplicationId <= 0 ? <div
                 className={[
                   "rounded-md border px-2 py-1 text-xs",
                   reportStatusBadgeClass(selectedReportUiState),
                 ].join(" ")}
               >
                 {reportStatusBadgeText(selectedReportUiState)}
-              </div>
+              </div> : null}
             </div>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -358,6 +359,21 @@ export default function TaskDetailPanel({
                 <div className="mt-2 whitespace-pre-wrap text-sm text-zinc-900 dark:text-zinc-50">
                   {visibleDescription}
                 </div>
+              </div>
+            ) : null}
+
+            {hireApplicationId > 0 ? (
+              <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm dark:border-blue-900 dark:bg-blue-950/30">
+                <a href={`/directory/personnel/hire-approvals?application_id=${hireApplicationId}#hire-approval-${hireApplicationId}`}
+                   className="font-medium text-blue-700 underline dark:text-blue-300">
+                  Перейти к визе заявления №{hireApplicationId}
+                </a>
+                {selectedItem?.electronic_hire_decision ? (
+                  <p className="mt-2">
+                    Решение: {selectedItem.electronic_hire_decision === "approved" ? "Согласовано" : "Отказ"}
+                    {selectedItem.electronic_hire_explanation ? ` · Пояснение: ${selectedItem.electronic_hire_explanation}` : ""}
+                  </p>
+                ) : null}
               </div>
             ) : null}
 

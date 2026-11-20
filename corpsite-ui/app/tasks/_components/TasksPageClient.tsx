@@ -1147,7 +1147,7 @@ export default function TasksPageClient() {
                                   </button>
                                 ) : null}
 
-                                {showDeleteButtons ? (
+                                {showDeleteButtons && item.source_kind !== "electronic_hire" ? (
                                   <button
                                     type="button"
                                     onClick={(e) => {
@@ -1239,7 +1239,7 @@ export default function TasksPageClient() {
             uiNotice={uiNotice}
             showExecutorColumn={showExecutorColumn}
             selectedEditable={selectedEditable}
-            showDeleteButtons={showDeleteButtons}
+            showDeleteButtons={showDeleteButtons && selectedItem?.source_kind !== "electronic_hire"}
             isSystemAdmin={isSystemAdmin}
             saving={saving}
             reportLink={reportLink}

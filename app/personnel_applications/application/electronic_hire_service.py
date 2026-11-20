@@ -28,7 +28,7 @@ def load_electronic_hire(conn: Connection, application_id: int, *, lock: bool = 
                a.intended_org_unit_id, a.intended_position_id,
                a.intended_employment_rate, a.personnel_order_id,
                a.contact_mobile_phone, a.contact_email,
-               e.planned_start_date, e.candidate_checked_at,
+               e.planned_start_date, e.candidate_checked_at, e.conditions_version,
                p.full_name, p.iin,
                ou.name AS org_unit_ru,
                NULLIF(to_jsonb(ou)->>'name_kk', '') AS org_unit_kk,
@@ -62,7 +62,12 @@ def conditions(application: dict[str, Any]) -> dict[str, Any]:
 
 
 def conditions_hash(application: dict[str, Any]) -> str:
-    return hashlib.sha256(json.dumps(conditions(application), sort_keys=True).encode()).hexdigest()
+    payload = conditions(application)
+    version = int(application.get("conditions_version") or 1)
+    # Preserve v1 hashes and existing visas when deploying this change.
+    if version > 1:
+        payload["conditions_version"] = version
+    return hashlib.sha256(json.dumps(payload, sort_keys=True).encode()).hexdigest()
 
 
 def current_visa(conn: Connection, application: dict[str, Any]) -> dict[str, Any] | None:
@@ -164,6 +169,11 @@ def update_conditions(conn: Connection, application_id: int, *, org_unit_id: int
             raise ElectronicHireError("Условия можно менять только до публикации приказа.", "ORDER_ALREADY_PUBLISHED")
     if not (Decimal("0") < employment_rate <= Decimal("2")):
         raise ElectronicHireError("Ставка должна быть больше нуля и не выше двух.", "RATE_INVALID")
+    requested = {"org_unit_id": org_unit_id, "position_id": position_id,
+                 "employment_rate": str(Decimal(str(employment_rate)).normalize()),
+                 "planned_start_date": str(planned_start_date)}
+    if conditions(app) == requested:
+        return app
     conn.execute(text("""
         UPDATE public.personnel_applications
         SET intended_org_unit_id=:unit, intended_position_id=:position,
@@ -172,7 +182,7 @@ def update_conditions(conn: Connection, application_id: int, *, org_unit_id: int
     """), {"unit": org_unit_id, "position": position_id, "rate": employment_rate, "id": application_id})
     conn.execute(text("""
         UPDATE public.electronic_hire_applications
-        SET planned_start_date=:start, candidate_checked_at=NULL,
+        SET planned_start_date=:start, conditions_version=conditions_version+1, candidate_checked_at=NULL,
             candidate_checked_by_user_id=NULL, updated_at=now()
         WHERE application_id=:id
     """), {"start": planned_start_date, "id": application_id})
@@ -204,6 +214,10 @@ def update_conditions(conn: Connection, application_id: int, *, org_unit_id: int
         """), {"order": updated["personnel_order_id"]})
         from app.services.personnel_orders_editorial_service import mark_blocks_stale_after_structured_change
         mark_blocks_stale_after_structured_change(conn, int(updated["personnel_order_id"]), item_id=int(item["item_id"]))
+        from app.personnel_applications.application.hire_approval_task_service import archive_superseded_hire_tasks
+        archive_superseded_hire_tasks(conn, application_id=application_id,
+                                      current_fingerprint=conditions_hash(updated))
+        ensure_approval_task(conn, updated)
         queue_approval_notification(conn, application_id)
     return updated
 
@@ -249,6 +263,28 @@ def resolve_unit_head(conn: Connection, org_unit_id: int) -> int | None:
         ORDER BY m.date_from DESC NULLS LAST, m.manager_id DESC LIMIT 1
     """), {"unit": org_unit_id}).mappings().first()
     return int(row["user_id"]) if row else None
+
+
+def ensure_approval_task(conn: Connection, application: dict[str, Any]) -> dict[str, Any]:
+    """The task is durable and independent of optional Telegram delivery."""
+    from app.personnel_applications.application.hire_approval_task_service import (
+        ensure_hire_approval_task, finish_hire_approval_task,
+    )
+    head = resolve_unit_head(conn, int(application["intended_org_unit_id"]))
+    if head is None:
+        raise ElectronicHireError("У отделения нет активного руководителя для согласования.", "HEAD_NOT_CONFIGURED")
+    creator = conn.execute(text("""
+        SELECT created_by FROM public.personnel_orders WHERE order_id=:id
+    """), {"id": application["personnel_order_id"]}).scalar_one()
+    task = ensure_hire_approval_task(conn, application=application,
+                                     fingerprint=conditions_hash(application),
+                                     head_user_id=head, created_by_user_id=int(creator))
+    visa = current_visa(conn, application)
+    if visa and visa["is_current"]:
+        finish_hire_approval_task(conn, task_id=int(task["task_id"]),
+                                  decision=visa["decision"], explanation=visa["explanation"],
+                                  decided_at=visa["decided_at"])
+    return task
 
 
 def queue_approval_notification(conn: Connection, application_id: int) -> dict[str, Any]:
@@ -352,6 +388,7 @@ def record_visa(conn: Connection, application_id: int, *, actor_user_id: int,
         raise ElectronicHireError("Выберите согласие или отказ.", "DECISION_INVALID")
     if decision == "rejected" and not (explanation or "").strip():
         raise ElectronicHireError("При отказе требуется пояснение.", "EXPLANATION_REQUIRED")
+    task = ensure_approval_task(conn, app)
     latest = current_visa(conn, app)
     if latest and latest["is_current"] and latest["decision"] == decision and latest["explanation"] == (explanation or None):
         return latest
@@ -367,4 +404,7 @@ def record_visa(conn: Connection, application_id: int, *, actor_user_id: int,
             director_resolution_by_user_id=:actor, director_resolution_note=:explanation,
             director_resolution_at=now(), updated_at=now() WHERE application_id=:id
     """), {"id": application_id, "decision": decision, "actor": actor_user_id, "explanation": explanation})
+    from app.personnel_applications.application.hire_approval_task_service import finish_hire_approval_task
+    finish_hire_approval_task(conn, task_id=int(task["task_id"]), decision=decision,
+                              explanation=explanation, decided_at=row["decided_at"])
     return {**dict(row), "is_current": True}

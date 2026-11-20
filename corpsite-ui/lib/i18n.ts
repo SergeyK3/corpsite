@@ -22,6 +22,7 @@ export const TASK_SOURCE_LABELS: Readonly<Record<string, string>> = {
   regular_task: "Регулярный шаблон",
   bot: "Telegram-бот",
   import: "Импорт",
+  electronic_hire: "Электронный приём",
 };
 
 export const SCHEDULE_TYPE_LABELS: Readonly<Record<string, string>> = {

@@ -254,6 +254,16 @@ def create_period(
     )
 
 
+@app.get("/periods/current")
+def get_current_period(user: Dict[str, Any] = Depends(get_current_user)):
+    from app.personnel_applications.application.hire_approval_task_service import current_hire_task_period
+
+    with engine.connect() as conn:
+        period = current_hire_task_period(conn)
+    return {"period_id": int(period["period_id"]) if period else 0,
+            "name": str(period["label"] or "") if period else ""}
+
+
 @app.get("/periods", response_model=List[PeriodOut])
 def list_periods(user: Dict[str, Any] = Depends(get_current_user)):
     _require_privileged_user(user)

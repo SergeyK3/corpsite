@@ -43,6 +43,12 @@ describe("taskEditPolicy", () => {
     const task = { task_kind: "regular", status_code: "IN_PROGRESS" };
     expect(canEditTask(task)).toBe(true);
   });
+
+  it("keeps electronic hire approval tasks read only for every role", () => {
+    const task = { task_kind: "adhoc", status_code: "IN_PROGRESS", source_kind: "electronic_hire" };
+    expect(canEditTask(task)).toBe(false);
+    expect(canEditTask(task, { isSystemAdmin: true })).toBe(false);
+  });
 });
 
 describe("isTaskRowEditable", () => {

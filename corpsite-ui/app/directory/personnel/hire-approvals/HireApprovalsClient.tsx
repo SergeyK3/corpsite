@@ -13,6 +13,12 @@ export default function HireApprovalsClient() {
     catch (e) { setError(e instanceof Error ? e.message : "Не удалось загрузить заявления."); }
   }, []);
   React.useEffect(() => { void load(); }, [load]);
+  React.useEffect(() => {
+    const target = Number(new URLSearchParams(window.location.search).get("application_id"));
+    if (target > 0 && items.some(item => item.application_id === target)) {
+      document.getElementById(`hire-approval-${target}`)?.scrollIntoView({block: "center"});
+    }
+  }, [items]);
 
   async function decide(id: number, decision: "approved" | "rejected") {
     setBusy(id); setError("");
@@ -26,7 +32,7 @@ export default function HireApprovalsClient() {
     <p className="text-sm text-zinc-600">Показаны заявления только вашего отделения. Решение сохраняет условия приёма и время визы.</p>
     {error && <p role="alert" className="rounded bg-red-50 p-3 text-sm text-red-800">{error}</p>}
     {items.length === 0 && <p className="rounded border p-4 text-sm">Заявлений на согласование нет.</p>}
-    {items.map(item => <section key={item.application_id} className="space-y-3 rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
+    {items.map(item => <section id={`hire-approval-${item.application_id}`} key={item.application_id} className="space-y-3 rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-2"><h2 className="font-semibold">Заявление №{item.application_id} · {item.full_name}</h2><span className="text-sm text-zinc-600">{item.current_visa?.is_current ? item.current_visa.decision === "approved" ? "Согласовано" : "Отказ" : "Ожидает решения"}</span></div>
       <p className="text-sm">{item.position} · {item.org_unit} · {item.employment_rate} ставки · с {item.planned_start_date}</p>
       <label className="block text-sm">Пояснение при отказе<textarea className="mt-1 w-full rounded border border-zinc-300 p-2" value={notes[item.application_id] || ""} onChange={e => setNotes({...notes, [item.application_id]: e.target.value})} /></label>

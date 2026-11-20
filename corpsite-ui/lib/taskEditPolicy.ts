@@ -22,6 +22,7 @@ export function canEditTask(src: unknown, options?: TaskEditOptions): boolean {
   if (!src || typeof src !== "object") return false;
 
   const task = src as Record<string, unknown>;
+  if (String(task.source_kind ?? "").trim().toLowerCase() === "electronic_hire") return false;
   const taskKind = String(task.task_kind ?? "").trim().toLowerCase();
   const statusCode = resolveTaskStatusCode(src);
   const isSystemAdmin = Boolean(options?.isSystemAdmin);
