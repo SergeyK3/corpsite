@@ -1,6 +1,7 @@
 """Electronic HIRE contract on the disposable PostgreSQL database."""
 from datetime import UTC, date, datetime
 from decimal import Decimal
+import json
 from uuid import uuid4
 
 import pytest
@@ -12,6 +13,7 @@ from app.personnel_applications.application.hire_order_draft_service import crea
 from app.personnel_applications.application.registration_service import register_personnel_application
 from app.personnel_applications.domain.errors import PersonnelApplicationHireOrderError
 from app.services.personnel_order_hire_from_person_service import validate_hire_person_candidate
+from app.services import personnel_order_template_application_service as templates
 from app.services.personnel_orders_apply_service import apply_personnel_order_in_conn
 from app.services.personnel_orders_command_service import (
     PersonnelOrderValidationError,
@@ -70,6 +72,48 @@ def _complete_card(conn, person_id: int):
     """), {"id": person_id})
 
 
+def test_first_published_hire_template_application_creates_editorial_blocks():
+    with engine.connect() as conn:
+        txn = conn.begin()
+        try:
+            published = conn.execute(text("""
+                SELECT 1 FROM public.personnel_order_template_versions
+                WHERE item_type_code='HIRE' AND status='PUBLISHED' LIMIT 1
+            """)).first()
+            if published is None:
+                pytest.skip("requires the published HIRE template in the isolated test catalog")
+            application, hr, _, _, _ = _setup(conn)
+            _complete_card(conn, application.person_id)
+            order = create_hire_order_draft_for_application(
+                conn, application_id=application.application_id, created_by_user_id=hr)
+            order_id = order.personnel_order_id
+            item_id = int(conn.execute(text("SELECT item_id FROM public.personnel_order_items WHERE order_id=:id"),
+                                       {"id": order_id}).scalar_one())
+            conn.execute(text("""
+                UPDATE public.personnel_order_items
+                SET payload=payload || CAST(:extra AS jsonb)
+                WHERE item_id=:id
+            """), {"id": item_id, "extra": json.dumps({
+                "document_forms_ru": {"employee_full_name_accusative_ru": "Тестову Айгуль"},
+                "hire_basis": {"ru": "Заявление", "kk": "Өтініш"},
+            }, ensure_ascii=False)})
+            preview = templates._preview(conn, order_id)
+            assert not preview["items"][0]["blocked"]
+            assert templates._blocks(conn, order_id, [item_id]) == []
+
+            templates.apply_template_application_tx(
+                conn, order_id, hr, expected_document_revision=preview["order_revision"])
+
+            blocks = templates._blocks(conn, order_id, [item_id])
+            assert len(blocks) == 8
+            generated = {(block["scope"], block["locale"], block["block_type"]): block["generated_text"]
+                         for block in blocks}
+            for locale in ("ru", "kk"):
+                assert generated[("ORDER", locale, "title")] == preview["order_proposed"][f"title_{locale}"]
+                assert generated[("ITEM", locale, "body")] == preview["items"][0]["proposed"][f"body_{locale}"]
+                assert "0,75" in generated[("ITEM", locale, "body")]
+        finally:
+            txn.rollback()
 def test_new_candidate_statement_card_gate_visa_and_reapproval(monkeypatch):
     with engine.connect() as conn:
         txn = conn.begin()
