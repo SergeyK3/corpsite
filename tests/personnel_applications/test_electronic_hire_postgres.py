@@ -67,6 +67,11 @@ def _complete_card(conn, person_id: int):
         VALUES (:id, '+77001234567')
         ON CONFLICT (person_id) DO UPDATE SET mobile_phone=EXCLUDED.mobile_phone
     """), {"id": person_id})
+    conn.execute(text("""
+        INSERT INTO public.person_education(person_id, education_kind, institution_name)
+        SELECT :id, code, 'Вымышленный учебный центр'
+        FROM public.education_program_kinds ORDER BY code LIMIT 1
+    """), {"id": person_id})
 
 
 def test_hire_approval_tasks_follow_visa_and_condition_revisions(monkeypatch):
@@ -151,11 +156,6 @@ def test_hire_approval_tasks_follow_visa_and_condition_revisions(monkeypatch):
                                 {"id": application.application_id}).scalar_one() == 4
         finally:
             txn.rollback()
-    conn.execute(text("""
-        INSERT INTO public.person_education(person_id, education_kind, institution_name)
-        SELECT :id, code, 'Вымышленный учебный центр'
-        FROM public.education_program_kinds ORDER BY code LIMIT 1
-    """), {"id": person_id})
 
 
 def test_first_published_hire_template_application_creates_editorial_blocks():

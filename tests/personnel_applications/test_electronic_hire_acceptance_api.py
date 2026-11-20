@@ -20,6 +20,57 @@ def _as_user(user_id: int, role_id: int):
     app.dependency_overrides[get_current_user] = lambda: {"user_id": user_id, "role_id": role_id}
 
 
+def test_hire_approval_is_visible_in_task_inbox_only_to_appointed_head():
+    with engine.begin() as conn:
+        application, head, unit, _, _ = _setup(conn)
+        _complete_card(conn, application.person_id)
+        create_hire_order_draft_for_application(conn, application_id=application.application_id,
+                                                created_by_user_id=head)
+        role = int(conn.execute(text("SELECT role_id FROM public.users WHERE user_id=:id"),
+                                {"id": head}).scalar_one())
+        other = int(conn.execute(text("""
+            INSERT INTO public.users(full_name, role_id, unit_id, is_active, login)
+            VALUES ('Вымышленный коллега', :role, :unit, TRUE, :login)
+            RETURNING user_id
+        """), {"role": role, "unit": unit, "login": f"eha-colleague-{uuid4().hex}"}).scalar_one())
+    client = TestClient(app)
+    try:
+        _as_user(head, role)
+        period = client.get("/periods/current")
+        assert period.status_code == 200, period.text
+        period_id = period.json()["period_id"]
+        assert period_id > 0
+        active = client.get("/tasks", params={"scope": "mine", "status_filter": "active",
+                                              "period_id": period_id})
+        assert active.status_code == 200, active.text
+        task = next(item for item in active.json()["items"]
+                    if item.get("electronic_hire_application_id") == application.application_id)
+        assert task["status_code"] == "IN_PROGRESS"
+        assert task["executor_user_id"] == head
+        assert "Тестова Айгуль" in task["title"] and "0,75" in task["description"]
+        task_id = task["task_id"]
+
+        _as_user(other, role)
+        foreign = client.get("/tasks", params={"scope": "mine", "status_filter": "active",
+                                               "period_id": period_id})
+        assert foreign.status_code == 200, foreign.text
+        assert all(item["task_id"] != task_id for item in foreign.json()["items"])
+        assert client.get(f"/tasks/{task_id}").status_code == 404
+
+        _as_user(head, role)
+        visa = client.post(f"/directory/electronic-hire/applications/{application.application_id}/visa",
+                           json={"decision": "rejected", "explanation": "Тестовое пояснение"})
+        assert visa.status_code == 200, visa.text
+        rejected = client.get("/tasks", params={"scope": "mine", "status_filter": "rejected",
+                                                "period_id": period_id})
+        assert rejected.status_code == 200, rejected.text
+        item = next(item for item in rejected.json()["items"] if item["task_id"] == task_id)
+        assert item["electronic_hire_decision"] == "rejected"
+        assert item["electronic_hire_explanation"] == "Тестовое пояснение"
+    finally:
+        app.dependency_overrides.pop(get_current_user, None)
+
+
 def test_search_excludes_active_and_api_print_uses_actual_fields():
     with engine.begin() as conn:
         former, hr, _, _, _ = _setup(conn, former=True)
