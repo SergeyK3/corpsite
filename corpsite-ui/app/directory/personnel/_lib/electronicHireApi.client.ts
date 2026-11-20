@@ -53,13 +53,16 @@ export function sendElectronicHireLinkTelegram(applicationId: number) {
   return apiFetchJson<{status: string; last_error?: string | null}>(`${base}/applications/${applicationId}/intake-link/telegram`, {method: "POST"});
 }
 
+export type HireVisa = {visa_id?: number; decision: string; is_current: boolean; explanation?: string | null;
+  decided_by_user_id: number; decided_by_name: string | null; decided_at: string};
+
 export type HireApprovalItem = { application_id: number; full_name: string; org_unit: string;
   position: string; employment_rate: number | string; planned_start_date: string;
-  current_visa: {decision: string; is_current: boolean; explanation?: string | null;
-    decided_by_user_id: number; decided_by_name: string | null; decided_at: string} | null };
+  current_visa: HireVisa | null; visa_history?: HireVisa[] };
 
-export function listHireApprovals() {
-  return apiFetchJson<{items: HireApprovalItem[]}>(`${base}/approvals`);
+export function listHireApprovals(applicationId?: number) {
+  const target = applicationId && applicationId > 0 ? `?application_id=${applicationId}` : "";
+  return apiFetchJson<{items: HireApprovalItem[]}>(`${base}/approvals${target}`);
 }
 
 export function recordHireVisa(applicationId: number, decision: "approved" | "rejected", explanation?: string) {

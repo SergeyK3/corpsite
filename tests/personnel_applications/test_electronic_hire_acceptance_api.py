@@ -69,6 +69,13 @@ def test_hire_approval_is_visible_in_task_inbox_only_to_appointed_head():
         assert saved_visa["decided_by_name"]
         assert saved_visa["decided_at"]
         assert saved_visa["explanation"] == "Тестовое пояснение"
+        target = client.get("/directory/electronic-hire/approvals",
+                            params={"application_id": application.application_id})
+        assert target.status_code == 200, target.text
+        saved = next(item for item in target.json()["items"]
+                     if item["application_id"] == application.application_id)
+        assert saved["visa_history"][0]["decision"] == "rejected"
+        assert saved["visa_history"][0]["decided_by_name"] == saved_visa["decided_by_name"]
         rejected = client.get("/tasks", params={"scope": "mine", "status_filter": "rejected",
                                                 "period_id": period_id})
         assert rejected.status_code == 200, rejected.text
@@ -153,6 +160,8 @@ def test_http_stale_visa_foreign_head_and_signed_copy(tmp_path, monkeypatch):
     try:
         _as_user(foreign_head, foreign_role)
         assert client.get("/directory/electronic-hire/approvals").json()["items"] == []
+        assert client.get("/directory/electronic-hire/approvals",
+                          params={"application_id": aid}).json()["items"] == []
         assert client.get(f"/directory/electronic-hire/applications/{aid}").status_code == 403
         assert client.get(f"/directory/electronic-hire/applications/{aid}/print").status_code == 403
         assert client.get(f"/directory/electronic-hire/orders/{oid}/application").status_code == 403
@@ -177,6 +186,12 @@ def test_http_stale_visa_foreign_head_and_signed_copy(tmp_path, monkeypatch):
             "planned_start_date": str(date(2026, 12, 2)),
         })
         assert changed.status_code == 200, changed.text
+        pending = client.get("/directory/electronic-hire/approvals",
+                             params={"application_id": aid})
+        assert pending.status_code == 200, pending.text
+        pending_item = next(item for item in pending.json()["items"] if item["application_id"] == aid)
+        assert pending_item["current_visa"]["is_current"] is False
+        assert pending_item["visa_history"][0]["decision"] == "approved"
         history = client.get(f"/directory/electronic-hire/applications/{aid}/visas")
         assert history.status_code == 200 and history.json()["items"][0]["is_current"] is False
 
@@ -193,5 +208,12 @@ def test_http_stale_visa_foreign_head_and_signed_copy(tmp_path, monkeypatch):
         assert "виз" in applied.text.lower()
         with engine.connect() as conn:
             assert conn.execute(text("SELECT count(*) FROM public.employee_events WHERE order_id=:id"), {"id": oid}).scalar_one() == 0
+        new_visa = client.post(f"/directory/electronic-hire/applications/{aid}/visa",
+                               json={"decision": "rejected", "explanation": "Новая дата не подходит"})
+        assert new_visa.status_code == 200, new_visa.text
+        worked = client.get("/directory/electronic-hire/approvals", params={"application_id": aid})
+        worked_item = next(item for item in worked.json()["items"] if item["application_id"] == aid)
+        assert worked_item["current_visa"]["is_current"] is True
+        assert [visa["decision"] for visa in worked_item["visa_history"][:2]] == ["rejected", "approved"]
     finally:
         app.dependency_overrides.pop(get_current_user, None)

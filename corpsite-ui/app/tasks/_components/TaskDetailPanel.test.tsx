@@ -48,6 +48,8 @@ describe("TaskDetailPanel report link", () => {
     expect(screen.getByRole("link", { name: "Перейти к визе заявления №26" }))
       .toHaveAttribute("href", "/directory/personnel/hire-approvals?application_id=26#hire-approval-26");
     expect(screen.getByText(/Пояснение: Не подходит дата начала/)).toBeInTheDocument();
+    expect(screen.getByText("Кадровый процесс")).toBeInTheDocument();
+    expect(screen.getByText("Приём на работу")).toBeInTheDocument();
     expect(screen.queryByText("Отчёт не отправлен")).not.toBeInTheDocument();
   });
 

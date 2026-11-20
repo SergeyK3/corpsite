@@ -2,7 +2,7 @@
 
 import * as React from "react";
 
-import { taskActionLabel, taskSourceLabel, taskStatusLabel, uiFieldLabel } from "@/lib/i18n";
+import { personnelProcessLabel, taskActionLabel, taskSourceLabel, taskStatusLabel, uiFieldLabel } from "@/lib/i18n";
 import { splitTaskDescription } from "@/lib/taskDescription";
 import {
   isHttpUrl,
@@ -268,6 +268,7 @@ export default function TaskDetailPanel({
   const selectedStatus = React.useMemo(() => statusTextOf(selectedItem), [selectedItem]);
   const selectedReportUiState = React.useMemo(() => computeReportUiState(selectedItem), [selectedItem]);
   const hireApplicationId = Number(selectedItem?.electronic_hire_application_id || 0);
+  const personnelProcess = personnelProcessLabel(selectedItem?.source_kind);
   const selectedExecutorRole = React.useMemo(() => executorRoleLabelOf(selectedItem), [selectedItem]);
   const selectedExecutorPerson = React.useMemo(() => executorPersonLabelOf(selectedItem), [selectedItem]);
   const resolvedReportLink = React.useMemo(
@@ -336,9 +337,9 @@ export default function TaskDetailPanel({
               </div>
 
               <div className="rounded-xl border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-950 p-4">
-                <div className="text-xs text-zinc-600 dark:text-zinc-400">Источник</div>
+                <div className="text-xs text-zinc-600 dark:text-zinc-400">{personnelProcess ? "Кадровый процесс" : "Источник"}</div>
                 <div className="mt-1 text-sm text-zinc-900 dark:text-zinc-50">
-                  {taskSourceLabel(selectedItem?.source_kind)}
+                  {personnelProcess ?? taskSourceLabel(selectedItem?.source_kind)}
                 </div>
               </div>
 

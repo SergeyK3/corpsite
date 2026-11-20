@@ -30,12 +30,15 @@ export default function HireApprovalsClient() {
   const [error, setError] = React.useState("");
   const [success, setSuccess] = React.useState<{ applicationId: number; message: string } | null>(null);
   const [loading, setLoading] = React.useState(true);
+  const [tab, setTab] = React.useState<"pending" | "worked">("pending");
   const [busy, setBusy] = React.useState<number | null>(null);
   const busyRef = React.useRef<number | null>(null);
+  const deepLinkHandled = React.useRef(false);
 
   const load = React.useCallback(async () => {
     try {
-      const result = await listHireApprovals();
+      const target = Number(new URLSearchParams(window.location.search).get("application_id"));
+      const result = await listHireApprovals(target > 0 ? target : undefined);
       setItems(result.items);
       setError("");
     } catch (e) {
@@ -46,11 +49,21 @@ export default function HireApprovalsClient() {
   }, []);
   React.useEffect(() => { void load(); }, [load]);
   React.useEffect(() => {
+    if (loading || deepLinkHandled.current) return;
     const target = Number(new URLSearchParams(window.location.search).get("application_id"));
-    if (target > 0 && items.some(item => item.application_id === target)) {
+    const item = items.find(candidate => candidate.application_id === target);
+    deepLinkHandled.current = true;
+    if (item) setTab(item.current_visa?.is_current ? "worked" : "pending");
+  }, [items, loading]);
+  React.useEffect(() => {
+    const target = Number(new URLSearchParams(window.location.search).get("application_id"));
+    if (target > 0 && items.some(item => item.application_id === target &&
+        Boolean(item.current_visa?.is_current) === (tab === "worked"))) {
       document.getElementById(`hire-approval-${target}`)?.scrollIntoView?.({ block: "center" });
     }
-  }, [items]);
+  }, [items, tab]);
+
+  const visibleItems = items.filter(item => Boolean(item.current_visa?.is_current) === (tab === "worked"));
 
   async function decide(id: number, decision: "approved" | "rejected") {
     if (busyRef.current !== null) return;
@@ -62,6 +75,7 @@ export default function HireApprovalsClient() {
       await recordHireVisa(id, decision, notes[id]);
       setSuccess({ applicationId: id, message: decision === "approved"
         ? `Заявление №${id} согласовано` : `По заявлению №${id} сохранён отказ` });
+      setTab("worked");
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Не удалось сохранить визу.");
@@ -74,12 +88,31 @@ export default function HireApprovalsClient() {
   return <main className="mx-auto max-w-5xl space-y-5 p-6 text-zinc-900">
     <h1 className="text-2xl font-semibold">Согласование заявлений о приёме</h1>
     <p className="text-sm text-zinc-600">Показаны заявления только вашего отделения. Решение сохраняет условия приёма и время визы.</p>
+    <nav aria-label="Состояние согласований" className="flex gap-2 border-b border-zinc-200">
+      <button type="button" aria-current={tab === "pending" ? "page" : undefined} onClick={() => setTab("pending")}
+        className={`px-4 py-2 text-sm font-medium ${tab === "pending" ? "border-b-2 border-blue-700 text-blue-800" : "text-zinc-600"}`}>
+        На согласовании
+      </button>
+      <button type="button" aria-current={tab === "worked" ? "page" : undefined} onClick={() => setTab("worked")}
+        className={`px-4 py-2 text-sm font-medium ${tab === "worked" ? "border-b-2 border-blue-700 text-blue-800" : "text-zinc-600"}`}>
+        Отработано
+      </button>
+    </nav>
     {error && <p role="alert" className="rounded border border-red-300 bg-red-50 p-3 text-sm font-medium text-red-800">{error}</p>}
+    {success && <div role="status" aria-live="polite"
+      className="space-y-3 rounded-lg border border-emerald-500 bg-emerald-100 px-4 py-3 font-semibold text-emerald-900">
+      <p>{success.message}</p>
+      <button type="button" onClick={() => { setSuccess(null); setTab("pending"); }}
+        className="rounded bg-emerald-800 px-3 py-2 text-sm text-white">Вернуться к ожидающим согласования</button>
+    </div>}
     {loading && <p className="rounded border p-4 text-sm">Загрузка заявлений…</p>}
-    {!loading && items.length === 0 && <p className="rounded border p-4 text-sm">Заявлений на согласование нет.</p>}
-    {items.map(item => {
+    {!loading && visibleItems.length === 0 && <p className="rounded border p-4 text-sm">
+      {tab === "pending" ? "Заявлений на согласование нет." : "Отработанных заявлений нет."}
+    </p>}
+    {visibleItems.map(item => {
       const visa = item.current_visa;
       const hasCurrentVisa = Boolean(visa?.is_current);
+      const history = (item.visa_history || []).filter(previous => !hasCurrentVisa || previous.visa_id !== visa?.visa_id);
       return <section id={`hire-approval-${item.application_id}`} key={item.application_id}
         className="scroll-mt-6 space-y-4 rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-2">
@@ -88,11 +121,6 @@ export default function HireApprovalsClient() {
             {hasCurrentVisa ? visa?.decision === "approved" ? "Согласовано" : "Отказ" : "Ожидает решения"}
           </span>
         </div>
-
-        {success?.applicationId === item.application_id && <p role="status" aria-live="polite"
-          className="rounded-lg border border-emerald-500 bg-emerald-100 px-4 py-3 font-semibold text-emerald-900">
-          {success.message}
-        </p>}
 
         <dl className="grid gap-3 rounded-lg bg-zinc-50 p-4 text-sm sm:grid-cols-2">
           <div><dt className="text-zinc-600">Отделение</dt><dd className="mt-1 font-medium">{item.org_unit}</dd></div>
@@ -105,9 +133,22 @@ export default function HireApprovalsClient() {
           <p><span className="text-zinc-600">Решение:</span> <strong>{visa.decision === "approved" ? "Согласовано" : "Отказ"}</strong></p>
           <p><span className="text-zinc-600">Автор:</span> {visa.decided_by_name || `Пользователь №${visa.decided_by_user_id}`}</p>
           <p><span className="text-zinc-600">Дата и время:</span> {formatDecisionTime(visa.decided_at)} (Кызылорда)</p>
-          {visa.explanation && <p><span className="text-zinc-600">Пояснение:</span> {visa.explanation}</p>}
+          <p><span className="text-zinc-600">Пояснение:</span> {visa.explanation || "—"}</p>
           {!visa.is_current && <p className="font-medium text-amber-700">Условия изменились. Требуется новая виза.</p>}
         </div>}
+
+        {history.length > 0 && <details className="rounded-lg border border-zinc-200 p-4 text-sm">
+          <summary className="cursor-pointer font-medium">История виз ({history.length})</summary>
+          <ol className="mt-3 space-y-3">
+            {history.map(previous =>
+              <li key={previous.visa_id} className="border-t border-zinc-200 pt-3">
+                <p>Решение: {previous.decision === "approved" ? "Согласовано" : "Отказ"}</p>
+                <p>Автор: {previous.decided_by_name || `Пользователь №${previous.decided_by_user_id}`}</p>
+                <p>Дата и время: {formatDecisionTime(previous.decided_at)} (Кызылорда)</p>
+                <p>Пояснение: {previous.explanation || "—"}</p>
+              </li>) }
+          </ol>
+        </details>}
 
         {!hasCurrentVisa && <>
           <label className="block text-sm">Пояснение при отказе

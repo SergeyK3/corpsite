@@ -263,7 +263,8 @@ def post_electronic_hire_notification_retry(application_id: int, user: dict = De
 
 
 @router.get("/approvals")
-def list_head_electronic_hire_approvals(user: dict = Depends(get_current_user)) -> dict:
+def list_head_electronic_hire_approvals(application_id: int | None = None,
+                                       user: dict = Depends(get_current_user)) -> dict:
     actor = user.get("user_id") or user.get("id")
     if not actor:
         raise HTTPException(401, "Unauthorized")
@@ -273,23 +274,37 @@ def list_head_electronic_hire_approvals(user: dict = Depends(get_current_user)) 
             JOIN public.electronic_hire_applications e USING (application_id)
             JOIN public.org_unit_managers m ON m.unit_id=a.intended_org_unit_id
             JOIN public.users u ON u.user_id=m.user_id
-            WHERE a.personnel_order_id IS NOT NULL AND a.status <> 'completed'
+            WHERE a.personnel_order_id IS NOT NULL
+              AND a.status NOT IN ('cancelled', 'withdrawn', 'expired')
               AND m.user_id=:actor AND upper(btrim(m.manager_type))='HEAD'
               AND m.is_active=TRUE AND u.is_active=TRUE
               AND (m.date_from IS NULL OR m.date_from <= CURRENT_DATE)
               AND (m.date_to IS NULL OR m.date_to >= CURRENT_DATE)
-            ORDER BY a.application_id DESC LIMIT 100
-        """), {"actor": int(actor)}).mappings().all()
+            ORDER BY CASE WHEN a.application_id=:target THEN 0 ELSE 1 END,
+                     a.application_id DESC LIMIT 100
+        """), {"actor": int(actor), "target": application_id or 0}).mappings().all()
         items = []
         for row in rows:
             app = load_electronic_hire(conn, int(row["application_id"]))
             if resolve_unit_head(conn, int(app["intended_org_unit_id"])) != int(actor):
                 continue
+            visa = current_visa(conn, app)
+            if app["status"] == "completed" and (visa is None or not visa["is_current"]):
+                continue
+            history = conn.execute(text("""
+                SELECT v.visa_id, v.decision, v.explanation, v.conditions_hash,
+                       v.decided_by_user_id, u.full_name AS decided_by_name, v.decided_at
+                FROM public.electronic_hire_visas v
+                JOIN public.users u ON u.user_id=v.decided_by_user_id
+                WHERE v.application_id=:id ORDER BY v.visa_id DESC
+            """), {"id": app["application_id"]}).mappings().all()
             items.append({"application_id": app["application_id"], "full_name": app["full_name"],
                           "org_unit": app["org_unit_ru"], "position": app["position_ru"],
                           "employment_rate": app["intended_employment_rate"],
                           "planned_start_date": app["planned_start_date"],
-                          "current_visa": current_visa(conn, app)})
+                          "current_visa": visa,
+                          "visa_history": [{**dict(row), "is_current": row["conditions_hash"] == conditions_hash(app)}
+                                           for row in history]})
         return {"items": items}
 
 
