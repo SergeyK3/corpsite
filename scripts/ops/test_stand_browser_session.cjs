@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 "use strict";
 
-// Reusable browser entry for the protected acceptance stand. Credentials and
+// Reusable browser entry for the acceptance stand. Application credentials and
 // storage state stay in the server's private directory, never in this source.
 const fs = require("node:fs");
 const path = require("node:path");
@@ -42,7 +42,9 @@ function accountPassword(file, accountKey) {
 async function saveState(context, sessionFile) {
   const temporary = `${sessionFile}.${process.pid}.tmp`;
   try {
-    await context.storageState({ path: temporary });
+    const state = await context.storageState();
+    state.cookies = state.cookies.filter(cookie => cookie.name !== "corpsite_test_access");
+    fs.writeFileSync(temporary, JSON.stringify(state), { flag: "wx", mode: 0o600 });
     fs.chmodSync(temporary, 0o600);
     fs.renameSync(temporary, sessionFile);
   } finally {
@@ -63,20 +65,28 @@ async function main() {
       route.startsWith("//") || route.includes("\\") || !readySelector) throw new Error("invalid_check_arguments");
 
   const sessionDirectory = process.env.TEST_STAND_SESSION_DIR;
-  const gateFile = process.env.TEST_STAND_GATE_PASSWORD_FILE;
   const accountsFile = process.env.TEST_STAND_ACCOUNTS_FILE;
-  if (!sessionDirectory || !gateFile || !accountsFile) throw new Error("missing_private_environment");
+  if (!sessionDirectory || !accountsFile) throw new Error("missing_private_environment");
   privateDirectory(sessionDirectory);
   const sessionFile = path.join(sessionDirectory, `${accountKey}.json`);
   const hasState = fs.existsSync(sessionFile);
-  if (hasState) privateFile(sessionFile);
+  let storedState;
+  if (hasState) {
+    const raw = privateFile(sessionFile);
+    try {
+      storedState = JSON.parse(raw);
+      storedState.cookies = (storedState.cookies || []).filter(cookie => cookie.name !== "corpsite_test_access");
+    } catch {
+      storedState = undefined;
+    }
+  }
 
   const browser = await chromium.launch({ headless: true, args: ["--no-sandbox"] });
   let context;
   let step = "open";
   try {
     try {
-      context = await browser.newContext(hasState ? { storageState: sessionFile } : {});
+      context = await browser.newContext(storedState ? { storageState: storedState } : {});
     } catch {
       context = await browser.newContext();
     }
@@ -86,7 +96,6 @@ async function main() {
       const pathname = new URL(request.url()).pathname;
       if (pathname.startsWith("/api/")) apiRequests.push(pathname);
     });
-    let gateLogin = false;
     let accountLogin = false;
     const targetUrl = new URL(route, origin);
     if (targetUrl.origin !== origin.origin) throw new Error("unexpected_target_origin");
@@ -97,12 +106,7 @@ async function main() {
       await page.goto(target, { waitUntil: "domcontentloaded" });
       if (new URL(page.url()).origin !== origin.origin) throw new Error("unexpected_redirect_origin");
       if (new URL(page.url()).pathname === "/_unlock") {
-        step = "gateway";
-        await page.locator("input[name=password]").fill(privateFile(gateFile).trim());
-        await page.getByRole("button", { name: "Enter" }).click();
-        await page.waitForURL(url => url.pathname !== "/_unlock", { timeout: 20000 });
-        gateLogin = true;
-        continue;
+        throw new Error("unexpected_gateway_route");
       }
 
       step = "session_check";
@@ -135,7 +139,7 @@ async function main() {
       const afterSettled = apiRequests.slice(settledAt);
       if (afterSettled.length) throw new Error("repeated_api_requests");
       await saveState(context, sessionFile);
-      console.log(`stand=ready gateway=${gateLogin ? "renewed" : "reused"} account=${accountLogin ? "renewed" : "reused"} idle_api_requests=0`);
+      console.log(`stand=ready account=${accountLogin ? "renewed" : "reused"} idle_api_requests=0`);
       return;
     }
     throw new Error("authentication_retry_limit");
