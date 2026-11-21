@@ -55,7 +55,7 @@ function tabButtonClass(active: boolean): string {
 
 export default function SystemAdminClient() {
   const me = useCurrentUser();
-  const canManageHireRollout = me?.role_code === "ADMIN" || me?.role_code === "SYSADMIN";
+  const canManageHireRollout = me?.is_system_admin === true;
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<MainTab>(searchParams.get("section") === "data-cleanup" ? "data-cleanup" : "users");
 

@@ -9,17 +9,13 @@ from sqlalchemy import text
 
 from app.db.engine import engine
 from app.security.admin_guard import require_sysadmin_api
+from app.security.directory_scope import is_system_admin
 
 router = APIRouter(prefix="/hire-approval-rollout", tags=["admin-hire-approval"])
 
 
 def require_hire_rollout_admin(admin: dict[str, Any] = Depends(require_sysadmin_api)) -> dict[str, Any]:
-    with engine.connect() as conn:
-        role_code = conn.execute(text("""
-            SELECT r.code FROM public.users u JOIN public.roles r ON r.role_id=u.role_id
-            WHERE u.user_id=:id AND u.is_active=TRUE
-        """), {"id": int(admin["user_id"])}).scalar_one_or_none()
-    if role_code not in {"ADMIN", "SYSADMIN"}:
+    if not is_system_admin(admin):
         raise HTTPException(403, "Только системный администратор может менять порядок согласования.")
     return admin
 

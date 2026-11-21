@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { listHireApprovals, recordHireVisa, type HireApprovalItem } from "../_lib/electronicHireApi.client";
+import { getHireApprovalStatement, listHireApprovals, recordHireVisa, type HireApprovalItem } from "../_lib/electronicHireApi.client";
 
 function formatRate(value: number | string): string {
   const rate = Number(value);
@@ -26,12 +26,16 @@ function formatDecisionTime(value: string): string {
 
 export default function HireApprovalsClient() {
   const [items, setItems] = React.useState<HireApprovalItem[]>([]);
-  const [notes, setNotes] = React.useState<Record<number, string>>({});
+  const [objectionId, setObjectionId] = React.useState<number | null>(null);
+  const [objectionReason, setObjectionReason] = React.useState("");
+  const [reasonError, setReasonError] = React.useState("");
   const [error, setError] = React.useState("");
   const [success, setSuccess] = React.useState<{ applicationId: number; message: string } | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [tab, setTab] = React.useState<"pending" | "worked">("pending");
   const [expanded, setExpanded] = React.useState<number | null>(null);
+  const [statement, setStatement] = React.useState("");
+  const [statementError, setStatementError] = React.useState("");
   const [busy, setBusy] = React.useState<number | null>(null);
   const busyRef = React.useRef<number | null>(null);
   const deepLinkHandled = React.useRef(false);
@@ -65,17 +69,36 @@ export default function HireApprovalsClient() {
   }, [items, tab]);
 
   const visibleItems = items.filter(item => Boolean(item.current_visa?.is_current) === (tab === "worked"));
+  React.useEffect(() => {
+    if (expanded === null) return;
+    let active = true;
+    setStatement("");
+    setStatementError("");
+    void getHireApprovalStatement(expanded).then(result => {
+      if (active) setStatement(result.ru);
+    }).catch(e => {
+      if (active) setStatementError(e instanceof Error ? e.message : "Не удалось загрузить заявление.");
+    });
+    return () => { active = false; };
+  }, [expanded]);
 
   async function decide(id: number, decision: "approved" | "rejected") {
     if (busyRef.current !== null) return;
+    if (decision === "rejected" && !objectionReason.trim()) {
+      setReasonError("Укажите причину возражения.");
+      return;
+    }
     busyRef.current = id;
     setBusy(id);
     setError("");
     setSuccess(null);
     try {
-      await recordHireVisa(id, decision, notes[id]);
+      await recordHireVisa(id, decision, decision === "rejected" ? objectionReason.trim() : undefined);
       setSuccess({ applicationId: id, message: decision === "approved"
-        ? `Заявление №${id} согласовано` : `По заявлению №${id} сохранён отказ` });
+        ? `Заявление №${id} согласовано` : `По заявлению №${id} сохранено возражение` });
+      setObjectionId(null);
+      setObjectionReason("");
+      setReasonError("");
       setTab("worked");
       await load();
     } catch (e) {
@@ -86,7 +109,7 @@ export default function HireApprovalsClient() {
     }
   }
 
-  return <main className="mx-auto max-w-5xl space-y-5 p-6 text-zinc-900">
+  return <main className="mx-auto max-w-7xl space-y-5 p-6 text-zinc-900">
     <h1 className="text-2xl font-semibold">Согласование заявлений</h1>
     <p className="text-sm text-zinc-600">Показаны доступные вам заявления. Решение сохраняет условия приёма и время согласования.</p>
     <nav aria-label="Состояние согласований" className="flex gap-2 border-b border-zinc-200">
@@ -110,10 +133,30 @@ export default function HireApprovalsClient() {
     {!loading && visibleItems.length === 0 && <p className="rounded border p-4 text-sm">
       {tab === "pending" ? "Заявлений на согласование нет." : "Отработанных заявлений нет."}
     </p>}
+    {tab === "pending" && visibleItems.length > 0 && <div className="overflow-x-auto rounded border border-zinc-200 bg-white">
+      <table className="w-full min-w-[1050px] border-collapse text-left text-sm">
+        <thead className="bg-zinc-50"><tr>{["№ заявления", "Тип заявления", "ФИО", "Отделение", "Должность", "Ставка", "Дата начала", "Статус", "Действия"].map(title => <th key={title} className="border-b p-2 font-medium">{title}</th>)}</tr></thead>
+        <tbody>{visibleItems.map(item => <tr id={`hire-approval-${item.application_id}`} key={item.application_id} className="scroll-mt-6 border-b align-top">
+          <td className="p-2">№{item.application_id}</td>
+          <td className="p-2">{item.application_type_label || "Приём на работу"}</td>
+          <td className="p-2">{item.full_name}</td>
+          <td className="p-2">{item.org_unit}</td>
+          <td className="p-2">{item.position}</td>
+          <td className="p-2">{formatRate(item.employment_rate)}</td>
+          <td className="p-2">{formatDate(item.planned_start_date)}</td>
+          <td className="p-2">{item.current_visa ? "Требуется новая виза" : "Ожидает решения"}</td>
+          <td className="p-2"><div className="flex flex-wrap gap-2 whitespace-nowrap">
+            <button type="button" className="text-blue-700 underline" onClick={() => setExpanded(expanded === item.application_id ? null : item.application_id)}>Открыть</button>
+            <button type="button" disabled={busy !== null} className="text-emerald-700 underline disabled:opacity-50" onClick={() => void decide(item.application_id, "approved")}>{busy === item.application_id ? "Сохранение…" : "Согласие"}</button>
+            <button type="button" disabled={busy !== null} className="text-red-700 underline disabled:opacity-50" onClick={() => { setObjectionId(item.application_id); setObjectionReason(""); setReasonError(""); }}>Возражение</button>
+          </div></td>
+        </tr>)}</tbody>
+      </table>
+    </div>}
     {tab === "worked" && visibleItems.length > 0 && <div className="overflow-x-auto rounded border border-zinc-200 bg-white">
       <table className="w-full min-w-[1150px] border-collapse text-left text-sm">
         <thead className="bg-zinc-50"><tr>{["№ заявления", "Тип заявления", "ФИО", "Отделение", "Должность", "Ставка", "Дата начала работы", "Решение", "Кто согласовал", "Дата и время решения", "Пояснение", ""].map(title => <th key={title} className="border-b p-2 font-medium">{title}</th>)}</tr></thead>
-        <tbody>{visibleItems.map(item => { const visa = item.current_visa!; return <tr key={item.application_id} className="border-b align-top">
+        <tbody>{visibleItems.map(item => { const visa = item.current_visa!; return <tr id={`hire-approval-${item.application_id}`} key={item.application_id} className="scroll-mt-6 border-b align-top">
           <td className="p-2"><button type="button" className="font-medium text-blue-700 underline" onClick={() => setExpanded(expanded === item.application_id ? null : item.application_id)}>№{item.application_id}</button></td>
           <td className="p-2">{item.application_type_label || "Приём на работу"}</td><td className="p-2">{item.full_name}</td>
           <td className="p-2">{item.org_unit}</td><td className="p-2">{item.position}</td>
@@ -127,11 +170,11 @@ export default function HireApprovalsClient() {
         </tr>; })}</tbody>
       </table>
     </div>}
-    {visibleItems.filter(item => tab === "pending" || expanded === item.application_id).map(item => {
+    {visibleItems.filter(item => expanded === item.application_id).map(item => {
       const visa = item.current_visa;
       const hasCurrentVisa = Boolean(visa?.is_current);
       const history = (item.visa_history || []).filter(previous => !hasCurrentVisa || previous.visa_id !== visa?.visa_id);
-      return <section id={`hire-approval-${item.application_id}`} key={item.application_id}
+      return <section key={item.application_id}
         className="scroll-mt-6 space-y-4 rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-2">
           <h2 className="font-semibold">Заявление №{item.application_id} · {item.full_name}</h2>
@@ -147,6 +190,12 @@ export default function HireApprovalsClient() {
           <div><dt className="text-zinc-600">Ставка</dt><dd className="mt-1 font-medium">{formatRate(item.employment_rate)}</dd></div>
           <div><dt className="text-zinc-600">Дата начала</dt><dd className="mt-1 font-medium">{formatDate(item.planned_start_date)}</dd></div>
         </dl>
+
+        <div className="rounded-lg border border-zinc-200 p-4 text-sm">
+          <h3 className="font-medium">Заявление</h3>
+          {statement ? <pre className="mt-2 whitespace-pre-wrap font-sans">{statement}</pre> :
+            <p className="mt-2" role={statementError ? "alert" : undefined}>{statementError || "Загрузка заявления…"}</p>}
+        </div>
 
         {visa && <div className="space-y-1 rounded-lg border border-zinc-200 p-4 text-sm">
           <p><span className="text-zinc-600">Решение:</span> <strong>{visa.decision === "approved" ? "Согласовано" : "Отказ"}</strong></p>
@@ -180,23 +229,21 @@ export default function HireApprovalsClient() {
           </li>)}</ol>
         </details>}
 
-        {!hasCurrentVisa && <>
-          <label className="block text-sm">Пояснение при отказе
-            <textarea className="mt-1 w-full rounded border border-zinc-300 p-2 disabled:opacity-60"
-              disabled={busy !== null} value={notes[item.application_id] || ""}
-              onChange={e => setNotes({ ...notes, [item.application_id]: e.target.value })} />
-          </label>
-          <div className="flex gap-2">
-            <button disabled={busy !== null} onClick={() => void decide(item.application_id, "approved")}
-              className="rounded bg-emerald-700 px-3 py-2 text-sm text-white disabled:opacity-50">
-              {busy === item.application_id ? "Сохранение…" : "Согласен"}
-            </button>
-            <button disabled={busy !== null || !notes[item.application_id]?.trim()}
-              onClick={() => void decide(item.application_id, "rejected")}
-              className="rounded border border-red-300 px-3 py-2 text-sm text-red-700 disabled:opacity-50">Не согласен</button>
-          </div>
-        </>}
       </section>;
     })}
+    {objectionId !== null && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onMouseDown={e => { if (e.target === e.currentTarget && busy === null) setObjectionId(null); }}>
+      <div role="dialog" aria-modal="true" aria-labelledby="objection-title" className="w-full max-w-md space-y-4 rounded-lg bg-white p-5 shadow-xl" onKeyDown={e => { if (e.key === "Escape" && busy === null) setObjectionId(null); }}>
+        <h2 id="objection-title" className="text-lg font-semibold">Возражение по заявлению №{objectionId}</h2>
+        <label className="block text-sm font-medium">Причина возражения
+          <textarea autoFocus required className="mt-1 w-full rounded border border-zinc-300 p-2" rows={4} disabled={busy !== null} value={objectionReason}
+            onChange={e => { setObjectionReason(e.target.value); setReasonError(""); }} aria-invalid={Boolean(reasonError)} aria-describedby={reasonError ? "objection-error" : undefined} />
+        </label>
+        {reasonError && <p id="objection-error" role="alert" className="text-sm text-red-700">{reasonError}</p>}
+        <div className="flex justify-end gap-2">
+          <button type="button" disabled={busy !== null} onClick={() => setObjectionId(null)} className="rounded border px-3 py-2 text-sm disabled:opacity-50">Отмена</button>
+          <button type="button" disabled={busy !== null} onClick={() => void decide(objectionId, "rejected")} className="rounded bg-red-700 px-3 py-2 text-sm text-white disabled:opacity-50">{busy === objectionId ? "Сохранение…" : "Сохранить возражение"}</button>
+        </div>
+      </div>
+    </div>}
   </main>;
 }

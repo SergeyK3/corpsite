@@ -409,6 +409,20 @@ def list_head_electronic_hire_approvals(application_id: int | None = None,
         return {"items": items}
 
 
+@router.get("/approvals/{application_id}/statement")
+def get_head_electronic_hire_statement(application_id: int,
+                                       user: dict = Depends(get_current_user)) -> dict[str, str]:
+    # Use the same visibility and historical-task rules as the approval list.
+    approvals = list_head_electronic_hire_approvals(application_id=application_id, user=user)
+    if not any(item["application_id"] == application_id for item in approvals["items"]):
+        raise HTTPException(404, "Заявление недоступно для согласования.")
+    try:
+        with engine.connect() as conn:
+            return render_application(conn, application_id)
+    except ElectronicHireError as exc:
+        raise _error(exc) from exc
+
+
 @router.post("/applications/{application_id}/visa")
 def post_head_electronic_hire_visa(application_id: int, body: VisaIn,
                                   user: dict = Depends(get_current_user)) -> dict:

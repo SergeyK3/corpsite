@@ -1,10 +1,12 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const api = vi.hoisted(() => ({ listHireApprovals: vi.fn(), recordHireVisa: vi.fn() }));
+const api = vi.hoisted(() => ({ listHireApprovals: vi.fn(), recordHireVisa: vi.fn(), getHireApprovalStatement: vi.fn() }));
 vi.mock("../_lib/electronicHireApi.client", () => api);
 
 import HireApprovalsClient from "./HireApprovalsClient";
+
+beforeEach(() => api.getHireApprovalStatement.mockResolvedValue({ ru: "Вымышленное заявление о приёме", kk: "" }));
 
 const candidate = {
   application_id: 54,
@@ -39,7 +41,9 @@ describe("HireApprovalsClient", () => {
       } },
     ] });
     render(<HireApprovalsClient />);
-    expect(await screen.findByText(/Заявление №56/)).toBeInTheDocument();
+    expect(await screen.findByRole("table")).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "№56" })).toBeInTheDocument();
+    expect(screen.getByRole("columnheader", { name: "Статус" })).toBeInTheDocument();
     expect(screen.queryByText(/Заявление №54/)).not.toBeInTheDocument();
     expect(screen.queryByText(/Заявление №25/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Отработано" }));
@@ -62,9 +66,9 @@ describe("HireApprovalsClient", () => {
     expect(screen.getByText("05.12.2026")).toBeInTheDocument();
     expect(screen.getByText(/20\.11\.2026.*11:22/)).toBeInTheDocument();
     expect(screen.getByText("Тестовое отделение трансфузиологии")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Согласен" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Не согласен" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("textbox", { name: "Пояснение при отказе" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Согласие" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Возражение" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Причина возражения" })).not.toBeInTheDocument();
   });
 
   it("confirms only after the server succeeds and blocks repeat clicks while saving", async () => {
@@ -74,7 +78,7 @@ describe("HireApprovalsClient", () => {
       .mockResolvedValueOnce({ items: [approved] });
     render(<HireApprovalsClient />);
 
-    const approve = await screen.findByRole("button", { name: "Согласен" });
+    const approve = await screen.findByRole("button", { name: "Согласие" });
     fireEvent.click(approve);
     expect(api.recordHireVisa).toHaveBeenCalledTimes(1);
     expect(screen.queryByText("Заявление №54 согласовано")).not.toBeInTheDocument();
@@ -86,7 +90,7 @@ describe("HireApprovalsClient", () => {
     finishVisa({ decision: "approved" });
     expect(await screen.findByRole("status")).toHaveTextContent("Заявление №54 согласовано");
     expect(screen.getByRole("button", { name: "Вернуться к ожидающим согласования" })).toBeInTheDocument();
-    await waitFor(() => expect(screen.queryByRole("button", { name: "Согласен" })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Согласие" })).not.toBeInTheDocument());
     fireEvent.click(screen.getByRole("button", { name: "Вернуться к ожидающим согласования" }));
     expect(screen.getByText("Заявлений на согласование нет.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Отработано" }));
@@ -97,10 +101,10 @@ describe("HireApprovalsClient", () => {
     api.listHireApprovals.mockResolvedValue({ items: [{ ...candidate, current_visa: null }] });
     api.recordHireVisa.mockRejectedValue(new Error("Сохранение не выполнено"));
     render(<HireApprovalsClient />);
-    fireEvent.click(await screen.findByRole("button", { name: "Согласен" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Согласие" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("Сохранение не выполнено");
     expect(screen.queryByText("Заявление №54 согласовано")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Согласен" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Согласие" })).toBeEnabled();
   });
 
   it("routes a completed task link to worked and returns a changed application to pending with history", async () => {
@@ -121,7 +125,10 @@ describe("HireApprovalsClient", () => {
 
     render(<HireApprovalsClient />);
     await waitFor(() => expect(screen.getByRole("button", { name: "На согласовании" })).toHaveAttribute("aria-current", "page"));
-    expect(screen.getByRole("button", { name: "Согласен" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Согласие" })).toBeInTheDocument();
+    expect(await screen.findByText(/Заявление №54 ·/)).toBeInTheDocument();
+    expect(await screen.findByText("Вымышленное заявление о приёме")).toBeInTheDocument();
+    expect(api.getHireApprovalStatement).toHaveBeenCalledWith(54);
     fireEvent.click(screen.getByText("История виз (2)"));
     expect(screen.getByText(/Старая дата/)).toBeInTheDocument();
     expect(api.listHireApprovals).toHaveBeenCalledWith(54);
@@ -141,6 +148,27 @@ describe("HireApprovalsClient", () => {
     expect(screen.getByText(note.trim())).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", {name: "№70"}));
     expect(screen.getByText(/Кто внёс подтверждение:/)).toBeInTheDocument();
-    expect(screen.queryByRole("button", {name: "Согласен"})).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", {name: "Согласие"})).not.toBeInTheDocument();
+  });
+
+  it("requires a reason in the objection dialog and changes only the selected application", async () => {
+    api.listHireApprovals.mockResolvedValue({ items: [
+      { ...candidate, current_visa: null },
+      { ...candidate, application_id: 55, full_name: "Вымышленная кандидатка Майра", current_visa: null },
+    ] });
+    api.recordHireVisa.mockResolvedValue({ decision: "rejected" });
+    render(<HireApprovalsClient />);
+    await screen.findByRole("table");
+    expect(screen.getAllByRole("button", { name: "Возражение" })).toHaveLength(2);
+    fireEvent.click(screen.getAllByRole("button", { name: "Возражение" })[1]);
+    expect(screen.getByRole("dialog")).toHaveTextContent("№55");
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить возражение" }));
+    expect(screen.getByRole("alert")).toHaveTextContent("Укажите причину возражения");
+    expect(api.recordHireVisa).not.toHaveBeenCalled();
+    fireEvent.change(screen.getByRole("textbox", { name: "Причина возражения" }), { target: { value: "  Требуется уточнить дату  " } });
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить возражение" }));
+    await waitFor(() => expect(api.recordHireVisa).toHaveBeenCalledWith(55, "rejected", "Требуется уточнить дату"));
+    expect(api.recordHireVisa).toHaveBeenCalledTimes(1);
+    expect(await screen.findByRole("status")).toHaveTextContent("№55");
   });
 });

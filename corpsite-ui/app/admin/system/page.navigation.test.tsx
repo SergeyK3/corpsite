@@ -65,6 +65,7 @@ describe("system admin page navigation", () => {
     const activeSection = within(sections).getByRole("button", { name: "Пользователи" });
     expect(activeSection).toHaveAttribute("aria-current", "page");
     expect(activeSection).toHaveClass("border-blue-900", "font-semibold", "ring-2");
+    expect(await screen.findByRole("button", { name: "Внедрение электронного согласования" })).toBeInTheDocument();
   });
 
   it("renders no management link without the request capability", async () => {
@@ -89,5 +90,14 @@ describe("system admin page navigation", () => {
       "href",
       "/admin/system/personnel-lifecycle",
     );
+  });
+
+  it("does not show rollout for a non-system role with an ADMIN code", async () => {
+    vi.mocked(apiAuthMe).mockResolvedValue({
+      user_id: 30, role_id: 4, role_code: "ADMIN", is_system_admin: false, has_sysadmin_api: true,
+    });
+    render(<AppShell><SystemAdminPage /></AppShell>);
+    const sections = await screen.findByRole("navigation", { name: "Разделы кабинета" });
+    expect(within(sections).queryByRole("button", { name: "Внедрение электронного согласования" })).not.toBeInTheDocument();
   });
 });

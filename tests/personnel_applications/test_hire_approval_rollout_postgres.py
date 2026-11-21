@@ -135,7 +135,7 @@ def test_admin_mode_api_audits_change_and_new_application_snapshots_mode():
         actor = int(conn.execute(text("SELECT user_id FROM public.users WHERE is_active ORDER BY user_id LIMIT 1")).scalar_one())
         admin = conn.execute(text("""
             SELECT u.user_id, u.role_id FROM public.users u JOIN public.roles r USING (role_id)
-            WHERE r.code='ADMIN' AND u.is_active=TRUE ORDER BY u.user_id LIMIT 1
+            WHERE u.role_id=2 AND u.is_active=TRUE ORDER BY u.user_id LIMIT 1
         """)).mappings().one()
         hr = conn.execute(text("""
             SELECT u.user_id, u.role_id FROM public.users u JOIN public.roles r USING (role_id)

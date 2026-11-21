@@ -79,6 +79,10 @@ export function listHireApprovals(applicationId?: number) {
   return apiFetchJson<{items: HireApprovalItem[]}>(`${base}/approvals${target}`);
 }
 
+export function getHireApprovalStatement(applicationId: number) {
+  return apiFetchJson<{ru: string; kk: string}>(`${base}/approvals/${applicationId}/statement`);
+}
+
 export function recordHireVisa(applicationId: number, decision: "approved" | "rejected", explanation?: string) {
   return apiFetchJson(`${base}/applications/${applicationId}/visa`, {method: "POST", body: {decision, explanation}});
 }

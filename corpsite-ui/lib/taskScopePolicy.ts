@@ -2,20 +2,7 @@ import type { MeInfo, TaskScope } from "./types";
 
 /** System administrator — task UI admin actions (delete, edit override). */
 export function isTaskSystemAdmin(me: MeInfo | null | undefined): boolean {
-  if (!me) return false;
-
-  const roleId = Number(me.role_id ?? 0);
-  const roleCode = String(me.role_code ?? "").trim().toUpperCase();
-  const roleName = String(me.role_name ?? "").trim().toLowerCase();
-  const roleNameRu = String(me.role_name_ru ?? "").trim().toLowerCase();
-
-  if (roleId === 2) return true;
-  if (me.is_system_admin === true) return true;
-  if (roleCode === "ADMIN" || roleCode === "SYSTEM_ADMIN") return true;
-  if (roleName.includes("system administrator")) return true;
-  if (roleNameRu.includes("системный администратор")) return true;
-
-  return false;
+  return Number(me?.role_id ?? 0) === 2;
 }
 
 /**
