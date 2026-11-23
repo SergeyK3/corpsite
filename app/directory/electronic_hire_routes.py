@@ -4,6 +4,7 @@ from __future__ import annotations
 from datetime import date
 from decimal import Decimal
 import os
+import logging
 from pathlib import Path
 from uuid import uuid4
 
@@ -12,13 +13,14 @@ from typing import Any, Literal
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.auth import get_current_user
 from app.db.engine import engine
 from app.directory.rbac import require_personnel_admin_or_403
 from app.personnel_applications.application.electronic_hire_service import (
     ElectronicHireError, conditions_hash, current_visa, dispatch_approval_notification, load_electronic_hire, mark_candidate_checked,
-    record_visa, render_application, validate_hire_position_input, resolve_unit_head, retry_approval_notification, update_conditions,
+    record_visa, render_application, require_unit_group, validate_hire_position_input, resolve_unit_head, retry_approval_notification, update_conditions,
 )
 from app.personnel_applications.application.registration_service import register_personnel_application
 from app.personnel_applications.domain.errors import (
@@ -37,6 +39,7 @@ from app.security.admin_permissions import POSITION_RECONCILIATION_RESOLVE, has_
 from app.security.directory_scope import is_system_admin
 
 router = APIRouter(prefix="/electronic-hire", tags=["electronic-hire"])
+logger = logging.getLogger(__name__)
 
 
 def _hr_user_id(user: dict) -> int:
@@ -232,6 +235,7 @@ def create_electronic_hire(body: ElectronicHireCreateIn, user: dict = Depends(ge
     actor = _hr_user_id(user)
     try:
         with engine.begin() as conn:
+            org_group_id = require_unit_group(conn, org_unit_id=body.org_unit_id, org_group_id=body.org_group_id)
             position_id, manual_name, manual_document = validate_hire_position_input(
                 conn, org_unit_id=body.org_unit_id, position_id=body.position_id,
                 manual_position_name=body.manual_position_name,
@@ -241,7 +245,7 @@ def create_electronic_hire(body: ElectronicHireCreateIn, user: dict = Depends(ge
                 conn, iin_raw=body.iin, full_name=body.full_name,
                 birth_date=body.birth_date, application_received_at=body.application_received_at,
                 vacancy_check_status="pending", vacancy_checked_at=None,
-                vacancy_checked_by_user_id=None, intended_org_group_id=body.org_group_id,
+                vacancy_checked_by_user_id=None, intended_org_group_id=org_group_id,
                 intended_org_unit_id=body.org_unit_id, intended_position_id=position_id,
                 intended_employment_rate=body.employment_rate, intended_vacancy_text=manual_name,
                 contact_mobile_phone=body.contact_mobile_phone, contact_email=body.contact_email,
@@ -277,8 +281,9 @@ def create_electronic_hire(body: ElectronicHireCreateIn, user: dict = Depends(ge
 @router.get("/applications")
 def list_electronic_hire(user: dict = Depends(get_current_user)) -> dict:
     _hr_user_id(user)
-    with engine.connect() as conn:
-        rows = conn.execute(text("""
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(text("""
             SELECT a.application_id, a.person_id, p.full_name, a.status,
                    a.intended_position_id, a.intended_vacancy_text AS manual_position_name,
                    CASE WHEN a.intended_position_id IS NULL AND a.intended_vacancy_text IS NOT NULL
@@ -289,7 +294,11 @@ def list_electronic_hire(user: dict = Depends(get_current_user)) -> dict:
             JOIN public.persons p ON p.person_id=a.person_id
             WHERE a.status NOT IN ('completed','cancelled','withdrawn','expired')
             ORDER BY a.application_id DESC LIMIT 50
-        """)).mappings().all()
+            """)).mappings().all()
+    except SQLAlchemyError as exc:
+        logger.exception("Could not list electronic hire applications")
+        raise HTTPException(503, {"code": "ELECTRONIC_HIRE_UNAVAILABLE",
+                                  "message": "Сервис заявлений временно недоступен. Повторите загрузку позже."}) from exc
     return {"items": [dict(row) for row in rows]}
 
 

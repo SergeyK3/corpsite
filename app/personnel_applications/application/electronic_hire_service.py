@@ -23,6 +23,29 @@ class ElectronicHireError(ValueError):
         self.code = code
 
 
+def require_unit_group(conn: Connection, *, org_unit_id: int, org_group_id: int | None = None) -> int:
+    """Resolve the same inherited group used by the shared unit selector."""
+    rows = conn.execute(text("""
+        WITH RECURSIVE lineage AS (
+            SELECT unit_id, parent_unit_id, group_id, is_active, 0 AS depth
+            FROM public.org_units WHERE unit_id=:unit
+            UNION ALL
+            SELECT parent.unit_id, parent.parent_unit_id, parent.group_id,
+                   parent.is_active, child.depth + 1
+            FROM public.org_units parent
+            JOIN lineage child ON parent.unit_id=child.parent_unit_id
+            WHERE child.depth < 20
+        )
+        SELECT group_id, is_active, depth FROM lineage ORDER BY depth
+    """), {"unit": org_unit_id}).mappings().all()
+    if not rows or not rows[0]["is_active"]:
+        raise ElectronicHireError("Выбранное отделение недоступно.", "ORG_UNIT_NOT_AVAILABLE")
+    resolved = next((int(row["group_id"]) for row in rows if row["group_id"] is not None), None)
+    if resolved is None or (org_group_id is not None and resolved != org_group_id):
+        raise ElectronicHireError("Группа отделений не соответствует отделению.", "ORG_GROUP_MISMATCH")
+    return resolved
+
+
 def require_allowed_position(conn: Connection, *, org_unit_id: int, position_id: int) -> None:
     """Use the same active unit-position links as the order editor's allowed list."""
     if not allowed_link_exists(conn, org_unit_id=org_unit_id, position_id=position_id):
@@ -217,6 +240,7 @@ def update_conditions(conn: Connection, application_id: int, *, org_unit_id: int
             raise ElectronicHireError("Условия можно менять только до публикации приказа.", "ORDER_ALREADY_PUBLISHED")
     if not (Decimal("0") < employment_rate <= Decimal("2")):
         raise ElectronicHireError("Ставка должна быть больше нуля и не выше двух.", "RATE_INVALID")
+    org_group_id = require_unit_group(conn, org_unit_id=org_unit_id)
     position_id, manual_position_name, manual_position_document_ru = validate_hire_position_input(
         conn, org_unit_id=org_unit_id, position_id=position_id,
         manual_position_name=manual_position_name, manual_position_document_ru=manual_position_document_ru,
@@ -231,11 +255,11 @@ def update_conditions(conn: Connection, application_id: int, *, org_unit_id: int
         manual_position_document_ru = app["manual_position_document_ru"]
     conn.execute(text("""
         UPDATE public.personnel_applications
-        SET intended_org_unit_id=:unit, intended_position_id=:position,
+        SET intended_org_group_id=:group_id, intended_org_unit_id=:unit, intended_position_id=:position,
             intended_vacancy_text=:manual_name,
             intended_employment_rate=:rate, updated_at=now()
         WHERE application_id=:id
-    """), {"unit": org_unit_id, "position": position_id, "manual_name": manual_position_name,
+    """), {"group_id": org_group_id, "unit": org_unit_id, "position": position_id, "manual_name": manual_position_name,
            "rate": employment_rate, "id": application_id})
     sync_envelope_intended_projection(conn, int(app["person_id"]))
     conn.execute(text("""
@@ -255,7 +279,8 @@ def update_conditions(conn: Connection, application_id: int, *, org_unit_id: int
         if item is None:
             raise ElectronicHireError("Пункт проекта приказа не найден.", "ORDER_ITEM_NOT_FOUND")
         payload = dict(item["payload"] or {})
-        payload.update({"org_unit_id": org_unit_id,
+        payload.update({"org_group_id": org_group_id,
+                        "org_unit_id": org_unit_id,
                         "employment_rate": float(employment_rate),
                         "source_org_unit_name": updated["org_unit_ru"],
                         "source_position_name": updated["position_ru"],

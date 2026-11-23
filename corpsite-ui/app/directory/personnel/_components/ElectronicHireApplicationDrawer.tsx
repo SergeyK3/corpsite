@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useOrgUnitScopeOptions } from "@/lib/useOrgUnitScopeOptions";
 import { usePersonnelOrderPositionOptions } from "@/lib/usePersonnelOrderPositionOptions";
+import OrgScopeFilter from "@/components/OrgScopeFilter";
 import { getActiveIntakeLink, issueIntakeLink, reissueIntakeLink } from "../_lib/personnelApplicationsApi.client";
 import {
   checkElectronicHire, createElectronicHire, createElectronicHireOrderDraft, getElectronicHire,
@@ -25,6 +26,7 @@ export default function ElectronicHireApplicationDrawer({ open, onClose }: Props
   const [birthDate, setBirthDate] = React.useState("");
   const [received, setReceived] = React.useState(today);
   const [start, setStart] = React.useState(today);
+  const [orgGroupId, setOrgGroupId] = React.useState<number | null>(null);
   const [unitId, setUnitId] = React.useState<number | null>(null);
   const [positionId, setPositionId] = React.useState<number | null>(null);
   const [manualPosition, setManualPosition] = React.useState(false);
@@ -46,15 +48,16 @@ export default function ElectronicHireApplicationDrawer({ open, onClose }: Props
   const [error, setError] = React.useState("");
   const [uploaded, setUploaded] = React.useState("");
   const [existing, setExisting] = React.useState<Array<{application_id: number; full_name: string; status: string}>>([]);
-  const [existingLoadError, setExistingLoadError] = React.useState(false);
+  const [existingLoadError, setExistingLoadError] = React.useState("");
   const [existingReloadKey, setExistingReloadKey] = React.useState(0);
   const [orderId, setOrderId] = React.useState<number | null>(null);
   const [notification, setNotification] = React.useState("");
-  const { options: units, loading: unitsLoading, error: unitsError } = useOrgUnitScopeOptions(null, open);
-  const unit = units.find(row => row.unit_id === unitId);
+  const { options: units, catalogOptions: allUnits, loading: unitsLoading, error: unitsError } = useOrgUnitScopeOptions(orgGroupId, open);
+  const unit = allUnits.find(row => row.unit_id === unitId);
+  const validUnit = orgGroupId != null && unit?.group_id === orgGroupId;
   const { scopedOptions: positions, loading: positionsLoading, error: positionsError } = usePersonnelOrderPositionOptions({ enabled: open, orgUnitId: unitId, orgGroupId: unit?.group_id ?? null, allowedOnly: true, reloadKey: positionReloadKey });
   const positionValid = !positionsLoading && !positionsError && positions.some(row => row.id === positionId);
-  const canSavePosition = unitId != null && (manualPosition
+  const canSavePosition = validUnit && (manualPosition
     ? newPositionName.trim().length > 0 && newPositionDocumentRu.trim().length > 0
     : positionValid);
   const positionHint = manualPosition
@@ -69,6 +72,32 @@ export default function ElectronicHireApplicationDrawer({ open, onClose }: Props
             ? "В этом отделении нет доступных справочных должностей. Введите название вручную и отправьте его на уточнение."
             : null;
 
+  function clearPositionForScopeChange() {
+    setPositionId(null);
+    setManualPosition(false);
+    setNewPositionName("");
+    setNewPositionDocumentRu("");
+  }
+
+  function selectOrgGroup(next: number | null) {
+    if (next === orgGroupId) return;
+    setOrgGroupId(next);
+    setUnitId(null);
+    clearPositionForScopeChange();
+  }
+
+  function selectOrgUnit(next: number | null) {
+    if (next === unitId) return;
+    setUnitId(next);
+    clearPositionForScopeChange();
+  }
+
+  React.useEffect(() => {
+    if (applicationId != null && unitId != null && !unitsLoading && unit?.group_id != null && orgGroupId !== unit.group_id) {
+      setOrgGroupId(unit.group_id);
+    }
+  }, [applicationId, unitId, unitsLoading, unit, orgGroupId]);
+
   React.useEffect(() => {
     if (!manualPosition && positionId != null && unitId != null && !positionsLoading && !positionsError && !positions.some(row => row.id === positionId)) {
       setPositionId(null);
@@ -78,10 +107,17 @@ export default function ElectronicHireApplicationDrawer({ open, onClose }: Props
   React.useEffect(() => {
     if (!open) return;
     let active = true;
-    setExistingLoadError(false);
+    setExistingLoadError("");
     void listElectronicHireApplications()
       .then(result => { if (active) setExisting(result.items); })
-      .catch(() => { if (active) { setExisting([]); setExistingLoadError(true); } });
+      .catch((e: unknown) => { if (active) {
+        const status = e && typeof e === "object" && "status" in e ? Number(e.status) : null;
+        setExistingLoadError(status === 401 || status === 403
+          ? "Не удалось загрузить заявления: проверьте вход и права доступа."
+          : status != null && Number.isFinite(status)
+            ? `Не удалось загрузить заявления: ошибка сервера (${status}).`
+            : "Не удалось загрузить заявления: нет соединения с API. Проверьте сеть и повторите попытку.");
+      } });
     return () => { active = false; };
   }, [open, existingReloadKey]);
 
@@ -104,7 +140,9 @@ export default function ElectronicHireApplicationDrawer({ open, onClose }: Props
       setApplicationId(id); setPersonId(Number(app.person_id));
       setIin(String(app.iin || "")); setFullName(String(app.full_name || ""));
       setReceived(String(app.application_received_at || "")); setStart(String(app.planned_start_date || ""));
-      setUnitId(Number(app.intended_org_unit_id) || null); setPositionId(Number(app.intended_position_id) || null);
+      const savedUnitId = Number(app.intended_org_unit_id) || null;
+      setUnitId(savedUnitId); setPositionId(Number(app.intended_position_id) || null);
+      setOrgGroupId(allUnits.find(row => row.unit_id === savedUnitId)?.group_id ?? null);
       setManualPosition(app.position_resolution === "unmatched_manual");
       setResolution(app.position_resolution as typeof resolution);
       setReview((await getPositionReview(id).catch(() => ({request: null}))).request);
@@ -130,7 +168,7 @@ export default function ElectronicHireApplicationDrawer({ open, onClose }: Props
         birth_date: birthDate || undefined,
         planned_start_date: start, org_unit_id: unitId,
         ...(manualPosition ? { manual_position_name: newPositionName.trim(), manual_position_document_ru: newPositionDocumentRu.trim() } : { position_id: positionId! }),
-        employment_rate: Number(rate.replace(",", ".")), org_group_id: unit?.group_id });
+        employment_rate: Number(rate.replace(",", ".")), org_group_id: orgGroupId });
       setApplicationId(result.application_id); setPersonId(result.person_id); setPositionId(result.position_id);
       setManualPosition(result.position_resolution === "unmatched_manual");
       setResolution(result.position_resolution);
@@ -201,7 +239,7 @@ export default function ElectronicHireApplicationDrawer({ open, onClose }: Props
     <aside className="h-full w-full max-w-2xl overflow-y-auto border-l border-zinc-200 bg-white p-6 text-zinc-900 shadow-xl">
       <div className="mb-5 flex items-start justify-between gap-4"><div><h2 className="text-xl font-semibold">Заявление о приёме на работу</h2><p className="text-sm text-zinc-600">Электронное заявление и планируемые условия приёма</p></div><button onClick={onClose} className="rounded border px-3 py-1">Закрыть</button></div>
       {error && <p role="alert" className="mb-4 rounded bg-red-50 p-3 text-sm text-red-800">{error}</p>}
-      {existingLoadError && <div role="alert" className="mb-4 rounded bg-red-50 p-3 text-sm text-red-800">Не удалось загрузить заявления. Сервис приёма на работу может быть недоступен. <button type="button" className="underline" onClick={() => setExistingReloadKey(key => key + 1)}>Повторить загрузку заявлений</button></div>}
+      {existingLoadError && <div role="alert" className="mb-4 rounded bg-red-50 p-3 text-sm text-red-800">{existingLoadError} <button type="button" className="underline" onClick={() => setExistingReloadKey(key => key + 1)}>Повторить загрузку</button></div>}
       {applicationId == null ? <form onSubmit={create} className="space-y-4">
         {existing.length > 0 && <div className="rounded border bg-zinc-50 p-3 text-sm"><h3 className="mb-2 font-medium">Незавершённые заявления</h3><ul className="space-y-1">{existing.map(row => <li key={row.application_id}><button type="button" className="underline" onClick={() => void openExisting(row.application_id)}>№{row.application_id} · {row.full_name}</button></li>)}</ul></div>}
         <label className="block text-sm">Поиск среди ранее уволенных<input className={field} value={query} onChange={e => setQuery(e.target.value)} placeholder="ФИО или ИИН" /></label>
@@ -209,7 +247,9 @@ export default function ElectronicHireApplicationDrawer({ open, onClose }: Props
         <div className="grid gap-3 sm:grid-cols-2"><label className="text-sm">ИИН<input required minLength={12} maxLength={12} className={field} value={iin} onChange={e => setIin(e.target.value)} /></label><label className="text-sm">ФИО кандидата<input required className={field} value={fullName} onChange={e => setFullName(e.target.value)} /></label></div>
         <label className="block text-sm">Дата рождения<input type="date" className={field} value={birthDate} onChange={e => setBirthDate(e.target.value)} /></label>
         <div className="grid gap-3 sm:grid-cols-2"><label className="text-sm">Дата заявления<input type="date" required className={field} value={received} onChange={e => setReceived(e.target.value)} /></label><label className="text-sm">Планируемая дата начала работы<input type="date" required className={field} value={start} onChange={e => setStart(e.target.value)} /></label></div>
-        <label className="block text-sm">Отделение<select required disabled={unitsLoading || !!unitsError} className={field} value={unitId ?? ""} onChange={e => { setUnitId(Number(e.target.value) || null); setPositionId(null); }}><option value="">{unitsLoading ? "Загрузка отделений…" : unitsError ? "Ошибка загрузки отделений" : "Выберите отделение"}</option>{units.map(row => <option key={row.unit_id} value={row.unit_id}>{row.name}</option>)}</select></label>
+        <OrgScopeFilter basePath="/directory/personnel/orders" label="Группа отделений" emptyLabel="Выберите группу отделений" value={orgGroupId} onChange={selectOrgGroup} />
+        <label className="block text-sm">Отделение<select required disabled={orgGroupId == null || unitsLoading || !!unitsError} className={field} value={validUnit ? unitId ?? "" : ""} onChange={e => selectOrgUnit(Number(e.target.value) || null)}><option value="">{orgGroupId == null ? "Сначала выберите группу отделений" : unitsLoading ? "Загрузка отделений…" : unitsError ? "Ошибка загрузки отделений" : "Выберите отделение"}</option>{units.map(row => <option key={row.unit_id} value={row.unit_id}>{row.name}</option>)}</select></label>
+        {orgGroupId == null && <p role="status" className="text-sm text-zinc-600">Отделение станет доступно после выбора группы отделений.</p>}
         {unitsError && <p role="alert" className="text-sm text-red-700">{unitsError}</p>}
         <label className="block text-sm">Должность<select required={!manualPosition} disabled={manualPosition || unitId == null || positionsLoading || !!positionsError || positions.length === 0} className={field} value={positionValid ? positionId ?? "" : ""} onChange={e => setPositionId(Number(e.target.value) || null)}><option value="">{unitId == null ? "Сначала выберите отделение" : positionsLoading ? "Загрузка должностей…" : positionsError ? "Ошибка загрузки должностей" : positions.length === 0 ? "Нет доступных должностей" : "Выберите должность"}</option>{positions.map(row => <option key={row.id} value={row.id}>{row.label}</option>)}</select></label>
         {positionHint && <p role={positionsError && !manualPosition ? "alert" : "status"} className={`text-sm ${positionsError && !manualPosition ? "text-red-700" : "text-amber-800"}`}>{positionHint}</p>}
@@ -235,7 +275,9 @@ export default function ElectronicHireApplicationDrawer({ open, onClose }: Props
           <a className="underline" href={`/directory/personnel/position-reconciliation?request_id=${review.request_id}`}>Показать историю и изменения</a>
         </section>}
         <details className="rounded border p-3"><summary className="cursor-pointer font-medium">Изменить условия приёма</summary><div className="mt-3 space-y-3">
-          <label className="block text-sm">Отделение<select disabled={unitsLoading || !!unitsError} className={field} value={unitId ?? ""} onChange={e => { setUnitId(Number(e.target.value) || null); setPositionId(null); }}><option value="">{unitsLoading ? "Загрузка отделений…" : unitsError ? "Ошибка загрузки отделений" : "Выберите отделение"}</option>{units.map(row => <option key={row.unit_id} value={row.unit_id}>{row.name}</option>)}</select></label>
+          <OrgScopeFilter basePath="/directory/personnel/orders" label="Группа отделений" emptyLabel="Выберите группу отделений" value={orgGroupId} onChange={selectOrgGroup} />
+          <label className="block text-sm">Отделение<select disabled={orgGroupId == null || unitsLoading || !!unitsError} className={field} value={validUnit ? unitId ?? "" : ""} onChange={e => selectOrgUnit(Number(e.target.value) || null)}><option value="">{orgGroupId == null ? "Сначала выберите группу отделений" : unitsLoading ? "Загрузка отделений…" : unitsError ? "Ошибка загрузки отделений" : "Выберите отделение"}</option>{units.map(row => <option key={row.unit_id} value={row.unit_id}>{row.name}</option>)}</select></label>
+          {orgGroupId == null && <p role="status" className="text-sm text-zinc-600">Отделение станет доступно после выбора группы отделений.</p>}
           {unitsError && <p role="alert" className="text-sm text-red-700">{unitsError}</p>}
           <label className="block text-sm">Должность<select disabled={manualPosition || unitId == null || positionsLoading || !!positionsError || positions.length === 0} className={field} value={positionValid ? positionId ?? "" : ""} onChange={e => setPositionId(Number(e.target.value) || null)}><option value="">{unitId == null ? "Сначала выберите отделение" : positionsLoading ? "Загрузка должностей…" : positionsError ? "Ошибка загрузки должностей" : positions.length === 0 ? "Нет доступных должностей" : "Выберите должность"}</option>{positions.map(row => <option key={row.id} value={row.id}>{row.label}</option>)}</select></label>
           {positionHint && <p role={positionsError && !manualPosition ? "alert" : "status"} className={`text-sm ${positionsError && !manualPosition ? "text-red-700" : "text-amber-800"}`}>{positionHint}</p>}
