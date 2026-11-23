@@ -1,166 +1,54 @@
-"""Protected manual upload API for canonical Person-card photos."""
-from __future__ import annotations
-
-import io
+"""The compatibility photo endpoint submits for review, never directly activates a photo."""
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
+from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
-from PIL import Image
-from sqlalchemy import text
-
-from app.db.engine import engine
-from app.main import app
-from tests.conftest import auth_headers, table_exists
-from tests.ppr.conftest import cleanup_person_graph, insert_person, ppr_db_available, require_ppr_schema
-
-
-pytestmark = pytest.mark.skipif(not ppr_db_available(), reason="PostgreSQL not available")
-
-
-def _jpeg(*, color: tuple[int, int, int]) -> bytes:
-    buffer = io.BytesIO()
-    Image.new("RGB", (600, 800), color=color).save(buffer, format="JPEG", quality=85)
-    return buffer.getvalue()
-
-
-@pytest.fixture(autouse=True)
-def _isolated_photo_storage(monkeypatch, tmp_path):
-    monkeypatch.setenv("PERSONNEL_PHOTO_STORAGE_ROOT", str(tmp_path))
+from app.api import ppr_router as api
+from app.auth import get_current_user
+from app.personnel_files import service
 
 
 @pytest.fixture
-def client() -> TestClient:
+def client(monkeypatch):
+    monkeypatch.setattr(api, 'assert_ppr_read_path_activation_allowed', lambda: None)
+    monkeypatch.setattr(api, 'require_personnel_card_edit_for_person', lambda user, person_id: None)
+    monkeypatch.setattr(api._query_service, 'load_summary', lambda *, person_id: SimpleNamespace(person_id=person_id))
+    app=FastAPI(); app.include_router(api.router)
+    app.dependency_overrides[get_current_user]=lambda: {'user_id':19}
     return TestClient(app)
 
 
-@pytest.fixture
-def privileged_headers(seed, monkeypatch):
-    monkeypatch.setenv("DIRECTORY_PRIVILEGED_USER_IDS", str(seed["initiator_user_id"]))
-    return auth_headers(seed["initiator_user_id"])
+def test_upload_submits_exact_route_subject_for_review(client,monkeypatch):
+    seen={}; vid=str(uuid4())
+    def submit(user,person_id,**kwargs):
+        seen.update(person_id=person_id,user=user,**kwargs)
+        return {'version_id':vid,'state':'pending'}
+    monkeypatch.setattr(service,'submit',submit)
+    response=client.post('/api/ppr/persons/99/photo',files={'file':('person-100.jpg',b'synthetic delegated bytes','image/jpeg')})
+    assert response.status_code==200
+    assert response.json()=={'person_id':99,'version_id':vid,'status':'pending'}
+    assert seen['person_id']==99
+    assert seen['kind']=='photo'
 
 
-@pytest.fixture
-def photo_people(seed):
-    require_ppr_schema()
-    with engine.begin() as conn:
-        required = ("person_photos", "person_photo_sources", "personnel_record_events")
-        if not all(table_exists(conn, table) for table in required):
-            pytest.skip("Person photo schema missing — run: alembic upgrade head")
-        first = insert_person(conn, full_name=f"Photo API A {uuid4().hex[:8]}", prefix="photo-api-a")
-        second = insert_person(conn, full_name=f"Photo API B {uuid4().hex[:8]}", prefix="photo-api-b")
-    yield first, second
-    with engine.begin() as conn:
-        cleanup_person_graph(conn, person_ids=[first, second], employee_ids=[])
+def test_upload_is_forbidden_without_card_permission(client,monkeypatch):
+    def deny(*_): raise HTTPException(403,'Forbidden')
+    monkeypatch.setattr(api,'require_personnel_card_edit_for_person',deny)
+    response=client.post('/api/ppr/persons/99/photo',files={'file':('test.jpg',b'test','image/jpeg')})
+    assert response.status_code==403
 
 
-def _post_photo(client: TestClient, *, person_id: int, content: bytes, headers, filename: str = "photo.jpg"):
-    return client.post(
-        f"/api/ppr/persons/{person_id}/photo",
-        headers=headers,
-        files={"file": (filename, content, "image/jpeg")},
-    )
+def test_upload_rejects_non_jpeg_before_storage(client,monkeypatch):
+    def unexpected(*args,**kwargs): raise AssertionError('Must not reach storage')
+    monkeypatch.setattr(service,'submit',unexpected)
+    response=client.post('/api/ppr/persons/99/photo',files={'file':('test.png',b'test','image/png')})
+    assert response.status_code==422
 
 
-def test_uploads_first_photo_to_exact_card_person_id(
-    client: TestClient,
-    photo_people: tuple[int, int],
-    privileged_headers,
-) -> None:
-    first, second = photo_people
-
-    response = _post_photo(
-        client,
-        person_id=second,
-        content=_jpeg(color=(10, 20, 30)),
-        headers=privileged_headers,
-        # The filename deliberately looks like another Person; it is ignored.
-        filename=f"person-{first}.jpg",
-    )
-
-    assert response.status_code == 200
-    assert response.json()["person_id"] == second
-    with engine.connect() as conn:
-        first_count = conn.execute(
-            text("SELECT COUNT(*) FROM public.person_photos WHERE person_id = :person_id"),
-            {"person_id": first},
-        ).scalar_one()
-        target = conn.execute(
-            text(
-                "SELECT person_id, is_active FROM public.person_photos "
-                "WHERE person_photo_id = :person_photo_id"
-            ),
-            {"person_photo_id": response.json()["person_photo_id"]},
-        ).mappings().one()
-    assert int(first_count) == 0
-    assert int(target["person_id"]) == second
-    assert target["is_active"] is True
-
-
-def test_replaces_photo_by_superseding_old_version(
-    client: TestClient,
-    photo_people: tuple[int, int],
-    privileged_headers,
-) -> None:
-    person_id, _ = photo_people
-    first = _post_photo(
-        client,
-        person_id=person_id,
-        content=_jpeg(color=(1, 2, 3)),
-        headers=privileged_headers,
-    )
-    second = _post_photo(
-        client,
-        person_id=person_id,
-        content=_jpeg(color=(4, 5, 6)),
-        headers=privileged_headers,
-    )
-
-    assert first.status_code == 200
-    assert second.status_code == 200
-    with engine.connect() as conn:
-        rows = conn.execute(
-            text(
-                "SELECT person_photo_id, is_active, superseded_at FROM public.person_photos "
-                "WHERE person_id = :person_id ORDER BY person_photo_id"
-            ),
-            {"person_id": person_id},
-        ).mappings().all()
-    assert len(rows) == 2
-    assert int(rows[0]["person_photo_id"]) == first.json()["person_photo_id"]
-    assert rows[0]["is_active"] is False
-    assert rows[0]["superseded_at"] is not None
-    assert int(rows[1]["person_photo_id"]) == second.json()["person_photo_id"]
-    assert rows[1]["is_active"] is True
-
-
-def test_upload_is_forbidden_without_permission(client: TestClient, photo_people, seed) -> None:
-    response = _post_photo(
-        client,
-        person_id=photo_people[0],
-        content=_jpeg(color=(10, 20, 30)),
-        headers=auth_headers(seed["executor_user_id"]),
-    )
-
-    assert response.status_code == 403
-
-
-def test_upload_rejects_non_jpeg_before_creating_photo(
-    client: TestClient,
-    photo_people,
-    privileged_headers,
-) -> None:
-    person_id = photo_people[0]
-    response = client.post(
-        f"/api/ppr/persons/{person_id}/photo",
-        headers=privileged_headers,
-        files={"file": ("invalid.png", b"not a jpeg", "image/png")},
-    )
-
-    assert response.status_code == 422
-    with engine.connect() as conn:
-        count = conn.execute(
-            text("SELECT COUNT(*) FROM public.person_photos WHERE person_id = :person_id"),
-            {"person_id": person_id},
-        ).scalar_one()
-    assert int(count) == 0
+def test_legacy_replacement_does_not_bypass_version_conflict(client,monkeypatch):
+    def conflict(*args,**kwargs): raise HTTPException(409,'Use exact version for replacement')
+    monkeypatch.setattr(service,'submit',conflict)
+    response=client.post('/api/ppr/persons/99/photo',files={'file':('test.jpg',b'test','image/jpeg')})
+    assert response.status_code==409

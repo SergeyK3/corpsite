@@ -14,7 +14,7 @@ describe("loadPersonCardPdfDocument", () => {
     vi.stubGlobal("fetch", fetchMock);
     const document = await loadPersonCardPdfDocument(7, { authorizationHeader: "Bearer token", bearerToken: "token", devUserId: null, requestingUserId: "1" });
     const paths = fetchMock.mock.calls.map(([input]) => String(input));
-    expect(paths).toEqual(expect.arrayContaining([expect.stringContaining("/api/ppr/persons/7"), expect.stringContaining("/contacts"), expect.stringContaining("/photo")]));
+    expect(paths).toEqual(expect.arrayContaining([expect.stringContaining("/api/ppr/persons/7"), expect.stringContaining("/contacts"), expect.stringContaining("/photo?for_export=true")]));
     expect(paths.some((path) => path.includes("intake") || path.includes("application"))).toBe(false);
     expect(document.html).toContain("corrected@example.test");
     expect(document.html).toContain("person-card-pdf-section-current_organization");

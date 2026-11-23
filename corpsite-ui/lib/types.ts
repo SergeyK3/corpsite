@@ -4,6 +4,8 @@ export type MeInfo = {
   is_documentation_viewer?: boolean;
   is_sysadmin_assistant?: boolean;
   assistant_permissions?: Record<string, boolean>;
+  has_working_contacts_read?: boolean;
+  ppr_stage_permissions?: Record<string, boolean>;
   must_change_password?: boolean;
   user_id?: number;
   role_id?: number;
@@ -50,6 +52,8 @@ export type MeInfo = {
   has_hr_governance?: boolean;
   /** Exact effective permission used by manual assignment change. */
   has_hr_enrollment_manager?: boolean;
+  /** GET /auth/me — permission to review personnel files (subject scope remains server-enforced). */
+  has_personnel_files_review?: boolean;
   /** WP-CL-004 — exact effective permission for the control-list XLSX export. */
   has_control_list_export?: boolean;
   /** WP-PPR-MIG-005D — exact read grant for the migration-status report. */
@@ -60,6 +64,7 @@ export type MeInfo = {
   has_personnel_orders_restore?: boolean;
   /** ADR-042 E1 — personnel directory / org sidebar visibility. */
   has_personnel_visibility?: boolean;
+  has_personnel_card_read?: boolean;
   has_personnel_card_edit?: boolean;
   show_org_sidebar?: boolean;
   personnel_visibility?: PersonnelVisibilityInfo;

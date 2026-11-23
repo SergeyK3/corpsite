@@ -4,6 +4,7 @@ import * as React from "react";
 import Image from "next/image";
 
 import { getPprPersonPhoto, uploadPprPersonPhoto } from "../_lib/pprQueryApi.client";
+import { getMyPersonalCardPhoto } from "@/app/profile/personal-card/_lib/selfPersonalCardApi.client";
 
 const MAX_PHOTO_BYTES = 512_000;
 
@@ -11,15 +12,16 @@ type Props = {
   personId: number | null;
   fullName: string;
   canManagePhoto?: boolean;
+  self?: boolean;
 };
 
 function uploadErrorMessage(error: unknown): string {
   return error instanceof Error && error.message ? error.message : "Не удалось загрузить фото.";
 }
 
-export default function PprPersonPhoto({ personId, fullName, canManagePhoto = false }: Props) {
+export default function PprPersonPhoto({ personId, fullName, canManagePhoto = false, self = false }: Props) {
   const [photoBlob, setPhotoBlob] = React.useState<Blob | null>(null);
-  const [loading, setLoading] = React.useState(personId != null);
+  const [loading, setLoading] = React.useState(self || personId != null);
   const [refreshKey, setRefreshKey] = React.useState(0);
   const [uploading, setUploading] = React.useState(false);
   const [message, setMessage] = React.useState<string | null>(null);
@@ -28,11 +30,11 @@ export default function PprPersonPhoto({ personId, fullName, canManagePhoto = fa
   React.useEffect(() => {
     const controller = new AbortController();
     setPhotoBlob(null);
-    setLoading(personId != null);
+    setLoading(self || personId != null);
 
-    if (personId == null) return () => controller.abort();
+    if (!self && personId == null) return () => controller.abort();
 
-    void getPprPersonPhoto(personId, { signal: controller.signal })
+    void (self ? getMyPersonalCardPhoto({ signal: controller.signal }) : getPprPersonPhoto(personId!, { signal: controller.signal }))
       .then((blob) => {
         if (!controller.signal.aborted) setPhotoBlob(blob);
       })
@@ -44,7 +46,7 @@ export default function PprPersonPhoto({ personId, fullName, canManagePhoto = fa
       });
 
     return () => controller.abort();
-  }, [personId, refreshKey]);
+  }, [personId, refreshKey, self]);
 
   const photoUrl = React.useMemo(
     () => (photoBlob == null ? null : URL.createObjectURL(photoBlob)),
@@ -61,7 +63,7 @@ export default function PprPersonPhoto({ personId, fullName, canManagePhoto = fa
   const onFileSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = "";
-    if (file == null || personId == null || uploading) return;
+    if (file == null || personId == null || self || uploading) return;
     setMessage(null);
     if (file.type.toLowerCase() !== "image/jpeg") {
       setMessage("Можно загрузить только JPEG-файл.");
@@ -103,7 +105,7 @@ export default function PprPersonPhoto({ personId, fullName, canManagePhoto = fa
           <span className="px-2">{loading ? "Загрузка фото…" : "Фото отсутствует"}</span>
         )}
       </div>
-      {canManagePhoto && personId != null ? (
+      {canManagePhoto && !self && personId != null ? (
         <div className="mt-2">
           <input
             ref={inputRef}

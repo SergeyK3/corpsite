@@ -148,6 +148,10 @@ app.include_router(ppr_stage1_general_router)
 app.include_router(ppr_stage2_education_router)
 app.include_router(ppr_stage3_training_router)
 app.include_router(ppr_migration_status_router)
+from app.personnel_files.router import router as personnel_files_router
+from app.personnel_files.upload_limit import PersonnelFileUploadLimit
+app.add_middleware(PersonnelFileUploadLimit)
+app.include_router(personnel_files_router)
 app.include_router(ppr_router)
 app.include_router(ppr_self_router)
 app.include_router(ppr_self_orders_router)

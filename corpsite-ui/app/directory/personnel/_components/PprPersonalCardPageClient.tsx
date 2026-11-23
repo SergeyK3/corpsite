@@ -59,6 +59,7 @@ import PprQualificationCategoryEditor from "./PprQualificationCategoryEditor";
 import PprCardEventHistorySection from "./PprCardEventHistorySection";
 import PprCardApplicationsSection from "./PprCardApplicationsSection";
 import PprPersonPhoto from "./PprPersonPhoto";
+import PersonnelFilesPanel from "./PersonnelFilesPanel";
 import EmployeeOperationalAssignmentSection from "./EmployeeOperationalAssignmentSection";
 import EmployeeCardOrdersSection from "./EmployeeCardOrdersSection";
 import EmployeeOnboardingSection from "./EmployeeOnboardingSection";
@@ -66,13 +67,64 @@ import EmployeeAccountSections from "../../employees/_components/EmployeeAccount
 import { getEmployees } from "../../employees/_lib/api.client";
 import { getPersonMigrationStatus, listMigrationStatusUniverses, type MigrationCell, type MigrationSection, type MigrationUniverse } from "../_lib/migrationStatusApi.client";
 import MigrationStatusBlock from "./MigrationStatusBlock";
+import {
+  getMyContacts,
+  getMyOperationalAssignment,
+  getMyPersonalCard,
+  type SelfOperationalAssignment,
+  type SelfPersonalCard,
+  type SelfPersonalCardResponse,
+} from "@/app/profile/personal-card/_lib/selfPersonalCardApi.client";
+import { displayEmploymentRate, displayOperationalStatus } from "@/app/profile/personal-card/_lib/operationalAssignmentDisplay";
+import { downloadMyPersonalCardPdf } from "@/app/profile/personal-card/_lib/selfPersonCardPdfOpen.client";
 
 type Props = {
   employeeId?: string;
   personId?: string;
   /** When false, PPR section mutations stay hidden while records remain visible. */
   canEditPprSections?: boolean;
+  /** ID-free employee-owned read, served only by /api/ppr/me routes. */
+  selfMode?: boolean;
 };
+
+type SelfContacts = Awaited<ReturnType<typeof getMyContacts>>;
+
+const SELF_SECTION_ORDER = [
+  "general", "contacts", "education", "training", "category", "family",
+  "languages", "employment_biography", "assignment", "additional",
+];
+
+function toSelfDisplayCard(card: SelfPersonalCard): PprCompositeReadResponse {
+  // The full card view expects HR identity/metadata fields. These local
+  // placeholders are never used to build a request or shown in self mode.
+  return {
+    identity: {
+      requested_person_id: null, requested_employee_id: null, resolved_person_id: 0,
+      merge_redirected: false, merge_chain: [], employee_context_id: null,
+      person_status: "", match_key: "", iin: null,
+    },
+    materialization: card.materialization,
+    general: card.general,
+    sections: card.sections,
+    additional: card.additional,
+    events: null,
+    intended_employment: null,
+    metadata: {
+      read_mode: "ppr_self", source: "self_personal_card", generated_at: "",
+      warnings: [], transitional: false, merge_redirected: false,
+      source_person_id: 0, requested_input_kind: null, requested_input_id: null,
+    },
+  };
+}
+
+function SelfField({ label, value }: { label: string; value: string | null | undefined }) {
+  return <div><dt className="text-xs text-zinc-500">{label}</dt><dd className="mt-0.5 text-sm font-medium text-zinc-900 dark:text-zinc-50">{value || "—"}</dd></div>;
+}
+
+function selfContactValue(record: Record<string, unknown> | null, key: string): string | null {
+  const value = record?.[key];
+  return typeof value === "string" && value.trim() ? value : null;
+}
 
 function isEducationRecord(record: PprSectionRecordResponse): record is PprEducationRecordResponse {
   return "education_kind" in record;
@@ -97,6 +149,7 @@ export default function PprPersonalCardPageClient({
   employeeId,
   personId,
   canEditPprSections = true,
+  selfMode = false,
 }: Props) {
   const router = useRouter();
   const currentUser = useCurrentUser();
@@ -115,22 +168,27 @@ export default function PprPersonalCardPageClient({
   const [loading, setLoading] = React.useState(true);
   const [errorView, setErrorView] = React.useState<ReturnType<typeof mapPprCardError> | null>(null);
   const [ppr, setPpr] = React.useState<PprCompositeReadResponse | null>(null);
+  const [selfStatus, setSelfStatus] = React.useState<SelfPersonalCardResponse["status"] | null>(null);
+  const [selfAssignment, setSelfAssignment] = React.useState<SelfOperationalAssignment | null>(null);
+  const [selfContacts, setSelfContacts] = React.useState<SelfContacts | null>(null);
+  const [pdfError, setPdfError] = React.useState<string | null>(null);
   const [activeApplication, setActiveApplication] = React.useState<PersonnelApplicationDetail | null>(null);
   const [fallbackEmployeeId, setFallbackEmployeeId] = React.useState<string | null>(null);
   const [migrationCells, setMigrationCells] = React.useState<Partial<Record<MigrationSection, MigrationCell>>>({});
   const [migrationUniverses, setMigrationUniverses] = React.useState<MigrationUniverse[]>([]);
+  const [fileRefresh, setFileRefresh] = React.useState(0);
   const [correctionMode, setCorrectionMode] = React.useState(false);
   const scrolledSectionRef = React.useRef<PprCardSectionId | null>(null);
 
-  const resolvedPersonId = ppr?.identity.resolved_person_id ?? (personId ? Number(personId) : null);
+  const resolvedPersonId = selfMode ? null : ppr?.identity.resolved_person_id ?? (personId ? Number(personId) : null);
   const pprEmployeeId =
-    ppr?.identity.employee_context_id != null
+    !selfMode && ppr?.identity.employee_context_id != null
       ? String(ppr.identity.employee_context_id)
-      : employeeId ?? null;
+      : selfMode ? null : employeeId ?? null;
   const resolvedEmployeeId = pprEmployeeId ?? fallbackEmployeeId;
   const migrationUniverseId = Number(searchParams.get("migration_universe_id"));
-  const canReadMigration = currentUser?.has_ppr_migration_status_read === true;
-  const canReadEmployeeAccess = currentUser?.has_user_access_admin === true || (currentUser?.is_documentation_viewer === true || currentUser?.is_sysadmin_assistant === true);
+  const canReadMigration = !selfMode && ppr?.metadata.read_mode !== "ppr_manager" && currentUser?.has_ppr_migration_status_read === true;
+  const canReadEmployeeAccess = !selfMode && (currentUser?.has_user_access_admin === true || (currentUser?.is_documentation_viewer === true || currentUser?.is_sysadmin_assistant === true));
   const provisionAccount = searchParams.get("provisionAccount") === "1";
 
   const loadCard = React.useCallback(
@@ -138,6 +196,29 @@ export default function PprPersonalCardPageClient({
       setLoading(true);
       setErrorView(null);
       try {
+        if (selfMode) {
+          const response = await getMyPersonalCard({ signal });
+          if (signal?.aborted) return;
+          setSelfStatus(response.status);
+          if (response.status !== "READY") {
+            setPpr(null);
+            return;
+          }
+          const [assignment, contacts] = await Promise.all([
+            getMyOperationalAssignment({ signal }),
+            getMyContacts({ signal }).catch(() => null),
+          ]);
+          if (signal?.aborted) return;
+          if (assignment.status !== "READY") {
+            setSelfStatus(assignment.status);
+            setPpr(null);
+            return;
+          }
+          setSelfAssignment(assignment.operational_assignment);
+          setSelfContacts(contacts);
+          setPpr(toSelfDisplayCard(response.card));
+          return;
+        }
         const data =
           personId != null
             ? await getPprByPersonId(personId, { signal })
@@ -151,7 +232,7 @@ export default function PprPersonalCardPageClient({
         if (!signal?.aborted) setLoading(false);
       }
     },
-    [employeeId, personId],
+    [employeeId, personId, selfMode],
   );
 
   React.useEffect(() => {
@@ -183,7 +264,7 @@ export default function PprPersonalCardPageClient({
   }
 
   React.useEffect(() => {
-    if (resolvedPersonId == null) {
+    if (selfMode || resolvedPersonId == null || !ppr || ppr.metadata.read_mode === "ppr_manager") {
       setActiveApplication(null);
       return;
     }
@@ -202,14 +283,14 @@ export default function PprPersonalCardPageClient({
     return () => {
       cancelled = true;
     };
-  }, [resolvedPersonId]);
+  }, [resolvedPersonId, ppr?.metadata.read_mode, selfMode]);
 
   React.useEffect(() => {
-    if (pprEmployeeId != null) {
+    if (selfMode || pprEmployeeId != null) {
       setFallbackEmployeeId(null);
       return;
     }
-    if (resolvedPersonId == null || !ppr?.general.full_name) {
+    if (resolvedPersonId == null || !ppr?.general.full_name || ppr?.metadata.read_mode === "ppr_manager") {
       setFallbackEmployeeId(null);
       return;
     }
@@ -235,7 +316,7 @@ export default function PprPersonalCardPageClient({
     return () => {
       cancelled = true;
     };
-  }, [pprEmployeeId, ppr?.general.full_name, resolvedPersonId]);
+  }, [pprEmployeeId, ppr?.general.full_name, resolvedPersonId, selfMode]);
 
   React.useEffect(() => {
     if (loading || errorView || !ppr) return;
@@ -280,51 +361,63 @@ export default function PprPersonalCardPageClient({
 
   const displayName =
     ppr?.general.full_name ||
-    (personId ? `Заявитель #${personId}` : `Сотрудник #${employeeId}`);
-  const isApplicant = ppr?.materialization.hr_relationship_context === PPR_HR_RELATIONSHIP_CANDIDATE;
+    (selfMode ? "" : personId ? `Заявитель #${personId}` : `Сотрудник #${employeeId}`);
+  const isApplicant = !selfMode && ppr?.materialization.hr_relationship_context === PPR_HR_RELATIONSHIP_CANDIDATE;
+  const managerView = selfMode || ppr?.metadata.read_mode === "ppr_manager";
   const canCreateHireOrder =
-    isApplicant &&
+    !managerView && isApplicant &&
     resolvedPersonId != null &&
     activeApplication != null &&
     canCreateHireOrderFromApplicantCard(activeApplication.status);
   const visibleCardSections = React.useMemo(
-    () =>
-      PPR_CARD_SECTIONS.filter((section) => {
+    () => {
+      if (selfMode) return SELF_SECTION_ORDER.flatMap((id) => {
+        const section = PPR_CARD_SECTIONS.find((item) => item.id === id);
+        return section ? [{ ...section, title: id === "additional" ? "Другие сведения" : section.title }] : [];
+      });
+      return PPR_CARD_SECTIONS.filter((section) => {
+        if (managerView && ["military", "additional", "assignment", "access", "orders", "applications", "onboarding", "changes", "intended_employment"].includes(section.id)) return false;
         if (section.id === "onboarding") return !isApplicant && resolvedEmployeeId != null;
         if (section.id === "intended_employment") return isApplicant;
         if (section.id === "assignment" || section.id === "orders") {
           return !isApplicant && resolvedEmployeeId != null;
         }
         return true;
-      }),
-    [isApplicant, resolvedEmployeeId],
+      });
+    },
+    [isApplicant, resolvedEmployeeId, managerView, selfMode],
   );
   const notMaterialized =
     ppr != null &&
     (!ppr.materialization.materialized ||
       ppr.materialization.lifecycle_state === PPR_LIFECYCLE_NOT_MATERIALIZED);
-  const canCorrectCard = currentUser?.has_personnel_card_edit === true || (currentUser?.is_documentation_viewer === true || currentUser?.is_sysadmin_assistant === true);
+  const canCorrectCard = !selfMode && !managerView && (currentUser?.has_personnel_card_edit === true || currentUser?.is_documentation_viewer === true);
   const employmentBiographyEditable = !notMaterialized && canEditPprSections && canCorrectCard && correctionMode;
   const militaryEditable = !notMaterialized && canEditPprSections && canCorrectCard && correctionMode;
-  const canManagePhoto = Boolean(canCorrectCard && correctionMode);
 
   React.useEffect(() => {
     if (editCategory && canCorrectCard) setCorrectionMode(true);
   }, [canCorrectCard, editCategory]);
 
   const employmentBiographyRoute: PprEmploymentBiographyRoute | null =
-    personId != null
+    selfMode ? null : personId != null
       ? { kind: "person", id: Number(personId) }
       : resolvedEmployeeId != null
         ? { kind: "employee", id: resolvedEmployeeId }
         : null;
 
   const militaryRoute: PprMilitaryServiceRoute | null =
-    personId != null
+    selfMode ? null : personId != null
       ? { kind: "person", id: Number(personId) }
       : resolvedEmployeeId != null
         ? { kind: "employee", id: resolvedEmployeeId }
         : null;
+
+  async function downloadSelfPdf() {
+    setPdfError(null);
+    const result = await downloadMyPersonalCardPdf();
+    if (!result.ok) setPdfError(result.error);
+  }
 
   return (
     <div className="w-full">
@@ -338,9 +431,11 @@ export default function PprPersonalCardPageClient({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="flex min-w-0 flex-1 items-start gap-3">
             <PprPersonPhoto
+              key={fileRefresh}
               personId={resolvedPersonId}
               fullName={displayName}
-              canManagePhoto={canManagePhoto}
+              canManagePhoto={false}
+              self={selfMode && ppr != null}
             />
             <div className="min-w-0">
               {isApplicant ? (
@@ -362,14 +457,15 @@ export default function PprPersonalCardPageClient({
               ) : null}
             </div>
           </div>
-          <button
+          {!selfMode ? <button
             type="button"
             onClick={() => router.push(returnToHref)}
             className="rounded border border-zinc-300 px-4 py-2 text-sm dark:border-zinc-700"
             data-testid="ppr-card-back-button"
           >
             {backButtonLabel}
-          </button>
+          </button> : null}
+          {selfMode && ppr ? <button type="button" onClick={() => void downloadSelfPdf()} className="rounded border border-zinc-300 px-4 py-2 text-sm dark:border-zinc-700" data-testid="self-personal-card-download-pdf">Скачать PDF</button> : null}
           {canCorrectCard ? (
             <button type="button" onClick={() => setCorrectionMode((value) => !value)}
               className="rounded border border-blue-500 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-800 dark:bg-blue-950/40 dark:text-blue-100"
@@ -392,6 +488,7 @@ export default function PprPersonalCardPageClient({
             </button>
           ) : null}
         </div>
+        {selfMode && pdfError ? <p role="alert" className="mt-3 text-sm text-red-700">{pdfError}</p> : null}
         {isApplicant ? (
           <p className="mt-2 text-sm text-amber-900 dark:text-amber-100">
             {canCreateHireOrder
@@ -403,6 +500,8 @@ export default function PprPersonalCardPageClient({
       </div>
 
       <div className="px-4 py-5 sm:px-6">
+        {selfMode && !loading && selfStatus === "PERSON_NOT_LINKED" ? <div data-testid="self-personal-card-person-not-linked" className="rounded-lg border border-zinc-200 p-4 text-sm dark:border-zinc-800">Личная карточка ещё не создана. Обратитесь в отдел кадров, чтобы связать её с вашей учётной записью.</div> : null}
+        {selfMode && !loading && selfStatus && selfStatus !== "READY" && selfStatus !== "PERSON_NOT_LINKED" ? <div data-testid="self-personal-card-unavailable" className="rounded-lg border border-zinc-200 p-4 text-sm dark:border-zinc-800">Карточка пока недоступна. Обратитесь в отдел кадров.</div> : null}
         {errorView ? (
           <div
             className={`mb-4 rounded-lg border px-3 py-2 text-sm ${
@@ -443,6 +542,7 @@ export default function PprPersonalCardPageClient({
             ) : null}
 
             <PprCardSectionNav sections={visibleCardSections} />
+            <PersonnelFilesPanel personId={resolvedPersonId} fullName={displayName} onChanged={() => { setFileRefresh(value => value + 1); void loadCard(); }} />
 
             {canReadMigration && migrationUniverses.length > 1 ? (
               <label className="block text-sm" data-testid="ppr-migration-universe-selector">
@@ -454,8 +554,8 @@ export default function PprPersonalCardPageClient({
               </label>
             ) : null}
 
-            <div className="space-y-5">
-              {ppr.additional.status_facts.length > 0 ? (
+            <div className="space-y-5" data-testid={selfMode ? "self-personal-card-ready" : undefined}>
+              {!selfMode && ppr.additional.status_facts.length > 0 ? (
                 <section className="hidden print:block" data-testid="ppr-print-note-section">
                   <h2 className="mb-2 text-base font-semibold">Примечание</h2>
                   <PprCardAdditionalSection additional={ppr.additional} mode="notes" />
@@ -467,11 +567,19 @@ export default function PprPersonalCardPageClient({
                 description="Основные персональные и кадровые сведения."
               >
                 <MigrationStatusBlock cell={migrationCells.general} />
-                <PprCardGeneralSection ppr={ppr} />
+                <PprCardGeneralSection ppr={selfMode ? { ...ppr, general: { ...ppr.general, iin: selfAssignment?.iin ?? ppr.general.iin } } : ppr} showPersonnelContext={!selfMode} />
               </PprCardSection>
 
-              {resolvedPersonId != null ? <PprCardSection id="contacts" title="Контакты" description="Канонические контактные сведения сотрудника.">
-                <PprCardContactsSection personId={resolvedPersonId} editable={correctionMode && canCorrectCard} onSaved={() => void loadCard()} />
+              {selfMode || resolvedPersonId != null ? <PprCardSection id="contacts" title="Контакты" description="Канонические контактные сведения сотрудника.">
+                {selfMode ? selfContacts === null ? <p role="alert" className="text-sm text-red-700">Контактные сведения не удалось загрузить.</p> : <>
+                  {selfContacts.fallback && !selfContacts.canonical ? <p className="mb-3 text-xs text-amber-700">Показаны неподтверждённые контактные сведения.</p> : null}
+                  <dl className="grid gap-4 sm:grid-cols-2" data-testid="self-contacts">
+                    <SelfField label="Мобильный телефон" value={selfContactValue(selfContacts.canonical ?? selfContacts.fallback, "mobile_phone")} />
+                    <SelfField label="Email" value={selfContactValue(selfContacts.canonical ?? selfContacts.fallback, "email")} />
+                    <SelfField label="Адрес регистрации" value={selfContactValue(selfContacts.canonical ?? selfContacts.fallback, "registration_address")} />
+                    <SelfField label="Адрес проживания" value={selfContactValue(selfContacts.canonical ?? selfContacts.fallback, "residence_address")} />
+                  </dl>
+                </> : resolvedPersonId != null ? <PprCardContactsSection personId={resolvedPersonId} editable={correctionMode && canCorrectCard} onSaved={() => void loadCard()} /> : null}
               </PprCardSection> : null}
 
               <PprCardSection
@@ -498,7 +606,7 @@ export default function PprPersonalCardPageClient({
                   active={trainingActive}
                   superseded={trainingSuperseded}
                   voided={trainingVoided}
-                  employeeId={resolvedEmployeeId}
+                   employeeId={managerView ? null : resolvedEmployeeId}
                 />
                 {resolvedPersonId != null && correctionMode && canCorrectCard ? <PprCardVersionedSectionEditor personId={resolvedPersonId} section="training" active={trainingActive} onSaved={() => void loadCard()} /> : null}
               </PprCardSection>
@@ -525,7 +633,7 @@ export default function PprPersonalCardPageClient({
                 {resolvedPersonId != null && correctionMode && canCorrectCard ? <PprCardVersionedSectionEditor personId={resolvedPersonId} section="relatives" active={familyActive} onSaved={() => void loadCard()} /> : null}
               </PprCardSection>
 
-              {militaryRoute ? (
+               {!managerView && militaryRoute ? (
                 <PprCardSection
                   id="military"
                   title="Воинский учёт"
@@ -552,7 +660,7 @@ export default function PprPersonalCardPageClient({
                 {resolvedPersonId != null && correctionMode && canCorrectCard ? <PprForeignLanguagesEditor personId={resolvedPersonId} items={ppr.additional.foreign_languages ?? []} version={ppr.additional.qualification_categories_version ?? ""} onSaved={() => void loadCard()} /> : null}
               </PprCardSection>
 
-              <PprCardSection
+               {!managerView ? <PprCardSection
                 id="additional"
                 title="Примечание"
                 description="Структурированные сведения об инвалидности и пенсионном статусе."
@@ -564,9 +672,9 @@ export default function PprPersonalCardPageClient({
                   editableStatusFacts={Boolean(canEditPprSections && (currentUser?.has_personnel_admin || currentUser?.is_documentation_viewer || currentUser?.is_sysadmin_assistant))}
                   onStatusFactsSaved={() => { void loadCard(); }}
                 />
-              </PprCardSection>
+               </PprCardSection> : null}
 
-              {employmentBiographyRoute ? (
+              {selfMode || employmentBiographyRoute ? (
                 <PprCardSection
                   id="employment_biography"
                   title="Трудовая биография"
@@ -576,12 +684,33 @@ export default function PprPersonalCardPageClient({
                     active={employmentBiographyActive}
                     superseded={employmentBiographySuperseded}
                     voided={employmentBiographyVoided}
-                    route={employmentBiographyRoute}
+                    route={employmentBiographyRoute ?? undefined}
                     editable={employmentBiographyEditable}
                     onMutated={() => loadCard()}
                   />
                 </PprCardSection>
               ) : null}
+
+              {selfMode && selfAssignment ? <PprCardSection
+                id="assignment"
+                title="Работа в текущей организации"
+                description="Текущие сведения о работе."
+              >
+                <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" data-testid="self-operational-assignment">
+                  <SelfField label="Подразделение" value={selfAssignment.org_unit_name} />
+                  <SelfField label="Должность" value={selfAssignment.position_name} />
+                  <SelfField label="Статус" value={displayOperationalStatus(selfAssignment.operational_status)} />
+                  <SelfField label="Ставка" value={displayEmploymentRate(selfAssignment.employment_rate)} />
+                </dl>
+              </PprCardSection> : null}
+
+              {selfMode ? <PprCardSection
+                id="additional"
+                title="Другие сведения"
+                description="Награды, учёные степени и звания."
+              >
+                <PprCardAdditionalSection additional={ppr.additional} showStatusFacts={false} />
+              </PprCardSection> : null}
 
               {isApplicant && resolvedPersonId != null ? (
                 <PprCardSection
@@ -593,7 +722,7 @@ export default function PprPersonalCardPageClient({
                 </PprCardSection>
               ) : null}
 
-              {!isApplicant && resolvedEmployeeId ? (
+               {!managerView && !isApplicant && resolvedEmployeeId ? (
                 <PprCardSection
                   id="assignment"
                   title="Работа в текущей организации"
@@ -607,7 +736,7 @@ export default function PprPersonalCardPageClient({
                 </PprCardSection>
               ) : null}
 
-              {!isApplicant && resolvedEmployeeId ? (
+               {!managerView && !isApplicant && resolvedEmployeeId ? (
                 <PprCardSection
                   id="access"
                   title="Доступ"
@@ -626,7 +755,7 @@ export default function PprPersonalCardPageClient({
                 </PprCardSection>
               ) : null}
 
-              {!isApplicant && resolvedEmployeeId ? (
+               {!managerView && !isApplicant && resolvedEmployeeId ? (
                 <PprCardSection
                   id="orders"
                   title="Кадровые приказы"
@@ -636,7 +765,7 @@ export default function PprPersonalCardPageClient({
                 </PprCardSection>
               ) : null}
 
-              {!isApplicant && resolvedEmployeeId ? (
+               {!managerView && !isApplicant && resolvedEmployeeId ? (
                 <PprCardSection
                   id="onboarding"
                   title="Адаптация"
@@ -646,7 +775,7 @@ export default function PprPersonalCardPageClient({
                 </PprCardSection>
               ) : null}
 
-              {resolvedPersonId != null ? (
+               {!managerView && resolvedPersonId != null ? (
                 <PprCardSection
                   id="applications"
                   title="Кадровые обращения"
@@ -656,22 +785,22 @@ export default function PprPersonalCardPageClient({
                 </PprCardSection>
               ) : null}
 
-              <PprCardSection
+               {!managerView ? <PprCardSection
                 id="changes"
                 title="История изменений"
                 description="Краткая хронология событий личной карточки."
               >
                 <PprCardEventHistorySection events={ppr.events} />
-              </PprCardSection>
+               </PprCardSection> : null}
 
-              {ppr.identity.employee_context_id != null ? (
+               {!managerView && ppr.identity.employee_context_id != null ? (
                 <p className="text-xs text-zinc-500">
                   Кадровый контекст: сотрудник #{ppr.identity.employee_context_id}
                   {ppr.identity.resolved_person_id
                     ? ` · person #${ppr.identity.resolved_person_id}`
                     : ""}
                 </p>
-              ) : resolvedPersonId != null ? (
+               ) : !managerView && resolvedPersonId != null ? (
                 <p className="text-xs text-zinc-500">Кадровый контекст: person #{resolvedPersonId}</p>
               ) : null}
 

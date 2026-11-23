@@ -180,6 +180,8 @@ export type EmployeeDocumentCreatePayload = {
   document_type_id: number;
   document_kind_id?: number | null;
   medical_specialty_id?: number | null;
+  certificate_entry_id?: number;
+  specialty_name_at_issue?: string;
   title?: string | null;
   training_title?: string | null;
   document_number?: string | null;

@@ -31,7 +31,7 @@ type Props = {
   active: PprExternalEmploymentRecordResponse[];
   superseded: PprExternalEmploymentRecordResponse[];
   voided: PprExternalEmploymentRecordResponse[];
-  route: PprEmploymentBiographyRoute;
+  route?: PprEmploymentBiographyRoute;
   editable?: boolean;
   onMutated?: () => void | Promise<void>;
 };
@@ -285,7 +285,7 @@ export default function PprCardEmploymentBiographySection({
   const supersedeCommandIdRef = React.useRef<string | null>(null);
 
   async function handleCreateSubmit() {
-    if (createLoading) return;
+    if (createLoading || !route) return;
     const validation = validateExternalEmploymentFormForSubmit(createForm);
     if (!validation.ok) {
       setCreateError(validation.message);
@@ -318,7 +318,7 @@ export default function PprCardEmploymentBiographySection({
   }
 
   async function handleVoidSubmit() {
-    if (voidLoading || !voidTarget?.record_id || !voidTarget.updated_at) return;
+    if (voidLoading || !route || !voidTarget?.record_id || !voidTarget.updated_at) return;
     setVoidLoading(true);
     setVoidError(null);
     setVoidStaleConflict(false);
@@ -344,7 +344,7 @@ export default function PprCardEmploymentBiographySection({
   }
 
   async function handleSupersedeSubmit() {
-    if (supersedeLoading || !supersedeTarget?.record_id || !supersedeTarget.updated_at) return;
+    if (supersedeLoading || !route || !supersedeTarget?.record_id || !supersedeTarget.updated_at) return;
     const validation = validateExternalEmploymentFormForSubmit(supersedeForm);
     if (!validation.ok) {
       setSupersedeError(validation.message);
@@ -378,7 +378,7 @@ export default function PprCardEmploymentBiographySection({
     return (
       <div className="space-y-3" data-testid="emp-bio-empty">
         <p className="text-sm text-zinc-500">Записи трудовой биографии отсутствуют.</p>
-        {editable ? (
+        {editable && route ? (
           <button
             type="button"
             className="rounded border border-zinc-300 px-3 py-1.5 text-sm dark:border-zinc-700"
@@ -394,7 +394,7 @@ export default function PprCardEmploymentBiographySection({
 
   return (
     <div className="space-y-4">
-      {editable ? (
+      {editable && route ? (
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
@@ -411,7 +411,7 @@ export default function PprCardEmploymentBiographySection({
         </div>
       ) : null}
 
-      {showCreate && editable ? (
+      {showCreate && editable && route ? (
         <div className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800" data-testid="emp-bio-create-form">
           <RecordFormFields form={createForm} onChange={setCreateForm} />
           {createError ? (
@@ -449,7 +449,7 @@ export default function PprCardEmploymentBiographySection({
           active.map((record) => (
             <div key={record.record_id ?? record.employer_name} className="space-y-2">
               <EmploymentRecordCard record={record} />
-              {editable && record.record_id != null ? (
+              {editable && route && record.record_id != null ? (
                 <div className="flex flex-wrap gap-2">
                   <button
                     type="button"

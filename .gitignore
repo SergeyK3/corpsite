@@ -184,3 +184,6 @@ runtime/_tmp_inv/
 
 # Local UI verification artifacts
 corpsite-ui/.artifacts/
+
+!docs/personnel-files/
+!docs/personnel-files/**

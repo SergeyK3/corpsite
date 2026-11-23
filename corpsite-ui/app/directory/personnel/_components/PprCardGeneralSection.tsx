@@ -9,7 +9,8 @@ import {
 import { deriveIntakeSurnameAlphabet } from "@/app/intake/_lib/intakePersonalFields";
 
 type Props = {
-  ppr: PprCompositeReadResponse;
+  ppr: Pick<PprCompositeReadResponse, "general" | "materialization">;
+  showPersonnelContext?: boolean;
 };
 
 function Field({ label, value }: { label: string; value: string }) {
@@ -21,16 +22,16 @@ function Field({ label, value }: { label: string; value: string }) {
   );
 }
 
-export default function PprCardGeneralSection({ ppr }: Props) {
+export default function PprCardGeneralSection({ ppr, showPersonnelContext = true }: Props) {
   const g = ppr.general;
   const mat = ppr.materialization;
   const alphabet = deriveIntakeSurnameAlphabet(g.last_name);
 
   return (
     <div className="space-y-4">
-      <p className="text-xs text-zinc-500">
+      {showPersonnelContext ? <p className="text-xs text-zinc-500">
         Раздел доступен только для просмотра. Редактирование будет подключено на следующем этапе.
-      </p>
+      </p> : null}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Field label="ФИО" value={g.full_name} />
         <Field label="Фамилия" value={g.last_name ?? ""} />
@@ -39,11 +40,11 @@ export default function PprCardGeneralSection({ ppr }: Props) {
         <Field label="ИИН" value={g.iin ?? ""} />
         <Field label="Дата рождения" value={formatPprDate(g.birth_date, "day")} />
         <Field label="Алфавит" value={alphabet} />
-        <Field
+        {showPersonnelContext ? <Field
           label="Статус личной карточки"
           value={lifecycleStatusLabel(mat.materialized, mat.lifecycle_state)}
-        />
-        <Field label="Кадровая связь" value={hrRelationshipLabel(mat.hr_relationship_context)} />
+        /> : null}
+        {showPersonnelContext ? <Field label="Кадровая связь" value={hrRelationshipLabel(mat.hr_relationship_context)} /> : null}
       </div>
     </div>
   );

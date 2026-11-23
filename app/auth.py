@@ -354,6 +354,7 @@ def _enrich_user_context(user: Dict[str, Any]) -> Dict[str, Any]:
             "has_learning_expert": False, "has_learning_review": False,
             "has_user_access_admin": False, "has_hr_governance": False,
             "has_hr_enrollment_manager": False, "can_hard_delete_employee": False,
+            "has_personnel_files_review": False,
             "can_view_all_tasks": False, "has_personnel_events_read": True,
             "has_personnel_visibility": True, "show_org_sidebar": True,
             "personnel_visibility": {"has_visibility": True, "show_org_sidebar": True,
@@ -379,6 +380,15 @@ def _enrich_user_context(user: Dict[str, Any]) -> Dict[str, Any]:
     out["has_hr_enrollment_manager"] = has_admin_permission(uid, HR_ENROLLMENT_MANAGER_CODE)
     out["has_learning_expert"] = has_admin_permission(uid, "LEARNING_EXPERT")
     out["has_learning_review"] = has_admin_permission(uid, "LEARNING_MANUAL_REVIEW")
+    # File reviewers are distinct from technical administrators and assistants.
+    # The per-person file API still applies resource and organization scope.
+    out["has_personnel_files_review"] = (
+        not out["is_system_admin"]
+        and (
+            has_admin_permission(uid, HR_ENROLLMENT_MANAGER_CODE)
+            or has_admin_permission(uid, "PERSONNEL_FILES_REVIEW")
+        )
+    )
     out["has_control_list_export"] = has_admin_permission(
         uid, CONTROL_LIST_EXPORT_PERMISSION
     )
