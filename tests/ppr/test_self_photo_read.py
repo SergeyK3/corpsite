@@ -19,7 +19,7 @@ def test_self_photo_ignores_requested_person_id(monkeypatch):
     monkeypatch.setattr(
         self_api,
         "load_verified_person_photo",
-        lambda person_id: seen_person_ids.append(person_id) or b"verified-jpeg",
+        lambda person_id, *, user: seen_person_ids.append(person_id) or b"verified-jpeg",
     )
     app.dependency_overrides[get_current_user] = lambda: {"user_id": 19}
     try:

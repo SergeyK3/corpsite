@@ -14,8 +14,13 @@ from app.person_photos.infrastructure.repository import PersonPhotoRepository
 from app.personnel_intake.domain.errors import PersonnelIntakeValidationError
 
 
-def load_verified_person_photo(person_id: int) -> bytes | None:
+def load_verified_person_photo(person_id: int, *, user: dict | None = None) -> bytes | None:
     """Return verified JPEG bytes or None; callers authorize the Person first."""
+    if user is not None:
+        from app.personnel_files.service import active_photo
+        managed, content = active_photo(user, person_id)
+        if managed:
+            return content
     with engine.connect() as conn:
         photo = PersonPhotoRepository(conn).get_active_photo(person_id)
     if photo is None or photo.mime_type != MIME_TYPE_JPEG:

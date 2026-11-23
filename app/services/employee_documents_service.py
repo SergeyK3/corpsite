@@ -144,6 +144,9 @@ def _map_document_row(row: Dict[str, Any]) -> Dict[str, Any]:
         "medical_specialty_group_id": int(row["medical_specialty_group_id"])
         if row.get("medical_specialty_group_id") is not None
         else None,
+        "specialty_name_at_issue": row.get('specialty_name_at_issue'),
+        "specialty_code_at_issue": row.get('specialty_code_at_issue'),
+        "classifier_edition_at_issue": row.get('classifier_edition_at_issue'),
         "title": row.get("title"),
         "training_title": row.get("training_title"),
         "document_number": row.get("document_number"),
@@ -366,7 +369,10 @@ def _select_documents_base_sql() -> str:
             dk.code AS document_kind_code,
             dk.name AS document_kind_name,
             ed.medical_specialty_id,
-            ms.name AS medical_specialty_name,
+            COALESCE(to_jsonb(ed)->>'specialty_name_at_issue',ms.name) AS medical_specialty_name,
+            to_jsonb(ed)->>'classifier_edition_at_issue' AS classifier_edition_at_issue,
+            to_jsonb(ed)->>'specialty_name_at_issue' AS specialty_name_at_issue,
+            to_jsonb(ed)->>'specialty_code_at_issue' AS specialty_code_at_issue,
             ms.group_id AS medical_specialty_group_id,
             ed.title,
             ed.training_title,
@@ -623,6 +629,8 @@ def create_employee_document(
     created_by: int,
     document_kind_id: Optional[int] = None,
     medical_specialty_id: Optional[int] = None,
+    certificate_entry_id: Optional[int] = None,
+    specialty_name_at_issue: Optional[str] = None,
     title: Optional[str] = None,
     training_title: Optional[str] = None,
     document_number: Optional[str] = None,
@@ -641,6 +649,24 @@ def create_employee_document(
         if not _employee_exists(conn, employee_id):
             raise EmployeeDocumentNotFoundError("employee_id not found.")
 
+        doc_type = _load_document_type(conn, document_type_id)
+        linked_schema = _table_exists(conn, 'certificate_classifier_entries')
+        is_certificate = doc_type and doc_type['code']=='SPECIALIST_CERTIFICATION' and linked_schema
+        if is_certificate:
+            if not certificate_entry_id or not specialty_name_at_issue or not specialty_name_at_issue.strip() or not issued_at or not valid_until:
+                raise EmployeeDocumentValidationError('Для нового сертификата выберите специальность с редакцией классификатора, исходное название и даты.')
+            from app.personnel_files.certificates import entry_facts
+            from fastapi import HTTPException
+            try:
+                facts = entry_facts(conn, certificate_entry_id)
+            except HTTPException as exc:
+                raise EmployeeDocumentValidationError(str(exc.detail)) from exc
+            if medical_specialty_id is not None and medical_specialty_id != facts['medical_specialty_id']:
+                raise EmployeeDocumentValidationError('Специальность не соответствует выбранной редакции.')
+            medical_specialty_id = facts['medical_specialty_id']
+            if valid_until < issued_at:
+                raise EmployeeDocumentValidationError('Срок действия заканчивается раньше даты выдачи.')
+
         _, status, validated_hours = _validate_payload(
             conn,
             document_type_id=document_type_id,
@@ -653,6 +679,19 @@ def create_employee_document(
             lifecycle_status=lifecycle_status,
             on_create=True,
         )
+
+        if is_certificate:
+            did = conn.execute(text('''INSERT INTO employee_documents
+                (employee_id,document_type_id,document_kind_id,medical_specialty_id,certificate_entry_id,
+                 specialty_name_at_issue,title,training_title,document_number,issued_by,issued_at,valid_until,
+                 file_url,comment,lifecycle_status,created_by)
+                VALUES(:eid,:type,:kind,:sid,:entry,:name,:title,:training,:number,:issuer,:issued,:until,
+                       :url,:comment,:status,:uid) RETURNING document_id'''),
+                {'eid':employee_id,'type':document_type_id,'kind':document_kind_id,'sid':medical_specialty_id,
+                 'entry':certificate_entry_id,'name':specialty_name_at_issue.strip(),'title':title,
+                 'training':training_title,'number':document_number,'issuer':issued_by,'issued':issued_at,
+                 'until':valid_until,'url':file_url,'comment':comment,'status':status,'uid':created_by}).scalar_one()
+            return _fetch_document_by_id(conn,did)
 
         row = conn.execute(
             text(
@@ -760,6 +799,9 @@ def update_employee_document(
         ).mappings().first()
         if not existing:
             return None
+
+        if _table_exists(conn,'certificate_classifier_entries') and (existing.get('certificate_entry_id') or conn.execute(text('SELECT 1 FROM personnel_file_versions WHERE employee_document_id=:id'),{'id':document_id}).first()):
+            raise EmployeeDocumentValidationError('Реквизиты выданного сертификата сохранены. Для исправления подайте новый сертификат через раздел файлов.')
 
         merged_type_id = int(document_type_id or existing["document_type_id"])
 
@@ -870,6 +912,8 @@ def soft_delete_employee_document(document_id: int) -> Optional[Dict[str, Any]]:
         raise RuntimeError("employee_documents tables are not available")
 
     with engine.begin() as conn:
+        if _table_exists(conn,'certificate_classifier_entries') and conn.execute(text('SELECT 1 FROM personnel_file_versions WHERE employee_document_id=:id'), {'id':document_id}).first():
+            raise EmployeeDocumentValidationError('Для связанного сертификата используйте решение по файлу; прежние реквизиты сохраняются.')
         row = conn.execute(
             text(
                 """
