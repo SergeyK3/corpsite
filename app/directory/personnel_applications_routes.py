@@ -56,6 +56,7 @@ from app.personnel_applications.application.registration_service import (
 from app.personnel_applications.application.hire_order_draft_service import (
     create_hire_order_draft_for_application,
 )
+from app.personnel_applications.application.electronic_hire_service import dispatch_approval_notification
 from app.personnel_applications.application.application_apply_service import (
     orchestrate_hire_apply_for_application,
 )
@@ -483,11 +484,16 @@ def post_hire_order_draft(
     user_id = _require_user_id(user)
     try:
         with engine.begin() as conn:
+            application = SqlAlchemyPersonnelApplicationRepository(conn).require_by_id(application_id)
+            if application.application_source != "electronic":
+                raise HTTPException(status_code=422, detail={"code": "ELECTRONIC_APPLICATION_REQUIRED", "message": "Приём на работу начинается с электронного заявления."})
             result = create_hire_order_draft_for_application(
                 conn,
                 application_id=application_id,
                 created_by_user_id=user_id,
             )
+        with engine.begin() as conn:
+            dispatch_approval_notification(conn, application_id)
         return HireOrderDraftOut(
             application_id=result.application_id,
             personnel_order_id=result.personnel_order_id,

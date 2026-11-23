@@ -26,6 +26,7 @@ export type PositionRowDto = {
   position_id?: number | null;
   id?: number | null;
   name?: string | null;
+  name_kk?: string | null;
 };
 
 export const TASK_ORG_FILTER_RESET_PARAM_KEYS = [
@@ -128,7 +129,8 @@ export function normalizePositionOptions(rows: readonly PositionRowDto[]): TaskO
     if (id == null || seen.has(id)) continue;
     seen.add(id);
     const name = String(row.name ?? "").trim();
-    out.push({ id, label: name || `#${id}` });
+    const kk=String(row.name_kk??'').trim();
+    out.push({ id, label: kk ? `${name || `#${id}`} / ${kk}` : name || `#${id}` });
   }
 
   return out.sort((a, b) => a.label.localeCompare(b.label, "ru"));

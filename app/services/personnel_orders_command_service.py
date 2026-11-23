@@ -64,6 +64,17 @@ LOCKED_ORDER_STATUSES = {
 ALLOWED_LOCALES = {LOCALE_KK, LOCALE_RU}
 
 
+def _require_hire_approval_for_order(conn, order_id: int) -> None:
+    from app.personnel_applications.application.electronic_hire_service import (
+        ElectronicHireError, order_has_hire_item, require_current_approval,
+    )
+    if order_has_hire_item(conn, order_id):
+        try:
+            require_current_approval(conn, order_id)
+        except ElectronicHireError as exc:
+            raise PersonnelOrderValidationError(str(exc)) from exc
+
+
 class PersonnelOrderConflictError(RuntimeError):
     """Order is locked or business rule conflict."""
 
@@ -448,6 +459,8 @@ def create_personnel_order_draft(
     if order_date is None:
         raise PersonnelOrderValidationError("order_date is required to save a personnel order.")
     normalized_type = _normalize_header_type(order_type_code)
+    if normalized_type == "HIRE":
+        raise PersonnelOrderValidationError("Приём на работу начинается с электронного заявления.")
     normalized_source_mode = _normalize_source_mode(source_mode)
     storage_json_value = json.dumps(storage_json or {})
 
@@ -556,6 +569,8 @@ def create_personnel_order_draft_tx(
     if order_date is None:
         raise PersonnelOrderValidationError("order_date is required to save a personnel order.")
     normalized_type = _normalize_header_type(order_type_code)
+    if normalized_type == "HIRE":
+        raise PersonnelOrderValidationError("Приём на работу начинается с электронного заявления.")
     (
         signed_by_employee_id,
         signed_by_name,
@@ -669,6 +684,7 @@ def register_personnel_order_tx(conn, *, order_id: int, target_status: str) -> N
         raise PersonnelOrderConflictError(
             f"Personnel order {order_id} cannot be registered from status {order['status']}."
         )
+    _require_hire_approval_for_order(conn, order_id)
     _validate_registerable_order(conn, order)
     resolved_type = _resolve_header_type_from_items(conn, int(order_id), str(order["order_type_code"]))
     conn.execute(
@@ -782,6 +798,8 @@ def create_personnel_order_item(
 ) -> Dict[str, Any]:
     _require_available()
     normalized_type = _normalize_item_type(item_type_code)
+    if normalized_type == "HIRE":
+        raise PersonnelOrderValidationError("Пункт приёма создаётся только из электронного заявления.")
     normalized_payload = payload or {}
     payload_json = json.dumps(payload or {})
 
@@ -1091,6 +1109,8 @@ def update_personnel_order_item(
         ).mappings().one()
 
         merged_type = updates.get("item_type_code", current_item["item_type_code"])
+        if str(merged_type) == "HIRE" and str(current_item["item_type_code"]) != "HIRE":
+            raise PersonnelOrderValidationError("Пункт приёма создаётся только из электронного заявления.")
         merged_employee_id = updates.get("employee_id", current_item.get("employee_id"))
         merged_payload_raw = payload if payload is not None else current_item.get("payload")
         merged_payload = merged_payload_raw if isinstance(merged_payload_raw, dict) else {}
@@ -1426,6 +1446,7 @@ def mark_personnel_order_ready_for_signature(*, order_id: int) -> Dict[str, Any]
             raise PersonnelOrderConflictError(
                 f"Only DRAFT orders can move to READY_FOR_SIGNATURE (current: {order['status']})."
             )
+        _require_hire_approval_for_order(conn, order_id)
         _validate_registerable_order(conn, order)
 
     from app.services.personnel_orders_editorial_service import (
@@ -1464,6 +1485,7 @@ def mark_personnel_order_ready_for_signature(*, order_id: int) -> Dict[str, Any]
             raise PersonnelOrderConflictError(
                 f"Only DRAFT orders can move to READY_FOR_SIGNATURE (current: {order['status']})."
             )
+        _require_hire_approval_for_order(conn, order_id)
         conn.execute(
             text(
                 """
@@ -1502,6 +1524,7 @@ def register_personnel_order(
                 f"Personnel order {order_id} cannot be registered from status {current_status}."
             )
 
+        _require_hire_approval_for_order(conn, order_id)
         _validate_registerable_order(conn, order)
         resolved_type = _resolve_header_type_from_items(
             conn,

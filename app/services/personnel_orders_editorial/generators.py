@@ -485,15 +485,23 @@ def generate_item_body(locale: str, item_ctx: Mapping[str, Any]) -> Dict[str, st
                 f"продолжительностью {days} календарных дней."
             )
     elif item_type == ORDER_TYPE_HIRE:
+        from app.services.personnel_order_hire_wording import hire_department_destination_kk, hire_position_accusative_ru
         org = _localized_name(org_unit_name, lang)
         position = _localized_position(position_name, lang)
         rate_value = _format_rate_value(rate)
         if lang == "kk":
             text = (
-                f"{fio} «{org}» бөлімшесіне {position} лауазымына "
+                f"{fio} {hire_department_destination_kk(org)} {position} лауазымына "
                 f"{rate_value} мөлшерлемесінде {date} бастап жұмысқа қабылдансын."
             )
         else:
+            fio = _clean(item_ctx.get("employee_full_name_accusative_ru")) or "[ФИО в винительном падеже (RU): заполните вручную]"
+            manual_forms = item_ctx.get("hire_position_manual_forms") or {}
+            manual_ru = _clean(item_ctx.get("position_document_nominative_ru")) if manual_forms.get("ru") is True else ""
+            try:
+                position = hire_position_accusative_ru(position, manual_ru)
+            except ValueError:
+                position = "[должность в винительном падеже (RU): заполните вручную]"
             text = (
                 f"Принять на работу {fio} в подразделение «{org}» на должность "
                 f"{position} со ставкой {rate_value} с {date}."

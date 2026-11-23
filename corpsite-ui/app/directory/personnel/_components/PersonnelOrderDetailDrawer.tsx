@@ -1,4 +1,5 @@
 "use client";
+import ElectronicHireVisaPanel from "./ElectronicHireVisaPanel";
 
 import * as React from "react";
 import { createPortal } from "react-dom";
@@ -693,6 +694,7 @@ export default function PersonnelOrderDetailDrawer({
 
           {order ? (
             <div hidden={activeTab !== "data"}>
+              {order.order_type_code === "HIRE" ? <ElectronicHireVisaPanel orderId={order.order_id} /> : null}
               {documentReview ? <section data-testid="personnel-order-document-review">
                 <h3 className="mb-2 text-sm font-semibold text-zinc-900 dark:text-zinc-100">Проверка документа</h3>
                 {documentReview.blockers.length || documentReview.warnings.length ? <ul className="mb-3 space-y-1 text-sm text-amber-800">{[...documentReview.blockers, ...documentReview.warnings].map((entry, index) => <li key={`${entry.code}-${index}`}>{entry.code}</li>)}</ul> : null}
@@ -704,6 +706,7 @@ export default function PersonnelOrderDetailDrawer({
               <section>
                 <h3 className="mb-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100">Действия</h3>
                 <PersonnelOrderLifecycleActions
+                  unmatchedPosition={Boolean(detail?.items.some(item => item.item_type_code === "HIRE" && item.payload?.position_resolution === "unmatched_manual"))}
                   order={order}
                   itemCount={detail?.items.length || 0}
                   linkedEventCount={linkedEventCount}
