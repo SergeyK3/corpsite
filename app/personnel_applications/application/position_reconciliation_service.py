@@ -9,7 +9,8 @@ from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
 from app.personnel_applications.application.electronic_hire_service import (
-    ElectronicHireError, load_electronic_hire, queue_approval_notification, render_application,
+    ElectronicHireError, conditions_hash, ensure_approval_task, load_electronic_hire,
+    queue_approval_notification, render_application,
 )
 from app.services.org_unit_allowed_positions_service import allowed_link_exists, upsert_allowed_position_link
 from app.services.position_directory_service import resolve_existing_name, save_details
@@ -214,6 +215,13 @@ def resolve_position_review(conn: Connection, *, request_id: int, actor_user_id:
         """), {"order": order_id})
         from app.services.personnel_orders_editorial_service import mark_blocks_stale_after_structured_change
         mark_blocks_stale_after_structured_change(conn, int(order_id), item_id=int(item["item_id"]))
+        from app.personnel_applications.application.hire_approval_task_service import archive_superseded_hire_tasks
+        archive_superseded_hire_tasks(
+            conn, application_id=int(request["application_id"]),
+            current_fingerprint=conditions_hash(updated),
+        )
+        if updated["approval_mode"] == "electronic":
+            ensure_approval_task(conn, updated)
         queue_approval_notification(conn, int(request["application_id"]))
     after_print = render_application(conn, int(request["application_id"]))
     conn.execute(text("""
