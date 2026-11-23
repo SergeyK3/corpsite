@@ -11,7 +11,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 type RouteParams = {
-  params: Promise<{ applicationId: string }> | { applicationId: string };
+  params: Promise<{ applicationId: string }>;
 };
 
 function jsonError(status: number, code: string, message: string): NextResponse {
