@@ -10,7 +10,7 @@ from typing import Any
 from sqlalchemy import text
 
 from app.db.engine import engine
-from app.services.personnel_order_template_application_service import _FIELDS, _values, render_item_template, TemplateApplicationError
+from app.services.personnel_order_template_application_service import _FIELDS, _render, _values, TemplateApplicationError
 from app.services.personnel_orders_query_service import PersonnelOrderValidationError
 
 
@@ -69,7 +69,7 @@ def bound_template_generation(conn: Any, order_id: int, items: list[Any]) -> dic
         for item in active_items:
             template = templates[int(item["item_id"])]
             values, _, _ = _values(conn, item, template)
-            rendered_items[int(item["item_id"])] = render_item_template(conn, item, template, values, item_only=combined)
+            rendered_items[int(item["item_id"])] = _render(template, values, item_only=combined)
     except ValueError as exc:
         raise PersonnelOrderValidationError(str(exc)) from exc
     first_template = templates[int(active_items[0]["item_id"])]
@@ -86,7 +86,7 @@ def render_added_item(conn: Any, *, order_id: int, item_id: int, template: dict[
     item = conn.execute(text("SELECT * FROM personnel_order_items WHERE item_id=:id"), {"id": item_id}).mappings().one()
     try:
         values, _, _ = _values(conn, item, template)
-        rendered = render_item_template(conn, item, template, values, item_only=True)
+        rendered = _render(template, values, item_only=True)
     except TemplateApplicationError as exc:
         raise PersonnelOrderValidationError(str(exc)) from exc
     for locale in ("ru", "kk"):

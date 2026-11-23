@@ -196,9 +196,6 @@ export type EmployeeCorrectResponse = {
 
 export type EmployeeStatusCorrectionPayload = {
   status: "working" | "not_working";
-  expected_assignment_id?: number;
-  expected_assignment_rate?: number | null;
-  employment_rate?: number;
   reason?: string;
   comment?: string;
 };

@@ -1,4 +1,3 @@
-import { intakeEmploymentFixture } from "../_lib/intakeTestFixtures";
 import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -45,23 +44,23 @@ describe("employment tenure integration", () => {
   it("calculates non-zero tenure for dd.mm.yyyy rows with overlap and open period", async () => {
     const fetchMock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
       const body = JSON.parse(String(init?.body ?? "{}")) as {
-        records: Array<{ record_id: string; start_date: string | null; end_date: string | null }>;
+        records: Array<{ record_id: string; year_from: string | null; year_to: string | null }>;
       };
       expect(body.records).toEqual([
         expect.objectContaining({
           record_id: "row-1",
-          start_date: "1993-09-01",
-          end_date: "1994-07-25",
+          year_from: "1993-09-01",
+          year_to: "1994-07-25",
         }),
         expect.objectContaining({
           record_id: "row-2",
-          start_date: "1994-01-01",
-          end_date: "1995-06-30",
+          year_from: "1994-01-01",
+          year_to: "1995-06-30",
         }),
         expect.objectContaining({
           record_id: "row-3",
-          start_date: "2020-01-01",
-          end_date: null,
+          year_from: "2020-01-01",
+          year_to: null,
         }),
       ]);
 
@@ -81,30 +80,30 @@ describe("employment tenure integration", () => {
     render(
       <IntakeEmploymentBiographyTable
         items={[
-          intakeEmploymentFixture({
+          {
             record_id: "row-1",
             organization: "Больница 1",
             position: "Врач",
             year_from: "01.09.1993",
             year_to: "25.07.1994",
             reason_for_leaving: "",
-          }),
-          intakeEmploymentFixture({
+          },
+          {
             record_id: "row-2",
             organization: "Больница 2",
             position: "Терапевт",
             year_from: "01.01.1994",
             year_to: "30.06.1995",
             reason_for_leaving: "",
-          }),
-          intakeEmploymentFixture({
+          },
+          {
             record_id: "row-3",
             organization: "Текущая",
             position: "Главврач",
             year_from: "01.01.2020",
             year_to: "",
             reason_for_leaving: "",
-          }),
+          },
         ]}
         onChange={vi.fn()}
       />,
@@ -135,14 +134,14 @@ describe("employment tenure integration", () => {
 
     const payload = emptyIntakeDraftPayload();
     payload.employment_biography = [
-      intakeEmploymentFixture({
+      {
         record_id: "row-1",
         organization: "Больница 1",
         position: "Врач",
         year_from: "01.09.1993",
         year_to: "25.07.1994",
         reason_for_leaving: "",
-      }),
+      },
     ];
 
     const { unmount } = render(

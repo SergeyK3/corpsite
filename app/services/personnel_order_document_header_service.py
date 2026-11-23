@@ -22,7 +22,9 @@ class PersonnelOrderDuplicateError(PersonnelOrderConflictError):
         self.duplicate = duplicate
         conflicts = [r for r in duplicate['candidates'] if r.get('is_conflict')]
         details = '; '.join(f"№ {r['order_number']} от {r['order_date']} (ID {r['order_id']})" for r in conflicts)
-        self.message = 'Уже существует приказ с такими же номером и датой: ' + details + '.'
+        self.message = 'В общем журнале кадровых приказов уже есть этот номер за календарный год: ' + details + '.'
+        # Keep the API error code for existing clients; the message describes
+        # the stricter annual rule.
         super().__init__('DUPLICATE_ORDER_NUMBER_DATE')
 
 
@@ -33,9 +35,9 @@ def duplicate_preview(*, order_number: str, order_date: Optional[date], order_id
             OR upper(po.order_number) LIKE 'PERSONNEL-IMPORT-%' OR upper(po.order_number) LIKE 'CSV-PILOT-%' THEN 'TECHNICAL' ELSE 'WORKING' END AS record_quality
           FROM personnel_orders po WHERE po.deleted_at IS NULL AND po.order_id <> COALESCE(:id,-1)
           AND {NUMBER_KEY_SQL.replace('order_number','po.order_number')}=:number ORDER BY po.order_id"""), {"id":order_id,"number":_number(order_number)}).mappings().all()
-    candidates=[{"order_id":int(r["order_id"]),"order_number":r["order_number"],"order_date":r["order_date"].isoformat() if r["order_date"] else None,"order_type_code":r["order_type_code"],"status":r["status"],"record_quality":r['record_quality'],"is_conflict":bool(order_date and r['order_date']==order_date),"can_open":True} for r in rows]
-    blocking=bool(order_date and any(r["order_date"]==order_date for r in rows))
-    return {"blocking":blocking,"warnings":(["SAME_NUMBER_DIFFERENT_DATE"] if rows and not blocking else []),"candidates":candidates}
+    candidates=[{"order_id":int(r["order_id"]),"order_number":r["order_number"],"order_date":r["order_date"].isoformat() if r["order_date"] else None,"order_type_code":r["order_type_code"],"status":r["status"],"record_quality":r['record_quality'],"is_conflict":bool(order_date and r['order_date'] and r['order_date'].year==order_date.year),"can_open":True} for r in rows]
+    blocking=any(candidate["is_conflict"] for candidate in candidates)
+    return {"blocking":blocking,"warnings":(["SAME_NUMBER_DIFFERENT_YEAR"] if order_date and rows and not blocking else []),"candidates":candidates}
 
 def patch_document_header(*, order_id:int, expected_document_revision:int, order_number:str, order_date:Optional[date], source_title:Optional[str], source_title_locale:Optional[str], reason_code:Optional[str], reason_text:Optional[str], actor_user_id:int)->dict[str,Any]:
     with engine.begin() as conn:

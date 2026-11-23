@@ -45,7 +45,7 @@ describe("TemplatesPageClient draft lifecycle", () => {
     vi.mocked(savePersonnelOrderTemplateDraft).mockReturnValueOnce(pending);
     const sent = { ...scoped, preamble_ru: "Отправленная преамбула", revision: 2 };
     fireEvent.change(screen.getByLabelText("Преамбула RU"), { target: { value: sent.preamble_ru } });
-    fireEvent.click(screen.getByRole("button", { name: "Сохранить черновик" }));
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить черновик", exact: true }));
     expect(screen.getByRole("button", { name: "Сохранение…" })).toBeDisabled();
     fireEvent.change(screen.getByLabelText("Преамбула RU"), { target: { value: "Последняя RU [поле]" } });
     fireEvent.change(screen.getByLabelText("Преамбула KK"), { target: { value: "Последняя KK [өріс]" } });
@@ -54,32 +54,32 @@ describe("TemplatesPageClient draft lifecycle", () => {
     await screen.findByText("Отправленные тексты сохранены. В редакторе есть более новые несохранённые изменения.");
     expect(screen.getByLabelText("Преамбула RU")).toHaveValue("Последняя RU [поле]");
     expect(screen.getByLabelText("Преамбула KK")).toHaveValue("Последняя KK [өріс]");
-    expect(screen.getByRole("button", { name: "Сохранить черновик" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Сохранить черновик", exact: true })).toBeEnabled();
     const latest = { ...sent, preamble_ru: "Последняя RU [поле]", preamble_kk: "Последняя KK [өріс]", revision: 3 };
     vi.mocked(savePersonnelOrderTemplateDraft).mockResolvedValue(latest);
     vi.mocked(getPersonnelOrderTemplateDraft).mockResolvedValue(latest);
-    fireEvent.click(screen.getByRole("button", { name: "Сохранить черновик" }));
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить черновик", exact: true }));
     await screen.findByText("Черновик сохранён");
     expect(savePersonnelOrderTemplateDraft).toHaveBeenLastCalledWith("EDUCATION_INFORMATION_CHANGE", expect.objectContaining({ expected_revision: 2, expected_template_version_id: 60, preamble_ru: latest.preamble_ru, preamble_kk: latest.preamble_kk }), 44);
     expect(getPersonnelOrderTemplateDraft).toHaveBeenLastCalledWith("EDUCATION_INFORMATION_CHANGE", 44);
-    expect(screen.getByRole("button", { name: "Сохранить черновик" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Сохранить черновик", exact: true })).toBeDisabled();
   });
 
   it("does not claim ID60 is saved when a successful PUT is contradicted by the readback", async () => {
     const scoped = await openEducationDraft();
     vi.mocked(savePersonnelOrderTemplateDraft).mockResolvedValue({ ...scoped, title_ru: "Последний текст", revision: 2 });
     changeTitle("Последний текст");
-    fireEvent.click(screen.getByRole("button", { name: "Сохранить черновик" }));
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить черновик", exact: true }));
     await screen.findByText(/Не удалось подтвердить сохранение отправленных текстов ID60/);
     expect(screen.queryByText("Черновик сохранён")).not.toBeInTheDocument();
     expect(screen.getByLabelText("Заголовок RU")).toHaveValue("Последний текст");
-    expect(screen.getByRole("button", { name: "Сохранить черновик" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Сохранить черновик", exact: true })).toBeEnabled();
   });
 
   it("explains unchanged ID60 save state and retains publication checks for education", async () => {
     await openEducationDraft();
-    const save = screen.getByRole("button", { name: "Сохранить черновик" });
-    const publish = screen.getByRole("button", { name: "Опубликовать версию" });
+    const save = screen.getByRole("button", { name: "Сохранить черновик", exact: true });
+    const publish = screen.getByRole("button", { name: "Опубликовать версию", exact: true });
     expect(save).toBeDisabled();
     expect(screen.getByText("Нет несохранённых изменений.")).toBeVisible();
     expect(publish).toBeEnabled();
@@ -100,7 +100,7 @@ describe("TemplatesPageClient draft lifecycle", () => {
     vi.mocked(apiFetchJson).mockClear();
     const fields = screen.getByTestId("template-draft-editor").querySelectorAll("textarea");
     fields.forEach((field, i) => fireEvent.change(field, { target: { value: `[поле ${i}]\nНесохранённый текст` } }));
-    fireEvent.click(screen.getByRole("button", { name: "Предварительный просмотр" }));
+    fireEvent.click(screen.getByRole("button", { name: "Предварительный просмотр", exact: true }));
     const panel = await screen.findByTestId("template-draft-preview");
     expect(panel.querySelectorAll("article")).toHaveLength(2);
     expect(panel.querySelectorAll("dd")).toHaveLength(10);
@@ -234,73 +234,7 @@ describe("TemplatesPageClient draft lifecycle", () => {
     await screen.findByTestId("template-draft-preview");
     expect(previewPersonnelOrderTemplateDraft).toHaveBeenLastCalledWith(type,expect.objectContaining({...texts,title_ru:scoped.title_ru}));
   });
-  it("selects the clicked identity before the URL updates and saves its exact draft version", async () => {
-    const type="TRANSFER";
-    const first={template_id:41,item_type_code:type,name_ru:"Card 41",name_kk:"41",is_default:true,template_version_id:null,draft_version_id:54};
-    const second={...first,template_id:42,name_ru:"Card 42",is_default:false,draft_version_id:55};
-    const draft42={...draft,template_id:42,item_type_code:type,template_version_id:55,version_number:1,title_ru:"Card 42"};
-    vi.mocked(listPersonnelOrderTemplateCatalog).mockResolvedValue({items:[{...catalog.items[0],type_code:type,templates:[first,second]}]});
-    vi.mocked(listPersonnelIndependentTemplates).mockResolvedValue({items:[first,second]});
-    vi.mocked(getPersonnelOrderTemplatePublished).mockResolvedValue(null);
-    vi.mocked(getPersonnelOrderTemplateDraft).mockImplementation(async (_type,id)=>id===42?draft42:{...draft42,template_id:41,template_version_id:54});
-    vi.mocked(savePersonnelOrderTemplateDraft).mockResolvedValue({...draft42,revision:2});
-    setup();
-    await waitFor(()=>expect(document.querySelector('[data-catalog-template-id="42"]')).toBeInTheDocument());
-    const card=document.querySelector<HTMLButtonElement>('[data-catalog-template-id="42"]')!;
-    await waitFor(()=>expect(screen.getByTestId("personnel-order-template-detail")).toHaveAttribute("data-template-id","41"));
-    vi.mocked(getPersonnelOrderTemplateDraft).mockClear();
-    fireEvent.click(card);
-    await screen.findByTestId("template-draft-editor");
-    expect(screen.getByTestId("template-draft-editor")).toHaveAttribute("data-template-id","42");
-    expect(screen.getByTestId("template-draft-editor")).toHaveAttribute("data-template-version-id","55");
-    expect(routerPush.mock.calls.at(-1)?.[0]).toContain("template_id=42");
-    expect(getPersonnelOrderTemplateDraft).toHaveBeenCalledWith(type,42);
-    expect(getPersonnelOrderTemplateDraft).not.toHaveBeenCalledWith(type,41);
-    expect(getPersonnelOrderTemplateDraft).not.toHaveBeenCalledWith(type);
-    changeTitle("Card 42 updated");
-    fireEvent.click(screen.getByRole("button",{name:"Сохранить черновик"}));
-    await waitFor(()=>expect(savePersonnelOrderTemplateDraft).toHaveBeenCalledWith(type,expect.objectContaining({expected_template_version_id:55,expected_revision:1}),42));
-    expect(publishPersonnelOrderTemplateDraft).not.toHaveBeenCalled();
-  });
-  it("keeps the latest card and editor through a delayed earlier URL update", async () => {
-    const type = "TRANSFER";
-    const first = {template_id: 41, item_type_code: type, name_ru: "Card 41", name_kk: "41", is_default: true, template_version_id: null, draft_version_id: null};
-    const second = {...first, template_id: 42, name_ru: "Card 42", is_default: false, draft_version_id: 55};
-    const third = {...first, template_id: 43, name_ru: "Card 43", is_default: false, draft_version_id: 56};
-    const templates = [first, second, third];
-    currentSearch = new URLSearchParams("section=personnel-orders&type=TRANSFER&template_id=41");
-    vi.mocked(listPersonnelOrderTemplateCatalog).mockResolvedValue({items: [{...catalog.items[0], type_code: type, templates}]});
-    vi.mocked(listPersonnelIndependentTemplates).mockResolvedValue({items: templates});
-    vi.mocked(getPersonnelOrderTemplatePublished).mockResolvedValue(null);
-    vi.mocked(getPersonnelOrderTemplateDraft).mockImplementation(async (_type, id) =>
-      id === 42 || id === 43
-        ? {...draft, template_id: id, item_type_code: type, template_version_id: id === 42 ? 55 : 56, title_ru: `Card ${id}`}
-        : null,
-    );
 
-    const view = setup();
-    await waitFor(() => expect(screen.getByTestId("personnel-order-template-detail")).toHaveAttribute("data-template-id", "41"));
-    const card42 = document.querySelector<HTMLButtonElement>('[data-catalog-template-id="42"]')!;
-    const card43 = document.querySelector<HTMLButtonElement>('[data-catalog-template-id="43"]')!;
-
-    fireEvent.click(card42);
-    await waitFor(() => expect(screen.getByTestId("template-draft-editor")).toHaveAttribute("data-template-id", "42"));
-    fireEvent.click(card43);
-    await waitFor(() => expect(screen.getByTestId("template-draft-editor")).toHaveAttribute("data-template-id", "43"));
-    expect(card42).toHaveAttribute("aria-pressed", "false");
-    expect(card43).toHaveAttribute("aria-pressed", "true");
-    expect(routerPush.mock.calls.at(-1)?.[0]).toContain("template_id=43");
-
-    currentSearch = new URLSearchParams("section=personnel-orders&type=TRANSFER&template_id=42");
-    view.rerender(<TemplatesPageClient />);
-    expect(screen.getByTestId("template-draft-editor")).toHaveAttribute("data-template-id", "43");
-    expect(card43).toHaveAttribute("aria-pressed", "true");
-
-    currentSearch = new URLSearchParams("section=personnel-orders&type=TRANSFER&template_id=43");
-    view.rerender(<TemplatesPageClient />);
-    expect(screen.getByTestId("template-draft-editor")).toHaveAttribute("data-template-id", "43");
-    expect(card43).toHaveAttribute("aria-pressed", "true");
-  });
   it('saves an official print heading independently of the detailed internal name and reports a missing KK heading',async()=>{
     const internal='О совмещении (О замещении на время отпуска как доп ставка)';
     vi.mocked(getPersonnelOrderTemplateDraft).mockResolvedValue({...draft,title_ru:internal,print_title_ru:'О замещении',print_title_kk:null});

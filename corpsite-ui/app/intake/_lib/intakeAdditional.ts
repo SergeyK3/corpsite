@@ -255,9 +255,7 @@ export function emptyIntakeAdditionalPayload(): IntakeAdditionalPayload {
 }
 
 export function normalizeIntakeAdditionalPayload(
-  raw: (Omit<Partial<IntakeAdditionalPayload>, "academic_degrees"> & {
-    academic_degrees?: Array<Partial<IntakeAcademicDegree & IntakeAcademicTitle> & Record<string, unknown>>;
-  }) | undefined,
+  raw: Partial<IntakeAdditionalPayload> | undefined,
 ): IntakeAdditionalPayload {
   const source = raw ?? {};
   const legacySplitTitles: IntakeAcademicTitle[] = [];

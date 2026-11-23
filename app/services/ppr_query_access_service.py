@@ -17,56 +17,6 @@ class PprQueryAccessDeniedError(PermissionError):
     """Raised when RBAC or visibility denies PPR read."""
 
 
-def is_full_personnel_card_reader(user_ctx: dict[str, Any]) -> bool:
-    """HR and privileged readers retain the complete personnel dossier."""
-    from app.security.documentation_viewer import documentation_read_allowed
-    from app.security.directory_scope import is_privileged
-
-    return bool(
-        documentation_read_allowed(user_ctx)
-        or is_privileged(user_ctx)
-        or evaluate_personnel_admin_access(user_ctx)
-    )
-
-
-def require_personnel_card_reader(user_ctx: dict[str, Any]) -> bool:
-    """Require an HR reader or an effective manager grant, independently of list visibility.
-
-    Returns True only for readers allowed to see the full HR dossier. The
-    ordinary personnel visibility assignment still controls the target scope.
-    """
-    if is_full_personnel_card_reader(user_ctx):
-        return True
-    from app.services.access_resolver_service import resolve_effective_access
-
-    try:
-        access = resolve_effective_access(int(user_ctx["user_id"]))
-    except (KeyError, TypeError, ValueError):
-        raise HTTPException(status_code=403, detail="Personal card access required.")
-    if str(access.get("access_level") or "").upper() != "MANAGER":
-        raise HTTPException(status_code=403, detail="Personal card access required.")
-    return False
-
-
-def assert_personnel_card_scope_for_person(
-    user_ctx: dict[str, Any], person_id: int, *, employee_id: int | None, full_reader: bool,
-) -> None:
-    """A manager must reach the target through its unique current Employee link."""
-    assert_ppr_read_allowed_for_person(user_ctx, person_id, resolved_employee_id=employee_id)
-    if full_reader:
-        return
-    if employee_id is None:
-        raise HTTPException(status_code=404, detail="Personal card not found.")
-    with default_engine.connect() as conn:
-        active = conn.execute(
-            text("SELECT is_active FROM public.employees WHERE employee_id = :employee_id AND person_id = :person_id"),
-            {"employee_id": employee_id, "person_id": person_id},
-        ).scalar_one_or_none()
-    if active is not True:
-        raise HTTPException(status_code=404, detail="Personal card not found.")
-    assert_ppr_read_allowed_for_employee(user_ctx, employee_id)
-
-
 def _is_org_wide_reader(user_ctx: dict[str, Any], scope: dict[str, Any]) -> bool:
     if scope.get("privileged"):
         return True

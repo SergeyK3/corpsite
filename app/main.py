@@ -55,6 +55,8 @@ from app.api.ppr_card_command_router import router as ppr_card_command_router
 from app.api.personnel_verification_router import router as personnel_verification_router
 from app.api.personnel_intake_public_router import router as personnel_intake_public_router
 from app.api.personnel_intake_tenure_router import router as personnel_intake_tenure_router
+from app.api.training_router import router as training_router
+from app.learning.router import router as learning_router
 from app.operational_orders.router import router as operational_orders_router
 from app.incoming_information.router import router as incoming_information_router
 
@@ -146,10 +148,6 @@ app.include_router(ppr_stage1_general_router)
 app.include_router(ppr_stage2_education_router)
 app.include_router(ppr_stage3_training_router)
 app.include_router(ppr_migration_status_router)
-from app.personnel_files.router import router as personnel_files_router
-from app.personnel_files.upload_limit import PersonnelFileUploadLimit
-app.add_middleware(PersonnelFileUploadLimit)
-app.include_router(personnel_files_router)
 app.include_router(ppr_router)
 app.include_router(ppr_self_router)
 app.include_router(ppr_self_orders_router)
@@ -162,6 +160,8 @@ app.include_router(education_document_references_router)
 app.include_router(personnel_verification_router)
 app.include_router(personnel_intake_public_router)
 app.include_router(personnel_intake_tenure_router)
+app.include_router(training_router)
+app.include_router(learning_router)
 app.include_router(operational_orders_router)
 app.include_router(incoming_information_router)
 

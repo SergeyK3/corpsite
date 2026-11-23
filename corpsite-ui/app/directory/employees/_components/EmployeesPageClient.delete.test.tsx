@@ -1,8 +1,8 @@
-import { employeeFixture } from "../_lib/employeeTestFixtures";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import EmployeesPageClient from "./EmployeesPageClient";
+import { OPEN_PERSONAL_CARD_CTA } from "@/lib/personnelCardTerminology";
 import { CurrentUserProvider } from "@/lib/currentUser";
 import type { MeInfo } from "@/lib/types";
 
@@ -31,7 +31,7 @@ vi.mock("./EmployeeCreateDrawer", () => ({
 
 vi.mock("../_lib/api.client", () => ({
   getEmployees: vi.fn(async () => ({
-    items: [employeeFixture({ employee_id: 42, person_id: 501, fio: "Иванов Иван", status: "active", employment_rate: 1 })],
+    items: [{ employee_id: 42, person_id: 501, fio: "Иванов Иван", status: "active", employment_rate: 1 }],
     total: 1,
   })),
   getPositions: vi.fn(async () => ({ items: [] })),
@@ -49,11 +49,11 @@ const baseProps = {
   pageTitle: "Персонал",
   readOnly: true,
   managementView: true,
-  initialFilters: { status: "all" as const, limit: 50, offset: 0 },
+  initialFilters: { status: "all", limit: 50, offset: 0 },
   initialDepartments: [],
   initialPositions: [],
   initialEmployees: {
-    items: [employeeFixture({ employee_id: 42, person_id: 501, fio: "Иванов Иван", status: "active", employment_rate: 1 })],
+    items: [{ employee_id: 42, person_id: 501, fio: "Иванов Иван", status: "active", employment_rate: 1 }],
     total: 1,
   },
   initialError: null,
@@ -86,7 +86,7 @@ describe("EmployeesPageClient staff hard-delete", () => {
   it("does not show delete button even for a stale enabled ADMIN capability", async () => {
     renderWithMe({ user_id: 1, role_id: 2, is_system_admin: true, can_hard_delete_employee: true });
 
-    expect(await screen.findByRole("link", { name: "Личная карточка" })).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: OPEN_PERSONAL_CARD_CTA })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Удалить/ })).not.toBeInTheDocument();
   });
 
@@ -99,7 +99,7 @@ describe("EmployeesPageClient staff hard-delete", () => {
       can_hard_delete_employee: false,
     });
 
-    await screen.findByRole("link", { name: "Личная карточка" });
+    await screen.findByRole("link", { name: OPEN_PERSONAL_CARD_CTA });
     expect(screen.queryByRole("button", { name: /Удалить/ })).not.toBeInTheDocument();
   });
 

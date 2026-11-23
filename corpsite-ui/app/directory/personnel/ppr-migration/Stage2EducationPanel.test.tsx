@@ -8,11 +8,11 @@ vi.mock("@/lib/api", () => ({ apiFetchJson: vi.fn() }));
 const api = vi.mocked(apiFetchJson);
 
 const baseRun = (status = "DRY_RUN_COMPLETED", pausedOperation?: string) => ({
-  run: { stage_run_id: 44, status, current_position: 2, paused_operation: pausedOperation, stage0_cohort_run_id: undefined as number | undefined },
+  run: { stage_run_id: 44, status, current_position: 2, paused_operation: pausedOperation },
   counts: { COMPLETED: 1, SKIPPED_BY_DECISION: 1 },
   participants: [
-    { stage_run_participant_id: 5, position: 2, employee_id: 202, status: "PENDING", error_code: undefined as string | undefined, fragments: [{ fragment_index: 1, source: { institution_name: "Колледж Б" }, current: {}, proposal: { institution_name: "Колледж Б" }, outcome: "READY_TO_ADD", reason_code: "STAGE2_KIND_BASIC" }] },
-    { stage_run_participant_id: 4, position: 1, employee_id: 101, status: "COMPLETED", error_code: undefined as string | undefined, fragments: [{ fragment_index: 0, source: { institution_name: "Университет А" }, current: { institution_name: "Университет А" }, proposal: {}, outcome: "ALREADY_APPLIED", reason_code: "STAGE2_EXACT_PROVENANCE_MATCH" }, { fragment_index: 2, source: { institution_name: "Магистратура" }, current: { institution_name: "Другая" }, proposal: { institution_name: "Магистратура" }, outcome: "CANONICAL_CONFLICT", reason_code: "STAGE2_CANONICAL_VALUE_CONFLICT" }] },
+    { stage_run_participant_id: 5, position: 2, employee_id: 202, status: "PENDING", fragments: [{ fragment_index: 1, source: { institution_name: "Колледж Б" }, current: {}, proposal: { institution_name: "Колледж Б" }, outcome: "READY_TO_ADD", reason_code: "STAGE2_KIND_BASIC" }] },
+    { stage_run_participant_id: 4, position: 1, employee_id: 101, status: "COMPLETED", fragments: [{ fragment_index: 0, source: { institution_name: "Университет А" }, current: { institution_name: "Университет А" }, proposal: {}, outcome: "ALREADY_APPLIED", reason_code: "STAGE2_EXACT_PROVENANCE_MATCH" }, { fragment_index: 2, source: { institution_name: "Магистратура" }, current: { institution_name: "Другая" }, proposal: { institution_name: "Магистратура" }, outcome: "CANONICAL_CONFLICT", reason_code: "STAGE2_CANONICAL_VALUE_CONFLICT" }] },
   ],
 });
 

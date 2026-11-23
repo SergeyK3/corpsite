@@ -43,14 +43,6 @@ const sampleResponse: PprCompositeReadResponse = {
   },
   sections: {},
   events: null,
-  intended_employment: null,
-  additional: {
-    foreign_languages: [], foreign_languages_none: false,
-    awards: [], awards_none: false,
-    academic_degrees: [], academic_degrees_none: false,
-    academic_titles: [], academic_titles_none: false,
-    status_facts: [],
-  },
   metadata: {
     read_mode: "composite",
     source: "ppr",

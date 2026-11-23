@@ -52,11 +52,6 @@ def pick_payload_value(payload: Mapping[str, Any], *keys: str) -> Any:
 
 def build_item_ctx(item: Mapping[str, Any], employee_name: Optional[str]) -> Dict[str, Any]:
     payload = payload_dict(item.get("payload"))
-    from app.services.personnel_order_kazakh_name import document_name_kk
-    employee_snapshot = payload_dict(payload.get("employee"))
-    name_snapshot = payload_dict(employee_snapshot.get("name"))
-    source_employee_name = name_snapshot.get("canonical") or pick_payload_value(payload, "source_employee_name") or employee_name
-    employee_name_kk = document_name_kk(source_employee_name or "", name=name_snapshot)
     document_forms_kk = payload_dict(payload.get("document_forms_kk"))
     document_forms_ru = payload_dict(payload.get("document_forms_ru"))
     assignment = payload_dict(payload.get("to_assignment") or payload.get("assignment"))
@@ -64,6 +59,8 @@ def build_item_ctx(item: Mapping[str, Any], employee_name: Optional[str]) -> Dic
     org_unit_name = pick_payload_value(
         payload, "source_org_unit_name", "org_unit_name", "orgUnitName", "from_org_unit_name"
     ) or presentation.get("org_unit_name") or assignment.get("unit") or item.get("snapshot_org_unit_name")
+    if item.get("item_type_code") == "HIRE" and payload.get("org_unit_title_kk"):
+        org_unit_name = {"ru": org_unit_name, "kk": payload["org_unit_title_kk"]}
     document_unit = payload.get("document_org_unit")
     if isinstance(document_unit, Mapping):
         org_unit_name = {"ru": str(document_unit.get("name") or "—"), "kk": str(document_unit.get("name_kk") or "—")}
@@ -95,8 +92,7 @@ def build_item_ctx(item: Mapping[str, Any], employee_name: Optional[str]) -> Dic
         "item_type_code": item.get("item_type_code"),
         "recall_payload": payload if item.get("item_type_code") == "LEAVE.ANNUAL.RECALL" else None,
         "childcare_payload": payload if item.get("item_type_code") == "LEAVE.CHILDCARE.GRANT" else None,
-        "employee_name": source_employee_name,
-        "employee_name_kk": employee_name_kk,
+        "employee_name": employee_name or pick_payload_value(payload, "source_employee_name"),
         "employee_full_name_accusative_ru": confirmed_transfer_accusative(payload),
         "effective_date": iso_date(item.get("effective_date")),
         "org_unit_name": org_unit_name,
@@ -106,6 +102,7 @@ def build_item_ctx(item: Mapping[str, Any], employee_name: Optional[str]) -> Dic
             and not document_forms_kk.get('position_document_possessive_kk')
             and not isinstance(position_name, dict) else position_name),
         "position_document_nominative_ru": document_forms_ru.get("position_document_nominative_ru"),
+        "hire_position_manual_forms": payload_dict(payload.get("hire_position_manual_forms")),
         # Explicit document forms are authoritative for the Kazakh document;
         # do not try to infer them from a Russian position snapshot.
         "position_document_possessive_kk": pick_payload_value(

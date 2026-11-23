@@ -53,7 +53,7 @@ it('opens the full dictionary with permanent arrows without replacing manual tex
   const kk=screen.getByRole('combobox',{name:'Специальность сертификата (KK)'});
   for(const locale of ['RU','KK'])expect(screen.getByRole('button',{name:`Открыть список специальностей (${locale})`})).toBeVisible();
   fireEvent.click(screen.getByRole('button',{name:'Открыть список специальностей (RU)'}));
-  await screen.findByRole('option',{name:'Терапия'});
+  await screen.findByRole('option',{name:'Терапия',exact:true});
   expect(ru).toHaveValue('');
   expect(within(screen.getByRole('listbox')).getAllByRole('option')).toHaveLength(2);
   expect(screen.getByRole('listbox').parentElement).toBe(document.body);

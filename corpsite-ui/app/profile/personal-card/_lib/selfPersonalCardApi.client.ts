@@ -60,22 +60,6 @@ export async function getMyPersonalCard(
   return body as SelfPersonalCardResponse;
 }
 
-/** ID-free photo read for the authenticated employee's resolved Person. */
-export async function getMyPersonalCardPhoto(opts?: { signal?: AbortSignal }): Promise<Blob> {
-  const path = "/api/ppr/me/photo";
-  const response = await fetch(resolveApiUrl(path), {
-    method: "GET",
-    headers: buildHeaders({ Accept: "image/jpeg" }),
-    cache: "no-store",
-    signal: opts?.signal,
-  });
-  if (!response.ok) {
-    const body = await readJsonSafe(response);
-    throw toApiError(response.status, body, { method: "GET", url: path });
-  }
-  return response.blob();
-}
-
 /** ID-free operational Employee projection for the authenticated caller only. */
 export async function getMyOperationalAssignment(
   opts?: { signal?: AbortSignal },

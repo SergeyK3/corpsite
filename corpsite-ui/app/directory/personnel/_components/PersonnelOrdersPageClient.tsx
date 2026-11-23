@@ -15,6 +15,7 @@ import { getEmployee, getEmployees } from "@/app/directory/employees/_lib/api.cl
 import { mapEmployeesResponseToSearchOptions, type EmployeeSearchOption } from "../_lib/personnelOrderEmployeeSearch";
 
 import PersonnelOrderCreateDialog from "./PersonnelOrderCreateDialog";
+import ElectronicHireApplicationDrawer from "./ElectronicHireApplicationDrawer";
 import PersonnelOrderDetailDrawer from "./PersonnelOrderDetailDrawer";
 import { PersonnelOrdersTable } from "./PersonnelOrdersTable";
 import {
@@ -85,6 +86,7 @@ export default function PersonnelOrdersPageClient() {
   const [selectedOrderId, setSelectedOrderId] = React.useState<number | null>(null);
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [createOpen, setCreateOpen] = React.useState(false);
+  const [applicationOpen, setApplicationOpen] = React.useState(false);
   const [toast, setToast] = React.useState<string | null>(null);
   const [employeeQuery, setEmployeeQuery] = React.useState("");
   const [filterResetKey, setFilterResetKey] = React.useState(0);
@@ -284,14 +286,15 @@ export default function PersonnelOrdersPageClient() {
             Журнал приказов: создание черновиков, регистрация и применение кадровых изменений
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setCreateOpen(true)}
-          className="rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
-          data-testid="personnel-order-create-button"
-        >
-          Создать приказ
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <a href="/directory/personnel/hire-approvals" className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium dark:border-zinc-700">Визы руководителя</a>
+          <button type="button" onClick={() => setCreateOpen(true)}
+            className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium dark:border-zinc-700"
+            data-testid="personnel-order-create-button">Создать приказ</button>
+          <button type="button" onClick={() => setApplicationOpen(true)}
+            className="rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
+            data-testid="electronic-hire-open-button">Сформировать заявление</button>
+        </div>
       </div>
 
       {toast ? (
@@ -469,10 +472,12 @@ export default function PersonnelOrdersPageClient() {
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         onCreated={handleCreated}
+        onHireRequested={() => { setCreateOpen(false); setApplicationOpen(true); }}
         initialEmployeeId={filters.employee_id}
         initialEmployeeQuery={filters.q}
         initialOrgUnitId={filters.org_unit_id}
       />
+      <ElectronicHireApplicationDrawer open={applicationOpen} onClose={() => setApplicationOpen(false)} />
 
     </div>
   );

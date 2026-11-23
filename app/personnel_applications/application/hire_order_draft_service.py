@@ -20,6 +20,7 @@ from app.personnel_applications.domain.status import (
     APPLICATION_STATUS_ORDER_DRAFT_CREATED,
 )
 from app.personnel_applications.infrastructure.repository import SqlAlchemyPersonnelApplicationRepository
+from app.personnel_applications.application.electronic_hire_service import load_electronic_hire, missing_card_fields, queue_approval_notification
 from app.services.personnel_order_hire_from_person_service import validate_hire_person_candidate
 from app.services.personnel_order_evidence_scope_service import (
     advance_personnel_order_evidence_scopes_tx,
@@ -70,6 +71,7 @@ def _create_draft_hire_order(
     person_id: int,
     payload: dict,
     created_by_user_id: int,
+    effective_date: date | None = None,
 ) -> int:
     if not _table_exists(conn, "personnel_orders") or not _table_exists(conn, "personnel_order_items"):
         raise PersonnelApplicationHireOrderError(
@@ -140,7 +142,7 @@ def _create_draft_hire_order(
         {
             "order_id": int(order_id),
             "item_type_code": ORDER_TYPE_HIRE,
-            "effective_date": _today(),
+            "effective_date": effective_date or _today(),
             "payload": json.dumps(payload),
             "item_status": ITEM_STATUS_ACTIVE,
         },
@@ -158,8 +160,12 @@ def create_hire_order_draft_for_application(
     app_repo = SqlAlchemyPersonnelApplicationRepository(conn)
     app = app_repo.require_by_id(application_id)
 
+    electronic = None
+    if app.application_source == "electronic":
+        electronic = load_electronic_hire(conn, application_id, lock=True)
+
     if app.personnel_order_id is not None:
-        if app.status not in {APPLICATION_STATUS_APPROVED, APPLICATION_STATUS_ORDER_DRAFT_CREATED}:
+        if app.status not in {APPLICATION_STATUS_APPROVED, APPLICATION_STATUS_ORDER_DRAFT_CREATED} and electronic is None:
             raise PersonnelApplicationHireOrderError(
                 "Application already has a linked personnel order.",
                 code="ORDER_ALREADY_LINKED",
@@ -171,7 +177,7 @@ def create_hire_order_draft_for_application(
             application_status=app.status,
         )
 
-    if app.status != APPLICATION_STATUS_APPROVED:
+    if electronic is None and app.status != APPLICATION_STATUS_APPROVED:
         raise PersonnelApplicationHireOrderError(
             f"HIRE draft can only be created after approval (status={app.status}).",
             code="HIRE_DRAFT_NOT_ALLOWED",
@@ -183,13 +189,33 @@ def create_hire_order_draft_for_application(
             code="HIRE_DRAFT_PLACEMENT_REQUIRED",
         )
 
+    if electronic is not None:
+        if app.status in {"completed", "cancelled", "withdrawn", "rejected"}:
+            raise PersonnelApplicationHireOrderError("Заявление закрыто.", code="APPLICATION_CLOSED")
+        missing = missing_card_fields(conn, app.person_id, application_id)
+        if missing:
+            raise PersonnelApplicationHireOrderError(
+                "Заполните обязательные поля ЛК: " + ", ".join(missing), code="PERSONAL_CARD_INCOMPLETE"
+            )
+
     payload = _build_hire_payload(app)
+    if electronic is not None:
+        payload.update({
+            "source_employee_name": electronic["full_name"],
+            "source_org_unit_name": electronic["org_unit_ru"],
+            "source_position_name": electronic["position_ru"],
+            "org_unit_title_kk": electronic["org_unit_kk"],
+            "position_title_kk": electronic["position_kk"],
+            "position_document_nominative_ru": electronic["position_document_ru"],
+            "position_document_possessive_kk": electronic["position_document_kk"],
+        })
     order_id = _create_draft_hire_order(
         conn,
         application_id=application_id,
         person_id=app.person_id,
         payload=payload,
         created_by_user_id=created_by_user_id,
+        effective_date=electronic["planned_start_date"] if electronic is not None else None,
     )
 
     now = _now_utc()
@@ -199,6 +225,8 @@ def create_hire_order_draft_for_application(
         personnel_order_id=order_id,
         now=now,
     )
+    if electronic is not None:
+        queue_approval_notification(conn, application_id)
     return HireOrderDraftResult(
         application_id=application_id,
         personnel_order_id=order_id,

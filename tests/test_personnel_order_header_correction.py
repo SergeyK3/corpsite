@@ -44,7 +44,8 @@ def test_duplicate_rules_and_current_order_excluded(seed):
     one,a=_order(seed,number="125-к",day=date(2026,7,10)); two,_=_order(seed,number="125-ж",day=date(2026,7,10))
     try:
         assert duplicate_preview(order_number="125-к",order_date=date(2026,7,10))["blocking"]
-        assert duplicate_preview(order_number="125-к",order_date=date(2026,7,11))["warnings"]
+        assert duplicate_preview(order_number="125-к",order_date=date(2026,7,11))["blocking"]
+        assert duplicate_preview(order_number="125-к",order_date=date(2027,7,10))["warnings"] == ["SAME_NUMBER_DIFFERENT_YEAR"]
         assert not duplicate_preview(order_number="125-ж",order_date=date(2026,7,10),order_id=two)["blocking"]
         assert not duplicate_preview(order_number="125\u2013\u043a",order_date=date(2026,7,10),order_id=one)["blocking"]
     finally:_clean(one);_clean(two)
@@ -84,18 +85,23 @@ def test_non_deleted_conflicts_keep_the_exact_record_and_metadata(seed,status):
         assert str(one) in error.message and number in error.message and '2026-09-01' in error.message
     finally:_clean(one)
 
-def test_database_uniqueness_uses_normalized_number_date_and_allows_other_dates(seed):
+def test_database_uniqueness_uses_normalized_number_and_calendar_year(seed):
     from sqlalchemy.exc import IntegrityError
     number='HDR-db-'+uuid4().hex;actor=int(seed['initiator_user_id'])
     sql=text("INSERT INTO personnel_orders(order_number,order_date,order_type_code,status,source_mode,created_by) VALUES(:n,:day,'HIRE','DRAFT','PAPER',:actor) RETURNING order_id")
+    other_type_sql=text("INSERT INTO personnel_orders(order_number,order_date,order_type_code,status,source_mode,created_by) VALUES(:n,:day,'TRANSFER','DRAFT','PAPER',:actor) RETURNING order_id")
     with engine.connect() as conn:
         transaction=conn.begin()
         try:
             conn.execute(sql,{'n':number,'day':date(2026,9,1),'actor':actor})
-            conn.execute(sql,{'n':number,'day':date(2026,9,2),'actor':actor})
             with pytest.raises(IntegrityError) as failure:
-                with conn.begin_nested():conn.execute(sql,{'n':'  '+number.upper().replace('-','–')+'  ','day':date(2026,9,1),'actor':actor})
+                with conn.begin_nested():conn.execute(sql,{'n':'  '+number.upper().replace('-','–')+'  ','day':date(2026,9,2),'actor':actor})
             assert failure.value.orig.diag.constraint_name=='uq_personnel_orders_active_number_date'
+            with pytest.raises(IntegrityError):
+                with conn.begin_nested():conn.execute(other_type_sql,{'n':number,'day':date(2026,12,31),'actor':actor})
+            conn.execute(sql,{'n':number+'/1','day':date(2026,9,2),'actor':actor})
+            conn.execute(sql,{'n':number+'/2','day':date(2026,9,2),'actor':actor})
+            conn.execute(sql,{'n':number,'day':date(2027,1,1),'actor':actor})
         finally:transaction.rollback()
 
 def test_confirmed_header_change_reopens_once_and_preserves_facts(seed):

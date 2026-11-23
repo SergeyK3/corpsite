@@ -33,7 +33,7 @@ async function json<T>(path: string, auth: PersonnelOrderPdfAuthContext): Promis
 
 async function photo(personId: number, auth: PersonnelOrderPdfAuthContext): Promise<string | null> {
   try {
-    const response = await fetch(resolveApiUrl(`/api/ppr/persons/${personId}/photo?for_export=true`, { serverSide: true }), { headers: { ...headers(auth), Accept: "image/jpeg" }, cache: "no-store" });
+    const response = await fetch(resolveApiUrl(`/api/ppr/persons/${personId}/photo`, { serverSide: true }), { headers: { ...headers(auth), Accept: "image/jpeg" }, cache: "no-store" });
     if (!response.ok) return null;
     const bytes = Buffer.from(await response.arrayBuffer());
     return bytes.length && bytes[0] === 0xff && bytes[1] === 0xd8 ? `data:image/jpeg;base64,${bytes.toString("base64")}` : null;
@@ -75,11 +75,8 @@ async function currentAssignment(
 
 export async function loadPersonCardPdfDocument(personId: number, auth: PersonnelOrderPdfAuthContext): Promise<{ html: string; filename: string }> {
   if (!Number.isSafeInteger(personId) || personId <= 0) throw new PersonCardPdfDataError(422, "INVALID_PERSON_ID", "Некорректный идентификатор сотрудника.");
-  const ppr = await json<PprCompositeReadResponse>(`/api/ppr/persons/${personId}`, auth);
-  if (ppr.metadata?.read_mode === "ppr_manager") {
-    throw new PersonCardPdfDataError(403, "FORBIDDEN", "PDF кадровой карточки доступен только отделу кадров.");
-  }
-  const [contactResponse, photoDataUrl] = await Promise.all([
+  const [ppr, contactResponse, photoDataUrl] = await Promise.all([
+    json<PprCompositeReadResponse>(`/api/ppr/persons/${personId}`, auth),
     json<ContactsResponse>(`/api/ppr/persons/${personId}/contacts`, auth),
     photo(personId, auth),
   ]);

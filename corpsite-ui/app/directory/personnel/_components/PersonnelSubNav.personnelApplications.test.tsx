@@ -26,7 +26,6 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/lib/currentUser", () => ({
   useCurrentUser: () => ({
-    has_personnel_admin: true,
     has_ppr_migration_status_read: true,
     can_approve_test_personnel_deletion: true,
   }),

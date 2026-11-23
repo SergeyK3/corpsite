@@ -5,20 +5,15 @@ import PprPersonPhoto from "./PprPersonPhoto";
 
 const getPprPersonPhotoMock = vi.fn();
 const uploadPprPersonPhotoMock = vi.fn();
-const getMyPersonalCardPhotoMock = vi.fn();
 vi.mock("../_lib/pprQueryApi.client", () => ({
   getPprPersonPhoto: (...args: unknown[]) => getPprPersonPhotoMock(...args),
   uploadPprPersonPhoto: (...args: unknown[]) => uploadPprPersonPhotoMock(...args),
-}));
-vi.mock("@/app/profile/personal-card/_lib/selfPersonalCardApi.client", () => ({
-  getMyPersonalCardPhoto: (...args: unknown[]) => getMyPersonalCardPhotoMock(...args),
 }));
 
 describe("PprPersonPhoto", () => {
   beforeEach(() => {
     getPprPersonPhotoMock.mockReset();
     uploadPprPersonPhotoMock.mockReset();
-    getMyPersonalCardPhotoMock.mockReset();
     let photoUrlCounter = 0;
     Object.defineProperty(URL, "createObjectURL", {
       configurable: true,
@@ -50,16 +45,6 @@ describe("PprPersonPhoto", () => {
     );
   });
 
-  it("loads the own photo without a Person ID or upload controls", async () => {
-    getMyPersonalCardPhotoMock.mockResolvedValue(new Blob(["self-jpeg"], { type: "image/jpeg" }));
-    render(<PprPersonPhoto personId={null} fullName="Масимов Акрамжан" self canManagePhoto />);
-
-    expect(await screen.findByRole("img", { name: "Фото сотрудника Масимов Акрамжан" })).toHaveAttribute("src", "blob:protected-person-photo-1");
-    expect(getMyPersonalCardPhotoMock).toHaveBeenCalledWith({ signal: expect.any(AbortSignal) });
-    expect(getPprPersonPhotoMock).not.toHaveBeenCalled();
-    expect(screen.queryByRole("button", { name: /Загрузить фото|Заменить фото/ })).not.toBeInTheDocument();
-  });
-
   it("shows a textual placeholder when the photo is absent or unavailable", async () => {
     getPprPersonPhotoMock.mockRejectedValue({ status: 404 });
 
@@ -75,8 +60,7 @@ describe("PprPersonPhoto", () => {
     render(<PprPersonPhoto personId={null} fullName="Иванов Иван" />);
 
     const frame = screen.getByTestId("ppr-person-photo");
-    expect(frame).toHaveClass("w-24", "shrink-0", "sm:w-[7.5rem]");
-    expect(frame.firstElementChild).toHaveClass("sm:h-40");
+    expect(frame).toHaveClass("w-24", "shrink-0", "sm:h-40");
     expect(screen.getByText("Фото отсутствует")).toBeInTheDocument();
   });
 

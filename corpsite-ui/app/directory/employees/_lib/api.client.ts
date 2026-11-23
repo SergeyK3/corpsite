@@ -193,15 +193,6 @@ export async function exportStaffExcel(args: Parameters<typeof getEmployees>[0])
   downloadExcelBlob(blob, "Персонал.xlsx");
 }
 
-export async function exportStaffReconciliationExcel(): Promise<void> {
-  const res = await fetch(resolveApiUrl("/directory/employees/reconciliation.xlsx"), {
-    headers: apiAuthHeaders(),
-    cache: "no-store",
-  });
-  if (!res.ok) throw new Error("Не удалось выгрузить общий список для сверки.");
-  downloadExcelBlob(await res.blob(), "Общий список для сверки.xlsx");
-}
-
 /**
  * Р”РµС‚Р°Р»Рё СЃРѕС‚СЂСѓРґРЅРёРєР°
  */
@@ -480,11 +471,6 @@ export async function correctEmployeeStatus(
     throw new Error("status must be working or not_working");
   }
   const payload: Record<string, unknown> = { status };
-  if (body.expected_assignment_id !== undefined) {
-    payload.expected_assignment_id = body.expected_assignment_id;
-    payload.expected_assignment_rate = body.expected_assignment_rate ?? null;
-  }
-  if (body.employment_rate !== undefined) payload.employment_rate = body.employment_rate;
   const reason = String(body.reason ?? "").trim();
   const comment = String(body.comment ?? "").trim();
   if (reason) payload.reason = reason;

@@ -44,40 +44,18 @@ export function kazakhInflectWord(value: string, form: KazakhCase): CalculatedKa
   return { value: source + ending(source, form, front), needsReview: ambiguous };
 }
 
-type KazakhPersonSource = { fio?: unknown; full_name?: unknown; first_name?: unknown; middle_name?: unknown; last_name?: unknown };
-type DocumentNameParts = { first: string; middle: string; last: string };
-const PATRONYMIC = /(?:ович|евич|ич|овна|евна|ична|ұлы|қызы)$/iu;
-const SURNAME = /(?:ов|ев|ин|ын|ова|ева|ина|ына|ский|цкий|ская|цкая)$/iu;
-
-/** Source FIO is unchanged; an ambiguous display order is never guessed. */
-function documentNameParts(person: KazakhPersonSource): DocumentNameParts | null {
-  const first = text(person.first_name), middle = text(person.middle_name), last = text(person.last_name);
-  if (first && last) return { first, middle, last };
-  const parts = text(person.fio || person.full_name).split(/\s+/u).filter(Boolean);
-  if (parts.length === 3) {
-    if (SURNAME.test(parts[0]) && PATRONYMIC.test(parts[2]) && !PATRONYMIC.test(parts[1]))
-      return { first: parts[1], middle: parts[2], last: parts[0] };
-    if (PATRONYMIC.test(parts[1]) && SURNAME.test(parts[2]) && !SURNAME.test(parts[0]))
-      return { first: parts[0], middle: parts[1], last: parts[2] };
-  }
-  if (parts.length === 2) {
-    if (SURNAME.test(parts[0]) && !SURNAME.test(parts[1]) && /^[\p{L}]{2,}$/u.test(parts[1])) return { first: parts[1], middle: "", last: parts[0] };
-    if (SURNAME.test(parts[1]) && !SURNAME.test(parts[0]) && /^[\p{L}]{2,}$/u.test(parts[0])) return { first: parts[0], middle: "", last: parts[1] };
-  }
-  return null;
-}
-
-export function calculateKazakhDocumentName(person: KazakhPersonSource): CalculatedKazakhForm {
-  const parts = documentNameParts(person);
-  return parts ? { value: [parts.first, parts.middle, parts.last].filter(Boolean).join(" "), needsReview: false }
-    : { value: "", needsReview: true };
-}
-
-export function calculateKazakhPersonForm(person: KazakhPersonSource, form: KazakhCase): CalculatedKazakhForm {
-  const parts = documentNameParts(person);
-  if (!parts) return { value: "", needsReview: true };
-  const inflected = kazakhInflectWord(parts.last, form);
-  return { value: [parts.first, parts.middle, inflected.value].filter(Boolean).join(" "), needsReview: inflected.needsReview };
+export function calculateKazakhPersonForm(
+  person: { fio?: unknown; first_name?: unknown; middle_name?: unknown; last_name?: unknown },
+  form: KazakhCase,
+): CalculatedKazakhForm {
+  const first = text(person.first_name);
+  const middle = text(person.middle_name);
+  const last = text(person.last_name);
+  const fallback = text(person.fio).split(/\s+/u).filter(Boolean);
+  const parts = last ? [first, middle, last] : [fallback[1] || "", fallback[2] || "", fallback[0] || ""];
+  const surname = parts[2];
+  const inflected = kazakhInflectWord(surname, form);
+  return { value: [parts[0], parts[1], inflected.value].filter(Boolean).join(" "), needsReview: inflected.needsReview };
 }
 
 export function calculateKazakhOrgUnitGenitive(name: unknown): CalculatedKazakhForm {

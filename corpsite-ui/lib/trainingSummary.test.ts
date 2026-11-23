@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { intakeTrainingFixture } from "../app/intake/_lib/intakeTestFixtures";
 
 import {
   addCalendarMonths,
@@ -47,7 +46,7 @@ describe("trainingSummary", () => {
   });
 
   it("derives intake records with reconciled hours", () => {
-    const summaryRecord = trainingSummaryRecordFromIntakeEntry(intakeTrainingFixture({
+    const summaryRecord = trainingSummaryRecordFromIntakeEntry({
       institution: "Org",
       course_name: "Safety",
       year_from: "2021-03-10",
@@ -56,7 +55,7 @@ describe("trainingSummary", () => {
       document_number: "",
       hours: "",
       hours_is_manual: false,
-    }));
+    });
 
     expect(summaryRecord.hours).toBe(24);
     expect(summaryRecord.completedAt).toBe("2021-03-12");

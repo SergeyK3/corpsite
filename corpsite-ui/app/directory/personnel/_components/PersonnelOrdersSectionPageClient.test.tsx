@@ -50,7 +50,6 @@ describe("PersonnelOrdersSectionPageClient", () => {
     expect(screen.getByText("Общая сводка по приказам")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "По категориям" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "По статусам" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "По типу персонала" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "По сотрудникам" })).toBeInTheDocument();
     expect(screen.getByTestId("orders-summary-mode")).toHaveTextContent("categories");
     expect(screen.queryByText("Кадровые действия по сотрудникам")).not.toBeInTheDocument();

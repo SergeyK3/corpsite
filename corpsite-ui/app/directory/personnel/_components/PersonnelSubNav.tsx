@@ -10,14 +10,14 @@ import {
   canSeeTestPersonnelApprovals,
   TEST_PERSONNEL_APPROVALS_HREF,
 } from "@/lib/testPersonnelDeletionNav";
-import { canSeeHrProcessesNav, canSeePersonnelFileReviewNav, canSeePersonnelJournalNav, PERSONNEL_FILE_REVIEW_HREF } from "@/lib/personnelNav";
+import { canSeeHrProcessesNav, canSeePersonnelJournalNav } from "@/lib/personnelNav";
 
 const BASE_ITEMS = [
   { href: "/directory/personnel/journal", title: "Кадровый журнал", prefixes: ["/directory/personnel/journal"] },
   {
     href: "/directory/personnel/lk",
     title: "Личные карточки",
-    prefixes: ["/directory/personnel/lk", "/directory/personnel/applicants", PERSONNEL_FILE_REVIEW_HREF],
+    prefixes: ["/directory/personnel/lk", "/directory/personnel/applicants"],
   },
   {
     href: "/directory/personnel/qualification-categories",
@@ -58,19 +58,17 @@ export default function PersonnelSubNav() {
   const pathname = usePathname() || "";
   const me = useCurrentUser();
   const controlListActive = isPersonnelControlListPath(pathname);
-  const hrProcesses = canSeeHrProcessesNav(me);
-  const journalOnly = canSeePersonnelJournalNav(me) && !hrProcesses;
+  const journalOnly = canSeePersonnelJournalNav(me) && !canSeeHrProcessesNav(me);
 
   return (
     <nav aria-label="Навигация кадровых процессов" className="flex flex-wrap gap-2">
       {BASE_ITEMS.map((item) => {
-        const isCards = item.href === "/directory/personnel/lk";
-        if (!hrProcesses && !(isCards && canSeePersonnelFileReviewNav(me)) && !(journalOnly && item.href === "/directory/personnel/journal")) return null;
+        if (journalOnly && item.href !== "/directory/personnel/journal") return null;
         const active = isBaseItemActive(pathname, item.prefixes, item.href);
         return (
           <Link
             key={item.href}
-            href={isCards && !hrProcesses ? PERSONNEL_FILE_REVIEW_HREF : item.href}
+            href={item.href}
             className={tabClassName(active)}
             aria-current={active ? "page" : undefined}
           >
@@ -78,7 +76,7 @@ export default function PersonnelSubNav() {
           </Link>
         );
       })}
-      {hrProcesses ? <Link
+      {!journalOnly ? <Link
         href="/directory/personnel/import"
         className={tabClassName(controlListActive)}
         aria-current={controlListActive ? "page" : undefined}

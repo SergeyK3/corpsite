@@ -5,13 +5,6 @@ import { loadPersonCardPdfDocument } from "./personCardPdfData.server";
 afterEach(() => vi.unstubAllGlobals());
 
 describe("loadPersonCardPdfDocument", () => {
-  it("rejects a manager PDF even when the card API allows a limited view", async () => {
-    const fetchMock = vi.fn(async () => Response.json({ metadata: { read_mode: "ppr_manager" } }));
-    vi.stubGlobal("fetch", fetchMock);
-    await expect(loadPersonCardPdfDocument(7, { authorizationHeader: "Bearer token", bearerToken: "token", devUserId: null, requestingUserId: "1" }))
-      .rejects.toMatchObject({ status: 403, code: "FORBIDDEN" });
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-  });
   it("renders the neutral current-work message when the person has no employee assignment", async () => {
     const fetchMock = vi.fn(async (input: string) => {
       if (input.includes("/photo")) return new Response(new Uint8Array([0xff, 0xd8, 1]), { status: 200 });
@@ -21,7 +14,7 @@ describe("loadPersonCardPdfDocument", () => {
     vi.stubGlobal("fetch", fetchMock);
     const document = await loadPersonCardPdfDocument(7, { authorizationHeader: "Bearer token", bearerToken: "token", devUserId: null, requestingUserId: "1" });
     const paths = fetchMock.mock.calls.map(([input]) => String(input));
-    expect(paths).toEqual(expect.arrayContaining([expect.stringContaining("/api/ppr/persons/7"), expect.stringContaining("/contacts"), expect.stringContaining("/photo?for_export=true")]));
+    expect(paths).toEqual(expect.arrayContaining([expect.stringContaining("/api/ppr/persons/7"), expect.stringContaining("/contacts"), expect.stringContaining("/photo")]));
     expect(paths.some((path) => path.includes("intake") || path.includes("application"))).toBe(false);
     expect(document.html).toContain("corrected@example.test");
     expect(document.html).toContain("person-card-pdf-section-current_organization");

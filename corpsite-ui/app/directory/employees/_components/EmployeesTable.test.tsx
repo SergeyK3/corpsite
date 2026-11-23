@@ -1,4 +1,3 @@
-import { employeeFixture } from "../_lib/employeeTestFixtures";
 // FILE: corpsite-ui/app/directory/employees/_components/EmployeesTable.test.tsx
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -7,6 +6,7 @@ import EmployeesTable from "./EmployeesTable";
 import {
   HR_DOSSIER_MISSING_EMPLOYEE_ID_TOOLTIP,
   OPEN_HR_DOSSIER_CTA,
+  OPEN_PERSONAL_CARD_CTA,
 } from "@/lib/personnelCardTerminology";
 
 describe("EmployeesTable actions", () => {
@@ -15,7 +15,7 @@ describe("EmployeesTable actions", () => {
   });
 
   const baseProps = {
-    items: [employeeFixture({ employee_id: 42, fio: "Иванов Иван", status: "active", employment_rate: 1 })],
+    items: [{ employee_id: 42, fio: "Иванов Иван", status: "active", employment_rate: 1 }],
     total: 1,
     limit: 50,
     offset: 0,
@@ -26,9 +26,9 @@ describe("EmployeesTable actions", () => {
 
   it("shows the effective assignment type and an explicit missing value", () => {
     render(<EmployeesTable {...baseProps} managementView items={[
-      employeeFixture({ employee_id: 42, fio: "Первый", status: "active", type_name: "Врачи" }),
-      employeeFixture({ employee_id: 43, fio: "Второй", status: "active", type_name: null }),
-    ]} />);
+      { employee_id: 42, fio: "Первый", status: "active", type_name: "Врачи" },
+      { employee_id: 43, fio: "Второй", status: "active", type_name: null },
+    ] as any} />);
     expect(screen.getByRole("columnheader", { name: "Тип" })).toBeInTheDocument();
     expect(screen.getByText("Врачи")).toBeInTheDocument();
     expect(screen.getByText("Не указан")).toBeInTheDocument();
@@ -51,35 +51,30 @@ describe("EmployeesTable actions", () => {
     );
   });
 
-  it("staff: preserves the task link and opens the selected Person card with list filters", () => {
+  it("staff «Персонал»: single «Открыть» link to canonical PPR card when person_id known", () => {
     const onOpenEmployee = vi.fn();
     render(
       <EmployeesTable
         {...baseProps}
-        items={[employeeFixture({ employee_id: 42, person_id: 501, fio: "Иванов Иван", status: "active", employment_rate: 1 })]}
+        items={[{ employee_id: 42, person_id: 501, fio: "Иванов Иван", status: "active", employment_rate: 1 }]}
         onOpenEmployee={onOpenEmployee}
         managementView
         directPersonalCardNav
-        returnToHref="/directory/staff?q=Ivanov&org_unit_id=8"
       />,
     );
 
-    const openLink = screen.getByRole("link", { name: "Задачи" });
-    expect(openLink).toHaveAttribute("href", "/tasks");
-    expect(openLink).toHaveTextContent("Задачи");
-    expect(screen.getByRole("link", { name: "Личная карточка" })).toHaveAttribute(
-      "href", "/directory/personnel/persons/501/card?return_to=%2Fdirectory%2Fstaff%3Fq%3DIvanov%26org_unit_id%3D8",
-    );
+    const openLink = screen.getByRole("link", { name: OPEN_PERSONAL_CARD_CTA });
+    expect(openLink).toHaveAttribute("href", "/directory/personnel/persons/501/card");
+    expect(openLink).toHaveTextContent("Открыть");
     expect(screen.queryByRole("button", { name: "Открыть" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: OPEN_HR_DOSSIER_CTA })).not.toBeInTheDocument();
     expect(screen.queryByText("Карточка")).not.toBeInTheDocument();
 
-    openLink.addEventListener("click", event => event.preventDefault());
     fireEvent.click(openLink);
     expect(onOpenEmployee).not.toHaveBeenCalled();
   });
 
-  it("staff: explains why the Person card is unavailable without person_id", () => {
+  it("staff «Персонал»: falls back to employee compatibility route without person_id", () => {
     const onOpenEmployee = vi.fn();
     render(
       <EmployeesTable
@@ -90,16 +85,13 @@ describe("EmployeesTable actions", () => {
       />,
     );
 
-    const openLink = screen.getByRole("link", { name: "Задачи" });
-    expect(openLink).toHaveAttribute("href", "/tasks");
-    expect(openLink).toHaveTextContent("Задачи");
-    expect(screen.getByRole("button", { name: "Личная карточка недоступна: нет связи с Person" })).toBeDisabled();
-    expect(screen.getByText("Нет связи с личной карточкой")).toBeInTheDocument();
+    const openLink = screen.getByRole("link", { name: OPEN_PERSONAL_CARD_CTA });
+    expect(openLink).toHaveAttribute("href", "/directory/personnel/employees/42/card");
+    expect(openLink).toHaveTextContent("Открыть");
     expect(screen.queryByRole("button", { name: "Открыть" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: OPEN_HR_DOSSIER_CTA })).not.toBeInTheDocument();
     expect(screen.queryByText("Карточка")).not.toBeInTheDocument();
 
-    openLink.addEventListener("click", event => event.preventDefault());
     fireEvent.click(openLink);
     expect(onOpenEmployee).not.toHaveBeenCalled();
   });
@@ -108,7 +100,7 @@ describe("EmployeesTable actions", () => {
     render(
       <EmployeesTable
         {...baseProps}
-        items={[employeeFixture({ fio: "Без ID", status: "active" })]}
+        items={[{ fio: "Без ID", status: "active" }]}
         managementView
         directPersonalCardNav
       />,
@@ -116,7 +108,7 @@ describe("EmployeesTable actions", () => {
 
     const disabled = screen.getByRole("button", { name: HR_DOSSIER_MISSING_EMPLOYEE_ID_TOOLTIP });
     expect(disabled).toBeDisabled();
-    expect(screen.queryByRole("link", { name: "Задачи" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: OPEN_PERSONAL_CARD_CTA })).not.toBeInTheDocument();
   });
 
   it("editable employees list keeps drawer «Открыть» button", () => {
@@ -130,7 +122,7 @@ describe("EmployeesTable actions", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Открыть" }));
     expect(onOpenEmployee).toHaveBeenCalledWith("42");
-    expect(screen.queryByRole("link", { name: "Задачи" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: OPEN_PERSONAL_CARD_CTA })).not.toBeInTheDocument();
   });
 
   it("HR personnel journal keeps single card link as «Открыть»", () => {
@@ -174,7 +166,7 @@ describe("EmployeesTable actions", () => {
     render(
       <EmployeesTable
         {...baseProps}
-        items={[employeeFixture({
+        items={[{
           employee_id: 42,
           person_id: 501,
           fio: "Архивный сотрудник",
@@ -188,7 +180,7 @@ describe("EmployeesTable actions", () => {
             order_number: null,
             order_date: null,
           },
-        })]}
+        }]}
         onOpenEmployee={onOpenEmployee}
         managementView
         directPersonalCardNav
@@ -204,7 +196,7 @@ describe("EmployeesTable actions", () => {
     render(
       <EmployeesTable
         {...baseProps}
-        items={[employeeFixture({
+        items={[{
           employee_id: 42,
           person_id: 501,
           fio: "Архивный сотрудник",
@@ -217,7 +209,7 @@ describe("EmployeesTable actions", () => {
             order_number: null,
             order_date: null,
           },
-        })]}
+        }]}
       />,
     );
 

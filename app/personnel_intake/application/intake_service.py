@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
 from app.personnel_applications.domain.errors import PersonnelApplicationNotFoundError
@@ -167,10 +168,10 @@ def issue_intake_link(
     reissue: bool = False,
 ) -> IssueIntakeLinkResult:
     """Issue a new protected intake link for an application."""
-    _require_application(conn, application_id)
+    application = _require_application(conn, application_id)
     repo = SqlAlchemyPersonnelIntakeRepository(conn)
     now = _now_utc()
-    expires_at = now + timedelta(days=_intake_link_ttl_days())
+    expires_at = now + (timedelta(hours=24) if application.application_source == "electronic" else timedelta(days=_intake_link_ttl_days()))
 
     active = repo.get_active_link_for_application(application_id)
     if active is not None and not reissue:
@@ -585,6 +586,7 @@ def submit_intake_draft_for_application(
         )
 
     _validate_submit_payload(draft.payload)
+    _validate_training_hire_photo(conn, application_id, draft.payload)
 
     draft = repo.mark_draft_submitted(draft.draft_id, submitted_at=now)
     link = repo.mark_link_submitted(link.link_id, submitted_at=now)
@@ -664,6 +666,35 @@ def _validate_submit_payload(payload: dict[str, Any]) -> None:
         raise PersonnelIntakeValidationError(
             f"Required intake fields missing: {', '.join(errors)}"
         )
+
+
+def _validate_training_hire_photo(conn: Connection, application_id: int, payload: dict[str, Any]) -> None:
+    """Stop a training hire before submission when the apply-required photo is missing."""
+    if os.getenv("TRAINING_MODE") != "1" or os.getenv("HIRE_PATH_REHEARSAL") != "1":
+        return
+    linked = conn.execute(text("""
+        SELECT 1 FROM public.learning_hire_applications
+        WHERE application_id = :application_id LIMIT 1
+    """), {"application_id": int(application_id)}).scalar_one_or_none()
+    if linked is None:
+        return
+
+    from app.personnel_intake.domain.photo_validation import validate_intake_photo_bytes
+    from app.personnel_intake.infrastructure.photo_storage import (
+        normalize_intake_photo_file_id, read_intake_photo,
+    )
+
+    raw_id = str((payload.get("personal") or {}).get("photo_file_id") or "").strip()
+    try:
+        file_id = normalize_intake_photo_file_id(raw_id)
+        content = read_intake_photo(application_id, file_id) if file_id else None
+        if content is None:
+            raise ValueError("Photo is missing")
+        validate_intake_photo_bytes(content, content_type="image/jpeg")
+    except (ValueError, PersonnelIntakeValidationError) as exc:
+        raise PersonnelIntakeValidationError(
+            "Для приёма на работу загрузите и сохраните фотографию 3×4 перед отправкой анкеты."
+        ) from exc
 
 
 def get_hr_intake_draft(conn: Connection, application_id: int) -> IntakeDraftSnapshot | None:

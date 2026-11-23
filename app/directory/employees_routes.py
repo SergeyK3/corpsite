@@ -14,7 +14,6 @@ from app.auth import get_current_user
 from app.db.engine import engine
 from app.security.directory_scope import is_privileged as _is_privileged
 from app.security.admin_permissions import HR_ENROLLMENT_MANAGER_CODE, has_admin_permission
-from app.security.sysadmin_assistant import has_hr_support
 from app.services.employee_hard_delete_service import (
     BULK_HARD_DELETE_MAX,
 )
@@ -182,9 +181,6 @@ class EmployeeStatusCorrectionIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     status: Literal["working", "not_working"]
-    expected_assignment_id: Optional[int] = Field(default=None, ge=1)
-    expected_assignment_rate: Optional[float] = None
-    employment_rate: Optional[float] = Field(default=None, gt=0, le=1.5)
     reason: Optional[str] = Field(default=None, max_length=500)
     comment: Optional[str] = Field(default=None, max_length=2000)
 
@@ -502,37 +498,6 @@ def export_employees(
     )
 
 
-@router.get("/employees/reconciliation.xlsx")
-def export_staff_reconciliation(
-    user: Dict[str, Any] = Depends(get_current_user),
-) -> Response:
-    """Full current-assignment workbook under the same roster visibility scope."""
-    from app.services.staff_reconciliation_export import (
-        build_reconciliation_workbook, fetch_current_assignments,
-    )
-
-    try:
-        scope = compute_scope(int(user["user_id"]), user)
-        require_personnel_visibility_or_403(user, scope)
-        as_of, rows = fetch_current_assignments(
-            engine,
-            scope_unit_id=scope["scope_unit_id"],
-            scope_unit_ids=scope["scope_unit_ids"],
-        )
-        return Response(
-            content=build_reconciliation_workbook(rows, as_of=as_of),
-            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers={
-                "Content-Disposition": 'attachment; filename="staff-reconciliation.xlsx"',
-                "Cache-Control": "no-store",
-            },
-        )
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise as_http500(exc)
-
-
 @router.post("/employees", status_code=201)
 def create_employee(
     body: EmployeeCreateIn,
@@ -776,7 +741,7 @@ def change_employee_assignment_route(
     user: Dict[str, Any] = Depends(get_current_user),
 ) -> Dict[str, Any]:
     actor_user_id = int(user["user_id"])
-    if not (has_admin_permission(actor_user_id, HR_ENROLLMENT_MANAGER_CODE) or has_hr_support(user)):
+    if not has_admin_permission(actor_user_id, HR_ENROLLMENT_MANAGER_CODE):
         raise HTTPException(
             status_code=403,
             detail=f"Permission required: {HR_ENROLLMENT_MANAGER_CODE}",
@@ -900,7 +865,6 @@ def correct_employee(
         actor_user_id = int(user["user_id"])
         if not (
             _is_privileged(user)
-            or has_hr_support(user)
             or has_admin_permission(actor_user_id, HR_ENROLLMENT_MANAGER_CODE)
         ):
             raise HTTPException(status_code=403, detail="Forbidden.")
@@ -981,7 +945,6 @@ def correct_employee_status(
         allowed = (
             _is_privileged(user)
             or role_code in {"ADMIN", "HR_HEAD"}
-            or has_hr_support(user)
             or has_admin_permission(actor_user_id, HR_ENROLLMENT_MANAGER_CODE)
         )
         if not allowed:
@@ -994,9 +957,6 @@ def correct_employee_status(
             employee_id=employee_id,
             status=body.status,
             reason=body.reason,
-            expected_assignment_id=body.expected_assignment_id,
-            expected_assignment_rate=body.expected_assignment_rate,
-            employment_rate=body.employment_rate,
             comment=body.comment,
             created_by=actor_user_id,
         )
@@ -1064,7 +1024,6 @@ def list_employee_events(
         actor_user_id = int(user["user_id"])
         if not (
             _is_privileged(user)
-            or has_hr_support(user)
             or has_admin_permission(actor_user_id, HR_ENROLLMENT_MANAGER_CODE)
         ):
             raise HTTPException(status_code=403, detail="Forbidden.")

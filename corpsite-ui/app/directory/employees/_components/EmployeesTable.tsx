@@ -8,6 +8,7 @@ import { buildEmployeeCardHref, buildPersonalCardHref } from "@/lib/employeeCard
 import {
   HR_DOSSIER_MISSING_EMPLOYEE_ID_TOOLTIP,
   OPEN_HR_DOSSIER_CTA,
+  OPEN_PERSONAL_CARD_CTA,
 } from "@/lib/personnelCardTerminology";
 import EmployeeStatusBadge from "./EmployeeStatusBadge";
 import {
@@ -26,9 +27,8 @@ type Props = {
   onChangePage: (nextOffset: number) => void;
   /** HR import journal: single «Открыть» link to /card. */
   showCard2Button?: boolean;
-  /** Staff «Персонал»: task and selected Person card actions. */
+  /** Staff «Персонал»: one «Открыть» link straight to PPR personal card. */
   directPersonalCardNav?: boolean;
-  returnToHref?: string;
   /** Compact columns: ФИО, должность, отделение, статус, ставки, открыть. */
   managementView?: boolean;
   /** Sysadmin hard-delete on /directory/staff. */
@@ -86,17 +86,32 @@ function getPersonId(it: any): number | null {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
-function StaffTasksAction({ item }: { item: any }) {
+function PersonalCardOpenAction({ item }: { item: any }) {
+  const personId = getPersonId(item);
   const employeeId = getEmployeeId(item);
+
+  if (personId != null) {
+    return (
+      <Link
+        href={buildPersonalCardHref({ personId })}
+        title={OPEN_PERSONAL_CARD_CTA}
+        aria-label={OPEN_PERSONAL_CARD_CTA}
+        className={actionLinkClass}
+      >
+        Открыть
+      </Link>
+    );
+  }
+
   if (employeeId) {
     return (
       <Link
-        href="/tasks"
-        title="Задачи"
-        aria-label="Задачи"
+        href={buildEmployeeCardHref(employeeId)}
+        title={OPEN_PERSONAL_CARD_CTA}
+        aria-label={OPEN_PERSONAL_CARD_CTA}
         className={actionLinkClass}
       >
-        Задачи
+        Открыть
       </Link>
     );
   }
@@ -110,21 +125,10 @@ function StaffTasksAction({ item }: { item: any }) {
         aria-label={HR_DOSSIER_MISSING_EMPLOYEE_ID_TOOLTIP}
         className={actionDisabledClass}
       >
-        Задачи
+        Открыть
       </button>
     </span>
   );
-}
-
-function PersonalCardLink({ item, returnToHref }: { item: any; returnToHref?: string }) {
-  const personId = getPersonId(item);
-  if (personId == null) {
-    return <span className="inline-flex items-center gap-1 text-xs text-zinc-600 dark:text-zinc-400" title="У сотрудника нет связи с Person. Обратитесь в отдел кадров.">
-      <button type="button" disabled aria-label="Личная карточка недоступна: нет связи с Person" className={actionDisabledClass}>ЛК</button>
-      <span>Нет связи с личной карточкой</span>
-    </span>;
-  }
-  return <Link href={buildPersonalCardHref({ personId }, { returnTo: returnToHref })} title="Личная карточка" aria-label="Личная карточка" className={actionLinkClass}>ЛК</Link>;
 }
 
 const sortableHeaderClass =
@@ -184,7 +188,6 @@ export default function EmployeesTable({
   onChangePage,
   showCard2Button = false,
   directPersonalCardNav = false,
-  returnToHref,
   managementView = false,
   showAdminDelete = false,
   deletingEmployeeId = null,
@@ -342,7 +345,7 @@ export default function EmployeesTable({
                           </button>
                         ) : null}
                         {directPersonalCardNav ? (
-                          <><StaffTasksAction item={it} /><PersonalCardLink item={it} returnToHref={returnToHref} /></>
+                          <PersonalCardOpenAction item={it} />
                         ) : null}
                         {managementView && directPersonalCardNav && !!employeeId && onCorrectEmployeeStatus ? (
                           <button
@@ -351,7 +354,7 @@ export default function EmployeesTable({
                             className={actionStatusCorrectionClass}
                             data-testid={`employee-status-correction-open-${employeeId}`}
                           >
-                            Исправить
+                            Исправить статус
                           </button>
                         ) : null}
                         {!directPersonalCardNav && !showCard2Button && !!employeeId ? (

@@ -34,12 +34,17 @@ No database connections are opened during the guard check itself.
 
 ## Local setup
 
-### 1. Configure the local test connection
+### 1. Create the test database (once)
 
-Set `TEST_DATABASE_URL` to a loopback PostgreSQL URL whose database name is
-`corpsite_test`. The runner below uses its credentials to create a new,
-randomly named `corpsite_test_*_test` database; it never writes to that base
-database. The database user needs `CREATEDB` permission.
+```powershell
+# PowerShell — adjust user/host if needed
+psql "postgresql://postgres:postgres@127.0.0.1:5432/postgres" -c "CREATE DATABASE corpsite_test;"
+```
+
+```bash
+# bash
+psql "postgresql://postgres:postgres@127.0.0.1:5432/postgres" -c "CREATE DATABASE corpsite_test;"
+```
 
 ### 2. Configure `.env`
 
@@ -50,25 +55,34 @@ DATABASE_URL=postgresql+psycopg2://postgres:postgres@127.0.0.1:5432/corpsite
 TEST_DATABASE_URL=postgresql+psycopg2://postgres:postgres@127.0.0.1:5432/corpsite_test
 ```
 
-### 3. Prepare a fresh database and run tests
+### 3. Apply migrations to the test database
 
-The historical grant migrations require initial roles, an active user and a
-parented `DISP` unit. A bare `alembic upgrade head` on an empty database stops
-at `i6j7k8l9m0n1`. Use the disposable runner from the repository root:
+Alembic reads `DATABASE_URL` from `.env`. Point it at the test DB for migrations:
 
 ```powershell
-# TEST_DATABASE_URL is set in the shell to the local corpsite_test URL
-python -m scripts.run_isolated_test_db -- -q tests/test_personnel_order_termination_reason.py tests/test_personnel_order_numeric_search_readonly.py
+$env:DATABASE_URL = $env:TEST_DATABASE_URL
+alembic upgrade head
 ```
 
-The runner upgrades to `h5c6d7e8f9a0`, loads the canonical role catalog from
-`db/init/020_seed_roles_users_employees.sql`, the maintained pilot directory and
-user seeds, and `tests/personnel_lk/adr065_test_org_bootstrap.sql`. It adds an
-`ADMIN` role and unit 44 only inside the disposable database. It then
-upgrades to head, runs pytest with the existing database guard, and removes only
-the newly created database. The old seed's employee IDs are text, so its
-employee/user statements cannot run against the current numeric ID schema.
-Pass other pytest paths after `--` to use the same isolated setup.
+```bash
+export DATABASE_URL="$TEST_DATABASE_URL"
+alembic upgrade head
+```
+
+Or in one line without changing `.env`:
+
+```bash
+DATABASE_URL=postgresql+psycopg2://postgres:postgres@127.0.0.1:5432/corpsite_test alembic upgrade head
+```
+
+### 4. Run tests
+
+```powershell
+# from repo root, with TEST_DATABASE_URL in .env or shell
+python -m pytest tests/test_db_guard.py -q
+python -m pytest tests/test_admin_org_units_crud.py -q
+python -m pytest -q
+```
 
 ## CI (recommended)
 
@@ -90,7 +104,10 @@ env:
   TEST_DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:5432/corpsite_test
 
 steps:
-  - run: python -m scripts.run_isolated_test_db -- -q
+  - run: alembic upgrade head
+    env:
+      DATABASE_URL: ${{ env.TEST_DATABASE_URL }}
+  - run: python -m pytest -q
 ```
 
 Use distinct `DATABASE_URL` (dummy or dev name) and `TEST_DATABASE_URL` so the guard passes.

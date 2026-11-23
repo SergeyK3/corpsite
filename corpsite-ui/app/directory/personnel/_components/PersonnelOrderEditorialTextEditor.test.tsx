@@ -1,5 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import * as React from 'react';
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import PersonnelOrderEditorialTextEditor from "./PersonnelOrderEditorialTextEditor";
@@ -11,7 +10,6 @@ vi.mock("../_lib/personnelOrdersApi.client", async () => {
   );
   return {
     ...actual,
-    getPersonnelOrder: vi.fn(),
     getPersonnelOrderEditorial: vi.fn(),
     generatePersonnelOrderEditorial: vi.fn(),
     patchPersonnelOrderEditorialBlock: vi.fn(),
@@ -21,10 +19,8 @@ vi.mock("../_lib/personnelOrdersApi.client", async () => {
 });
 
 import {
-  PERSONNEL_ORDER_CREATE_TYPE_OPTIONS,
   generatePersonnelOrderEditorial,
   getPersonnelOrderEditorial,
-  getPersonnelOrder,
   patchPersonnelOrderEditorialBlock,
   resetPersonnelOrderEditorialBlock,
   updatePersonnelOrderItem,
@@ -243,7 +239,7 @@ describe("PersonnelOrderEditorialTextEditor", () => {
     vi.mocked(getPersonnelOrderEditorial).mockImplementation(async()=>structuredClone(state));
     vi.mocked(patchPersonnelOrderEditorialBlock).mockImplementation(async(_id,blockId,body)=>{
       const block=state.items[0].blocks.find(block=>block.block_id===blockId)!;
-      block.override_text=body.override_text;block.effective_text=body.override_text ?? '';block.revision+=1;
+      block.override_text=body.override_text;block.effective_text=body.override_text;block.revision+=1;
       return structuredClone(state);
     });
     let view=render(<PersonnelOrderEditorialTextEditor orderId={42} order={sampleOrder} items={educationItems} editable/>);
@@ -292,7 +288,7 @@ describe("PersonnelOrderEditorialTextEditor", () => {
     expect(screen.getByText("Негіз (мәтін құжатта)")).toBeInTheDocument();
     expect(screen.getByText("Негіз: жеке өтініш.")).toBeInTheDocument();
     expect(screen.queryByTestId("personnel-order-editorial-basis-block")).not.toBeInTheDocument();
-    expect(screen.queryByText("Заключительная часть")).not.toBeInTheDocument();
+    expect(screen.getByText("Заключительная часть")).toBeInTheDocument();
 
     expect(screen.queryByText(/fingerprint/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/generator_key/i)).not.toBeInTheDocument();
@@ -331,102 +327,11 @@ describe("PersonnelOrderEditorialTextEditor", () => {
     expect(generatePersonnelOrderEditorial).not.toHaveBeenCalled();
   });
 
-  it.each(['EMPLOYER_INITIATIVE','CONTRACT_EXPIRATION'] as const)('changes the visible termination reason to %s, reopens it, and keeps the manual basis',async reason=>{
-    let saved:PersonnelOrderItem={...items[0],item_type_code:'TERMINATION',payload:{termination_reason:'EMPLOYEE_INITIATIVE',basis_other_text:'Приказ кадровика № 7',legacy_flag:true}};
-    const manualBasis={ru:'Основание: приказ кадровика № 7.',kk:'Негіз: кадр бөлімінің № 7 бұйрығы.'};
-    let editorial=sampleState();editorial.items[0].item_type_code='TERMINATION';
-    for(const block of editorial.items[0].blocks)if(block.block_type==='basis'){
-      block.override_text=manualBasis[block.locale as 'ru'|'kk'];block.effective_text=block.override_text;
-    }
-    vi.mocked(getPersonnelOrder).mockImplementation(async()=>({order:{order_id:42},items:[structuredClone(saved)]} as PersonnelOrderDetailResponse));
-    vi.mocked(getPersonnelOrderEditorial).mockImplementation(async()=>structuredClone(editorial));
-    vi.mocked(updatePersonnelOrderItem).mockImplementation(async(_order,_item,body)=>{
-      saved={...saved,payload:body.payload!};
-      return {order:{order_id:42},items:[structuredClone(saved)]} as PersonnelOrderDetailResponse;
-    });
-    vi.mocked(generatePersonnelOrderEditorial).mockImplementation(async()=>{
-      editorial=structuredClone(editorial);
-      for(const block of editorial.items[0].blocks)if(block.block_type==='body'){
-        block.generated_text=block.effective_text=block.locale==='ru'
-          ? reason==='CONTRACT_EXPIRATION'?'В связи с истечением срока трудового договора':'по инициативе работодателя'
-          : reason==='CONTRACT_EXPIRATION'?'Еңбек шарты мерзімінің аяқталуына байланысты':'жұмыс берушінің бастамасы бойынша';
-      }
-      return structuredClone(editorial);
-    });
-    const beforeGenerate=vi.fn().mockResolvedValue(true);
-    function Harness(){const [current,setCurrent]=React.useState(saved);return <PersonnelOrderEditorialTextEditor orderId={42} order={sampleOrder} items={[current]} editable beforeGenerate={beforeGenerate} onOrderChanged={detail=>setCurrent(detail.items[0])}/>;}
-    let view=render(<Harness/>);
-    const selector=await screen.findByTestId('personnel-order-termination-reason-10');
-    expect(within(selector).getByRole('combobox',{name:'Причина расторжения трудового договора'})).toHaveValue('EMPLOYEE_INITIATIVE');
-    expect([...within(selector).getByRole('combobox').querySelectorAll('option')].map(option=>option.value)).toEqual(['','EMPLOYEE_INITIATIVE','EMPLOYER_INITIATIVE','CONTRACT_EXPIRATION']);
-    expect(selector.compareDocumentPosition(screen.getByTestId('personnel-order-editorial-block-Негіз (мәтін құжатта)')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    fireEvent.change(within(selector).getByRole('combobox'),{target:{value:reason}});
-    fireEvent.click(within(selector).getByRole('button',{name:'Сохранить причину'}));
-    await waitFor(()=>expect(generatePersonnelOrderEditorial).toHaveBeenCalledWith(42));
-    expect(beforeGenerate).toHaveBeenCalledOnce();
-    expect(updatePersonnelOrderItem).toHaveBeenCalledWith(42,10,{payload:{termination_reason:reason,basis_other_text:'Приказ кадровика № 7',legacy_flag:true}});
-    expect(saved.payload).not.toHaveProperty('legal_basis_article');
-    expect(screen.getByTestId('personnel-order-editorial-block-Текст пункта').textContent).toContain(reason==='CONTRACT_EXPIRATION'?'Еңбек шарты мерзімінің аяқталуына байланысты':'жұмыс берушінің бастамасы бойынша');
-    expect(screen.getByTestId('personnel-order-editorial-block-Негіз (мәтін құжатта)').textContent).toContain(manualBasis.kk);
-    view.unmount();view=render(<Harness/>);
-    expect((await screen.findByTestId('personnel-order-termination-reason-10')).querySelector('select')).toHaveValue(reason);
-    fireEvent.click(screen.getByTestId('personnel-order-editorial-locale-ru'));
-    expect(screen.getByTestId('personnel-order-editorial-block-Текст пункта').textContent).toContain(reason==='CONTRACT_EXPIRATION'?'В связи с истечением срока трудового договора':'по инициативе работодателя');
-    expect(screen.getByTestId('personnel-order-editorial-block-Основание (текст в документе)').textContent).toContain(manualBasis.ru);
-    view.unmount();
-  });
-
-  it('shows a legacy free-text termination reason without enabling edits on a locked order',async()=>{
-    const legacy='по соглашению сторон';
-    const item={...items[0],item_type_code:'TERMINATION',payload:{termination_reason:legacy}};
-    const state=sampleState();state.items[0].item_type_code='TERMINATION';state.editable=false;state.order_status='SIGNED';
-    vi.mocked(getPersonnelOrderEditorial).mockResolvedValue(state);
-    render(<PersonnelOrderEditorialTextEditor orderId={42} order={sampleOrder} items={[item]} editable={false}/>);
-    const selector=await screen.findByTestId('personnel-order-termination-reason-10');
-    expect(within(selector).getByRole('combobox')).toHaveValue(legacy);
-    expect(within(selector).getByRole('combobox')).toBeDisabled();
-    expect(within(selector).getByRole('option',{name:legacy})).toBeInTheDocument();
-    expect(within(selector).queryByRole('button',{name:'Сохранить причину'})).not.toBeInTheDocument();
-    expect(updatePersonnelOrderItem).not.toHaveBeenCalled();
-  });
-
-  it.each([
-    ['EMPLOYER_INITIATIVE','По инициативе работодателя','Жұмыс берушінің бастамасы бойынша'],
-    ['CONTRACT_EXPIRATION','В связи с истечением срока трудового договора','Еңбек шарты мерзімінің аяқталуына байланысты'],
-  ] as const)("saves and reopens manual RU/KK termination body additions for %s", async (reason,ru,kk) => {
-    const terminationItems=items.map(item=>({...item,item_type_code:'TERMINATION',payload:{termination_reason:reason}}));
-    const state=sampleState();state.items[0].item_type_code='TERMINATION';
-    vi.mocked(getPersonnelOrderEditorial).mockImplementation(async()=>structuredClone(state));
-    vi.mocked(patchPersonnelOrderEditorialBlock).mockImplementation(async(_id,blockId,body)=>{
-      const block=state.items[0].blocks.find(block=>block.block_id===blockId)!;
-      block.override_text=body.override_text;block.effective_text=body.override_text ?? '';block.revision+=1;
-      return structuredClone(state);
-    });
-    let view=render(<PersonnelOrderEditorialTextEditor orderId={42} order={sampleOrder} items={terminationItems} editable/>);
-    const manual={ru:`${ru}. Конкретная причина и правовая ссылка RU — вручную.`,kk:`${kk}. Нақты себеп пен құқықтық сілтеме KK — қолмен.`};
-    for(const locale of ['kk','ru'] as const){
-      fireEvent.click(await screen.findByTestId('personnel-order-editorial-locale-'+locale));
-      const block=screen.getByTestId('personnel-order-editorial-block-Текст пункта');
-      fireEvent.click(within(block).getByTestId('personnel-order-editorial-edit'));
-      fireEvent.change(within(block).getByTestId('personnel-order-editorial-textarea'),{target:{value:manual[locale]}});
-      fireEvent.click(within(block).getByTestId('personnel-order-editorial-save'));
-      await waitFor(()=>expect(within(block).getByTestId('personnel-order-editorial-readonly').textContent).toBe(manual[locale]));
-    }
-    view.unmount();
-    view=render(<PersonnelOrderEditorialTextEditor orderId={42} order={sampleOrder} items={terminationItems} editable/>);
-    for(const locale of ['kk','ru'] as const){
-      fireEvent.click(await screen.findByTestId('personnel-order-editorial-locale-'+locale));
-      await waitFor(()=>expect(screen.getByTestId('personnel-order-editorial-block-Текст пункта').textContent).toContain(manual[locale]));
-    }
-    expect(terminationItems[0].payload.termination_reason).toBe(reason);
-    expect(updatePersonnelOrderItem).not.toHaveBeenCalled();
-  });
-
-
   it("asks for confirmation before manual generate and regenerates all locales", async () => {
     vi.mocked(getPersonnelOrderEditorial).mockResolvedValue(sampleState());
     vi.mocked(generatePersonnelOrderEditorial).mockResolvedValue(sampleState());
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+
     render(<PersonnelOrderEditorialTextEditor orderId={42} order={sampleOrder} items={items} editable />);
 
     await waitFor(() => {
@@ -709,7 +614,7 @@ describe("PersonnelOrderEditorialTextEditor", () => {
     expect(screen.getByText(/только для просмотра/i)).toBeInTheDocument();
   });
 
-  it("shows structured requisites preview independently of the hidden closing section", async () => {
+  it("shows structured requisites preview after closing section", async () => {
     vi.mocked(getPersonnelOrderEditorial).mockResolvedValue(sampleState());
 
     render(<PersonnelOrderEditorialTextEditor orderId={42} order={sampleOrder} items={items} editable />);
@@ -753,19 +658,31 @@ describe("PersonnelOrderEditorialTextEditor", () => {
     expect(screen.getByTestId("personnel-order-requisites-date")).toHaveTextContent("18 июля 2026 года");
   });
 
-  it("keeps bilingual requisites visible without closing editing controls or writes", async () => {
+  it("does not embed requisites in closing textarea when editing", async () => {
     vi.mocked(getPersonnelOrderEditorial).mockResolvedValue(sampleState());
     vi.mocked(patchPersonnelOrderEditorialBlock).mockResolvedValue(sampleState());
 
     render(<PersonnelOrderEditorialTextEditor orderId={42} order={sampleOrder} items={items} editable />);
 
     await waitFor(() => {
-      expect(screen.getByTestId("personnel-order-editorial-requisites")).toBeInTheDocument();
+      expect(screen.getByTestId("personnel-order-editorial-block-Заключительная часть")).toBeInTheDocument();
     });
 
-    expect(screen.queryByTestId("personnel-order-editorial-block-Заключительная часть")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("personnel-order-editorial-closing-toggle")).not.toBeInTheDocument();
-    expect(patchPersonnelOrderEditorialBlock).not.toHaveBeenCalled();
+    const closingSection = screen.getByTestId("personnel-order-editorial-block-Заключительная часть");
+    fireEvent.click(closingSection.querySelector('[data-testid="personnel-order-editorial-edit"]')!);
+
+    const textarea = screen.getByTestId("personnel-order-editorial-textarea");
+    fireEvent.change(textarea, {
+      target: { value: "Контроль за исполнением приказа оставляю за собой." },
+    });
+    fireEvent.click(screen.getByTestId("personnel-order-editorial-save"));
+
+    await waitFor(() => {
+      expect(patchPersonnelOrderEditorialBlock).toHaveBeenCalledWith(42, 3, {
+        override_text: "Контроль за исполнением приказа оставляю за собой.",
+        expected_revision: 1,
+      });
+    });
 
     fireEvent.click(screen.getByTestId("personnel-order-editorial-locale-ru"));
 

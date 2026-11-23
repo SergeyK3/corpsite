@@ -18,9 +18,6 @@ const baseRecord: NormalizedRecord = {
   normalized_record_id: 42,
   batch_id: 7,
   row_id: 11,
-  source_sheet: "Лист1",
-  source_row_number: 11,
-  source_cell_text: "",
   employee_id: null,
   employee_binding: {
     status: "unbound",
@@ -86,7 +83,7 @@ const boundRecord: NormalizedRecord = {
   employee_id: 45,
   employee_binding: {
     status: "bound",
-    method: "manual",
+    method: "enroll",
     reason: null,
     employee_id: 45,
     directory_employee_name: "Козгамбаева Ляззат Таласпаевна",

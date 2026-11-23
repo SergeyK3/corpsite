@@ -81,9 +81,6 @@ const baseRecord: NormalizedRecord = {
   normalized_record_id: 42,
   batch_id: 7,
   row_id: 11,
-  source_sheet: "Лист1",
-  source_row_number: 11,
-  source_cell_text: "",
   employee_id: null,
   employee_binding: {
     status: "unbound",
@@ -214,11 +211,10 @@ describe("ImportEnrollEmployeeWizard single-screen UX", () => {
     });
     vi.mocked(getOrgUnitsTree).mockResolvedValue({
       items: [
-        { id: "44", unit_id: 44, name: "Амбулатория", group_id: CLINICAL_GROUP_ID, children: [] },
-        { id: "73", unit_id: 73, name: "Отдел кадров", group_id: ADMIN_GROUP_ID, children: [] },
+        { unit_id: 44, name: "Амбулатория", group_id: CLINICAL_GROUP_ID, children: [] },
+        { unit_id: 73, name: "Отдел кадров", group_id: ADMIN_GROUP_ID, children: [] },
       ],
-      inactive_ids: [], root_id: null,
-    });
+    } as Awaited<ReturnType<typeof getOrgUnitsTree>>);
   });
 
   afterEach(() => {

@@ -29,27 +29,12 @@ from app.services.personnel_qualification_categories_report_service import build
 from app.services.personnel_type_headcount_report_service import build_personnel_type_headcount_report
 from app.services.personnel_headcount_trend_service import build_personnel_headcount_trend
 from app.services.personnel_staffing_report_service import build_staffing_report
-from app.services.position_assignment_reconciliation_report_service import build_position_assignment_reconciliation
 
 from .common import as_http500
 from .rbac import compute_scope, require_personnel_admin_or_403, require_personnel_visibility_or_403
 
 
 router = APIRouter(prefix="/personnel/reports", tags=["personnel-reports"])
-
-
-@router.get("/position-assignment-reconciliation")
-def position_assignment_reconciliation(
-    user: dict[str, Any] = Depends(get_current_user),
-) -> dict[str, Any]:
-    """Organization-wide read-only comparison under the existing HR report right."""
-    try:
-        require_personnel_admin_or_403(user)
-        return build_position_assignment_reconciliation(engine)
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise as_http500(exc)
 
 
 @router.get("/personnel-type-headcount")

@@ -23,7 +23,6 @@ def client(monkeypatch):
     user = {"user_id": 101, "has_personnel_card_edit": False}
     app.dependency_overrides[get_current_user] = lambda: user
     monkeypatch.setattr(ppr_router, "assert_ppr_read_path_activation_allowed", lambda: None)
-    monkeypatch.setattr(ppr_router, "require_personnel_card_reader", lambda _user: False)
     yield TestClient(app)
     app.dependency_overrides.pop(get_current_user, None)
 
@@ -36,10 +35,10 @@ def _stub_authorized_person(monkeypatch, *, person_id: int = 41, employee_id: in
         lambda route_person_id: SimpleNamespace(person_id=person_id, employee_id=employee_id),
     )
 
-    def allow_read(_user, resolved_person_id: int, *, employee_id: int | None = None, full_reader: bool = False) -> None:
-        checked.append((resolved_person_id, employee_id))
+    def allow_read(_user, resolved_person_id: int, *, resolved_employee_id: int | None = None) -> None:
+        checked.append((resolved_person_id, resolved_employee_id))
 
-    monkeypatch.setattr(ppr_router, "assert_personnel_card_scope_for_person", allow_read)
+    monkeypatch.setattr(ppr_router, "assert_ppr_read_allowed_for_person", allow_read)
     return checked
 
 
@@ -125,7 +124,7 @@ def test_operational_assignment_denies_person_outside_visibility_scope(client, m
     )
     monkeypatch.setattr(
         ppr_router,
-        "assert_personnel_card_scope_for_person",
+        "assert_ppr_read_allowed_for_person",
         lambda *_args, **_kwargs: (_ for _ in ()).throw(HTTPException(status_code=404, detail="Person not found.")),
     )
     monkeypatch.setattr(

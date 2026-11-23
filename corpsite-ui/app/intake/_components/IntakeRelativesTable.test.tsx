@@ -1,4 +1,3 @@
-import { intakeRelativeFixture } from "../_lib/intakeTestFixtures";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -24,12 +23,12 @@ describe("IntakeRelativesTable", () => {
     render(
       <IntakeRelativesTable
         items={[
-          intakeRelativeFixture({
+          {
             relationship: "Супруг(а)",
             full_name: "Петрова Анна Сергеевна",
             birth_year: "1992-04-12",
             work_place: "Городская больница №1",
-          }),
+          },
         ]}
         onChange={vi.fn()}
       />,
@@ -67,7 +66,7 @@ describe("IntakeRelativesTable", () => {
     const onChange = vi.fn();
     render(
       <IntakeRelativesTable
-        items={[intakeRelativeFixture({ relationship: "", full_name: "Иванов Иван", birth_year: "", work_place: "" })]}
+        items={[{ relationship: "", full_name: "Иванов Иван", birth_year: "", work_place: "" }]}
         onChange={onChange}
       />,
     );
@@ -85,7 +84,7 @@ describe("IntakeRelativesTable", () => {
     const onChange = vi.fn();
     render(
       <IntakeRelativesTable
-        items={[intakeRelativeFixture({ relationship: "бабушка", full_name: "Иванова Анна", birth_year: "", work_place: "" })]}
+        items={[{ relationship: "бабушка", full_name: "Иванова Анна", birth_year: "", work_place: "" }]}
         onChange={onChange}
       />,
     );
@@ -105,7 +104,7 @@ describe("IntakeRelativesTable", () => {
     const onChange = vi.fn();
     render(
       <IntakeRelativesTable
-        items={[intakeRelativeFixture({ relationship: "мать", full_name: "Иванова Анна", birth_year: "", work_place: "" })]}
+        items={[{ relationship: "мать", full_name: "Иванова Анна", birth_year: "", work_place: "" }]}
         onChange={onChange}
       />,
     );
@@ -125,12 +124,12 @@ describe("IntakeRelativesTable", () => {
     render(
       <IntakeRelativesTable
         items={[
-          intakeRelativeFixture({
+          {
             relationship: "Супруг(а)",
             full_name: "Петрова Анна Сергеевна",
             birth_year: "1992-04-12",
             work_place: "Городская больница №1",
-          }),
+          },
         ]}
         onChange={onChange}
       />,
@@ -152,12 +151,12 @@ describe("IntakeRelativesTable", () => {
     render(
       <IntakeRelativesTable
         items={[
-          intakeRelativeFixture({
+          {
             relationship: "Супруг(а)",
             full_name: "Петрова Анна Сергеевна",
             birth_year: "",
             work_place: "",
-          }),
+          },
         ]}
         onChange={onChange}
       />,
@@ -179,12 +178,12 @@ describe("IntakeRelativesTable across editor modes", () => {
   it("renders the same relatives table in public and on-behalf editors", () => {
     const payload = emptyIntakeDraftPayload();
     payload.relatives = [
-      intakeRelativeFixture({
+      {
         relationship: "Супруг(а)",
         full_name: "Петрова Анна Сергеевна",
         birth_year: "1992-04-12",
         work_place: "Городская больница №1",
-      }),
+      },
     ];
 
     const { unmount } = render(

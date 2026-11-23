@@ -2,8 +2,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-
-const STORAGE_KEY = "corpsite_ui_theme";
+import { UI_THEME_CHANGED_EVENT, UI_THEME_STORAGE_KEY } from "@/lib/uiTheme";
 
 export type UiThemeMode = "work" | "document";
 
@@ -19,22 +18,31 @@ export default function ThemeControl() {
 
   useEffect(() => {
     setMounted(true);
-    try {
-      const stored = localStorage.getItem(STORAGE_KEY) as UiThemeMode | null;
-      const initial: UiThemeMode = stored === "document" ? "document" : "work";
-      setMode(initial);
-      applyMode(initial);
-    } catch {
-      setMode("work");
-      applyMode("work");
-    }
+    const syncMode = () => {
+      try {
+        const stored = localStorage.getItem(UI_THEME_STORAGE_KEY) as UiThemeMode | null;
+        const initial: UiThemeMode = stored === "document" ? "document" : "work";
+        setMode(initial);
+        applyMode(initial);
+      } catch {
+        setMode("work");
+        applyMode("work");
+      }
+    };
+    syncMode();
+    window.addEventListener(UI_THEME_CHANGED_EVENT, syncMode);
+    window.addEventListener("storage", syncMode);
+    return () => {
+      window.removeEventListener(UI_THEME_CHANGED_EVENT, syncMode);
+      window.removeEventListener("storage", syncMode);
+    };
   }, []);
 
   const toggle = () => {
     const next: UiThemeMode = mode === "document" ? "work" : "document";
     setMode(next);
     try {
-      localStorage.setItem(STORAGE_KEY, next);
+      localStorage.setItem(UI_THEME_STORAGE_KEY, next);
     } catch {
       /* ignore */
     }

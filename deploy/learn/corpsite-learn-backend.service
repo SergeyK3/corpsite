@@ -1,0 +1,30 @@
+[Unit]
+Description=Corpsite Learn backend
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=corpsite-learn
+Group=corpsite-learn
+WorkingDirectory=/opt/projects/corpsite-learn/app
+EnvironmentFile=/etc/corpsite-learn/backend.env
+ExecStartPre=/opt/projects/corpsite-learn/app/.venv/bin/python scripts/learn/preflight.py
+ExecStart=/opt/projects/corpsite-learn/app/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8003
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+KillMode=mixed
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/corpsite-learn
+IPAddressDeny=any
+IPAddressAllow=localhost
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=corpsite-learn-backend
+
+[Install]
+WantedBy=multi-user.target

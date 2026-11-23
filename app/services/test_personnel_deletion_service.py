@@ -78,8 +78,6 @@ RELATIONSHIP_MATRIX: tuple[RelationshipRule, ...] = (
     _rule("PPR_RELATIVE_PRESENT", "person_relatives", BLOCK, "t.person_id=:person_id"),
     _rule("PPR_EXTERNAL_EMPLOYMENT_PRESENT", "person_external_employment", BLOCK, "t.person_id=:person_id"),
     _rule("PPR_MILITARY_PRESENT", "person_military_service", BLOCK, "t.person_id=:person_id"),
-    _rule("PERSONNEL_FILE_SET_PRESENT", "personnel_file_sets", BLOCK, "t.person_id=:person_id"),
-    _rule("PERSONNEL_FILE_AUDIT_PRESENT", "personnel_file_events", BLOCK, "t.person_id=:person_id"),
     _rule("PHOTO_PRESENT", "person_photos", BLOCK, "t.person_id=:person_id"),
     _rule("PHOTO_PROVENANCE_PRESENT", "person_photo_sources", BLOCK, "t.person_id=:person_id OR t.source_application_id=ANY(:application_ids)", lookup="Person or all applications", keys=("person_id", "application_ids")),
     _rule("TELEGRAM_BINDING_PRESENT", "person_telegram_bindings", BLOCK, "t.person_id=:person_id"),

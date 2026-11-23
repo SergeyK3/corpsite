@@ -3,6 +3,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useCurrentUser } from "@/lib/currentUser";
 
 import {
   getPositionCabinetTabLabel,
@@ -21,6 +22,7 @@ function tabClassName(active: boolean): string {
 
 export default function PositionCabinetNav() {
   const pathname = usePathname() || "/tasks";
+  const me = useCurrentUser();
   const activeSection = resolvePositionCabinetSection(pathname);
 
   return (
@@ -31,6 +33,7 @@ export default function PositionCabinetNav() {
       data-testid="position-cabinet-nav"
     >
       {POSITION_CABINET_NAV_ITEMS.map((item) => {
+        if (item.id === "training" && me?.training_enabled !== true) return null;
         const label = getPositionCabinetTabLabel(item.id);
         const active = activeSection === item.id;
 

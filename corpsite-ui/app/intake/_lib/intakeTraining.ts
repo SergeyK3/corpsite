@@ -16,8 +16,6 @@ export { countInclusiveCalendarDays };
 
 export type IntakeTrainingEntry = IntakeTraining;
 
-type TrainingPeriodInput = Pick<IntakeTrainingEntry, "year_from"> & Partial<Pick<IntakeTrainingEntry, "year_to" | "year">> & Record<string, unknown>;
-
 export type IntakeTrainingRow = {
   item: IntakeTrainingEntry;
   index: number;
@@ -44,7 +42,7 @@ export function resolveIntakeTrainingYearFrom(
 }
 
 export function resolveIntakeTrainingYearTo(
-  item: Partial<Pick<IntakeTrainingEntry, "year_to" | "year">> & Record<string, unknown>,
+  item: Pick<IntakeTrainingEntry, "year_to" | "year"> & Record<string, unknown>,
 ): string {
   const yearTo = String(item.year_to ?? "").trim();
   if (yearTo) return yearTo;
@@ -52,7 +50,7 @@ export function resolveIntakeTrainingYearTo(
 }
 
 export function resolveIntakeTrainingPeriodRangeError(
-  item: TrainingPeriodInput,
+  item: Pick<IntakeTrainingEntry, "year_from" | "year_to" | "year"> & Record<string, unknown>,
 ): string | null {
   return resolveIntakePeriodRangeError(
     resolveIntakeTrainingYearFrom(item),
@@ -100,7 +98,7 @@ export function getIntakeTrainingDocumentTypeLabel(
   );
 }
 
-export function formatIntakeTrainingPeriodCell(item: TrainingPeriodInput): string {
+export function formatIntakeTrainingPeriodCell(item: Pick<IntakeTrainingEntry, "year_from" | "year_to" | "year">): string {
   const from = formatIntakePeriodForDisplay(item.year_from);
   const to = formatIntakePeriodForDisplay(resolveIntakeTrainingYearTo(item));
   if (!from && !to) return "—";
@@ -216,12 +214,12 @@ export function applyTrainingEntryPatch(
 }
 
 export function isInvalidIntakeTrainingPeriodRange(
-  item: TrainingPeriodInput,
+  item: Pick<IntakeTrainingEntry, "year_from" | "year_to" | "year"> & Record<string, unknown>,
 ): boolean {
   return resolveIntakeTrainingPeriodRangeError(item) !== null;
 }
 
-function trainingStartSortKey(item: TrainingPeriodInput): string {
+function trainingStartSortKey(item: Pick<IntakeTrainingEntry, "year_from" | "year_to" | "year">): string {
   return String(item.year_from ?? resolveIntakeTrainingYearTo(item) ?? "").trim();
 }
 

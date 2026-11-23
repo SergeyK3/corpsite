@@ -1,4 +1,3 @@
-import { intakeEmploymentFixture } from "./intakeTestFixtures";
 import { describe, expect, it } from "vitest";
 
 import { emptyIntakeDraftPayload } from "./intakeApi.client";
@@ -8,13 +7,13 @@ describe("intakePayloadCompare", () => {
   it("detects military and employment biography differences", () => {
     const baseline = emptyIntakeDraftPayload();
     baseline.employment_biography = [
-      intakeEmploymentFixture({
+      {
         organization: "Клиника А",
         position: "Медсестра",
         year_from: "2020",
         year_to: "2024",
         reason_for_leaving: "Переезд",
-      }),
+      },
     ];
     baseline.military.composition = "soldiers";
 
@@ -56,8 +55,6 @@ describe("intakePayloadCompare", () => {
       gender: "",
       citizenship: "",
       nationality: "",
-      personnel_number: "",
-      photo_file_id: "",
     });
     expect(Object.keys(canonical.personal)).toEqual([
       "last_name",
@@ -68,8 +65,6 @@ describe("intakePayloadCompare", () => {
       "gender",
       "citizenship",
       "nationality",
-      "personnel_number",
-      "photo_file_id",
     ]);
   });
 

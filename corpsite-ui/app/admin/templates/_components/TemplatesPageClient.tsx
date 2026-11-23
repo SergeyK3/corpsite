@@ -679,11 +679,9 @@ export default function TemplatesPageClient() {
   const [query, setQuery] = useState("");
   const [level, setLevel] = useState("ALL");
   const [copiedDraft, setCopiedDraft] = useState<PersonnelOrderTemplateDraft>();
-  const [pendingSelection, setPendingSelection] = useState<{ type: string; templateId?: number } | null>(null);
+  const [switchingType, setSwitchingType] = useState<string | null>(null);
   const selectedType = searchParams.get("type") || "";
-  const selectedTemplateId = Number(searchParams.get("template_id")) || undefined;
-  const displayedType = pendingSelection?.type ?? selectedType;
-  const displayedTemplateId = pendingSelection ? pendingSelection.templateId : selectedTemplateId;
+  const displayedType = switchingType ?? selectedType;
   const selectedItem = items.find((item) => item.type_code === displayedType && (!group || TEMPLATE_TYPE_GROUP[item.type_code as keyof typeof TEMPLATE_TYPE_GROUP] === group))
     ?? items.find((item) => !group || TEMPLATE_TYPE_GROUP[item.type_code as keyof typeof TEMPLATE_TYPE_GROUP] === group);
 
@@ -692,10 +690,8 @@ export default function TemplatesPageClient() {
   },[selectedItem?.type_code,displayedType]);
 
   useEffect(() => {
-    if (pendingSelection && selectedType === pendingSelection.type && selectedTemplateId === pendingSelection.templateId) {
-      setPendingSelection(null);
-    }
-  }, [pendingSelection, selectedType, selectedTemplateId]);
+    if (switchingType && selectedType === switchingType) setSwitchingType(null);
+  }, [selectedType, switchingType]);
 
   useEffect(() => {
     if (activeSection !== TEMPLATE_SECTIONS.personnelOrders) return;
@@ -717,7 +713,7 @@ export default function TemplatesPageClient() {
   function selectType(type: string) {
     if (type === displayedType) return;
     setCopiedDraft(undefined);
-    setPendingSelection({ type });
+    setSwitchingType(type);
     const params = new URLSearchParams(searchParams.toString());
     params.set("section", TEMPLATE_SECTIONS.personnelOrders);
     params.set("type", type);
@@ -743,10 +739,10 @@ export default function TemplatesPageClient() {
           <div className="flex gap-2"><input aria-label="Поиск шаблонов кадровых приказов" value={query} onChange={(e) => setQuery(e.target.value)} className="rounded border px-2 py-1" /><select aria-label="Уровень поддержки" value={level} onChange={(e) => setLevel(e.target.value)} className="rounded border px-2 py-1"><option value="ALL">Все уровни</option><option value="SUPPORTED">SUPPORTED</option><option value="PARTIAL">PARTIAL</option><option value="NOT_IMPLEMENTED">NOT_IMPLEMENTED</option></select></div>
           <div role="group" aria-label={language === "kk" ? "Бұйрық топтары" : "Группы приказов"} className="mb-3 flex flex-wrap gap-2">{PERSONNEL_ORDER_GROUPS.map(entry => <button type="button" key={entry.id} aria-pressed={group === entry.id} onClick={() => { const nextGroup = group === entry.id ? null : entry.id; setGroup(nextGroup); if (nextGroup && selectedItem && TEMPLATE_TYPE_GROUP[selectedItem.type_code as keyof typeof TEMPLATE_TYPE_GROUP] !== nextGroup) { const nextItem = items.find(item => TEMPLATE_TYPE_GROUP[item.type_code as keyof typeof TEMPLATE_TYPE_GROUP] === nextGroup); if (nextItem) selectType(nextItem.type_code); } }} className="rounded border px-3 py-2">{entry[language]}</button>)}</div>
           <div className="grid gap-2 md:grid-cols-2" data-testid="personnel-order-template-list">{visibleItems.flatMap((item) => item.templates?.length ? item.templates.filter(template => `${item.type_code} ${template.name_ru} ${template.name_kk}`.toLowerCase().includes(query.toLowerCase())).map(template=><button key={template.template_id} type="button" data-catalog-template-id={template.template_id} className="rounded border p-3 text-left hover:bg-blue-50 dark:hover:bg-zinc-800" onClick={()=>{
-              setCopiedDraft(undefined);setPendingSelection({ type: item.type_code, templateId: template.template_id });
+              setCopiedDraft(undefined);setSwitchingType(item.type_code);
               const params=new URLSearchParams(searchParams.toString());params.set("section",TEMPLATE_SECTIONS.personnelOrders);params.set("type",item.type_code);params.set("template_id",String(template.template_id));router.push(`/admin/templates?${params.toString()}`);
-            }} aria-pressed={selectedItem?.type_code === item.type_code && displayedTemplateId === template.template_id}><div className="font-medium">{language === "kk" ? template.name_kk || template.name_ru : template.name_ru || template.name_kk}</div><div className="font-mono text-xs">{item.type_code}</div><div className="text-sm"><PersonnelTemplateIdentity templateId={template.template_id} versionId={template.draft_version_id ?? template.template_version_id} versionNumber={template.draft_version_id ? template.draft_version_number : template.version_number} status={template.draft_version_id ? "DRAFT" : "PUBLISHED"} /></div></button>) : `${item.type_code} ${item.title_ru} ${item.title_kk}`.toLowerCase().includes(query.toLowerCase()) ? [<button key={item.type_code} type="button" onClick={() => selectType(item.type_code)} className="rounded border p-3 text-left" data-testid={`personnel-order-template-${item.type_code}`}><div className="font-medium">{localizedPersonnelTitle(item, language)}</div><div className="font-mono text-xs">{item.type_code}</div><div className="text-sm">{item.support_level} · {item.supported_locales.join(", ")}</div></button>] : [])}</div>
-          {selectedItem ? <div ref={selectedCardRef} className="scroll-mt-20" data-testid="selected-personnel-template-card"><PersonnelTemplateVariants key={selectedItem.type_code} item={selectedItem} catalog={items} initialTemplateId={selectedItem.type_code === displayedType ? displayedTemplateId : undefined} onSelected={id => { setCopiedDraft(undefined); setPendingSelection({ type: selectedItem.type_code, templateId: id }); const params = new URLSearchParams(searchParams.toString()); params.set("type", selectedItem.type_code); if (id) params.set("template_id", String(id)); else params.delete("template_id"); router.push(`/admin/templates?${params.toString()}`); }} initialDraft={copiedDraft?.item_type_code === selectedItem.type_code ? copiedDraft : undefined} onCreated={draft => { setGroup(null); setPendingSelection({ type: draft.item_type_code, templateId: draft.template_id }); setCopiedDraft(draft); const params = new URLSearchParams(searchParams.toString()); params.set("type", draft.item_type_code); params.set("template_id", String(draft.template_id)); router.push(`/admin/templates?${params.toString()}`); }} onCatalogChanged={() => setCatalogRefresh(n => n + 1)} renderEditor={(templateId, onChanged, copyActions, copyForm, createdDraft, editorItem = selectedItem, selectedTemplate, onRemoved) => <TemplateDetail key={`${editorItem.type_code}:${templateId || "default"}`} item={editorItem} selectedTemplate={selectedTemplate} templateId={templateId} onChanged={onChanged} onRemoved={onRemoved} copyActions={copyActions} copyForm={copyForm} createdDraft={createdDraft} />} /></div> : null}
+            }}><div className="font-medium">{language === "kk" ? template.name_kk || template.name_ru : template.name_ru || template.name_kk}</div><div className="font-mono text-xs">{item.type_code}</div><div className="text-sm"><PersonnelTemplateIdentity templateId={template.template_id} versionId={template.draft_version_id ?? template.template_version_id} versionNumber={template.draft_version_id ? template.draft_version_number : template.version_number} status={template.draft_version_id ? "DRAFT" : "PUBLISHED"} /></div></button>) : `${item.type_code} ${item.title_ru} ${item.title_kk}`.toLowerCase().includes(query.toLowerCase()) ? [<button key={item.type_code} type="button" onClick={() => selectType(item.type_code)} className="rounded border p-3 text-left" data-testid={`personnel-order-template-${item.type_code}`}><div className="font-medium">{localizedPersonnelTitle(item, language)}</div><div className="font-mono text-xs">{item.type_code}</div><div className="text-sm">{item.support_level} · {item.supported_locales.join(", ")}</div></button>] : [])}</div>
+          {selectedItem ? <div ref={selectedCardRef} className="scroll-mt-20" data-testid="selected-personnel-template-card"><PersonnelTemplateVariants key={selectedItem.type_code} item={selectedItem} catalog={items} initialTemplateId={selectedItem.type_code === selectedType ? Number(searchParams.get("template_id")) || undefined : undefined} onSelected={id => { setCopiedDraft(undefined); const params = new URLSearchParams(searchParams.toString()); params.set("type", selectedItem.type_code); if (id) params.set("template_id", String(id)); else params.delete("template_id"); router.push(`/admin/templates?${params.toString()}`); }} initialDraft={copiedDraft?.item_type_code === selectedItem.type_code ? copiedDraft : undefined} onCreated={draft => { setGroup(null); setSwitchingType(draft.item_type_code); setCopiedDraft(draft); const params = new URLSearchParams(searchParams.toString()); params.set("type", draft.item_type_code); params.set("template_id", String(draft.template_id)); router.push(`/admin/templates?${params.toString()}`); }} onCatalogChanged={() => setCatalogRefresh(n => n + 1)} renderEditor={(templateId, onChanged, copyActions, copyForm, createdDraft, editorItem = selectedItem, selectedTemplate, onRemoved) => <TemplateDetail key={`${editorItem.type_code}:${templateId || "default"}`} item={editorItem} selectedTemplate={selectedTemplate} templateId={templateId} onChanged={onChanged} onRemoved={onRemoved} copyActions={copyActions} copyForm={copyForm} createdDraft={createdDraft} />} /></div> : null}
           <GeneralPersonnelOrderRequirements />
         </section>
       )}

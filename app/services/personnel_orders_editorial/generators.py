@@ -40,7 +40,7 @@ from app.services.personnel_orders_editorial.constants import (
 )
 from app.services.personnel_orders_editorial.fingerprint import compute_fingerprint
 from app.services.personnel_orders_editorial.position_dictionary import localized_personnel_order_position
-from app.services.personnel_order_termination_reason import termination_reason_basis_text, termination_reason_text
+from app.services.personnel_order_termination_reason import termination_reason_text
 from app.services.personnel_order_childcare_contract import TEXTS as CHILDCARE_TEXTS, childcare_values, render_childcare
 
 DOCUMENT_TITLES: Dict[str, Dict[str, str]] = {
@@ -380,7 +380,7 @@ def generate_item_body(locale: str, item_ctx: Mapping[str, Any]) -> Dict[str, st
     if item_type == ORDER_TYPE_LEAVE_CHILDCARE_GRANT:
         values = childcare_values(item_ctx.get("childcare_payload") or {}, org_unit_ru=_localized_name(item_ctx.get("org_unit_name"), "ru"))
         return _result(generated_text=render_childcare(f"body_template_{lang}", values), generator_key=GENERATOR_KEY_ITEM_BODY, fingerprint_payload={"type": item_type, "locale": lang, "values": values})
-    employee_name = (item_ctx.get("employee_name_kk") or item_ctx.get("employee_name")) if lang == "kk" else item_ctx.get("employee_name")
+    employee_name = item_ctx.get("employee_name")
     effective_date = item_ctx.get("effective_date")
     org_unit_name = item_ctx.get("org_unit_name")
     if _clean(item_ctx.get("org_unit_document_genitive_kk")):
@@ -485,15 +485,23 @@ def generate_item_body(locale: str, item_ctx: Mapping[str, Any]) -> Dict[str, st
                 f"продолжительностью {days} календарных дней."
             )
     elif item_type == ORDER_TYPE_HIRE:
+        from app.services.personnel_order_hire_wording import hire_department_destination_kk, hire_position_accusative_ru
         org = _localized_name(org_unit_name, lang)
         position = _localized_position(position_name, lang)
         rate_value = _format_rate_value(rate)
         if lang == "kk":
             text = (
-                f"{fio} «{org}» бөлімшесіне {position} лауазымына "
+                f"{fio} {hire_department_destination_kk(org)} {position} лауазымына "
                 f"{rate_value} мөлшерлемесінде {date} бастап жұмысқа қабылдансын."
             )
         else:
+            fio = _clean(item_ctx.get("employee_full_name_accusative_ru")) or "[ФИО в винительном падеже (RU): заполните вручную]"
+            manual_forms = item_ctx.get("hire_position_manual_forms") or {}
+            manual_ru = _clean(item_ctx.get("position_document_nominative_ru")) if manual_forms.get("ru") is True else ""
+            try:
+                position = hire_position_accusative_ru(position, manual_ru)
+            except ValueError:
+                position = "[должность в винительном падеже (RU): заполните вручную]"
             text = (
                 f"Принять на работу {fio} в подразделение «{org}» на должность "
                 f"{position} со ставкой {rate_value} с {date}."
@@ -667,11 +675,6 @@ def generate_basis_text(locale: str, basis_fact: Mapping[str, Any]) -> Dict[str,
     document_date = _clean(basis_fact.get("document_date"))
     free_text = _clean(basis_fact.get("free_text"))
     item_type = str(basis_fact.get("item_type_code") or "").strip().upper()
-
-    if item_type == "TERMINATION" and not basis_type and not free_text and basis_fact.get("termination_reason"):
-        return _result(generated_text=termination_reason_basis_text(basis_fact["termination_reason"], lang),
-                       generator_key=GENERATOR_KEY_ITEM_BASIS,
-                       fingerprint_payload={"type": item_type, "termination_reason": basis_fact["termination_reason"], "basis": None})
 
     if basis_type == BASIS_TYPE_PERSONAL_APPLICATION:
         if item_type == ORDER_TYPE_RETURN_FROM_CHILDCARE_LEAVE:

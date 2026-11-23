@@ -1,6 +1,6 @@
 // FILE: corpsite-ui/app/directory/positions/page.tsx
-import PositionsTabsPageClient from "./_components/PositionsTabsPageClient";
+import PositionsPageClient from "./_components/PositionsPageClient";
 
 export default function PositionsPage() {
-  return <PositionsTabsPageClient />;
+  return <PositionsPageClient />;
 }

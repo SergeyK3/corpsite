@@ -4,7 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ControlListEntryDialog from "./ControlListEntryDialog";
 import { getEmployees } from "../_lib/api.client";
 import { getEducationProfileDetail, getNormalizedRecord, listEducationProfiles, listNormalizedRecords } from "../../personnel/_lib/importApi.client";
-import { normalizedRecordFixture } from "../../personnel/_lib/normalizedRecordTestFixture";
 
 vi.mock("../_lib/api.client", () => ({ getEmployees: vi.fn(), mapApiErrorToMessage: (error: unknown) => String(error) }));
 vi.mock("../../personnel/_lib/importApi.client", () => ({
@@ -14,7 +13,7 @@ vi.mock("./ControlListProfilePreviewDialog", () => ({ default: ({ detail, open }
 vi.mock("../../personnel/_components/ImportEnrollEmployeeWizard", () => ({ default: ({ record, onReviewed }: { record: { normalized_record_id: number }; onReviewed: (record: unknown) => void }) => <div data-testid="enroll-only-wizard" data-record-id={record.normalized_record_id}><button type="button" onClick={() => undefined}>dry run</button><button type="button" onClick={() => undefined}>cancel</button><button type="button" onClick={() => undefined}>error</button><button type="button" onClick={() => onReviewed(record)}>enrollment success</button></div> }));
 
 const record = (id: number, batchId: number, rowId: number, iin = "750812450121", fullName = "Умерзакова Махаббат") =>
-  normalizedRecordFixture({ normalized_record_id: id, batch_id: batchId, row_id: rowId, iin, full_name: fullName });
+  ({ normalized_record_id: id, record_id: id, batch_id: batchId, row_id: rowId, iin, full_name: fullName }) as never;
 
 function startEmptyOperationalSearch() {
   vi.mocked(getEmployees).mockResolvedValue({ items: [], total: 0 });

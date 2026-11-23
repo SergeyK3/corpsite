@@ -105,12 +105,8 @@ def _phone(value: str | None) -> str | None:
 
 @router.get("/contacts")
 def get_contacts(person_id:int=Path(ge=1), user:dict=Depends(get_current_user)):
-    from app.services.ppr_query_access_service import assert_personnel_card_scope_for_person, require_personnel_card_reader
-    from app.ppr.read.query_service import PprQueryApplicationService
-    full_reader = require_personnel_card_reader(user)
-    summary = PprQueryApplicationService().load_summary(person_id=person_id)
-    assert_personnel_card_scope_for_person(user, summary.person_id, employee_id=summary.employee_id, full_reader=full_reader)
-    person_id = summary.person_id
+    from app.services.ppr_query_access_service import assert_ppr_read_allowed_for_person
+    assert_ppr_read_allowed_for_person(user, person_id)
     with engine.connect() as conn:
         row=conn.execute(text("SELECT mobile_phone,email,registration_address,residence_address,version,updated_at FROM person_contacts WHERE person_id=:p"),{"p":person_id}).mappings().one_or_none()
         fallback = None

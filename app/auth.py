@@ -168,7 +168,8 @@ def _sign(message: bytes, secret: str) -> bytes:
     return hmac.new(secret.encode("utf-8"), message, hashlib.sha256).digest()
 
 
-def create_access_token(user_id: int, *, token_version: Optional[int] = None) -> str:
+def create_access_token(user_id: int, *, token_version: Optional[int] = None,
+                        source_token_version: Optional[int] = None) -> str:
     now = int(time.time())
     exp = now + _jwt_ttl_seconds()
     header = {"alg": "HS256", "typ": "JWT"}
@@ -176,6 +177,8 @@ def create_access_token(user_id: int, *, token_version: Optional[int] = None) ->
     # All newly issued JWTs carry the version claim.  This is required for
     # password changes and account retirement to revoke prior sessions.
     payload["token_version"] = int(token_version if token_version is not None else 1)
+    if source_token_version is not None:
+        payload["source_token_version"] = int(source_token_version)
 
     header_b64 = _b64url(_json_dumps(header))
     payload_b64 = _b64url(_json_dumps(payload))
@@ -224,9 +227,19 @@ def _get_user_by_id(user_id: int) -> Optional[Dict[str, Any]]:
         return None
 
     with engine.connect() as conn:
+        has_training_links = conn.execute(
+            text("SELECT to_regclass('public.training_identity_links') IS NOT NULL")
+        ).scalar_one()
+        source_join = """
+                LEFT JOIN public.training_identity_links training_link
+                    ON training_link.training_user_id = u.user_id
+                LEFT JOIN public.users source_user
+                    ON training_link.source_kind = 'local'
+                   AND source_user.user_id = training_link.source_user_id
+        """ if has_training_links else "LEFT JOIN public.users source_user ON FALSE"
         row = conn.execute(
             text(
-                """
+                f"""
                 SELECT
                     u.user_id,
                     u.role_id,
@@ -236,18 +249,38 @@ def _get_user_by_id(user_id: int) -> Optional[Dict[str, Any]]:
                     u.is_active,
                     u.full_name,
                     u.login,
-                    u.employee_id,
+                    COALESCE(u.employee_id, source_user.employee_id) AS employee_id,
                     u.telegram_id,
                     u.telegram_username,
                     p.position_id,
-                    p.name AS position_name
+                    p.name AS position_name,
+                    EXISTS (
+                        SELECT 1 FROM public.org_unit_managers m
+                        WHERE m.user_id = u.user_id
+                          AND UPPER(BTRIM(m.manager_type)) = 'HEAD'
+                          AND m.is_active IS TRUE
+                          AND (m.date_from IS NULL OR m.date_from <= CURRENT_DATE)
+                          AND (m.date_to IS NULL OR m.date_to >= CURRENT_DATE)
+                    ) AS is_hire_approver
                 FROM public.users u
                 LEFT JOIN public.roles r
                     ON r.role_id = u.role_id
+                {source_join}
                 LEFT JOIN public.employees e
-                    ON e.employee_id = u.employee_id
+                    ON e.employee_id = COALESCE(u.employee_id, source_user.employee_id)
+                LEFT JOIN LATERAL (
+                    SELECT MIN(pa.position_id) AS position_id
+                    FROM public.person_assignments pa
+                    WHERE pa.person_id = e.person_id
+                      AND pa.active_flag IS TRUE
+                      AND pa.is_primary IS TRUE
+                      AND pa.lifecycle_status = 'active'
+                      AND pa.start_date <= CURRENT_DATE
+                      AND (pa.end_date IS NULL OR pa.end_date >= CURRENT_DATE)
+                    HAVING COUNT(*) = 1
+                ) current_pa ON TRUE
                 LEFT JOIN public.positions p
-                    ON p.position_id = e.position_id
+                    ON p.position_id = current_pa.position_id
                 WHERE u.user_id = :uid
                 """
             ),
@@ -275,6 +308,7 @@ def _get_user_by_id(user_id: int) -> Optional[Dict[str, Any]]:
         "position_name": str(row["position_name"]).strip()
         if row.get("position_name") is not None and str(row["position_name"]).strip()
         else None,
+        "is_hire_approver": bool(row["is_hire_approver"]),
         "must_change_password": bool(policy_row.get("must_change_password") or False),
         "token_version": int(policy_row.get("token_version") or 1),
         "locked_at": policy_row.get("locked_at"),
@@ -300,6 +334,15 @@ def _enrich_user_context(user: Dict[str, Any]) -> Dict[str, Any]:
     )
 
     out = dict(user)
+    rehearsal_database = (engine.url.database or "").startswith("corpsite_learn_rehearsal_") and os.getenv("TRAINING_REHEARSAL") == "1"
+    out["training_enabled"] = (
+        engine.url.host in {"127.0.0.1", "localhost", "::1"}
+        and (engine.url.database in {"corpsite_test", "corpsite_learn"} or rehearsal_database)
+        and (engine.url.database != "corpsite_learn" or os.getenv("TRAINING_SERVER_ENABLED") == "1")
+        and os.getenv("TRAINING_MODE") == "1"
+        and os.getenv("TRAINING_DISABLE_EXTERNAL") == "1"
+        and (engine.url.database == "corpsite_learn" or os.getenv("APP_ENV", "dev").lower() not in {"prod", "production"})
+    )
     from app.security.documentation_viewer import is_documentation_viewer, is_standalone_profile
     if is_standalone_profile(out):
         from app.security.sysadmin_assistant import is_assistant, PERMISSIONS
@@ -308,9 +351,9 @@ def _enrich_user_context(user: Dict[str, Any]) -> Dict[str, Any]:
             "is_sysadmin_assistant": is_assistant(out), "is_privileged": False,
             "is_system_admin": False, "has_sysadmin_api": False,
             "has_personnel_admin": False, "has_personnel_card_edit": False,
+            "has_learning_expert": False, "has_learning_review": False,
             "has_user_access_admin": False, "has_hr_governance": False,
             "has_hr_enrollment_manager": False, "can_hard_delete_employee": False,
-            "has_personnel_files_review": False,
             "can_view_all_tasks": False, "has_personnel_events_read": True,
             "has_personnel_visibility": True, "show_org_sidebar": True,
             "personnel_visibility": {"has_visibility": True, "show_org_sidebar": True,
@@ -320,22 +363,6 @@ def _enrich_user_context(user: Dict[str, Any]) -> Dict[str, Any]:
         out["assistant_permissions"] = {
             code: has_admin_permission(int(out["user_id"]), code) for code in PERMISSIONS
         } if is_assistant(out) else {}
-        if is_assistant(out):
-            from app.security.sysadmin_assistant import HR_SUPPORT, CARD_EDIT, STAGE_PERMISSIONS
-            granted = out["assistant_permissions"]
-            out.update({
-                "has_personnel_admin": granted.get(HR_SUPPORT, False),
-                "has_hr_governance": False,
-                "has_personnel_card_edit": granted.get(CARD_EDIT, False),
-                "has_hr_enrollment_manager": granted.get(HR_SUPPORT, False),
-                "has_control_list_export": granted.get("CONTROL_LIST_EXPORT", False),
-                "has_ppr_migration_status_read": granted.get("PPR_MIGRATION_STATUS_READ", False),
-                "has_personnel_orders_archive": granted.get("PERSONNEL_ORDERS_ARCHIVE", False),
-                "has_personnel_orders_restore": granted.get("PERSONNEL_ORDERS_RESTORE", False),
-                "has_working_contacts_read": granted.get("ASSISTANT_WORKING_CONTACTS_READ", False),
-                "ppr_stage_permissions": {str(stage): granted.get(code, False)
-                                          for stage, code in STAGE_PERMISSIONS.items()},
-            })
         return out
     out["is_privileged"] = is_privileged(out)
     out["is_system_admin"] = int(out.get("role_id") or 0) == 2
@@ -350,15 +377,8 @@ def _enrich_user_context(user: Dict[str, Any]) -> Dict[str, Any]:
     out["has_user_access_admin"] = has_admin_permission(uid, USER_ACCESS_ADMIN)
     out["has_hr_governance"] = out["has_sysadmin_api"] or has_hr_governance_permission(uid)
     out["has_hr_enrollment_manager"] = has_admin_permission(uid, HR_ENROLLMENT_MANAGER_CODE)
-    # File reviewers are distinct from technical administrators and assistants.
-    # The per-person file API still applies resource and organization scope.
-    out["has_personnel_files_review"] = (
-        not out["is_system_admin"]
-        and (
-            has_admin_permission(uid, HR_ENROLLMENT_MANAGER_CODE)
-            or has_admin_permission(uid, "PERSONNEL_FILES_REVIEW")
-        )
-    )
+    out["has_learning_expert"] = has_admin_permission(uid, "LEARNING_EXPERT")
+    out["has_learning_review"] = has_admin_permission(uid, "LEARNING_MANUAL_REVIEW")
     out["has_control_list_export"] = has_admin_permission(
         uid, CONTROL_LIST_EXPORT_PERMISSION
     )
@@ -399,17 +419,6 @@ def _enrich_user_context(user: Dict[str, Any]) -> Dict[str, Any]:
     from app.services.tasks_service import can_view_team_tasks
 
     out = enrich_user_with_personnel_visibility(out)
-
-    # Navigation mirrors the existing server-side card role gate. The target
-    # Person and department scope are still checked by each card API request.
-    from app.services.ppr_query_access_service import require_personnel_card_reader
-    try:
-        require_personnel_card_reader(out)
-        out["has_personnel_card_read"] = True
-    except HTTPException as exc:
-        if exc.status_code != 403:
-            raise
-        out["has_personnel_card_read"] = False
 
     can_view_all_tasks = False
     role_id = int(out.get("role_id") or 0)
@@ -476,6 +485,17 @@ def get_current_user(
         raise HTTPException(status_code=403, detail="Account locked.")
 
     validate_token_version_claim(payload, u)
+    from app.training_identity import link_for_target, source_for_target
+    if link_for_target(user_id):
+        try:
+            source = source_for_target(user_id)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=503, detail="Источник учебного входа недоступен.") from exc
+        if not source or not source["is_active"] or is_user_locked(source) or source.get("must_change_password"):
+            raise HTTPException(status_code=403, detail="Исходная учётная запись недоступна.")
+        if int(payload.get("source_token_version") or -1) != int(source.get("token_version") or 1):
+            raise HTTPException(status_code=401, detail="Исходная сессия изменена.")
+        u["training_linked"] = True
     require_password_not_expired_or_change_allowed(request, u)
 
     return _enrich_user_context(u)
@@ -521,7 +541,14 @@ def login(payload: LoginRequest, request: Request) -> TokenResponse:
     user_agent = request.headers.get("user-agent")
     login_value = (payload.login or "").strip()
 
-    u = _get_user_auth_row_by_login(login_value)
+    from app.training_identity import TrainingIdentityCollision, target_for_login
+    try:
+        linked = target_for_login(login_value)
+    except TrainingIdentityCollision as exc:
+        raise HTTPException(status_code=409, detail="Неоднозначная связь учебного логина.") from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail="Источник учебного входа недоступен.") from exc
+    u = _get_user_auth_row_by_login(linked[0] if linked else login_value)
     if not u:
         record_login_failed(
             user_id=None,
@@ -552,7 +579,18 @@ def login(payload: LoginRequest, request: Request) -> TokenResponse:
         )
         raise HTTPException(status_code=403, detail="Account locked.")
 
-    ph = (u.get("password_hash") or "").strip()
+    if linked and (not linked[1]["is_active"] or is_user_locked(linked[1]) or linked[1].get("must_change_password")):
+        record_login_failed(
+            user_id=int(u["user_id"]), login=login_value,
+            ip_address=ip_address, user_agent=user_agent,
+            failure_reason="source_account_unavailable",
+        )
+        raise HTTPException(status_code=403, detail="Исходная учётная запись недоступна.")
+
+    from app.training_identity import link_for_target
+    if not linked and link_for_target(int(u["user_id"])):
+        raise HTTPException(status_code=401, detail="Неверный логин или пароль")
+    ph = ((linked[1].get("password_hash") if linked else u.get("password_hash")) or "").strip()
     if not ph:
         record_login_failed(
             user_id=int(u["user_id"]),
@@ -578,7 +616,10 @@ def login(payload: LoginRequest, request: Request) -> TokenResponse:
         ip_address=ip_address,
         user_agent=user_agent,
     )
-    token = create_access_token(int(u["user_id"]), token_version=int(u.get("token_version") or 1))
+    token = create_access_token(
+        int(u["user_id"]), token_version=int(u.get("token_version") or 1),
+        source_token_version=int(linked[1].get("token_version") or 1) if linked else None,
+    )
     return TokenResponse(access_token=token, token_type="bearer")
 
 
@@ -595,6 +636,8 @@ def password_change(
     ip_address = request.client.host if request.client else None
     user_agent = request.headers.get("user-agent")
     user_id = int(user["user_id"])
+    if user.get("training_linked"):
+        raise HTTPException(status_code=403, detail="Смените пароль в рабочей учётной записи.")
 
     def reject(detail: str, reason: str) -> None:
         write_security_event(

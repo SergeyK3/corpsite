@@ -29,11 +29,8 @@ import {
   buildVisibilityDirectoryNavItems,
   HR_PROCESSES_NAV_ITEM,
   isHrProcessesRoute,
-  isPersonnelFileReviewRoute,
   isPersonnelDirectoryRoute,
   PERSONNEL_DIRECTORY_NAV_ITEM,
-  PPR_MIGRATION_NAV_ITEM,
-  WORKING_CONTACTS_NAV_ITEM,
   shouldShowPrimaryAdminNavItem,
 } from "@/lib/personnelNav";
 import {
@@ -124,8 +121,6 @@ const PRIMARY_ADMIN_NAV: NavItem[] = [
   },
   PERSONNEL_DIRECTORY_NAV_ITEM,
   HR_PROCESSES_NAV_ITEM,
-  PPR_MIGRATION_NAV_ITEM,
-  WORKING_CONTACTS_NAV_ITEM,
   OPERATIONAL_ORDERS_NAV_ITEM,
   INCOMING_INFORMATION_NAV_ITEM,
 ];
@@ -370,7 +365,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     !loading &&
     !!me &&
     !canAccessDirectoryRoute(pathname, me) &&
-    (isPersonnelFileReviewRoute(pathname) || isIncomingInformationRoute(pathname) || isForbiddenAdminRoute(pathname, me));
+    (isIncomingInformationRoute(pathname) || isForbiddenAdminRoute(pathname, me));
 
   const privilegedSysadminOnly =
     !isAdmin &&
@@ -389,7 +384,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if ((me?.is_documentation_viewer || me?.is_sysadmin_assistant) && !me.must_change_password && (pathname === "/" || pathname === "/tasks")) {
-      router.replace(me?.is_sysadmin_assistant ? "/directory/personnel/journal" : "/admin/system");
+      router.replace("/admin/system");
     }
   }, [me, pathname, router]);
 
@@ -402,11 +397,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const showPositionCabinetNav = shouldShowPositionCabinetNav(pathname, { showPersonnelVisibility });
 
   function renderMainSection(content: React.ReactNode) {
-    const assistantHrRoute = pathname.startsWith("/directory/personnel") ||
-      pathname.startsWith("/directory/staff") || pathname.startsWith("/directory/employees");
-    const viewOnly = me?.is_documentation_viewer || (me?.is_sysadmin_assistant && !assistantHrRoute);
+    const viewOnly = me?.is_documentation_viewer || (me?.is_sysadmin_assistant && !pathname.startsWith("/directory/personnel/orders"));
     return <section className="min-w-0">{viewOnly && !pathname.startsWith("/profile")
-      ? <DocumentationViewingBoundary assistant={me?.is_sysadmin_assistant === true}>{content}</DocumentationViewingBoundary> : content}</section>;
+      ? <DocumentationViewingBoundary>{content}</DocumentationViewingBoundary> : content}</section>;
   }
 
   function withCurrentUser(node: React.ReactNode) {

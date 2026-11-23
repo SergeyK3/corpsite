@@ -42,7 +42,6 @@ import PersonnelOrderMedicalSpecialtyPicker, {type MedicalSpecialtySnapshot} fro
 import PersonnelOrderAllowanceRecipient,{blankAllowanceRecipient,recipientBlockers,type AllowanceRecipient} from './PersonnelOrderAllowanceRecipient';
 import {russianEmployeeDativeForOrder} from '../_lib/personnelOrderRussianWording';
 import {savedKazakhEmployeeNameForm} from '../_lib/personnelOrderDocumentForms';
-import {PERSONNEL_ORDER_TERMINATION_REASONS} from '../_lib/personnelOrderTerminationReason';
 
 import {
   createManualPersonnelOrderDraft, createPersonnelOrderItem,
@@ -70,6 +69,7 @@ type Props = {
   open: boolean;
   onClose: () => void;
   onCreated: (result: PersonnelOrderManualDraftCreateResult) => void;
+  onHireRequested?: () => void;
   itemContext?: {orderId: number; itemTypeCode: string; template: PersonnelPublishedTemplateVariant; employeeIds: number[];items?: PersonnelOrderDetailResponse['items']; sourceTitleLocale?: "ru" | "kk" | "unknown" | null};
   onItemAdded?: (result: PersonnelOrderDetailResponse) => void;
   initialEmployeeId?: number | null;
@@ -187,6 +187,7 @@ export default function PersonnelOrderCreateDialog({
   open,
   onClose,
   onCreated,
+  onHireRequested,
   itemContext, onItemAdded,
   initialEmployeeId = null,
   initialEmployeeQuery = null,
@@ -536,7 +537,7 @@ export default function PersonnelOrderCreateDialog({
     if (concurrent || simpleAllowance) {
       // An unconfirmed automatic RU declension must not enter this order.
       forms.employee_full_name_dative_ru = serviceArea||simpleAllowance?russianEmployeeDativeForOrder(selected):savedRussianEmployeeNameForm(selected, "dative");
-      if(serviceArea||simpleAllowance){const proposal=calculateKazakhPersonForm(selected,'dative');forms.employee_full_name_dative_kk=savedKazakhEmployeeNameForm(selected,'dative')||(proposal.needsReview?'':proposal.value);}
+      if(serviceArea||simpleAllowance)forms.employee_full_name_dative_kk=savedKazakhEmployeeNameForm(selected,'dative')||calculateKazakhPersonForm(selected,'dative').value;
     }
     if (concurrent && !cessation) Object.assign(forms, concurrentEmployeeDatives(selected));
     if(recall){
@@ -678,6 +679,7 @@ export default function PersonnelOrderCreateDialog({
   if (!open) return null;
 
   function changeType(nextType: string, versionId?: number) {
+    if (nextType === "HIRE" && !itemContext) { onHireRequested?.(); return; }
     setSelectedVersion(versionId);
     ++templateId.current;
     setType(nextType);
@@ -777,7 +779,7 @@ export default function PersonnelOrderCreateDialog({
         ...(documentPosition?.id ? {position_id: documentPosition.id} : {}),
       });
       if ((transfer || concurrent && !cessation && !replacementMode) && medicalSpecialty && request.item_payload) Object.assign(request.item_payload,{medical_specialty:medicalSpecialty});
-      if (!categoryOrder && !serviceLengthOrder && !educationOrder && !personalDataOrder && request.item_payload) {
+      if (type === "HIRE" && request.item_payload) {
         const payload=request.item_payload as Record<string,unknown>;
         payload.document_forms_ru={employee_full_name_dative_ru:kk.employee_full_name_dative_ru,employee_full_name_genitive_ru:kk.employee_full_name_genitive_ru,
           employee_full_name_accusative_ru:kk.employee_full_name_accusative_ru,position_document_nominative_ru:kk.position_document_nominative_ru,
@@ -955,7 +957,7 @@ export default function PersonnelOrderCreateDialog({
               {employee && transfer ? <Field label="ФИО в винительном падеже (RU)"><input aria-label="ФИО в винительном падеже (RU)" value={kk.employee_full_name_accusative_ru} onChange={e=>setKk(current=>({...current,employee_full_name_accusative_ru:e.target.value}))} className={inputClassName}/>{!kk.employee_full_name_accusative_ru.trim() ? <p role="alert">Нет подтверждённого ФИО в винительном падеже (RU). Заполните вручную.</p> : null}</Field> : null}
               {termination && employee ? <section className="space-y-3 sm:col-span-2" data-testid="termination-required-fields">
                 <Field label="Должность на казахском языке (KK)"><input aria-label="Должность на казахском языке (KK)" value={terminationPositionKk} onChange={e=>{terminationPositionKkEdited.current=true;setTerminationPositionKk(e.target.value);}} aria-invalid={!terminationPositionKk.trim()} aria-describedby={!terminationPositionKk.trim() ? "termination-position-kk-hint" : undefined} className={inputClassName}/>{!terminationPositionKk.trim() ? <p id="termination-position-kk-hint" role="alert" className="text-xs text-amber-700">Заполните должность на казахском языке для текста приказа.</p> : null}</Field>
-                <Field label="Причина расторжения трудового договора"><select aria-label="Причина расторжения трудового договора" value={terminationReason} onChange={e=>setTerminationReason(e.target.value)} aria-invalid={!terminationReason.trim()} aria-describedby={!terminationReason.trim() ? "termination-reason-hint" : undefined} className={inputClassName}><option value="">Выберите причину</option>{PERSONNEL_ORDER_TERMINATION_REASONS.map(reason=><option key={reason.code} value={reason.code}>{reason.ru.charAt(0).toLocaleUpperCase('ru-RU')+reason.ru.slice(1)}</option>)}</select>{!terminationReason.trim() ? <p id="termination-reason-hint" role="alert" className="text-xs text-amber-700">Выберите причину расторжения трудового договора.</p> : null}</Field>
+                <Field label="Причина расторжения трудового договора"><select aria-label="Причина расторжения трудового договора" value={terminationReason} onChange={e=>setTerminationReason(e.target.value)} aria-invalid={!terminationReason.trim()} aria-describedby={!terminationReason.trim() ? "termination-reason-hint" : undefined} className={inputClassName}><option value="">Выберите причину</option><option value="EMPLOYEE_INITIATIVE">По инициативе работника</option></select>{!terminationReason.trim() ? <p id="termination-reason-hint" role="alert" className="text-xs text-amber-700">Выберите причину расторжения трудового договора.</p> : null}</Field>
               </section> : null}
               {employee && (serviceArea || simpleAllowance)?<PersonnelOrderAllowanceRecipient employee={employee} value={allowanceRecipient} onChange={setAllowanceRecipient}/>:null}
               {simpleAllowance ? <section data-testid="simple-allowance-fields" className="space-y-3 sm:col-span-2">

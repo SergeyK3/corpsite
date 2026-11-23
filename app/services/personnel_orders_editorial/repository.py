@@ -668,8 +668,12 @@ def find_block(
     conn: Connection,
     order_id: int,
     block_id: int,
+    *,
+    scope: str | None = None,
 ) -> Tuple[str, Dict[str, Any]]:
     """Return ('order'|'item', row) verifying ownership by order_id."""
+    if scope not in (None, "order", "item"):
+        raise ValueError("Invalid editorial block scope")
     order_row = conn.execute(
         text(
             """
@@ -694,7 +698,7 @@ def find_block(
             """
         ),
         {"block_id": int(block_id), "order_id": int(order_id)},
-    ).mappings().first()
+    ).mappings().first() if scope != "item" else None
     if order_row is not None:
         return "order", dict(order_row)
 
@@ -726,7 +730,7 @@ def find_block(
             """
         ),
         {"block_id": int(block_id), "order_id": int(order_id)},
-    ).mappings().first()
+    ).mappings().first() if scope != "order" else None
     if item_row is not None:
         return "item", dict(item_row)
 

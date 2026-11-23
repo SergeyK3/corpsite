@@ -151,13 +151,6 @@ describe("personnelNav", () => {
       expect(canSeeSysadminCabinetNav(headWithVisibility)).toBe(false);
     });
 
-    it("file reviewer without the broader HR role enters through Кадровые процессы", () => {
-      const items = buildPersonnelSidebarNavItems({ has_personnel_files_review: true });
-      expect(items).toEqual([
-        expect.objectContaining({ title: "Кадровые процессы", href: "/directory/personnel/file-review" }),
-      ]);
-    });
-
     it("HR head visibility shell includes contacts alongside personnel split", () => {
       const items = buildVisibilityDirectoryNavItems(hrManager);
       expect(items.map((item) => item.title)).toEqual(["Персонал", "Кадровые процессы", "Контакты"]);
@@ -191,7 +184,6 @@ describe("personnelNav", () => {
         "Производственные приказы",
         "Контакты",
         "Должности",
-        "Тип",
       ]);
     });
 

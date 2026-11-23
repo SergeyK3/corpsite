@@ -3,7 +3,7 @@ import * as React from "react";
 import {getEmployee, getEmployees} from "@/app/directory/employees/_lib/api.client";
 import type {EmployeeDTO} from "@/app/directory/employees/_lib/types";
 import type {OrgUnitSelectOption} from "@/lib/orgUnitsSelect";
-import {calculateKazakhDocumentName,calculateKazakhPersonForm} from "../_lib/kazakhDocumentForms";
+import {calculateKazakhPersonForm} from "../_lib/kazakhDocumentForms";
 import {russianEmployeeGenitiveForOrder, savedRussianEmployeeNameForm} from "../_lib/personnelOrderRussianWording";
 import {russianReferenceCase} from "../_lib/personnelOrderRussianWording";
 import {savedKazakhEmployeeNameForm} from "../_lib/personnelOrderDocumentForms";
@@ -84,10 +84,10 @@ export default function PersonnelOrderReplacementFields({value,onChange,mode,sta
   return <section data-testid="replacement-fields" className="space-y-3 sm:col-span-2">
     <h3 className="font-medium">{serviceArea?'Доплата за расширение зоны обслуживания':'Замещение на время отпуска'}</h3>
     <ReplacementEmployeeSearch includeAssignments={serviceArea} label="Замещаемый сотрудник (RU)" value={value.employee_name_ru} onEdit={text=>{setSelectedEmployee(null);onChange(current=>({...current,employee_id:undefined,assignment_id:undefined,employee_name_ru:text}));}} onSelect={employee=>{
-      const kkName=calculateKazakhDocumentName(employee).value||employee.fio||"";
+      const parts=(employee.fio||"").split(/\s+/);const kkName=[employee.first_name||parts[1],employee.middle_name||parts[2],employee.last_name||parts[0]].filter(Boolean).join(" ");
       const genitive=calculateKazakhPersonForm(employee,"genitive");
       setSelectedEmployee(employee);
-      onChange(current=>({...current,employee_id:Number(employee.id)||undefined,employee_name_ru:employee.fio||"",...Object.fromEntries(Object.entries({employee_name_kk:kkName,employee_genitive_ru:russianEmployeeGenitiveForOrder(employee),employee_genitive_kk:savedKazakhEmployeeNameForm(employee,'genitive')||(genitive.needsReview?"":genitive.value)}).filter(([key])=>!serviceArea||!edited.current.has(key as keyof ReplacementFields))),...(!serviceArea?{
+      onChange(current=>({...current,employee_id:Number(employee.id)||undefined,employee_name_ru:employee.fio||"",...Object.fromEntries(Object.entries({employee_name_kk:kkName,employee_genitive_ru:russianEmployeeGenitiveForOrder(employee),employee_genitive_kk:serviceArea?(savedKazakhEmployeeNameForm(employee,'genitive')||genitive.value):genitive.needsReview?"":genitive.value}).filter(([key])=>!serviceArea||!edited.current.has(key as keyof ReplacementFields))),...(!serviceArea?{
         position_id:employee.position?.id||undefined,position_ru:employee.position?.job_nameru||employee.position?.name||"",position_kk:employee.position?.document_possessive_kk||employee.position?.job_namekk_doc||employee.position?.job_namekk||employee.position?.name_kk||"",org_unit_id:employee.org_unit?.unit_id||undefined,org_unit_ru:employee.org_unit?.name||"",org_unit_kk:employee.org_unit?.document_genitive_kk||employee.org_unit?.name_kk||"",position_genitive_ru:"",org_unit_genitive_ru:""}:{})}));
       if(serviceArea)fillPlacement(employee,employee.assignments?.length===1?employee.assignments[0]:undefined,employee.assignments?.length!==1);
     }}/>

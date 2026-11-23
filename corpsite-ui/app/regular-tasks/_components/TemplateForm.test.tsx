@@ -295,7 +295,7 @@ describe("TemplateForm executor role select", () => {
     });
 
     expect((screen.getByLabelText(/^Роль исполнителя/) as HTMLSelectElement).value).toBe("2");
-    expect((screen.getByRole("option", { name: "Амбулаторный эксперт (#2)" }) as HTMLOptionElement).selected).toBe(true);
+    expect(screen.getByRole("option", { name: "Амбулаторный эксперт (#2)" }).selected).toBe(true);
   });
 
   it("updates executor_role_id when role is changed", () => {
@@ -318,7 +318,7 @@ describe("TemplateForm executor role select", () => {
       initialValues: { ...baseValues, executor_role_id: "99" },
     });
 
-    expect((screen.getByRole("option", { name: "ID роли: 99" }) as HTMLOptionElement).selected).toBe(true);
+    expect(screen.getByRole("option", { name: "ID роли: 99" }).selected).toBe(true);
   });
 });
 

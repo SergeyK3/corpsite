@@ -1,4 +1,3 @@
-import { intakeRelativeFixture, intakeEducationFixture, intakeTrainingFixture } from "../_lib/intakeTestFixtures";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 
@@ -358,7 +357,7 @@ describe("IntakePageClient", () => {
   it("autosaves a relative relationship selected from the list", async () => {
     const payload = intakeApi.emptyIntakeDraftPayload();
     payload.current_step = "relatives";
-    payload.relatives = [intakeRelativeFixture({ relationship: "", full_name: "Иванова Анна", birth_year: "", work_place: "" })];
+    payload.relatives = [{ relationship: "", full_name: "Иванова Анна", birth_year: "", work_place: "" }];
     vi.spyOn(intakeApi, "openIntakeSession").mockResolvedValue({
       application_id: 1,
       draft_id: 1,
@@ -398,7 +397,7 @@ describe("IntakePageClient", () => {
   it("shows a saved custom relationship after reopening the session", async () => {
     const payload = intakeApi.emptyIntakeDraftPayload();
     payload.current_step = "relatives";
-    payload.relatives = [intakeRelativeFixture({ relationship: "крёстная мать", full_name: "Иванова Анна", birth_year: "", work_place: "" })];
+    payload.relatives = [{ relationship: "крёстная мать", full_name: "Иванова Анна", birth_year: "", work_place: "" }];
     vi.spyOn(intakeApi, "openIntakeSession").mockResolvedValue({
       application_id: 1,
       draft_id: 1,
@@ -514,7 +513,7 @@ describe("IntakePageClient", () => {
     expect(await screen.findByLabelText(/Фамилия/i)).toHaveValue("Петров");
     expect(screen.getByLabelText(/Имя/i)).toHaveValue("Пётр");
     expect(screen.getByLabelText(/Отчество/i)).toHaveValue("Петрович");
-    expect(screen.getByTestId("intake-birth-date")).toHaveValue("20.05.1990");
+    expect(screen.getByLabelText(/Дата рождения/i)).toHaveValue("20.05.1990");
   });
 
   it("shows prefilled phone and email on contacts step without re-entry", async () => {
@@ -683,7 +682,7 @@ describe("IntakePageClient", () => {
     const payload = intakeApi.emptyIntakeDraftPayload();
     payload.current_step = "education";
     payload.education = [
-      intakeEducationFixture({
+      {
         education_type: "basic",
         institution: "КазНУ",
         year_from: "2014-09-01",
@@ -691,7 +690,7 @@ describe("IntakePageClient", () => {
         specialty: "",
         qualification: "",
         diploma_number: "",
-      }),
+      },
     ];
 
     vi.spyOn(intakeApi, "openIntakeSession").mockResolvedValue({
@@ -718,7 +717,7 @@ describe("IntakePageClient", () => {
     const payload = intakeApi.emptyIntakeDraftPayload();
     payload.current_step = "education";
     payload.education = [
-      intakeEducationFixture({
+      {
         education_type: "basic",
         institution: "КазНУ",
         year_from: "2014",
@@ -726,7 +725,7 @@ describe("IntakePageClient", () => {
         specialty: "",
         qualification: "",
         diploma_number: "",
-      }),
+      },
     ];
 
     vi.spyOn(intakeApi, "openIntakeSession").mockResolvedValue({
@@ -753,7 +752,7 @@ describe("IntakePageClient", () => {
     const payload = intakeApi.emptyIntakeDraftPayload();
     payload.current_step = "education";
     payload.education = [
-      intakeEducationFixture({
+      {
         education_type: "basic",
         institution: "КазНУ",
         year_from: "2014-09-01",
@@ -761,7 +760,7 @@ describe("IntakePageClient", () => {
         specialty: "",
         qualification: "",
         diploma_number: "",
-      }),
+      },
     ];
 
     vi.spyOn(intakeApi, "openIntakeSession").mockResolvedValue({
@@ -811,7 +810,7 @@ describe("IntakePageClient", () => {
   it("loads empty training year without Invalid Date", async () => {
     const payload = intakeApi.emptyIntakeDraftPayload();
     payload.current_step = "training";
-    payload.training = [intakeTrainingFixture({ institution: "Центр", year: "", course_name: "Охрана труда", hours: "" })];
+    payload.training = [{ institution: "Центр", year: "", course_name: "Охрана труда", hours: "" }];
 
     vi.spyOn(intakeApi, "openIntakeSession").mockResolvedValue({
       application_id: 1,
@@ -837,7 +836,7 @@ describe("IntakePageClient", () => {
     payload.personal.last_name = "Петров";
     payload.current_step = "review";
     payload.education = [
-      intakeEducationFixture({
+      {
         education_type: "basic",
         institution: "КазНУ",
         year_from: "2014-09-01",
@@ -845,10 +844,10 @@ describe("IntakePageClient", () => {
         specialty: "",
         qualification: "",
         diploma_number: "",
-      }),
+      },
     ];
     payload.training = [
-      intakeTrainingFixture({ institution: "Центр", year: "2021-03-10", course_name: "Охрана труда", hours: "" }),
+      { institution: "Центр", year: "2021-03-10", course_name: "Охрана труда", hours: "" },
     ];
 
     vi.spyOn(intakeApi, "openIntakeSession").mockResolvedValue({
@@ -877,7 +876,7 @@ describe("IntakePageClient", () => {
     payload.contacts.mobile_phone = "+77005554433";
     payload.current_step = "review";
     payload.education = [
-      intakeEducationFixture({
+      {
         education_type: "basic",
         institution: "КазНМУ",
         year_from: "2014",
@@ -885,7 +884,7 @@ describe("IntakePageClient", () => {
         specialty: "",
         qualification: "",
         diploma_number: "",
-      }),
+      },
     ];
 
     vi.spyOn(intakeApi, "openIntakeSession").mockResolvedValue({
@@ -919,7 +918,7 @@ describe("IntakePageClient", () => {
     payload.contacts.mobile_phone = "+77005554433";
     payload.current_step = "review";
     payload.education = [
-      intakeEducationFixture({
+      {
         education_type: "basic",
         institution: "КазНМУ",
         year_from: "2014",
@@ -927,7 +926,7 @@ describe("IntakePageClient", () => {
         specialty: "",
         qualification: "",
         diploma_number: "",
-      }),
+      },
     ];
 
     vi.spyOn(intakeApi, "openIntakeSession").mockResolvedValue({
@@ -961,7 +960,7 @@ describe("IntakePageClient", () => {
     payload.contacts.mobile_phone = "+77005554433";
     payload.current_step = "review";
     payload.education = [
-      intakeEducationFixture({
+      {
         education_type: "basic",
         institution: "КазНМУ",
         year_from: "2014",
@@ -969,7 +968,7 @@ describe("IntakePageClient", () => {
         specialty: "",
         qualification: "",
         diploma_number: "",
-      }),
+      },
     ];
 
     vi.spyOn(intakeApi, "openIntakeSession").mockResolvedValue({
@@ -1002,7 +1001,7 @@ describe("IntakePageClient", () => {
     payload.contacts.mobile_phone = "+77005554433";
     payload.current_step = "review";
     payload.education = [
-      intakeEducationFixture({
+      {
         education_type: "basic",
         institution: "КазНМУ",
         year_from: "2014-09-01",
@@ -1010,7 +1009,7 @@ describe("IntakePageClient", () => {
         specialty: "",
         qualification: "",
         diploma_number: "",
-      }),
+      },
     ];
 
     vi.spyOn(intakeApi, "openIntakeSession").mockResolvedValue({
@@ -1055,7 +1054,7 @@ describe("IntakePageClient", () => {
     payload.contacts.mobile_phone = "+77001112233";
     payload.current_step = "review";
     payload.education = [
-      intakeEducationFixture({
+      {
         education_type: "basic",
         institution: "ВУЗ",
         year_from: "2020-09-01",
@@ -1063,7 +1062,7 @@ describe("IntakePageClient", () => {
         specialty: "X",
         qualification: "Y",
         diploma_number: "1",
-      }),
+      },
     ];
 
     vi.spyOn(intakeApi, "openIntakeSession").mockResolvedValue({

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 
 import { apiAuthLogin, apiAuthMe, apiFetchJson } from "@/lib/api";
 import { isAuthed, logout, setSessionLogin } from "@/lib/auth";
+import { resetLearningThemeAfterLogin } from "@/lib/uiTheme";
 
 const LAST_LOGIN_KEY = "corpsite.lastLogin";
 
@@ -117,6 +118,7 @@ export default function LoginPage() {
         // ignore
       }
       setSessionLogin(l);
+      resetLearningThemeAfterLogin();
 
       router.replace("/");
     } catch (e: any) {

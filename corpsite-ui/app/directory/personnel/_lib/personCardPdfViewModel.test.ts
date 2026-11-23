@@ -1,19 +1,17 @@
 import { describe, expect, it } from "vitest";
 
 import { buildPersonCardPdfViewModel } from "./personCardPdfViewModel";
-import type { SelfCardPdfProjection } from "./personCardPdfViewModel";
-import type { PprSectionRecordResponse } from "./pprQueryTypes";
 
-const section = (section_code: string, active: PprSectionRecordResponse[] = []) => ({ section_code, active, superseded: [], voided: [] });
-
-const ppr: SelfCardPdfProjection = {
-  general: { full_name: "Исправленная Анна", last_name: "Исправленная", first_name: "Анна", middle_name: null, iin: "masked", birth_date: "1990-01-02", created_at: "2026-01-01", updated_at: "2026-01-01" },
+const ppr = {
+  identity: { iin: "masked", resolved_person_id: 7 },
+  general: { full_name: "Исправленная Анна", iin: "masked", birth_date: "1990-01-02" },
   sections: {
-    "PPR-EDUCATION": section("PPR-EDUCATION", [{ record_id: 1, education_kind: "masters", institution_type: null, institution_name: "КазНУ", started_at: "2015", completed_at: "2017", specialty: "Право", qualification: null, diploma_number: "D-1", document_date: null, verification_status: "verified", lifecycle_status: "active" }]),
-    "PPR-TRAINING": section("PPR-TRAINING"), "PPR-EMPLOYMENT-BIOGRAPHY": section("PPR-EMPLOYMENT-BIOGRAPHY"), "PPR-MILITARY": section("PPR-MILITARY"), "PPR-FAMILY": section("PPR-FAMILY"),
+    "PPR-EDUCATION": { active: [{ education_kind: "masters", institution_name: "КазНУ", started_at: "2015", completed_at: "2017", specialty: "Право", qualification: null, diploma_number: "D-1", document_date: null }] },
+    "PPR-TRAINING": { active: [] }, "PPR-EMPLOYMENT-BIOGRAPHY": { active: [] }, "PPR-MILITARY": { active: [] }, "PPR-FAMILY": { active: [] },
   },
-  additional: { foreign_languages: [{ language: "Английский", proficiency: "Владеет свободно" }], foreign_languages_none: false, qualification_categories: [], awards: [], awards_none: false, academic_degrees: [], academic_degrees_none: false, academic_titles: [], academic_titles_none: false, status_facts: [], source_note_hint: null },
-};
+  intended_employment: null,
+  additional: { foreign_languages: [{ language: "Английский", proficiency: "Владеет свободно" }], qualification_categories: [], awards: [], academic_degrees: [], academic_titles: [], source_note_hint: null },
+} as never;
 
 describe("buildPersonCardPdfViewModel", () => {
   it("uses corrected PPR and canonical contacts without intake or tenure", () => {
@@ -31,9 +29,6 @@ describe("buildPersonCardPdfViewModel", () => {
       ppr: {
         ...ppr,
         intended_employment: {
-          org_group_id: null,
-          org_unit_id: null,
-          position_id: null,
           org_group_name: "Не использовать",
           org_unit_name: "Не использовать",
           position_name: "Не использовать",

@@ -1,4 +1,3 @@
-import { employeeFixture } from "../_lib/employeeTestFixtures";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -34,7 +33,7 @@ vi.mock("../../org-units/_lib/api.client", () => ({
 }));
 
 const baseProps = {
-  initialFilters: { status: "all" as const, limit: 50, offset: 0 },
+  initialFilters: { status: "all", limit: 50, offset: 0 },
   initialDepartments: [],
   initialPositions: [],
   initialEmployees: { items: [], total: 0 },

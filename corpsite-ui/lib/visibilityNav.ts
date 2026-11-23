@@ -5,12 +5,9 @@ import { canSeeAdminShell } from "./adminNav";
 import { isPositionCabinetRoute } from "./positionCabinetNav";
 import {
   canSeeHrProcessesNav,
-  canSeePersonnelFileReviewNav,
   canSeePersonnelDirectoryNav,
   isHrProcessesRoute,
   isPersonnelDirectoryRoute,
-  isPersonnelCardRoute,
-  isPersonnelFileReviewRoute,
   PERSONNEL_DIRECTORY_NAV_ITEM,
 } from "./personnelNav";
 import { canSeeOperationalOrdersNav, isOperationalOrdersRoute } from "./operationalOrdersNav";
@@ -41,14 +38,10 @@ export function canViewPersonnelTasksReadOnly(me: MeInfo | null | undefined): bo
 }
 
 export function canAccessDirectoryRoute(pathname: string, me: MeInfo | null | undefined): boolean {
-  if (isPersonnelFileReviewRoute(pathname)) {
-    return canSeePersonnelFileReviewNav(me);
-  }
   if (isTestPersonnelApprovalsRoute(pathname)) return canSeeTestPersonnelApprovals(me);
   if (isIncomingInformationRoute(pathname)) return canAccessIncomingInformationRoute(me);
   if (canSeeAdminShell(me)) return true;
 
-  if (isPersonnelCardRoute(pathname)) return me?.has_personnel_card_read === true;
   if (isHrProcessesRoute(pathname)) return canSeeHrProcessesNav(me);
   if (isPersonnelDirectoryRoute(pathname)) return canSeePersonnelDirectoryNav(me);
   if (isOperationalOrdersRoute(pathname)) return canSeeOperationalOrdersNav(me);

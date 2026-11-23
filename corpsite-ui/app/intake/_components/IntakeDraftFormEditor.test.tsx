@@ -1,4 +1,3 @@
-import { intakeTrainingFixture, intakeEducationFixture } from "../_lib/intakeTestFixtures";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -62,7 +61,7 @@ describe("IntakeDraftFormEditor period validation", () => {
   it("shows reversed training period error on the record editor", () => {
     const payload = emptyIntakeDraftPayload();
     payload.training = [
-      intakeTrainingFixture({
+      {
         institution: "Учебный центр охраны труда",
         course_name: "Охрана труда и техника безопасности",
         year_from: "2024-07-10",
@@ -71,7 +70,7 @@ describe("IntakeDraftFormEditor period validation", () => {
         document_number: "ОТ-178-01",
         hours: "40",
         hours_is_manual: true,
-      }),
+      },
     ];
 
     renderEditor(payload, trainingStepIndex);
@@ -84,14 +83,14 @@ describe("IntakeDraftFormEditor period validation", () => {
   it("shows reversed training period error in expanded editor after edit", () => {
     const payload = emptyIntakeDraftPayload();
     payload.training = [
-      intakeTrainingFixture({
+      {
         institution: "Центр",
         course_name: "Первая помощь",
         year_from: "2024-06-01",
         year_to: "2024-05-10",
         hours: "",
         hours_is_manual: false,
-      }),
+      },
     ];
 
     renderEditor(payload, trainingStepIndex);
@@ -105,7 +104,7 @@ describe("IntakeDraftFormEditor period validation", () => {
   it("shows reversed education period error on the record editor", () => {
     const payload = emptyIntakeDraftPayload();
     payload.education = [
-      intakeEducationFixture({
+      {
         education_type: "basic",
         institution: "КазНУ",
         year_from: "2022-09-01",
@@ -113,7 +112,7 @@ describe("IntakeDraftFormEditor period validation", () => {
         specialty: "",
         qualification: "",
         diploma_number: "",
-      }),
+      },
     ];
 
     renderEditor(payload, educationStepIndex);
@@ -165,7 +164,7 @@ describe("IntakeDraftFormEditor date fields", () => {
   it("renders period date fields with full-day period editor on education step", () => {
     const payload = emptyIntakeDraftPayload();
     payload.education = [
-      intakeEducationFixture({
+      {
         education_type: "basic",
         institution: "КазНУ",
         year_from: "2014-09-01",
@@ -174,7 +173,7 @@ describe("IntakeDraftFormEditor date fields", () => {
         qualification: "",
         document_type: "diploma",
         diploma_number: "",
-      }),
+      },
     ];
 
     renderEditor(payload, educationStepIndex);
@@ -196,7 +195,7 @@ describe("IntakeDraftFormEditor date fields", () => {
   it("stores edited period date as canonical ISO", () => {
     const payload = emptyIntakeDraftPayload();
     payload.education = [
-      intakeEducationFixture({
+      {
         education_type: "basic",
         institution: "КазНУ",
         year_from: "",
@@ -205,7 +204,7 @@ describe("IntakeDraftFormEditor date fields", () => {
         qualification: "",
         document_type: "diploma",
         diploma_number: "",
-      }),
+      },
     ];
     const onChange = vi.fn();
     renderEditor(payload, educationStepIndex, onChange);
@@ -409,7 +408,7 @@ describe("IntakeDraftFormEditor review and submit actions", () => {
     payload.contacts.mobile_phone = "+77005554433";
     payload.contacts.registration_address = "г. Алматы, ул. Абая 1";
     payload.education = [
-      intakeEducationFixture({
+      {
         education_type: "basic",
         institution: "КазНУ",
         year_from: "2014-09-01",
@@ -417,7 +416,7 @@ describe("IntakeDraftFormEditor review and submit actions", () => {
         specialty: "Медицина",
         qualification: "Бакалавр",
         diploma_number: "123",
-      }),
+      },
     ];
     payload.military.status = "Призывник";
 
@@ -475,7 +474,7 @@ describe("IntakeDraftFormEditor review and submit actions", () => {
     payload.personal.first_name = "Пётр";
     payload.personal.birth_date = "1990-05-20";
     payload.education = [
-      intakeEducationFixture({
+      {
         education_type: "basic",
         institution: "КазНМУ",
         year_from: "2014",
@@ -483,7 +482,7 @@ describe("IntakeDraftFormEditor review and submit actions", () => {
         specialty: "",
         qualification: "",
         diploma_number: "",
-      }),
+      },
     ];
     const onStepIndexChange = vi.fn();
 
@@ -507,7 +506,7 @@ describe("IntakeDraftFormEditor review and submit actions", () => {
   it("blocks both HR review buttons when a reversed period remains", () => {
     const payload = emptyIntakeDraftPayload();
     payload.training = [
-      intakeTrainingFixture({
+      {
         institution: "Учебный центр охраны труда",
         course_name: "Охрана труда и техника безопасности",
         year_from: "2024-07-10",
@@ -516,7 +515,7 @@ describe("IntakeDraftFormEditor review and submit actions", () => {
         document_number: "ОТ-178-01",
         hours: "40",
         hours_is_manual: true,
-      }),
+      },
     ];
 
     render(

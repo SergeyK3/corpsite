@@ -21,9 +21,6 @@ function sampleDetail(
     },
     items: [],
     localized_texts: [],
-    attachments: [],
-    prints: [],
-    events: [],
   };
 }
 

@@ -11,9 +11,9 @@ describe("flattenOrgUnits", () => {
   it("flattens nested org units with depth prefixes", () => {
     const rows = flattenOrgUnits([
       {
-        id: "1", unit_id: 1,
+        unit_id: 1,
         name: "Клиника",
-        children: [{ id: "2", unit_id: 2, name: "Терапия", children: [] }],
+        children: [{ unit_id: 2, name: "Терапия", children: [] }],
       },
     ]);
 

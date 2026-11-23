@@ -11,7 +11,6 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Path
-from fastapi.responses import Response
 from sqlalchemy import text
 
 from app.api.ppr_mappers import composite_to_response
@@ -32,7 +31,6 @@ from app.api.ppr_self_schemas import (
 )
 from app.auth import get_current_user
 from app.db.engine import engine
-from app.db.models.person_photos import MIME_TYPE_JPEG
 from app.ppr.application.authorization import SelfPersonalCardAuthorizationAdapter
 from app.ppr.application.command_models import MaterializePprPayload, PprCommandEnvelope
 from app.ppr.application.config import assert_ppr_read_path_activation_allowed
@@ -40,7 +38,6 @@ from app.ppr.application.lifecycle_service import PprLifecycleApplicationService
 from app.ppr.application.section_service import PprSectionApplicationService
 from app.ppr.domain.errors import PprNotMaterializedError
 from app.services.personnel_record_event_service import emit_personnel_record_event
-from app.services.ppr_person_photo_read_service import load_verified_person_photo
 from app.services.self_personal_card_access_service import SelfPersonalCardAccessService
 
 
@@ -78,23 +75,6 @@ def get_my_ppr_card(
             sections=mapped.sections,
             additional=mapped.additional,
         ),
-    )
-
-
-@router.get("/me/photo")
-def get_my_ppr_photo(user: dict[str, Any] = Depends(get_current_user)) -> Response:
-    """Return the caller's verified canonical photo without a client subject ID."""
-    assert_ppr_read_path_activation_allowed()
-    resolution = _self_access_service.resolve_for_user(user)
-    if resolution.status != "READY" or resolution.composite is None:
-        raise HTTPException(status_code=404, detail="Person photo not found.")
-    content = load_verified_person_photo(int(resolution.composite.person_id), user=user)
-    if content is None:
-        raise HTTPException(status_code=404, detail="Person photo not found.")
-    return Response(
-        content=content,
-        media_type=MIME_TYPE_JPEG,
-        headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"},
     )
 
 
@@ -239,25 +219,7 @@ def get_my_contacts(user: dict[str, Any] = Depends(get_current_user)):
     with engine.connect() as conn:
         row = conn.execute(text("""SELECT mobile_phone,email,registration_address,residence_address,version,updated_at
             FROM person_contacts WHERE person_id=:person_id"""), {"person_id": person_id}).mappings().one_or_none()
-        fallback = None
-        if row is None:
-            # Match the read-only hints used by the personnel card; do not
-            # copy them into the canonical contact record.
-            application = conn.execute(text("""SELECT contact_mobile_phone AS mobile_phone, contact_email AS email
-                FROM personnel_applications WHERE person_id=:person_id
-                ORDER BY updated_at DESC NULLS LAST, application_id DESC LIMIT 1"""), {"person_id": person_id}).mappings().one_or_none()
-            operational = conn.execute(text("""SELECT phone AS mobile_phone FROM contacts
-                WHERE person_id=:person_id AND COALESCE(is_deleted,false)=false
-                ORDER BY updated_at DESC NULLS LAST LIMIT 1"""), {"person_id": person_id}).mappings().one_or_none()
-            if application or operational:
-                fallback = {
-                    "mobile_phone": (application or {}).get("mobile_phone") or (operational or {}).get("mobile_phone"),
-                    "email": (application or {}).get("email"),
-                    "registration_address": None,
-                    "residence_address": None,
-                    "source": "intake_or_operational_unconfirmed",
-                }
-    return {"canonical": dict(row) if row else None, "fallback": fallback}
+    return {"canonical": dict(row) if row else None, "fallback": None}
 
 
 @router.put("/me/contacts")

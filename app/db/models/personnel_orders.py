@@ -26,7 +26,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
-from app.db.personnel_order_header_uniqueness import NUMBER_KEY_SQL,ACTIVE_HEADER_SQL,INDEX_NAME
+from app.db.personnel_order_header_uniqueness import NUMBER_KEY_SQL,ORDER_YEAR_SQL,ACTIVE_HEADER_SQL,INDEX_NAME
 
 ORDER_CLASS_PERSONNEL = "PERSONNEL"
 
@@ -198,7 +198,7 @@ class PersonnelOrder(Base):
 
     __tablename__ = "personnel_orders"
     __table_args__ = (
-        Index(INDEX_NAME,text(NUMBER_KEY_SQL),'order_date',unique=True,postgresql_where=text(ACTIVE_HEADER_SQL)),
+        Index(INDEX_NAME,text(NUMBER_KEY_SQL),text(ORDER_YEAR_SQL),unique=True,postgresql_where=text(ACTIVE_HEADER_SQL)),
         CheckConstraint(
             "order_type_code IN "
             "('HIRE', 'TRANSFER', 'TERMINATION', 'RETURN_FROM_CHILDCARE_LEAVE', 'CONCURRENT_DUTY_START', "

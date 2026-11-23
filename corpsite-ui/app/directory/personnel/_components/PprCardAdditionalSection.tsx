@@ -29,7 +29,6 @@ type Props = {
   mode?: "languages" | "category" | "notes" | "additional";
   personId?: number;
   editableStatusFacts?: boolean;
-  showStatusFacts?: boolean;
   onStatusFactsSaved?: () => void;
 };
 
@@ -298,7 +297,7 @@ function QualificationCategoriesBlock({ items }: { items: PprQualificationCatego
   );
 }
 
-export default function PprCardAdditionalSection({ additional, mode = "additional", personId, editableStatusFacts = false, showStatusFacts = true, onStatusFactsSaved }: Props) {
+export default function PprCardAdditionalSection({ additional, mode = "additional", personId, editableStatusFacts = false, onStatusFactsSaved }: Props) {
   if (mode === "languages") {
     return (
       <div className="space-y-3" data-testid="ppr-foreign-languages-section">
@@ -314,10 +313,10 @@ export default function PprCardAdditionalSection({ additional, mode = "additiona
   }
   return (
     <div className="space-y-8" data-testid="ppr-additional-section">
-      {showStatusFacts ? <section className="space-y-3 print:hidden" data-testid="ppr-additional-status-facts-block">
+      <section className="space-y-3 print:hidden" data-testid="ppr-additional-status-facts-block">
         <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Примечание</h3>
         {editableStatusFacts && personId && onStatusFactsSaved ? <><SourceNoteHint value={additional.source_note_hint} /><PprAdditionalStatusFactsEditor personId={personId} facts={additional.status_facts} onSaved={onStatusFactsSaved} /></> : <StatusFactsBlock additional={additional} />}
-      </section> : null}
+      </section>
 
       <section className="space-y-3" data-testid="ppr-additional-awards-block">
         <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">Награды</h3>

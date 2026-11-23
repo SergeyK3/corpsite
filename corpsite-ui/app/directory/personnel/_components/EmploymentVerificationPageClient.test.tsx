@@ -2,7 +2,6 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import EmploymentVerificationPageClient from "./EmploymentVerificationPageClient";
-import type { EmploymentRevisionDecisionResponse, VerificationTaskResponse } from "../_lib/personnelVerificationApi.client";
 
 const {
   apiAuthMe,
@@ -74,7 +73,7 @@ vi.mock("../_lib/personnelVerificationApi.client", async (importOriginal) => {
   };
 });
 
-function makeTask(taskId: number, overrides: Partial<VerificationTaskResponse> = {}): VerificationTaskResponse {
+function makeTask(taskId: number, overrides: Partial<typeof TASK_A> = {}) {
   return {
     task_id: taskId,
     person_id: 5,
@@ -401,7 +400,7 @@ describe("EmploymentVerificationPageClient", () => {
   });
 
   it("ignores stale review response from previously selected task", async () => {
-    let resolveA!: (value: typeof REVIEW_A) => void;
+    let resolveA: ((value: typeof REVIEW_A) => void) | null = null;
     const delayedA = new Promise<typeof REVIEW_A>((resolve) => {
       resolveA = resolve;
     });
@@ -433,7 +432,7 @@ describe("EmploymentVerificationPageClient", () => {
     expect(panelB).toHaveTextContent("ТОО Кардио111 — кардиотестолог");
     expect(panelB).not.toHaveTextContent("тестовый тестолог");
 
-    resolveA(REVIEW_A);
+    resolveA?.(REVIEW_A);
     await waitFor(() => {
       expect(screen.getByTestId("employment-verification-task-panel")).toHaveTextContent(
         "ТОО Кардио111 — кардиотестолог",
@@ -470,10 +469,10 @@ describe("EmploymentVerificationPageClient", () => {
   });
 
   it("blocks in-flight double confirm submit", async () => {
-    let resolveConfirm!: (value: EmploymentRevisionDecisionResponse) => void;
+    let resolveConfirm: ((value: unknown) => void) | null = null;
     confirmEmploymentTask.mockImplementation(
       () =>
-        new Promise<EmploymentRevisionDecisionResponse>((resolve) => {
+        new Promise((resolve) => {
           resolveConfirm = resolve;
         }),
     );
@@ -499,7 +498,7 @@ describe("EmploymentVerificationPageClient", () => {
     }
     expect(confirmEmploymentTask).toHaveBeenCalledTimes(1);
 
-    resolveConfirm({
+    resolveConfirm?.({
       task: { ...TASK, status: "completed" },
       attestation: {
         attestation_id: 1,

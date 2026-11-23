@@ -6,7 +6,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 
 import OrgScopeFilter from "@/components/OrgScopeFilter";
 import ExportExcelButton from "@/components/ExportExcelButton";
-import { useCurrentUser } from "@/lib/currentUser";
 import { readOrgScopeFromSearchParams } from "@/lib/orgScope";
 
 import { nodeSearchText, type TreeNode } from "./_components/OrgUnitsTree";
@@ -75,7 +74,6 @@ function flattenListRows(nodes: TreeNode[]): OrgUnitListRow[] {
 }
 
 export default function OrgUnitsPage() {
-  const canManage = useCurrentUser()?.is_sysadmin_assistant !== true;
   const router = useRouter();
   const sp = useSearchParams();
   const orgScope = useMemo(() => readOrgScopeFromSearchParams(sp), [sp]);
@@ -467,7 +465,6 @@ export default function OrgUnitsPage() {
 
             {selectedNode ? (
               <div className="flex flex-wrap items-center gap-2">
-                {canManage ? <>
                 <button type="button" onClick={() => { setCreateName(""); setCreateError(""); setCreateOpen(true); }}
                   className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50">Добавить дочерний</button>
                 <button
@@ -510,7 +507,6 @@ export default function OrgUnitsPage() {
                     Деактивировать
                   </button>
                 )}
-                </> : null}
                 <button type="button" onClick={() => setSelectedId(null)}
                   className="rounded-lg border px-3 py-2 text-sm hover:bg-gray-50">Закрыть</button>
               </div>

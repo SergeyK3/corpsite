@@ -1,8 +1,6 @@
 // FILE: corpsite-ui/app/directory/personnel/_components/EmployeeDocumentFormModal.tsx
 "use client";
 
-import {classifierCatalog, type ClassifierEntry} from "../_lib/personnelFilesApi.client";
-
 import * as React from "react";
 
 import { loadOrgUnitSelectOptions } from "@/lib/orgUnitsSelect";
@@ -114,9 +112,6 @@ export default function EmployeeDocumentFormModal({
   const [submitting, setSubmitting] = React.useState(false);
   const [archiving, setArchiving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [certificateEntries,setCertificateEntries] = React.useState<ClassifierEntry[]>([]);
-  const [certificateEntry,setCertificateEntry] = React.useState("");
-  const [issuedSpecialty,setIssuedSpecialty] = React.useState("");
 
   const selectedType = React.useMemo(
     () => documentTypes.find((t) => String(t.document_type_id) === form.document_type_id) ?? null,
@@ -137,15 +132,10 @@ export default function EmployeeDocumentFormModal({
 
   const specialtyRequired = Boolean(selectedType?.requires_medical_specialty);
   const hoursRequired = Boolean(selectedType?.tracks_hours);
-  const newCertificate = mode === "create" && selectedType?.code === "SPECIALIST_CERTIFICATION";
-  React.useEffect(() => {
-    if (open && newCertificate) void classifierCatalog().then(c => setCertificateEntries(c.entries.filter(row => row.accepts_new))).catch(e => setError(String(e.message)));
-  },[open,newCertificate]);
 
   React.useEffect(() => {
     if (!open) return;
     setError(null);
-    setCertificateEntry("");setIssuedSpecialty("");
 
     if (mode === "edit" && documentRow) {
       const next: FormState = {
@@ -347,7 +337,6 @@ export default function EmployeeDocumentFormModal({
           medical_specialty_id: form.medical_specialty_id
             ? Number(form.medical_specialty_id)
             : null,
-          ...(newCertificate ? {certificate_entry_id:Number(certificateEntry),specialty_name_at_issue:issuedSpecialty} : {}),
           title: titleValue,
           training_title: form.training_title.trim() || null,
           document_number: form.document_number.trim() || null,
@@ -591,12 +580,6 @@ export default function EmployeeDocumentFormModal({
             <label className="mb-1 block text-xs font-medium text-zinc-600 dark:text-zinc-400">
               Специальность{specialtyRequired ? " *" : ""}
             </label>
-            {newCertificate ? <>
-              <label className="block text-sm">Специальность и редакция классификатора<select className={selectClass} required value={certificateEntry} onChange={e => {
-                setCertificateEntry(e.target.value);const entry=certificateEntries.find(row => row.entry_id===Number(e.target.value));setField("medical_specialty_id",entry ? String(entry.medical_specialty_id) : "");
-              }}><option value="">Выберите по выданному сертификату</option>{certificateEntries.map(row => <option key={row.entry_id} value={row.entry_id}>{row.specialty_name} · {row.specialty_code} · {row.edition_code}</option>)}</select></label>
-              <label className="mt-2 block text-sm">Исходное название специальности в сертификате<input className={wideInputClass} required maxLength={500} value={issuedSpecialty} onChange={e => setIssuedSpecialty(e.target.value)} /></label>
-            </> : <>
             <select
               required={specialtyRequired}
               value={form.medical_specialty_id}
@@ -612,7 +595,6 @@ export default function EmployeeDocumentFormModal({
                 </option>
               ))}
             </select>
-            </>}
           </div>
 
           <div>

@@ -1,4 +1,3 @@
-import { employeeFixture } from "../_lib/employeeTestFixtures";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -11,8 +10,8 @@ describe("EmployeesTable staff sorting headers", () => {
 
   const baseProps = {
     items: [
-      employeeFixture({ employee_id: 1, fio: "Борисов Борис", status: "active", employment_rate: 1 }),
-      employeeFixture({ employee_id: 2, fio: "Антонов Антон", status: "inactive", employment_rate: 0.5 }),
+      { employee_id: 1, fio: "Борисов Борис", status: "active", employment_rate: 1 },
+      { employee_id: 2, fio: "Антонов Антон", status: "inactive", employment_rate: 0.5 },
     ],
     total: 2,
     limit: 50,
@@ -90,8 +89,8 @@ describe("EmployeesTable staff sorting headers", () => {
         {...baseProps}
         sortable={false}
         items={[
-          employeeFixture({ employee_id: 2, fio: "Яковлев Заведующий", status: "active", employment_rate: 1 }),
-          employeeFixture({ employee_id: 1, fio: "Абдулов Врач", status: "active", employment_rate: 1 }),
+          { employee_id: 2, fio: "Яковлев Заведующий", status: "active", employment_rate: 1 },
+          { employee_id: 1, fio: "Абдулов Врач", status: "active", employment_rate: 1 },
         ]}
       />,
     );

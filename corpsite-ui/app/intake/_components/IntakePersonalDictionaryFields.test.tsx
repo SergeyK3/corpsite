@@ -13,7 +13,7 @@ const personalStepIndex = INTAKE_STEPS.findIndex((step) => step.id === "personal
 
 function readCitizenshipOptions(scope: ReturnType<typeof within>) {
   fireEvent.click(scope.getByTestId("intake-citizenship"));
-  return scope.getAllByRole("option").map((node: HTMLElement) => node.textContent);
+  return scope.getAllByRole("option").map((node) => node.textContent);
 }
 
 afterEach(() => {

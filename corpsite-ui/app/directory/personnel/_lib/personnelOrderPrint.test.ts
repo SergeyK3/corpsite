@@ -41,8 +41,7 @@ it.each(['ru','kk'] as const)('prints historical certificate wording and respect
 it.each(['ru','kk'] as const)('prints HIRE paired basis and optional certificate in %s without cross-language fallback',language=>{
   const detail=sampleDetail();
   detail.order.source_title_locale='ru';
-  const hireBasis={ru:'Ручное основание RU TEST',kk:'Қолмен негіз KK TEST'};
-  detail.items[0].payload.hire_basis=hireBasis;
+  detail.items[0].payload.hire_basis={ru:'Ручное основание RU TEST',kk:'Қолмен негіз KK TEST'};
   detail.items[0].payload.hire_details={education:{code:'',ru:'',kk:''},service_length:{ru:'',kk:''},certificate:{
     specialty:{medical_specialty_id:7,name_ru:'Медицина RU TEST',name_kk:'Медицина KK TEST'},issued_on:'2026-02-02'}};
   let html=buildPersonnelOrderPrintDocumentHtml(buildPersonnelOrderPrintViewModel(detail),language);
@@ -50,8 +49,8 @@ it.each(['ru','kk'] as const)('prints HIRE paired basis and optional certificate
   expect(html).not.toContain(language==='kk'?'Ручное основание RU TEST':'Қолмен негіз KK TEST');
   expect(html).toContain(language==='ru'?'Сертификат: Медицина RU TEST':'Сертификат: Медицина KK TEST');
   expect(html).toContain(language==='ru'?'2 февраля 2026 года':'2026 жылғы 2 ақпан');
-  hireBasis.kk='';
-  detail.items[0].payload.hire_details={...detail.items[0].payload.hire_details as Record<string, unknown>,certificate:{specialty:null,issued_on:''}};
+  detail.items[0].payload.hire_basis.kk='';
+  detail.items[0].payload.hire_details.certificate={specialty:null,issued_on:''};
   html=buildPersonnelOrderPrintDocumentHtml(buildPersonnelOrderPrintViewModel(detail),'kk');
   expect(html).not.toContain('Ручное основание RU TEST');
   expect(html).not.toContain('Сертификат:');
@@ -69,7 +68,7 @@ it.each(['ru','kk','kk-ru'] as const)('prints one saved HIRE decimal years value
   html = buildPersonnelOrderPrintDocumentHtml(buildPersonnelOrderPrintViewModel(detail),language);
   if (language !== 'kk') expect(html).toContain('Трудовой стаж: 0 лет');
   if (language !== 'ru') expect(html).toContain('Еңбек өтілі: 0 жыл');
-  detail.items[0].payload.hire_details = {...detail.items[0].payload.hire_details as Record<string, unknown>,service_length_years:''};
+  detail.items[0].payload.hire_details.service_length_years = '';
   html = buildPersonnelOrderPrintDocumentHtml(buildPersonnelOrderPrintViewModel(detail),language);
   for (const text of ['Трудовой стаж:', 'Еңбек өтілі:', 'OLD RU', 'OLD KK']) expect(html).not.toContain(text);
 });
@@ -121,28 +120,6 @@ it('preserves manually written HIRE date wording in RU/KK print', () => {
   for (const locale of ['ru', 'kk'] as const) expect(buildPersonnelOrderPrintDocumentHtml(model, locale)).toContain(manual[locale]);
 });
 
-it.each([
-  ['EMPLOYEE_INITIATIVE', 'по инициативе работника', 'жұмыскердің бастамасы бойынша'],
-  ['EMPLOYER_INITIATIVE', 'по инициативе работодателя', 'жұмыс берушінің бастамасы бойынша'],
-  ['CONTRACT_EXPIRATION', 'В связи с истечением срока трудового договора', 'Еңбек шарты мерзімінің аяқталуына байланысты'],
-  ['по соглашению сторон', 'по соглашению сторон', 'по соглашению сторон'],
-] as const)('prints termination reason %s in both languages and keeps manual additions', (reason, ru, kk) => {
-  const detail=sampleDetail({order_type_code:'TERMINATION',legal_basis_article:null,basis_summary:null});
-  detail.items[0].item_type_code='TERMINATION';
-  detail.items[0].payload={termination_reason:reason};
-  const automatic=buildPersonnelOrderPrintViewModel(detail);
-  expect(buildPersonnelOrderPrintDocumentHtml(automatic,'ru')).toContain(ru);
-  expect(buildPersonnelOrderPrintDocumentHtml(automatic,'kk')).toContain(kk);
-  const manual={ru:`Уволить вручную. ${ru}. Дополнение кадровика RU.`,kk:`Қолмен босатылсын. ${kk}. Кадрлық толықтыру KK.`};
-  const editorial={order_id:42,order_status:'DRAFT',editable:true,order_blocks:[],items:[{
-    order_item_id:1,item_number:1,item_type_code:'TERMINATION',basis_required:true,
-    blocks: (['ru','kk'] as const).map((locale,index)=>({block_id:30+index,scope:'item',order_item_id:1,locale,block_type:'body',
-      generated_text:'Автоматический текст',override_text:manual[locale],effective_text:manual[locale],revision:2,editable:true,review_status:'CURRENT'})),
-  }]};
-  const reopened=buildPersonnelOrderPrintViewModel(detail,{editorial});
-  for(const locale of ['ru','kk'] as const)expect(buildPersonnelOrderPrintDocumentHtml(reopened,locale)).toContain(manual[locale]);
-});
-
 it.each(['ru','kk','kk-ru'] as const)('prints explicit new personal-data acknowledgement names in %s without old surname',locale=>{
  const detail=sampleDetail({order_type_code:'PERSONAL_DATA_CHANGE'});detail.items[0].item_type_code='PERSONAL_DATA_CHANGE';
  detail.items[0].payload={personal_data:{new_full_name_ru:'НЕЛЬЗЯ РАЗБИРАТЬ',new_full_name_kk:'ЖОЛДЫ ТАЛДАМАУ',new_surname_ru:'Новая Двойная',new_given_name_ru:'Юлия',new_surname_kk:'Жаңа Тегі',new_given_name_kk:'Әлия'}};
@@ -155,19 +132,6 @@ it.each(['ru','kk','kk-ru'] as const)('prints explicit new personal-data acknowl
 it('leaves the personal-data acknowledgement blank when explicit parts are missing',()=>{
  const detail=sampleDetail({order_type_code:'PERSONAL_DATA_CHANGE'});detail.items[0].item_type_code='PERSONAL_DATA_CHANGE';detail.items[0].payload={personal_data:{new_full_name_ru:'Новая Анна'}};
  const html=buildPersonnelOrderPrintDocumentHtml(buildPersonnelOrderPrintViewModel(detail),'ru');const ack=html.split('data-testid="personnel-order-print-acknowledgement"')[1];expect(ack).not.toContain('Петрова');expect(ack).not.toContain('Новая');
-});
-
-it('prints a selected termination reason as a separate bilingual basis and gives manual text priority',()=>{
- const detail=sampleDetail({order_type_code:'TERMINATION',legal_basis_article:null,basis_summary:null});
- detail.items[0].item_type_code='TERMINATION';detail.items[0].payload={termination_reason:'CONTRACT_EXPIRATION'};
- const basis={ru:'Основание: В связи с истечением срока трудового договора.',kk:'Негіз: Еңбек шарты мерзімінің аяқталуына байланысты.'};
- const editorial={order_id:42,order_status:'DRAFT',editable:true,order_blocks:[],items:[{order_item_id:detail.items[0].item_id,item_number:1,item_type_code:'TERMINATION',basis_required:true,
-  blocks:(['ru','kk'] as const).map((locale,index)=>({block_id:90+index,scope:'item',order_item_id:detail.items[0].item_id,locale,block_type:'basis',generated_text:basis[locale],override_text:null as string|null,effective_text:basis[locale],revision:1,editable:true,review_status:'CURRENT'}))}]};
- const automatic=buildPersonnelOrderPrintViewModel(detail,{editorial:editorial as any});
- for(const locale of ['ru','kk'] as const){const html=buildPersonnelOrderPrintDocumentHtml(automatic,locale);const section=html.split('data-testid="personnel-order-print-basis"')[1];expect(section).toContain(`<div>${locale==='ru'?'Основание':'Негіз'}:</div>`);expect(section).toContain(basis[locale].split(': ')[1]);expect(html).not.toContain(locale==='ru'?'Личное заявление':'Жеке өтініш');}
- editorial.items[0].blocks[0].override_text='Основание: договор № 42.';
- const manual=buildPersonnelOrderPrintViewModel(detail,{editorial:editorial as any});
- expect(buildPersonnelOrderPrintDocumentHtml(manual,'ru')).toContain('договор № 42.');
 });
 
 it.each(['TRANSFER','CONCURRENT_DUTY_START','SUPPLEMENTARY_PAY'])('preserves both detailed grounds and punctuation in RU and KK print HTML for %s',code=>{
@@ -810,19 +774,6 @@ describe("buildPersonnelOrderPrintViewModel", () => {
 });
 
 describe("personnelOrderPrint item text", () => {
-  it("uses document name order only in a clear Kazakh FIO", () => {
-    const base = {
-      itemNumber: 1, itemTypeCode: "TERMINATION", employeeName: "Фидахметова Нургул Маметовна",
-      effectiveDate: "2026-11-19", orgUnitName: null, positionName: null,
-      toOrgUnitName: null, toPositionName: null, rate: null, toRate: null,
-      concurrentRate: null, remainingRate: null, totalRate: null,
-      terminationReason: "CONTRACT_EXPIRATION", payload: {},
-    };
-    expect(renderPersonnelOrderPrintItemText(base, "kk")[0]).toContain("Нургул Маметовна Фидахметова");
-    expect(renderPersonnelOrderPrintItemText(base, "ru")[0]).toContain("Фидахметова Нургул Маметовна");
-    expect(renderPersonnelOrderPrintItemText({...base, employeeName: "Нургул Фидахметова Маметовна"}, "kk")[0])
-      .toContain("Нургул Фидахметова Маметовна");
-  });
   it("renders hire text for ru/kk/kk-ru", () => {
     const model: PersonnelOrderPrintViewModel = buildPersonnelOrderPrintViewModel(sampleDetail(), {
       orgUnitNames: { 10: "Хирургия" },

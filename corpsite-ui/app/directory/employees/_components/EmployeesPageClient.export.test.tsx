@@ -2,8 +2,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import EmployeesPageClient from "./EmployeesPageClient";
 
-const { getEmployees, exportStaffExcel, exportStaffReconciliationExcel, replace } = vi.hoisted(() => ({
-  getEmployees: vi.fn(), exportStaffExcel: vi.fn(), exportStaffReconciliationExcel: vi.fn(), replace: vi.fn(),
+const { getEmployees, exportStaffExcel, replace } = vi.hoisted(() => ({
+  getEmployees: vi.fn(), exportStaffExcel: vi.fn(), replace: vi.fn(),
 }));
 let params = new URLSearchParams();
 let pathname = "/directory/staff";
@@ -17,7 +17,7 @@ vi.mock("./EmployeeDrawer", () => ({ default: () => null }));
 vi.mock("./EmployeeCreateDrawer", () => ({ default: () => null }));
 vi.mock("./ControlListEntryDialog", () => ({ default: () => null }));
 vi.mock("../_lib/api.client", () => ({
-  getEmployees, exportStaffExcel, exportStaffReconciliationExcel,
+  getEmployees, exportStaffExcel,
   getPositions: vi.fn(async () => ({ items: [] })),
   getDepartments: vi.fn(async () => ({ items: [] })),
   mapApiErrorToMessage: String,
@@ -33,7 +33,6 @@ beforeEach(() => {
   params = new URLSearchParams();
   getEmployees.mockReset().mockResolvedValue({ items: [{ id: "1", fio: "Иванов" }], total: 231 });
   exportStaffExcel.mockReset().mockResolvedValue(undefined);
-  exportStaffReconciliationExcel.mockReset().mockResolvedValue(undefined);
   replace.mockReset();
 });
 afterEach(cleanup);
@@ -42,16 +41,6 @@ it.each(["/directory/staff", "/directory/staff/"])("shows export on the staff ro
   pathname = route;
   render(<EmployeesPageClient {...props} />);
   await waitFor(() => expect(screen.getByRole("button", { name: "Выгрузить в Excel" })).toBeEnabled());
-  expect(screen.getByRole("button", { name: "Общий список для сверки (Excel)" })).toBeEnabled();
-});
-
-it("exports the unfiltered reconciliation list even when the roster filter is empty", async () => {
-  params = new URLSearchParams("q=несуществующий&offset=100&limit=1");
-  getEmployees.mockResolvedValue({ items: [], total: 0 });
-  render(<EmployeesPageClient {...props} />);
-  fireEvent.click(screen.getByRole("button", { name: "Общий список для сверки (Excel)" }));
-  await waitFor(() => expect(exportStaffReconciliationExcel).toHaveBeenCalledExactlyOnceWith());
-  expect(exportStaffExcel).not.toHaveBeenCalled();
 });
 
 it.each(["/directory/employees", "/directory/personnel", "/directory/staffing", "/directory/staff/archive"])("does not add staff export to another route: %s", async (route) => {

@@ -1,4 +1,3 @@
-import { employeeFixture } from "../_lib/employeeTestFixtures";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -62,12 +61,12 @@ describe("EmployeeAccountSections login suggestion", () => {
   });
 
   it("prefills kozgambaeva.lt when opening user create drawer", async () => {
-    vi.mocked(getEmployee).mockResolvedValue(employeeFixture({
+    vi.mocked(getEmployee).mockResolvedValue({
       employee_id: 100,
       fio: "Козгамбаева Ляззат Таласпаевна",
       user: null,
       org_unit: { unit_id: 44, name: "Ambulatory" },
-    }) as Awaited<ReturnType<typeof getEmployee>>);
+    } as Awaited<ReturnType<typeof getEmployee>>);
 
     render(<EmployeeAccountSections employeeId="100" showEvents={false} showTelegram={false} />);
 
@@ -87,12 +86,12 @@ describe("EmployeeAccountSections login suggestion", () => {
   });
 
   it("prefills kozgambaeva.lt on auto-open after enrollment", async () => {
-    vi.mocked(getEmployee).mockResolvedValue(employeeFixture({
+    vi.mocked(getEmployee).mockResolvedValue({
       employee_id: 100,
       fio: "Козгамбаева Ляззат Таласпаевна",
       user: null,
       org_unit: { unit_id: 44, name: "Ambulatory" },
-    }) as Awaited<ReturnType<typeof getEmployee>>);
+    } as Awaited<ReturnType<typeof getEmployee>>);
 
     render(
       <EmployeeAccountSections

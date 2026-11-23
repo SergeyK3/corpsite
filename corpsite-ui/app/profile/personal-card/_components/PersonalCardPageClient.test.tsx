@@ -1,110 +1,324 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import PersonalCardPageClient from "./PersonalCardPageClient";
+vi.mock("@/app/directory/personnel/_lib/educationProgramKinds", async () => {
+  const actual=await vi.importActual<object>("@/app/directory/personnel/_lib/educationProgramKinds");
+  const {educationProgramKindTestRows}=await import("@/app/directory/personnel/_lib/educationProgramKinds.fixture");
+  return {...actual,useEducationProgramKinds:()=>({items:educationProgramKindTestRows,loading:false,error:""})};
+});
 
-const cardSearchParams = new URLSearchParams();
-const cardRouter = { push: vi.fn(), replace: vi.fn() };
-vi.mock("next/navigation", () => ({
-  useRouter: () => cardRouter,
-  useSearchParams: () => cardSearchParams,
-}));
-vi.mock("@/app/directory/personnel/_components/PprPersonPhoto", () => ({
-  default: ({ fullName }: { fullName: string }) => <div data-testid="ppr-person-photo" aria-label={`Фото сотрудника ${fullName}`} />,
-}));
-
-const getMyPersonalCard = vi.fn();
-const getMyOperationalAssignment = vi.fn();
-const getMyContacts = vi.fn();
+const getMyPersonalCardMock = vi.fn();
+const getMyOperationalAssignmentMock = vi.fn();
+const downloadMyPersonalCardPdfMock = vi.fn();
+const saveMyContactsMock = vi.fn();
+const saveMyForeignLanguagesMock = vi.fn();
+const addMyEducationMock = vi.fn();
+const addMyExternalEmploymentMock = vi.fn();
+const supersedeMyExternalEmploymentMock = vi.fn();
+const getMyContactsMock = vi.fn();
+const getMyForeignLanguagesMock = vi.fn();
 
 vi.mock("../_lib/selfPersonalCardApi.client", () => ({
-  getMyPersonalCard: (...args: unknown[]) => getMyPersonalCard(...args),
-  getMyOperationalAssignment: (...args: unknown[]) => getMyOperationalAssignment(...args),
-  getMyContacts: (...args: unknown[]) => getMyContacts(...args),
+  getMyPersonalCard: (...args: unknown[]) => getMyPersonalCardMock(...args),
+  getMyOperationalAssignment: (...args: unknown[]) => getMyOperationalAssignmentMock(...args),
+  saveMyContacts: (...args: unknown[]) => saveMyContactsMock(...args),
+  saveMyForeignLanguages: (...args: unknown[]) => saveMyForeignLanguagesMock(...args),
+  addMyEducation: (...args: unknown[]) => addMyEducationMock(...args),
+  addMyExternalEmployment: (...args: unknown[]) => addMyExternalEmploymentMock(...args),
+  supersedeMyExternalEmployment: (...args: unknown[]) => supersedeMyExternalEmploymentMock(...args),
+  getMyContacts: (...args: unknown[]) => getMyContactsMock(...args),
+  getMyForeignLanguages: (...args: unknown[]) => getMyForeignLanguagesMock(...args),
 }));
 vi.mock("../_lib/selfPersonCardPdfOpen.client", () => ({
-  downloadMyPersonalCardPdf: vi.fn(),
+  downloadMyPersonalCardPdf: () => downloadMyPersonalCardPdfMock(),
 }));
 
 afterEach(() => {
   cleanup();
-  getMyPersonalCard.mockReset();
-  getMyOperationalAssignment.mockReset();
-  getMyContacts.mockReset();
+  getMyPersonalCardMock.mockReset();
+  getMyOperationalAssignmentMock.mockReset();
+  downloadMyPersonalCardPdfMock.mockReset();
+  saveMyForeignLanguagesMock.mockReset();
+  addMyExternalEmploymentMock.mockReset();
+  supersedeMyExternalEmploymentMock.mockReset();
+  getMyContactsMock.mockReset(); getMyForeignLanguagesMock.mockReset();
 });
 
-const card = {
-  materialization: { materialized: true, lifecycle_state: "READY", hr_relationship_context: "EMPLOYEE", envelope_version: 1, created_at: null, updated_at: null },
-  general: { full_name: "Масимов Акрамжан Бакримжанович", last_name: "Масимов", first_name: "Акрамжан", middle_name: "Бакримжанович", birth_date: null, iin: null, created_at: "2026-01-01", updated_at: "2026-01-01" },
-  sections: {
-    "PPR-EDUCATION": { section_code: "PPR-EDUCATION", active: [{ record_id: 7, education_kind: "higher", institution_type: "university", institution_name: "КазНУ", specialty: "Медицина", qualification: "Врач", started_at: "2000-09-01", completed_at: "2006-06-01", diploma_number: "123", document_date: "2006-06-01", verification_status: "confirmed", lifecycle_status: "active" }], superseded: [], voided: [] },
-    "PPR-TRAINING": { section_code: "PPR-TRAINING", active: [], superseded: [], voided: [] },
-    "PPR-FAMILY": { section_code: "PPR-FAMILY", active: [], superseded: [], voided: [] },
-    "PPR-EMPLOYMENT-BIOGRAPHY": { section_code: "PPR-EMPLOYMENT-BIOGRAPHY", active: [], superseded: [], voided: [] },
+const readyResponse = {
+  status: "READY" as const,
+  card: {
+    materialization: { materialized: true, lifecycle_state: "READY", hr_relationship_context: null, envelope_version: 1, created_at: null, updated_at: null },
+    general: { full_name: "Иванов Иван Иванович", last_name: "Иванов", first_name: "Иван", middle_name: "Иванович", birth_date: "1990-01-01", iin: "********1234", created_at: "2026-01-01", updated_at: "2026-01-01" },
+    sections: {
+      "PPR-EDUCATION": { section_code: "PPR-EDUCATION", active: [{ education_kind: "masters", institution_type: "university", institution_name: "КазНУ", specialty: "Экономика", qualification: "Магистр", started_at: "2018-09-01", completed_at: "2020-06-30", diploma_number: "Д-42", document_date: "2020-07-15" }], superseded: [], voided: [] },
+      "PPR-EMPLOYMENT-BIOGRAPHY": { section_code: "PPR-EMPLOYMENT-BIOGRAPHY", active: [{ record_id: 77, updated_at: "2026-01-02T03:04:05+00:00", record_kind: "episode", employer_name: "АО Пример", department_name: "Финансы", position_title: "Аналитик", employment_type: "full_time", started_at: "2021-02-01", ended_at: "2024-12-31", termination_reason: "По собственному желанию" }], superseded: [], voided: [] },
+    },
+    additional: { foreign_languages: [{ language: "Казахский", proficiency: "C1" }], foreign_languages_none: false, awards: [], awards_none: true, academic_degrees: [], academic_degrees_none: true, academic_titles: [], academic_titles_none: true, status_facts: [] },
   },
-  additional: { foreign_languages: [{ language: "Английский", proficiency: "C1" }], foreign_languages_none: false, awards: [{ name: "Грамота", issued_by: "Организация", awarded_at: "2024-01-01", document_number: "1" }], awards_none: false, academic_degrees: [], academic_degrees_none: true, academic_titles: [], academic_titles_none: true, qualification_categories: [], status_facts: [] },
 };
 
-function ready(assignedRate: number | null = null) {
-  getMyPersonalCard.mockResolvedValue({ status: "READY", card });
-  getMyOperationalAssignment.mockResolvedValue({ status: "READY", operational_assignment: {
-    department_group_name: null,
-    org_unit_name: "ОВЭиПД",
-    position_name: "Руководитель",
+const readyAssignmentResponse = {
+  status: "READY" as const,
+  operational_assignment: {
+    department_group_name: "Administration",
+    org_unit_name: "Human resources",
+    position_name: "Specialist",
     operational_status: "active",
-    employment_rate: assignedRate,
-    iin: null,
-  } });
-  getMyContacts.mockResolvedValue({ canonical: { mobile_phone: "+77001234567", email: null, registration_address: null, residence_address: null }, fallback: null });
-}
+    employment_rate: 1,
+    iin: "990101123456",
+  },
+};
 
 describe("PersonalCardPageClient", () => {
-  it("uses only ID-free self endpoints and shows saved PPR sections in read-only mode", async () => {
-    ready();
+  it("loads the self card without accepting or displaying subject IDs", async () => {
+    getMyPersonalCardMock.mockResolvedValue(readyResponse);
+    getMyOperationalAssignmentMock.mockResolvedValue(readyAssignmentResponse);
+    getMyContactsMock.mockResolvedValue({ canonical: null, fallback: null }); getMyForeignLanguagesMock.mockResolvedValue({ foreign_languages: [], updated_at: null });
     render(<PersonalCardPageClient />);
 
-    const view = await screen.findByTestId("self-personal-card-ready");
-    expect(getMyPersonalCard).toHaveBeenCalledWith({ signal: expect.any(AbortSignal) });
-    expect(getMyOperationalAssignment).toHaveBeenCalledWith({ signal: expect.any(AbortSignal) });
-    expect(getMyContacts).toHaveBeenCalledWith({ signal: expect.any(AbortSignal) });
-    expect(screen.getAllByRole("heading", { level: 1 })).toHaveLength(1);
-    expect(screen.getByTestId("ppr-person-photo")).toHaveAttribute("aria-label", `Фото сотрудника ${card.general.full_name}`);
-    expect(screen.queryByTestId("ppr-card-back-button")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("ppr-card-edit-mode-button")).not.toBeInTheDocument();
-    expect(within(view).getAllByText(card.general.full_name).length).toBeGreaterThan(0);
-    expect(within(view).getByText("КазНУ")).toBeInTheDocument();
-    expect(within(view).getByText("Медицина")).toBeInTheDocument();
-    expect(within(view).getByText("Грамота")).toBeInTheDocument();
-    expect(within(view).getByText("+77001234567")).toBeInTheDocument();
-    expect(within(view).getByTestId("ppr-additional-languages-table")).toBeInTheDocument();
-    expect(within(view).getByTestId("self-operational-assignment")).toHaveTextContent("ОВЭиПД");
-    expect(within(view).queryByRole("button", { name: /редактировать|добавить|удалить/i })).not.toBeInTheDocument();
-    expect(within(view).queryByText(/Кадровая связь|Кадровые приказы|Доступ/)).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId("self-personal-card-ready")).toBeInTheDocument());
+    expect(getMyPersonalCardMock).toHaveBeenCalledWith({ signal: expect.any(AbortSignal) });
+    expect(getMyOperationalAssignmentMock).toHaveBeenCalledWith({ signal: expect.any(AbortSignal) });
+    expect(screen.getByText("Иванов Иван Иванович")).toBeInTheDocument();
+    expect(screen.getByTestId("self-personal-card-download-pdf")).toBeInTheDocument();
+    expect(screen.getAllByRole("tab")).toHaveLength(6);
+    expect(screen.queryByTestId("self-contacts-editor")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("self-education-editor")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("self-languages-editor")).not.toBeInTheDocument();
+    expect(screen.queryByText(/person_id|employee_id/i)).not.toBeInTheDocument();
+    expect(screen.getByTestId("self-operational-assignment")).toHaveTextContent("Human resources");
+    expect(screen.getByTestId("self-operational-assignment")).toHaveTextContent("Specialist");
+    expect(screen.getByTestId("self-operational-assignment")).toHaveTextContent("Работает");
+    expect(screen.getByTestId("self-operational-assignment")).toHaveTextContent("1.00");
+    expect(screen.getByTestId("self-operational-assignment")).not.toHaveTextContent("active");
+    expect(screen.getByText("990101123456")).toBeInTheDocument();
   });
 
-  it("keeps a genuinely absent employment rate empty", async () => {
-    ready(null);
+  it("renders one styled editor inside its selected tab and keeps education heading single", async () => {
+    getMyPersonalCardMock.mockResolvedValue(readyResponse);
+    getMyOperationalAssignmentMock.mockResolvedValue(readyAssignmentResponse);
+    getMyContactsMock.mockResolvedValue({ canonical: null, fallback: null }); getMyForeignLanguagesMock.mockResolvedValue({ foreign_languages: [], updated_at: null });
     render(<PersonalCardPageClient />);
-    const assignment = within(await screen.findByTestId("self-operational-assignment"));
-    expect(assignment.getByText("Ставка").parentElement).toHaveTextContent("—");
-    expect(assignment.getByText("Ставка").parentElement).not.toHaveTextContent("1.00");
+
+    await screen.findByTestId("self-personal-card-ready");
+    fireEvent.click(screen.getByRole("tab", { name: "Контакты" }));
+    const contacts = screen.getByTestId("self-contacts-editor");
+    expect(contacts).toHaveClass("rounded-xl", "border", "p-4");
+    expect(screen.queryByTestId("self-education-editor")).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "Редактировать" }));
+    const mobile = screen.getByLabelText("Мобильный телефон");
+    expect(mobile).toHaveClass("h-11", "w-full", "border", "border-zinc-300");
+    expect(screen.getByLabelText("Email")).toBeInTheDocument();
+    expect(screen.getByLabelText("Адрес регистрации")).toBeInTheDocument();
+    expect(screen.getByLabelText("Адрес проживания")).toBeInTheDocument();
+    fireEvent.change(mobile, { target: { value: "+77001234567" } });
+    expect(screen.getByRole("alert")).toHaveTextContent("Есть несохранённые изменения");
+    expect(screen.getByRole("button", { name: "Сохранить" })).toHaveClass("bg-blue-600");
+    expect(screen.getByRole("button", { name: "Отмена" })).toHaveClass("border");
+
+    fireEvent.click(screen.getByRole("tab", { name: "Образование" }));
+    expect(screen.getByTestId("self-education-editor")).toBeInTheDocument();
+    expect(screen.queryByTestId("self-contacts-editor")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { name: "Образование" })).toHaveLength(1);
   });
 
-  it("reports a contact load failure without treating it as empty data", async () => {
-    ready();
-    getMyContacts.mockRejectedValue(new Error("network"));
+  it("shows all saved education and employment fields before editing", async () => {
+    getMyPersonalCardMock.mockResolvedValue(readyResponse);
+    getMyOperationalAssignmentMock.mockResolvedValue(readyAssignmentResponse);
     render(<PersonalCardPageClient />);
-    const view = await screen.findByTestId("self-personal-card-ready");
-    expect(within(view).getByRole("alert")).toHaveTextContent("Контактные сведения не удалось загрузить");
-    expect(within(view).queryByTestId("self-contacts")).not.toBeInTheDocument();
-    expect(within(view).getAllByText(card.general.full_name).length).toBeGreaterThan(0);
+
+    await screen.findByTestId("self-personal-card-ready");
+    fireEvent.click(screen.getByRole("tab", { name: "Образование" }));
+    const education = screen.getByTestId("self-education-records");
+    expect(education).toHaveTextContent("Вид образования");
+    expect(education).toHaveTextContent("Магистратура");
+    expect(education).toHaveTextContent("Тип учреждения");
+    expect(education).toHaveTextContent("ВУЗ");
+    expect(education).toHaveTextContent("КазНУ");
+    expect(education).toHaveTextContent("Экономика");
+    expect(education).toHaveTextContent("Магистр");
+    expect(education).toHaveTextContent("01.09.2018");
+    expect(education).toHaveTextContent("30.06.2020");
+    expect(education).toHaveTextContent("Д-42");
+    expect(education).toHaveTextContent("15.07.2020");
+
+    fireEvent.click(screen.getByRole("tab", { name: "Трудовая биография" }));
+    const employment = screen.getByTestId("self-employment-records");
+    expect(employment).toHaveTextContent("АО Пример");
+    expect(employment).not.toHaveTextContent("Финансы");
+    expect(employment).toHaveTextContent("Аналитик");
+    expect(employment).toHaveTextContent("01.02.2021");
+    expect(employment).toHaveTextContent("31.12.2024");
+    expect(employment).toHaveTextContent("По собственному желанию");
+    expect(employment).not.toHaveTextContent("Финансы");
   });
 
-  it("explains a missing Person link without showing card actions", async () => {
-    getMyPersonalCard.mockResolvedValue({ status: "PERSON_NOT_LINKED", card: null });
+  it("adds one organization separately and returns to the employment list after reload", async () => {
+    getMyPersonalCardMock.mockResolvedValue(readyResponse);
+    getMyOperationalAssignmentMock.mockResolvedValue(readyAssignmentResponse);
+    addMyExternalEmploymentMock.mockResolvedValue({ status: "applied" });
     render(<PersonalCardPageClient />);
-    expect(await screen.findByTestId("self-personal-card-person-not-linked")).toHaveTextContent("Обратитесь в отдел кадров");
-    expect(getMyOperationalAssignment).not.toHaveBeenCalled();
+
+    await screen.findByTestId("self-personal-card-ready");
+    fireEvent.click(screen.getByRole("tab", { name: "Трудовая биография" }));
+    expect(screen.queryByText("Подразделение")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { name: "Трудовая биография" })).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Добавить место работы" }));
+    expect(screen.queryByText("Организация 1")).not.toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "По собственному желанию" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Перевод" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Переезд в другой регион" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Другое" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "По соглашению сторон" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Сокращение" })).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Организация"), { target: { value: "Организация один" } });
+    fireEvent.change(screen.getByLabelText("Должность"), { target: { value: "Специалист" } });
+    fireEvent.change(screen.getByLabelText("Причина увольнения"), { target: { value: "other" } });
+    fireEvent.change(screen.getByLabelText("Другая причина увольнения"), { target: { value: "Семейные обстоятельства" } });
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(addMyExternalEmploymentMock).toHaveBeenCalledTimes(1));
+    expect(addMyExternalEmploymentMock.mock.calls[0]?.[0]).toMatchObject({ employer_name: "Организация один", position_title: "Специалист", termination_reason: "Семейные обстоятельства" });
+    expect(addMyExternalEmploymentMock.mock.calls.flat().some((value) => value && typeof value === "object" && "department_name" in value)).toBe(false);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Добавить место работы" })).toBeInTheDocument());
+    expect(getMyPersonalCardMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("supersedes a self-owned employment record from its own card without subject IDs", async () => {
+    getMyPersonalCardMock.mockResolvedValue(readyResponse);
+    getMyOperationalAssignmentMock.mockResolvedValue(readyAssignmentResponse);
+    supersedeMyExternalEmploymentMock.mockResolvedValue({ status: "COMMITTED" });
+    render(<PersonalCardPageClient />);
+
+    await screen.findByTestId("self-personal-card-ready");
+    fireEvent.click(screen.getByRole("tab", { name: "Трудовая биография" }));
+    const record = screen.getByTestId("self-employment-record-77");
+    fireEvent.click(within(record).getByRole("button", { name: "Редактировать" }));
+    fireEvent.change(screen.getByLabelText("Должность"), { target: { value: "Старший аналитик" } });
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(supersedeMyExternalEmploymentMock).toHaveBeenCalledTimes(1));
+    const [recordId, payload, commandId] = supersedeMyExternalEmploymentMock.mock.calls[0] ?? [];
+    expect(recordId).toBe(77);
+    expect(payload).toMatchObject({
+      expected_updated_at: "2026-01-02T03:04:05+00:00",
+      replacement: { record_kind: "episode", employer_name: "АО Пример", position_title: "Старший аналитик" },
+    });
+    expect(commandId).toEqual(expect.stringMatching(/^self-employment-/));
+    expect(JSON.stringify(payload)).not.toMatch(/person_id|employee_id/i);
+    expect(record).toContainElement(within(record).getByRole("button", { name: "Редактировать" }));
+  });
+
+  it("reloads the self language CAS version before each consecutive save", async () => {
+    getMyPersonalCardMock.mockResolvedValue(readyResponse);
+    getMyOperationalAssignmentMock.mockResolvedValue(readyAssignmentResponse);
+    getMyForeignLanguagesMock
+      .mockResolvedValueOnce({ foreign_languages: [{ language: "Английский", proficiency: "C1" }], updated_at: "2026-01-01T00:00:00+00:00" })
+      .mockResolvedValueOnce({ foreign_languages: [{ language: "Английский", proficiency: "C1" }], updated_at: "2026-01-01T00:00:00+00:00" })
+      .mockResolvedValueOnce({ foreign_languages: [{ language: "Английский", proficiency: "Читает и может объясняться" }], updated_at: "2026-01-02T00:00:00+00:00" })
+      .mockResolvedValueOnce({ foreign_languages: [{ language: "Английский", proficiency: "Читает и может объясняться" }], updated_at: "2026-01-02T00:00:00+00:00" })
+      .mockResolvedValueOnce({ foreign_languages: [{ language: "Английский", proficiency: "Владеет свободно" }], updated_at: "2026-01-03T00:00:00+00:00" });
+    saveMyForeignLanguagesMock
+      .mockResolvedValueOnce({ updated_at: "2026-01-02T00:00:00+00:00" })
+      .mockResolvedValueOnce({ updated_at: "2026-01-03T00:00:00+00:00" });
+    render(<PersonalCardPageClient />);
+
+    await screen.findByTestId("self-personal-card-ready");
+    fireEvent.click(screen.getByRole("tab", { name: "Иностранные языки" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Редактировать" }));
+    expect(await screen.findByLabelText("Уровень владения")).toHaveValue("Владеет свободно");
+    fireEvent.change(screen.getByLabelText("Уровень владения"), { target: { value: "Читает и может объясняться" } });
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+    await waitFor(() => expect(saveMyForeignLanguagesMock).toHaveBeenCalledTimes(1));
+    expect(saveMyForeignLanguagesMock.mock.calls[0]?.[0]).toMatchObject({
+      foreign_languages: [{ language: "Английский", proficiency: "Читает и может объясняться" }],
+      expected_updated_at: "2026-01-01T00:00:00+00:00",
+    });
+
+    await waitFor(() => expect(getMyForeignLanguagesMock).toHaveBeenCalledTimes(3));
+    fireEvent.click(screen.getByRole("button", { name: "Редактировать" }));
+    await waitFor(() => expect(getMyForeignLanguagesMock).toHaveBeenCalledTimes(4));
+    fireEvent.change(screen.getByLabelText("Уровень владения"), { target: { value: "Владеет свободно" } });
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+    await waitFor(() => expect(saveMyForeignLanguagesMock).toHaveBeenCalledTimes(2));
+    expect(saveMyForeignLanguagesMock.mock.calls[1]?.[0]).toMatchObject({
+      foreign_languages: [{ language: "Английский", proficiency: "Владеет свободно" }],
+      expected_updated_at: "2026-01-02T00:00:00+00:00",
+    });
+  });
+
+  it("adds a language without replacing an existing one, then edits that language", async () => {
+    const turkish = { language: "Турецкий", proficiency: "Со словарём" };
+    const arabicDictionary = { language: "Арабский", proficiency: "Со словарём" };
+    const arabicFluent = { language: "Арабский", proficiency: "Владеет свободно" };
+    getMyPersonalCardMock.mockResolvedValue(readyResponse);
+    getMyOperationalAssignmentMock.mockResolvedValue(readyAssignmentResponse);
+    getMyForeignLanguagesMock
+      .mockResolvedValueOnce({ foreign_languages: [turkish], updated_at: "2026-09-20T10:00:00Z" })
+      .mockResolvedValueOnce({ foreign_languages: [turkish], updated_at: "2026-09-20T10:00:00Z" })
+      .mockResolvedValueOnce({ foreign_languages: [turkish, arabicDictionary], updated_at: "2026-09-20T10:01:00Z" })
+      .mockResolvedValueOnce({ foreign_languages: [turkish, arabicDictionary], updated_at: "2026-09-20T10:01:00Z" })
+      .mockResolvedValueOnce({ foreign_languages: [turkish, arabicFluent], updated_at: "2026-09-20T10:02:00Z" });
+    saveMyForeignLanguagesMock
+      .mockResolvedValueOnce({ foreign_languages: [turkish, arabicDictionary], updated_at: "2026-09-20T10:01:00Z" })
+      .mockResolvedValueOnce({ foreign_languages: [turkish, arabicFluent], updated_at: "2026-09-20T10:02:00Z" });
+
+    render(<PersonalCardPageClient />);
+    fireEvent.click(await screen.findByRole("tab", { name: "Иностранные языки" }));
+
+    fireEvent.click(await screen.findByRole("button", { name: "Добавить язык" }));
+    fireEvent.change(await screen.findByLabelText("Язык"), { target: { value: "Арабский" } });
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(saveMyForeignLanguagesMock).toHaveBeenCalledTimes(1));
+    expect(saveMyForeignLanguagesMock.mock.calls[0][0]).toMatchObject({
+      foreign_languages: [turkish, arabicDictionary],
+      expected_updated_at: "2026-09-20T10:00:00Z",
+    });
+
+    const editButtons = await screen.findAllByRole("button", { name: "Редактировать" });
+    fireEvent.click(editButtons[1]);
+    fireEvent.change(await screen.findByLabelText("Уровень владения"), { target: { value: "Владеет свободно" } });
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(saveMyForeignLanguagesMock).toHaveBeenCalledTimes(2));
+    expect(saveMyForeignLanguagesMock.mock.calls[1][0]).toMatchObject({
+      foreign_languages: [turkish, arabicFluent],
+      expected_updated_at: "2026-09-20T10:01:00Z",
+    });
+  });
+
+  it("localizes a foreign-language CAS conflict", async () => {
+    getMyPersonalCardMock.mockResolvedValue(readyResponse);
+    getMyOperationalAssignmentMock.mockResolvedValue(readyAssignmentResponse);
+    getMyForeignLanguagesMock.mockResolvedValue({ foreign_languages: [{ language: "Английский", proficiency: "C1" }], updated_at: "2026-01-01T00:00:00+00:00" });
+    saveMyForeignLanguagesMock.mockRejectedValue({ status: 409 });
+    render(<PersonalCardPageClient />);
+
+    await screen.findByTestId("self-personal-card-ready");
+    fireEvent.click(screen.getByRole("tab", { name: "Иностранные языки" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Редактировать" }));
+    await screen.findByLabelText("Уровень владения");
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Данные изменились. Обновите карточку и повторите.");
+  });
+
+  it("shows a clear HR contact state when Person is not linked", async () => {
+    getMyPersonalCardMock.mockResolvedValue({ status: "PERSON_NOT_LINKED", card: null });
+    render(<PersonalCardPageClient />);
+
+    await waitFor(() => expect(screen.getByTestId("self-personal-card-person-not-linked")).toBeInTheDocument());
+    expect(screen.getByText(/Обратитесь в отдел кадров/)).toBeInTheDocument();
+    expect(screen.queryByTestId("self-personal-card-download-pdf")).not.toBeInTheDocument();
+  });
+
+  it("shows a safe unavailable state for other resolver states", async () => {
+    getMyPersonalCardMock.mockResolvedValue({ status: "NO_EMPLOYEE_LINK", card: null });
+    render(<PersonalCardPageClient />);
+
+    await waitFor(() => expect(screen.getByTestId("self-personal-card-unavailable")).toBeInTheDocument());
     expect(screen.queryByTestId("self-personal-card-download-pdf")).not.toBeInTheDocument();
   });
 });

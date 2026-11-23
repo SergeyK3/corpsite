@@ -1175,20 +1175,4 @@ describe("PprPersonalCardPageClient", () => {
     expect(getEmployeeImportCard2OptionalMock).not.toHaveBeenCalled();
     expect(getPprByEmployeeIdMock).toHaveBeenCalledTimes(1);
   });
-
-  it("shows a manager only personal sections with no HR actions", async () => {
-    const card = buildMaterializedPpr();
-    getPprByPersonIdMock.mockResolvedValue({
-      ...card,
-      metadata: { ...card.metadata, read_mode: "ppr_manager" },
-    });
-    render(<CurrentUserProvider value={{ has_personnel_card_edit: true, has_personnel_admin: true }}><PprPersonalCardPageClient personId="901" /></CurrentUserProvider>);
-    await waitFor(() => expect(screen.getByText(PERSONAL_CARD_TITLE)).toBeInTheDocument());
-    expect(screen.queryByTestId("ppr-card-edit-mode-button")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("employee-access-section")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("orders-section")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("applications-section")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("assignment-section")).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "Воинский учёт" })).not.toBeInTheDocument();
-  });
 });

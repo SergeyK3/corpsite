@@ -280,11 +280,11 @@ it("keeps HIRE name inputs when toggling modes and requires both surname and fir
 it("shows the existing HIRE rate and basis once, blocks missing values and retains inputs across mode changes", async () => {
   setup();
   await chooseTypeInMenu("HIRE");
-  expect(screen.getByRole('combobox',{name:'Подразделение (RU)'})).toBeVisible();
+  expect(screen.getByRole('combobox',{name:'Подразделение (RU)',exact:true})).toBeVisible();
   const terms=screen.getByTestId('hire-terms-fields');
-  expect(screen.getByRole('combobox',{name:'Сотрудник'}).compareDocumentPosition(terms)&Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(screen.getByRole('combobox',{name:'Сотрудник',exact:true}).compareDocumentPosition(terms)&Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   fireEvent.click(screen.getByRole("radio", {name: "Новый сотрудник"}));
-  expect(screen.getByRole('combobox',{name:'Подразделение (RU)'})).toBeVisible();
+  expect(screen.getByRole('combobox',{name:'Подразделение (RU)',exact:true})).toBeVisible();
   const form=screen.getByLabelText('Ставка').closest('form')!;
   const controls=Array.from(form.querySelectorAll('input:not([type="hidden"]),select,textarea'));
   expect(controls.slice(-3).map(control=>control.getAttribute('aria-label'))).toEqual(['Ставка','Основание (RU)','Основание (KK)']);
@@ -549,7 +549,7 @@ it.each(["LEAVE.CHILDCARE.GRANT", "LEAVE.UNPAID.GRANT", "TERMINATION"] as const)
   expect(screen.queryByText(/Необходимо заполнить:/)).not.toBeInTheDocument();
 });
 
-it.each(["EMPLOYEE_INITIATIVE", "EMPLOYER_INITIATIVE", "CONTRACT_EXPIRATION"])("requires termination reason beside its field and creates an order with %s", async reason => {
+it("requires termination reason beside its field and sends the confirmed KK title with the chosen reason", async () => {
   setup();
   vi.mocked(getEmployee).mockResolvedValue({ ...employeeDetail, position: { id: 27, name: "Медсестра", name_kk: "Мейіргер", document_possessive_kk: "мейіргері", translation_status: "confirmed", document_form_status: "confirmed" } });
   await selectType("TERMINATION");
@@ -560,7 +560,7 @@ it.each(["EMPLOYEE_INITIATIVE", "EMPLOYER_INITIATIVE", "CONTRACT_EXPIRATION"])("
   expect(screen.getByLabelText("Должность на казахском языке (KK)")).toHaveValue("Мейіргер");
   expect(screen.getByTestId("termination-required-fields").querySelector("#termination-reason-hint")).toHaveTextContent("Выберите причину расторжения трудового договора.");
   expect(screen.getByRole("button", {name:"Создать приказ"})).toBeDisabled();
-  fireEvent.change(screen.getByLabelText("Причина расторжения трудового договора"), {target:{value:reason}});
+  fireEvent.change(screen.getByLabelText("Причина расторжения трудового договора"), {target:{value:"EMPLOYEE_INITIATIVE"}});
   vi.mocked(previewPersonnelOrderHeaderDuplicate).mockResolvedValue({blocking:false,warnings:[],candidates:[]});
   vi.mocked(createManualPersonnelOrderDraft).mockResolvedValue({order_id:1} as never);
   await waitFor(()=>expect(screen.getByRole("button", {name:"Создать приказ"})).toBeEnabled());
@@ -568,7 +568,7 @@ it.each(["EMPLOYEE_INITIATIVE", "EMPLOYER_INITIATIVE", "CONTRACT_EXPIRATION"])("
   await waitFor(()=>expect(createManualPersonnelOrderDraft).toHaveBeenCalledWith(expect.objectContaining({
     item_type_code:"TERMINATION",
     document_subject_context:expect.objectContaining({document_position_kk:"Мейіргер"}),
-    item_payload:expect.objectContaining({termination_reason:reason}),
+    item_payload:expect.objectContaining({termination_reason:"EMPLOYEE_INITIATIVE"}),
   })));
 });
 
@@ -960,7 +960,7 @@ it("requires transfer destination, rate and bilingual basis, then opens the crea
   await waitFor(() => expect(screen.getByRole("button",{name:"Создать приказ"})).toBeEnabled());
   fireEvent.click(screen.getByRole("button",{name:"Создать приказ"}));
   await waitFor(() => expect(onCreated).toHaveBeenCalledWith(result)); expect(onClose).toHaveBeenCalled();
-  expect(createManualPersonnelOrderDraft).toHaveBeenCalledWith(expect.objectContaining({employee_id:383,item_payload:expect.objectContaining({transfer:{position_ru:"Врач",position_kk:"Дәрігер",org_unit_ru:"Терапия",org_unit_kk:"Терапия бөлімшесі",rate:0.5,basis_ru:"Заявление",basis_kk:"Өтініш"},document_forms_ru:expect.objectContaining({employee_full_name_accusative_ru:"Ильясову Ассель Адиловну"})})}));
+  expect(createManualPersonnelOrderDraft).toHaveBeenCalledWith(expect.objectContaining({employee_id:383,item_payload:{transfer:{position_ru:"Врач",position_kk:"Дәрігер",org_unit_ru:"Терапия",org_unit_kk:"Терапия бөлімшесі",rate:0.5,basis_ru:"Заявление",basis_kk:"Өтініш"},document_forms_ru:{employee_full_name_accusative_ru:"Ильясову Ассель Адиловну"}}}));
 });
 
 

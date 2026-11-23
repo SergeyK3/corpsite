@@ -100,8 +100,7 @@ describe("control-list export browser client", () => {
 
   it("uses the UTF-8 Content-Disposition filename and always cleans up fallback resources", async () => {
     const click = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
-    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => response());
-    const fetchImpl = fetchMock as typeof fetch;
+    const fetchImpl = vi.fn(async () => response()) as unknown as typeof fetch;
     const deps = fallbackDeps(fetchImpl);
     const outcome = await exportControlListFile(deps);
 
@@ -117,7 +116,7 @@ describe("control-list export browser client", () => {
       expect.any(URL),
       expect.objectContaining({ method: "POST", cache: "no-store" }),
     );
-    expect((fetchMock.mock.calls[0][0] as URL).pathname).toBe(
+    expect((fetchImpl.mock.calls[0][0] as URL).pathname).toBe(
       "/directory/personnel/control-list/export",
     );
   });

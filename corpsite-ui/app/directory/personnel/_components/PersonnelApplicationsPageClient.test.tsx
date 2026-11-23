@@ -119,8 +119,6 @@ const sampleItem: PersonnelApplicationListItem = {
   intake_draft_status: null,
   intake_opened_at: null,
   intake_submitted_at: null,
-  intake_link_display_state: null,
-  intake_url_path: null,
   employee_id: null,
   employee_full_name: null,
   completed_at: null,

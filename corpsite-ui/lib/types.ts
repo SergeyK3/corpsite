@@ -4,8 +4,6 @@ export type MeInfo = {
   is_documentation_viewer?: boolean;
   is_sysadmin_assistant?: boolean;
   assistant_permissions?: Record<string, boolean>;
-  has_working_contacts_read?: boolean;
-  ppr_stage_permissions?: Record<string, boolean>;
   must_change_password?: boolean;
   user_id?: number;
   role_id?: number;
@@ -38,6 +36,10 @@ export type MeInfo = {
   can_request_test_system_identity_deletion?: boolean;
   /** Sysadmin cabinet API (/admin/users, /admin/access/*, …) — not directory privileged roles. */
   has_sysadmin_api?: boolean;
+  training_enabled?: boolean;
+  is_hire_approver?: boolean;
+  has_learning_expert?: boolean;
+  has_learning_review?: boolean;
   /** ADR-043 C4.2 — personnel lifecycle admin (ADMIN or HR_ENROLLMENT_MANAGER). */
   has_personnel_admin?: boolean;
   /** Narrow read-only access to the personnel event journal. */
@@ -48,8 +50,6 @@ export type MeInfo = {
   has_hr_governance?: boolean;
   /** Exact effective permission used by manual assignment change. */
   has_hr_enrollment_manager?: boolean;
-  /** GET /auth/me — permission to review personnel files (subject scope remains server-enforced). */
-  has_personnel_files_review?: boolean;
   /** WP-CL-004 — exact effective permission for the control-list XLSX export. */
   has_control_list_export?: boolean;
   /** WP-PPR-MIG-005D — exact read grant for the migration-status report. */
@@ -60,8 +60,6 @@ export type MeInfo = {
   has_personnel_orders_restore?: boolean;
   /** ADR-042 E1 — personnel directory / org sidebar visibility. */
   has_personnel_visibility?: boolean;
-  /** Role-level card read; each Person is checked against the user's scope by the API. */
-  has_personnel_card_read?: boolean;
   has_personnel_card_edit?: boolean;
   show_org_sidebar?: boolean;
   personnel_visibility?: PersonnelVisibilityInfo;
@@ -69,8 +67,6 @@ export type MeInfo = {
   can_view_all_tasks?: boolean;
   /** OO-UI-001 — operational orders read access projection. */
   has_operational_orders_read?: boolean;
-  /** Legacy projection; archive access is determined by operational_orders_permissions. */
-  has_operational_order_archive_review?: boolean;
   operational_orders_permissions?: {
     intake_create?: boolean;
     intake_read?: boolean;
@@ -85,7 +81,6 @@ export type MeInfo = {
     assign_signing_authority?: boolean;
     mark_ready_for_signature?: boolean;
     return_from_signature?: boolean;
-    archive_review?: boolean;
   };
   /** WP-II — aggregate read projection used for navigation and direct-route access. */
   has_incoming_information_read?: boolean;
