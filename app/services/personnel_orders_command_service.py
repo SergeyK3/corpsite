@@ -685,8 +685,8 @@ def register_personnel_order_tx(conn, *, order_id: int, target_status: str) -> N
         raise PersonnelOrderConflictError(
             f"Personnel order {order_id} cannot be registered from status {order['status']}."
         )
-    _validate_registerable_order(conn, order)
     _require_hire_approval_for_order(conn, order_id)
+    _validate_registerable_order(conn, order)
     resolved_type = _resolve_header_type_from_items(conn, int(order_id), str(order["order_type_code"]))
     conn.execute(
         text(
@@ -1461,8 +1461,8 @@ def mark_personnel_order_ready_for_signature(*, order_id: int) -> Dict[str, Any]
             raise PersonnelOrderConflictError(
                 f"Only DRAFT orders can move to READY_FOR_SIGNATURE (current: {order['status']})."
             )
-        _validate_registerable_order(conn, order)
         _require_hire_approval_for_order(conn, order_id)
+        _validate_registerable_order(conn, order)
 
     from app.services.personnel_orders_editorial_service import (
         PersonnelOrderReadyGateError,
@@ -1539,8 +1539,8 @@ def register_personnel_order(
                 f"Personnel order {order_id} cannot be registered from status {current_status}."
             )
 
-        _validate_registerable_order(conn, order)
         _require_hire_approval_for_order(conn, order_id)
+        _validate_registerable_order(conn, order)
         resolved_type = _resolve_header_type_from_items(
             conn,
             int(order_id),

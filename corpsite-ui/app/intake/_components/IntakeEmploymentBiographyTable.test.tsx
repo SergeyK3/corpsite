@@ -1,3 +1,4 @@
+import { intakeEmploymentFixture } from "../_lib/intakeTestFixtures";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -55,13 +56,13 @@ describe("IntakeEmploymentBiographyTable", () => {
     render(
       <IntakeEmploymentBiographyTable
         items={[
-          {
+          intakeEmploymentFixture({
             organization: "Городская больница №1",
             position: "Врач-терапевт",
             year_from: "2018-09-01",
             year_to: "2022-06-15",
             reason_for_leaving: "По собственному желанию",
-          },
+          }),
         ]}
         onChange={vi.fn()}
       />,
@@ -106,13 +107,13 @@ describe("IntakeEmploymentBiographyTable", () => {
     render(
       <IntakeEmploymentBiographyTable
         items={[
-          {
+          intakeEmploymentFixture({
             organization: "Клиника А",
             position: "Медсестра",
             year_from: "2020-01-15",
             year_to: "2024-08-01",
             reason_for_leaving: "Переезд",
-          },
+          }),
         ]}
         onChange={onChange}
       />,
@@ -131,13 +132,13 @@ describe("IntakeEmploymentBiographyTable", () => {
     render(
       <IntakeEmploymentBiographyTable
         items={[
-          {
+          intakeEmploymentFixture({
             organization: "Клиника А",
             position: "Медсестра",
             year_from: "2020-01-15",
             year_to: "2024-08-01",
             reason_for_leaving: "",
-          },
+          }),
         ]}
         onChange={onChange}
       />,
@@ -157,13 +158,13 @@ describe("IntakeEmploymentBiographyTable across editor modes", () => {
     mockTenureCalculation();
     const payload = emptyIntakeDraftPayload();
     payload.employment_biography = [
-      {
+      intakeEmploymentFixture({
         organization: "Городская больница №1",
         position: "Врач-терапевт",
         year_from: "2018-09-01",
         year_to: "2022-06-15",
         reason_for_leaving: "По собственному желанию",
-      },
+      }),
     ];
 
     const { unmount } = render(

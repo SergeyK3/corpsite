@@ -59,6 +59,12 @@ describe("visibilityNav", () => {
     expect(canAccessDirectoryRoute("/tasks", observerWithAssignment)).toBe(false);
   });
 
+  it("lets an authenticated department head open the scoped hire approval page", () => {
+    expect(canAccessDirectoryRoute("/directory/personnel/hire-approvals", observerPlain)).toBe(true);
+    expect(canAccessDirectoryRoute("/directory/personnel/hire-approvals", null)).toBe(false);
+    expect(canAccessDirectoryRoute("/directory/personnel/orders", observerPlain)).toBe(false);
+  });
+
   it("gates the file review route by its specific permission", () => {
     const route = "/directory/personnel/file-review";
     expect(canAccessDirectoryRoute(route, hrHead)).toBe(false);

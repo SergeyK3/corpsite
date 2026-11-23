@@ -3,13 +3,15 @@
 import * as React from "react";
 import { useOrgUnitScopeOptions } from "@/lib/useOrgUnitScopeOptions";
 import { usePersonnelOrderPositionOptions } from "@/lib/usePersonnelOrderPositionOptions";
+import OrgScopeFilter from "@/components/OrgScopeFilter";
 import { getActiveIntakeLink, issueIntakeLink, reissueIntakeLink } from "../_lib/personnelApplicationsApi.client";
 import {
   checkElectronicHire, createElectronicHire, createElectronicHireOrderDraft, getElectronicHire,
   getHireUnitApprovalMode, recordHirePaperConfirmation,
   listElectronicHireApplications, printElectronicHire,
   retryElectronicHireNotification, searchFormerCandidates, sendElectronicHireLinkTelegram, updateElectronicHireConditions,
-  uploadElectronicHireSignedCopy, type FormerCandidate,
+  uploadElectronicHireSignedCopy, getPositionReview, requestPositionReview,
+  type FormerCandidate, type PositionReview,
 } from "../_lib/electronicHireApi.client";
 import PersonnelApplicationIntakeOnBehalfDrawer from "./PersonnelApplicationIntakeOnBehalfDrawer";
 
@@ -25,8 +27,16 @@ export default function ElectronicHireApplicationDrawer({ open, onClose }: Props
   const [birthDate, setBirthDate] = React.useState("");
   const [received, setReceived] = React.useState(today);
   const [start, setStart] = React.useState(today);
+  const [orgGroupId, setOrgGroupId] = React.useState<number | null>(null);
   const [unitId, setUnitId] = React.useState<number | null>(null);
   const [positionId, setPositionId] = React.useState<number | null>(null);
+  const [manualPosition, setManualPosition] = React.useState(false);
+  const [newPositionName, setNewPositionName] = React.useState("");
+  const [newPositionDocumentRu, setNewPositionDocumentRu] = React.useState("");
+  const [resolution, setResolution] = React.useState<"catalog" | "unmatched_manual" | "matched_manual">("catalog");
+  const [review, setReview] = React.useState<PositionReview | null>(null);
+  const [reviewExplanation, setReviewExplanation] = React.useState("");
+  const [positionReloadKey, setPositionReloadKey] = React.useState(0);
   const [rate, setRate] = React.useState("1");
   const [applicationId, setApplicationId] = React.useState<number | null>(null);
   const [personId, setPersonId] = React.useState<number | null>(null);
@@ -39,6 +49,8 @@ export default function ElectronicHireApplicationDrawer({ open, onClose }: Props
   const [error, setError] = React.useState("");
   const [uploaded, setUploaded] = React.useState("");
   const [existing, setExisting] = React.useState<Array<{application_id: number; full_name: string; status: string}>>([]);
+  const [existingLoadError, setExistingLoadError] = React.useState("");
+  const [existingReloadKey, setExistingReloadKey] = React.useState(0);
   const [orderId, setOrderId] = React.useState<number | null>(null);
   const [notification, setNotification] = React.useState("");
   const [approvalMode, setApprovalMode] = React.useState<"paper" | "electronic">("paper");
@@ -51,9 +63,57 @@ export default function ElectronicHireApplicationDrawer({ open, onClose }: Props
   const [paperAttachmentId, setPaperAttachmentId] = React.useState<number | null>(null);
   const [paperResult, setPaperResult] = React.useState("");
   const [paperAttachmentHref, setPaperAttachmentHref] = React.useState("");
-  const { options: units } = useOrgUnitScopeOptions(null, open);
-  const unit = units.find(row => row.unit_id === unitId);
-  const { scopedOptions: positions } = usePersonnelOrderPositionOptions({ enabled: open, orgUnitId: unitId, orgGroupId: unit?.group_id ?? null, allowedOnly: true });
+  const { options: units, catalogOptions: allUnits, loading: unitsLoading, error: unitsError } = useOrgUnitScopeOptions(orgGroupId, open);
+  const unit = allUnits.find(row => row.unit_id === unitId);
+  const validUnit = orgGroupId != null && unit?.group_id === orgGroupId;
+  const { scopedOptions: positions, loading: positionsLoading, error: positionsError } = usePersonnelOrderPositionOptions({ enabled: open, orgUnitId: unitId, orgGroupId: unit?.group_id ?? null, allowedOnly: true, reloadKey: positionReloadKey });
+  const positionValid = !positionsLoading && !positionsError && positions.some(row => row.id === positionId);
+  const canSavePosition = validUnit && (manualPosition
+    ? newPositionName.trim().length > 0 && newPositionDocumentRu.trim().length > 0
+    : positionValid);
+  const positionHint = manualPosition
+    ? "Выбрано ручное название. Список должностей отключён; вернитесь к выбору из справочника при необходимости."
+    : unitId == null
+      ? "Сначала выберите отделение."
+      : positionsLoading
+        ? "Загружаем должности для выбранного отделения…"
+        : positionsError
+          ? positionsError
+          : positions.length === 0
+            ? "В этом отделении нет доступных справочных должностей. Введите название вручную и отправьте его на уточнение."
+            : null;
+
+  function clearPositionForScopeChange() {
+    setPositionId(null);
+    setManualPosition(false);
+    setNewPositionName("");
+    setNewPositionDocumentRu("");
+  }
+
+  function selectOrgGroup(next: number | null) {
+    if (next === orgGroupId) return;
+    setOrgGroupId(next);
+    setUnitId(null);
+    clearPositionForScopeChange();
+  }
+
+  function selectOrgUnit(next: number | null) {
+    if (next === unitId) return;
+    setUnitId(next);
+    clearPositionForScopeChange();
+  }
+
+  React.useEffect(() => {
+    if (applicationId != null && unitId != null && !unitsLoading && unit?.group_id != null && orgGroupId !== unit.group_id) {
+      setOrgGroupId(unit.group_id);
+    }
+  }, [applicationId, unitId, unitsLoading, unit, orgGroupId]);
+
+  React.useEffect(() => {
+    if (!manualPosition && positionId != null && unitId != null && !positionsLoading && !positionsError && !positions.some(row => row.id === positionId)) {
+      setPositionId(null);
+    }
+  }, [manualPosition, positionId, unitId, positionsLoading, positionsError, positions]);
 
   React.useEffect(() => {
     if (!open || unitId == null) { setTargetMode(null); return; }
@@ -64,7 +124,22 @@ export default function ElectronicHireApplicationDrawer({ open, onClose }: Props
     return () => { active = false; };
   }, [open, unitId]);
 
-  React.useEffect(() => { if (open) void listElectronicHireApplications().then(result => setExisting(result.items)).catch(() => {}); }, [open]);
+  React.useEffect(() => {
+    if (!open) return;
+    let active = true;
+    setExistingLoadError("");
+    void listElectronicHireApplications()
+      .then(result => { if (active) setExisting(result.items); })
+      .catch((e: unknown) => { if (active) {
+        const status = e && typeof e === "object" && "status" in e ? Number(e.status) : null;
+        setExistingLoadError(status === 401 || status === 403
+          ? "Не удалось загрузить заявления: проверьте вход и права доступа."
+          : status != null && Number.isFinite(status)
+            ? `Не удалось загрузить заявления: ошибка сервера (${status}).`
+            : "Не удалось загрузить заявления: нет соединения с API. Проверьте сеть и повторите попытку.");
+      } });
+    return () => { active = false; };
+  }, [open, existingReloadKey]);
 
   React.useEffect(() => {
     if (!open || query.trim().length < 2) { setMatches([]); return; }
@@ -85,7 +160,15 @@ export default function ElectronicHireApplicationDrawer({ open, onClose }: Props
       setApplicationId(id); setPersonId(Number(app.person_id));
       setIin(String(app.iin || "")); setFullName(String(app.full_name || ""));
       setReceived(String(app.application_received_at || "")); setStart(String(app.planned_start_date || ""));
-      setUnitId(Number(app.intended_org_unit_id) || null); setPositionId(Number(app.intended_position_id) || null);
+      const savedUnitId = Number(app.intended_org_unit_id) || null;
+      setUnitId(savedUnitId); setPositionId(Number(app.intended_position_id) || null);
+      setOrgGroupId(allUnits.find(row => row.unit_id === savedUnitId)?.group_id ?? null);
+      setManualPosition(app.position_resolution === "unmatched_manual");
+      setResolution(app.position_resolution as typeof resolution);
+      setReview((await getPositionReview(id).catch(() => ({request: null}))).request);
+      setNewPositionName(String(app.manual_position_name || ""));
+      setNewPositionDocumentRu(String(app.manual_position_document_ru || ""));
+      setPositionReloadKey(key => key + 1);
       setSavedUnitId(Number(app.intended_org_unit_id) || null);
       setApprovalMode(app.approval_mode === "electronic" ? "electronic" : "paper");
       const paper = app.current_paper_confirmation as {is_current?: boolean; approver_name?: string; approved_on?: string;
@@ -104,16 +187,22 @@ export default function ElectronicHireApplicationDrawer({ open, onClose }: Props
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
-    if (unitId == null || positionId == null) return;
+    if (unitId == null || !canSavePosition) return;
     setBusy(true); setError("");
     try {
       const result = await createElectronicHire({ iin, full_name: fullName, application_received_at: received,
         birth_date: birthDate || undefined,
-        planned_start_date: start, org_unit_id: unitId, position_id: positionId,
-        employment_rate: Number(rate.replace(",", ".")), org_group_id: unit?.group_id });
-      setApplicationId(result.application_id); setPersonId(result.person_id);
+        planned_start_date: start, org_unit_id: unitId,
+        ...(manualPosition ? { manual_position_name: newPositionName.trim(), manual_position_document_ru: newPositionDocumentRu.trim() } : { position_id: positionId! }),
+        employment_rate: Number(rate.replace(",", ".")), org_group_id: orgGroupId });
+      setApplicationId(result.application_id); setPersonId(result.person_id); setPositionId(result.position_id);
+      setManualPosition(result.position_resolution === "unmatched_manual");
+      setResolution(result.position_resolution);
+      setReview(null);
       setSavedUnitId(unitId); setApprovalMode(result.approval_mode);
       setPaperResult(""); setPaperAttachmentHref("");
+      if (result.position_resolution !== "unmatched_manual") { setNewPositionName(""); setNewPositionDocumentRu(""); }
+      setPositionReloadKey(key => key + 1);
       setPrintText(await printElectronicHire(result.application_id));
       try { const issued = await issueIntakeLink(result.application_id); setLink(issued.intake_url_path); } catch { /* HR may issue later. */ }
     } catch (e) { setError(message(e)); } finally { setBusy(false); }
@@ -139,16 +228,31 @@ export default function ElectronicHireApplicationDrawer({ open, onClose }: Props
   }
 
   async function saveConditions() {
-    if (applicationId == null || unitId == null || positionId == null) return;
+    if (applicationId == null || unitId == null || !canSavePosition) return;
     setBusy(true); setError("");
     try {
-      const updated = await updateElectronicHireConditions(applicationId, {org_unit_id: unitId, position_id: positionId,
+      const updated = await updateElectronicHireConditions(applicationId, {org_unit_id: unitId,
+        ...(manualPosition ? { manual_position_name: newPositionName.trim(), manual_position_document_ru: newPositionDocumentRu.trim() } : { position_id: positionId! }),
         employment_rate: Number(rate.replace(",", ".")), planned_start_date: start,
-        mode_change_reason: savedUnitId !== unitId ? modeReason : undefined}) as {approval_mode: "paper" | "electronic"};
+        mode_change_reason: savedUnitId !== unitId ? modeReason : undefined});
       setSavedUnitId(unitId); setApprovalMode(updated.approval_mode); setModeReason(""); setPaperResult(""); setPaperAttachmentHref("");
-      setPrintText(await printElectronicHire(applicationId)); setChecked(false);
-      setNotification(updated.approval_mode === "electronic" ? "Ожидает повторного согласования" : "Требуется новое бумажное подтверждение");
+      setPositionId(updated.intended_position_id);
+      setManualPosition(updated.position_resolution === "unmatched_manual");
+      setResolution(updated.position_resolution);
+      setReview((await getPositionReview(applicationId).catch(() => ({request: null}))).request);
+      setNewPositionName(updated.manual_position_name || "");
+      setNewPositionDocumentRu(updated.manual_position_document_ru || "");
+      setPositionReloadKey(key => key + 1);
+      setPrintText(await printElectronicHire(applicationId)); setChecked(false); setNotification(updated.approval_mode === "electronic" ? "Ожидает повторного согласования" : "Требуется новое бумажное подтверждение");
     } catch (e) { setError(message(e)); } finally { setBusy(false); }
+  }
+
+  async function sendPositionReview() {
+    if (applicationId == null || !reviewExplanation.trim()) return;
+    setBusy(true); setError("");
+    try { setReview(await requestPositionReview(applicationId, reviewExplanation.trim())); }
+    catch (e) { setError(message(e)); }
+    finally { setBusy(false); }
   }
 
   async function confirmPaper() {
@@ -178,30 +282,58 @@ export default function ElectronicHireApplicationDrawer({ open, onClose }: Props
     <aside className="h-full w-full max-w-2xl overflow-y-auto border-l border-zinc-200 bg-white p-6 text-zinc-900 shadow-xl">
       <div className="mb-5 flex items-start justify-between gap-4"><div><h2 className="text-xl font-semibold">Заявление о приёме на работу</h2><p className="text-sm text-zinc-600">Электронное заявление и планируемые условия приёма</p></div><button onClick={onClose} className="rounded border px-3 py-1">Закрыть</button></div>
       {error && <p role="alert" className="mb-4 rounded bg-red-50 p-3 text-sm text-red-800">{error}</p>}
+      {existingLoadError && <div role="alert" className="mb-4 rounded bg-red-50 p-3 text-sm text-red-800">{existingLoadError} <button type="button" className="underline" onClick={() => setExistingReloadKey(key => key + 1)}>Повторить загрузку</button></div>}
       {applicationId == null ? <form onSubmit={create} className="space-y-4">
         {existing.length > 0 && <div className="rounded border bg-zinc-50 p-3 text-sm"><h3 className="mb-2 font-medium">Незавершённые заявления</h3><ul className="space-y-1">{existing.map(row => <li key={row.application_id}><button type="button" className="underline" onClick={() => void openExisting(row.application_id)}>№{row.application_id} · {row.full_name}</button></li>)}</ul></div>}
         <label className="block text-sm">Поиск среди ранее уволенных<input className={field} value={query} onChange={e => setQuery(e.target.value)} placeholder="ФИО или ИИН" /></label>
         {matches.length > 0 && <ul className="rounded border p-2">{matches.map(row => <li key={row.person_id}><button type="button" className="w-full rounded px-2 py-1 text-left hover:bg-zinc-100" onClick={() => { setIin(row.iin); setFullName(row.full_name); setMatches([]); setQuery(row.full_name); }}>{row.full_name} · {row.iin}</button></li>)}</ul>}
         <div className="grid gap-3 sm:grid-cols-2"><label className="text-sm">ИИН<input required minLength={12} maxLength={12} className={field} value={iin} onChange={e => setIin(e.target.value)} /></label><label className="text-sm">ФИО кандидата<input required className={field} value={fullName} onChange={e => setFullName(e.target.value)} /></label></div>
         <label className="block text-sm">Дата рождения<input type="date" className={field} value={birthDate} onChange={e => setBirthDate(e.target.value)} /></label>
-        <div className="grid gap-3 sm:grid-cols-2"><label className="text-sm">Дата заявления<input type="date" required className={field} value={received} onChange={e => setReceived(e.target.value)} /></label><label className="text-sm">Планируемая дата начала<input type="date" required className={field} value={start} onChange={e => setStart(e.target.value)} /></label></div>
-        <label className="block text-sm">Отделение<select required className={field} value={unitId ?? ""} onChange={e => { setUnitId(Number(e.target.value) || null); setPositionId(null); }}><option value="">Выберите отделение</option>{units.map(row => <option key={row.unit_id} value={row.unit_id}>{row.name}</option>)}</select></label>
+        <div className="grid gap-3 sm:grid-cols-2"><label className="text-sm">Дата заявления<input type="date" required className={field} value={received} onChange={e => setReceived(e.target.value)} /></label><label className="text-sm">Планируемая дата начала работы<input type="date" required className={field} value={start} onChange={e => setStart(e.target.value)} /></label></div>
+        <OrgScopeFilter basePath="/directory/personnel/orders" label="Группа отделений" emptyLabel="Выберите группу отделений" value={orgGroupId} onChange={selectOrgGroup} />
+        <label className="block text-sm">Отделение<select required disabled={orgGroupId == null || unitsLoading || !!unitsError} className={field} value={validUnit ? unitId ?? "" : ""} onChange={e => selectOrgUnit(Number(e.target.value) || null)}><option value="">{orgGroupId == null ? "Сначала выберите группу отделений" : unitsLoading ? "Загрузка отделений…" : unitsError ? "Ошибка загрузки отделений" : "Выберите отделение"}</option>{units.map(row => <option key={row.unit_id} value={row.unit_id}>{row.name}</option>)}</select></label>
+        {orgGroupId == null && <p role="status" className="text-sm text-zinc-600">Отделение станет доступно после выбора группы отделений.</p>}
+        {unitsError && <p role="alert" className="text-sm text-red-700">{unitsError}</p>}
         {unitId && <p className="rounded bg-blue-50 p-2 text-sm">{targetMode === null ? "Загрузка порядка согласования…" : targetMode === "electronic" ? "Требуется электронное согласование" : "Согласование на бумаге"}</p>}
-        <label className="block text-sm">Должность<select required className={field} value={positionId ?? ""} onChange={e => setPositionId(Number(e.target.value) || null)}><option value="">Выберите должность</option>{positions.map(row => <option key={row.id} value={row.id}>{row.label}</option>)}</select></label>
+        <label className="block text-sm">Должность<select required={!manualPosition} disabled={manualPosition || unitId == null || positionsLoading || !!positionsError || positions.length === 0} className={field} value={positionValid ? positionId ?? "" : ""} onChange={e => setPositionId(Number(e.target.value) || null)}><option value="">{unitId == null ? "Сначала выберите отделение" : positionsLoading ? "Загрузка должностей…" : positionsError ? "Ошибка загрузки должностей" : positions.length === 0 ? "Нет доступных должностей" : "Выберите должность"}</option>{positions.map(row => <option key={row.id} value={row.id}>{row.label}</option>)}</select></label>
+        {positionHint && <p role={positionsError && !manualPosition ? "alert" : "status"} className={`text-sm ${positionsError && !manualPosition ? "text-red-700" : "text-amber-800"}`}>{positionHint}</p>}
+        {positionsError && !manualPosition && <button type="button" className="text-sm underline" onClick={() => setPositionReloadKey(key => key + 1)}>Повторить загрузку должностей</button>}
+        <button type="button" className="text-sm underline" onClick={() => setManualPosition(value => !value)}>{manualPosition ? "Выбрать должность из списка" : "Нет подходящей должности? Ввести вручную"}</button>
+        {manualPosition && <label className="block text-sm">Название должности вручную<input required maxLength={500} className={field} value={newPositionName} onChange={e => setNewPositionName(e.target.value)} /></label>}
+        {manualPosition && <p className="text-xs text-zinc-600">Название сохранится в этом заявлении без связи со справочником должностей.</p>}
+        {manualPosition && <label className="block text-sm">После «на должность» (для текста заявления)<input required maxLength={500} className={field} value={newPositionDocumentRu} onChange={e => setNewPositionDocumentRu(e.target.value)} placeholder="Например: старшего специалиста" /></label>}
         <label className="block text-sm">Ставка<input required type="number" step="0.01" min="0.01" max="2" className={field} value={rate} onChange={e => setRate(e.target.value)} /></label>
-        <button disabled={busy || unitId == null || positionId == null || targetMode === null} className="rounded bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">Сформировать заявление</button>
+        <button disabled={busy || !canSavePosition || targetMode === null} className="rounded bg-zinc-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">Сформировать заявление</button>
       </form> : <div className="space-y-5">
         <p className="rounded bg-emerald-50 p-3 text-sm text-emerald-800">Заявление №{applicationId} сохранено. Личная карточка: {personId}.</p>
-        <p className="rounded bg-blue-50 p-3 text-sm">Порядок заявления: {approvalMode === "electronic" ? "Требуется электронное согласование" : "Согласование на бумаге"}</p>
+        <p className="rounded bg-blue-50 p-3 text-sm">Порядок заявления: {approvalMode === "electronic" ? "электронное согласование" : "согласование на бумаге"}</p>
+        {resolution === "unmatched_manual" && <section className="rounded-lg border-2 border-amber-500 bg-amber-50 p-4 text-sm text-amber-950" role="status">
+          <h3 className="font-semibold">Должность требует сопоставления со справочником</h3>
+          <p className="mt-1">Исходное название: {newPositionName}. Заявление и черновик доступны; подписание, регистрация и применение приказа ожидают решения.</p>
+          {review ? <p className="mt-2">Запрос №{review.request_id}: {review.status === "open" ? "ожидает решения" : "решён"}. Автор: {review.requester_name}. <a className="underline" href={`/directory/personnel/position-reconciliation?request_id=${review.request_id}`}>Открыть запрос</a></p>
+            : <div className="mt-3"><label className="block">Пояснение для ответственного за справочник<textarea className={field} value={reviewExplanation} onChange={e => setReviewExplanation(e.target.value)} maxLength={2000} /></label><button type="button" disabled={busy || !reviewExplanation.trim()} className="mt-2 rounded bg-amber-800 px-3 py-2 text-white disabled:opacity-50" onClick={() => void sendPositionReview()}>Отправить на уточнение</button></div>}
+        </section>}
+        {resolution === "matched_manual" && review?.status === "resolved" && <section className="rounded-lg border border-emerald-400 bg-emerald-50 p-4 text-sm" role="status">
+          <h3 className="font-semibold">Должность сопоставлена</h3>
+          <p>Исходное название: {review.source_title}. Решение: {review.resolved_position_name} / {review.resolved_position_name_kk}. Принял: {review.decider_name}, {review.decided_at ? new Date(review.decided_at).toLocaleString("ru-RU") : ""}.</p>
+          <p>Проверьте текст приказа RU/KK и повторное согласование. Исходное заявление сохранено.</p>
+          <a className="underline" href={`/directory/personnel/position-reconciliation?request_id=${review.request_id}`}>Показать историю и изменения</a>
+        </section>}
         <details className="rounded border p-3"><summary className="cursor-pointer font-medium">Изменить условия приёма</summary><div className="mt-3 space-y-3">
-          <label className="block text-sm">Отделение<select className={field} value={unitId ?? ""} onChange={e => { setUnitId(Number(e.target.value) || null); setPositionId(null); }}><option value="">Выберите отделение</option>{units.map(row => <option key={row.unit_id} value={row.unit_id}>{row.name}</option>)}</select></label>
-          {savedUnitId !== unitId && <div className="rounded border border-amber-300 bg-amber-50 p-3 text-sm">
-            <p>Для целевого отделения: {targetMode === null ? "загрузка порядка согласования…" : targetMode === "electronic" ? "требуется электронное согласование" : "согласование на бумаге"}. После сохранения заявление перейдёт на этот порядок.</p>
-            <label className="block">Причина смены отделения<input className={field} value={modeReason} onChange={e => setModeReason(e.target.value)} /></label>
-          </div>}
-          <label className="block text-sm">Должность<select className={field} value={positionId ?? ""} onChange={e => setPositionId(Number(e.target.value) || null)}><option value="">Выберите должность</option>{positions.map(row => <option key={row.id} value={row.id}>{row.label}</option>)}</select></label>
+          <OrgScopeFilter basePath="/directory/personnel/orders" label="Группа отделений" emptyLabel="Выберите группу отделений" value={orgGroupId} onChange={selectOrgGroup} />
+          <label className="block text-sm">Отделение<select disabled={orgGroupId == null || unitsLoading || !!unitsError} className={field} value={validUnit ? unitId ?? "" : ""} onChange={e => selectOrgUnit(Number(e.target.value) || null)}><option value="">{orgGroupId == null ? "Сначала выберите группу отделений" : unitsLoading ? "Загрузка отделений…" : unitsError ? "Ошибка загрузки отделений" : "Выберите отделение"}</option>{units.map(row => <option key={row.unit_id} value={row.unit_id}>{row.name}</option>)}</select></label>
+          {orgGroupId == null && <p role="status" className="text-sm text-zinc-600">Отделение станет доступно после выбора группы отделений.</p>}
+          {unitsError && <p role="alert" className="text-sm text-red-700">{unitsError}</p>}
+          {savedUnitId !== unitId && <div className="rounded border border-amber-300 bg-amber-50 p-3 text-sm"><p>При смене отделения порядок согласования будет обновлён: {targetMode === null ? "загрузка…" : targetMode === "electronic" ? "электронный" : "бумажный"}.</p><label className="block">Причина смены отделения<input className={field} value={modeReason} onChange={e => setModeReason(e.target.value)} /></label></div>}
+          <label className="block text-sm">Должность<select disabled={manualPosition || unitId == null || positionsLoading || !!positionsError || positions.length === 0} className={field} value={positionValid ? positionId ?? "" : ""} onChange={e => setPositionId(Number(e.target.value) || null)}><option value="">{unitId == null ? "Сначала выберите отделение" : positionsLoading ? "Загрузка должностей…" : positionsError ? "Ошибка загрузки должностей" : positions.length === 0 ? "Нет доступных должностей" : "Выберите должность"}</option>{positions.map(row => <option key={row.id} value={row.id}>{row.label}</option>)}</select></label>
+          {positionHint && <p role={positionsError && !manualPosition ? "alert" : "status"} className={`text-sm ${positionsError && !manualPosition ? "text-red-700" : "text-amber-800"}`}>{positionHint}</p>}
+          {positionsError && !manualPosition && <button type="button" className="text-sm underline" onClick={() => setPositionReloadKey(key => key + 1)}>Повторить загрузку должностей</button>}
+          <button type="button" className="text-sm underline" onClick={() => setManualPosition(value => !value)}>{manualPosition ? "Выбрать должность из списка" : "Нет подходящей должности? Ввести вручную"}</button>
+          {manualPosition && <label className="block text-sm">Название должности вручную<input maxLength={500} className={field} value={newPositionName} onChange={e => setNewPositionName(e.target.value)} /></label>}
+          {manualPosition && <p className="text-xs text-zinc-600">Название сохранится в этом заявлении без связи со справочником должностей.</p>}
+          {manualPosition && <label className="block text-sm">После «на должность» (для текста заявления)<input maxLength={500} className={field} value={newPositionDocumentRu} onChange={e => setNewPositionDocumentRu(e.target.value)} placeholder="Например: старшего специалиста" /></label>}
           <div className="grid gap-2 sm:grid-cols-2"><label className="text-sm">Ставка<input className={field} type="number" min="0.01" max="2" step="0.01" value={rate} onChange={e => setRate(e.target.value)} /></label><label className="text-sm">Начало работы<input className={field} type="date" value={start} onChange={e => setStart(e.target.value)} /></label></div>
-          <button disabled={busy || unitId == null || positionId == null || (savedUnitId !== unitId && (targetMode === null || !modeReason.trim()))} className="rounded border px-3 py-2 text-sm" onClick={() => void saveConditions()}>Сохранить условия</button>
+          <button disabled={busy || !canSavePosition || (savedUnitId !== unitId && (targetMode === null || !modeReason.trim()))} className="rounded border px-3 py-2 text-sm" onClick={() => void saveConditions()}>Сохранить условия</button>
         </div></details>
         <div className="flex flex-wrap gap-2"><button className="rounded border px-3 py-2" onClick={() => setLocale("ru")}>Русский</button><button className="rounded border px-3 py-2" onClick={() => setLocale("kk")}>Қазақша</button><button className="rounded border px-3 py-2" onClick={openPrint}>Печать</button><button className="rounded border px-3 py-2" onClick={() => { void printElectronicHire(applicationId).then(setPrintText).catch(e => setError(message(e))); }}>Обновить после исправлений в ЛК</button></div>
         {printText && <pre className="whitespace-pre-wrap rounded border bg-zinc-50 p-5 font-serif text-base leading-7">{printText[locale]}</pre>}
@@ -228,7 +360,7 @@ export default function ElectronicHireApplicationDrawer({ open, onClose }: Props
         <div className="border-t pt-4"><button disabled={busy} className="rounded bg-zinc-900 px-4 py-2 text-sm text-white disabled:opacity-50" onClick={() => void createOrder()}>Сформировать приказ</button>
           {orderId && <p className="mt-2 text-sm">Проект приказа №{orderId} · <a className="underline" href={`/directory/personnel/orders?order_id=${orderId}`}>Открыть проект</a></p>}
           {notification && <p className="mt-2 text-sm">Уведомление: {notification}</p>}
-          {approvalMode === "electronic" && orderId && notification !== "sent" && <button className="mt-2 text-sm underline" onClick={() => { void retryElectronicHireNotification(applicationId).then(r => setNotification(r.status === "sent" ? "sent" : r.last_error || r.status)).catch(e => setError(message(e))); }}>Повторить отправку согласующему</button>}
+          {approvalMode === "electronic" && orderId && notification !== "sent" && <button className="mt-2 text-sm underline" onClick={() => { void retryElectronicHireNotification(applicationId).then(r => setNotification(r.status === "sent" ? "sent" : r.last_error || r.status)).catch(e => setError(message(e))); }}>Повторить отправку руководителю</button>}
         </div>
       </div>}
     </aside>

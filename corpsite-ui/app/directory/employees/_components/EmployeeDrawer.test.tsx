@@ -1,3 +1,4 @@
+import { employeeFixture } from "../_lib/employeeTestFixtures";
 // FILE: corpsite-ui/app/directory/employees/_components/EmployeeDrawer.test.tsx
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -18,7 +19,7 @@ vi.mock("@/lib/api", () => ({
   apiAuthMe: vi.fn(),
 }));
 
-const activeEmployee: EmployeeDetails = {
+const activeEmployee: EmployeeDetails = employeeFixture({
   id: 42,
   employee_id: 42,
   fio: "Иванов Иван Иванович",
@@ -28,7 +29,7 @@ const activeEmployee: EmployeeDetails = {
   date_to: null,
   position: { id: 3, name: "Заведующий отделением" },
   org_unit: { unit_id: 7, name: "Терапия" },
-} as EmployeeDetails;
+}) as EmployeeDetails;
 
 const employeeWithAccount: EmployeeDetails = {
   ...activeEmployee,

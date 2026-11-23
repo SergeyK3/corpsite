@@ -4,6 +4,7 @@ import * as React from "react";
 
 import {
   generatePersonnelOrderEditorial,
+  getPersonnelOrder,
   getPersonnelOrderEditorial,
   mapPersonnelOrdersApiError,
   patchPersonnelOrderEditorialBlock,
@@ -29,6 +30,7 @@ import {
 } from "../_lib/personnelOrderEditorialUi";
 import PersonnelOrderDocumentRequisitesPreview from "./PersonnelOrderDocumentRequisitesPreview";
 import {personnelOrderPositionOverride} from "../_lib/personnelOrderPositionOverride";
+import { PERSONNEL_ORDER_TERMINATION_REASONS } from "../_lib/personnelOrderTerminationReason";
 
 const GENERATE_CONFIRM_MESSAGE = [
   "Пересформировать текст приказа?",
@@ -110,6 +112,49 @@ function StructuredBasisBlockEditor({ item, block, editable, documents = [], onC
   }
   if (!editing) return <div className="space-y-2" data-testid="personnel-order-editorial-basis-block"><h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{ui.basis}</h4><div className="min-h-[2.5rem] whitespace-pre-wrap rounded-lg border border-zinc-200 bg-zinc-50/80 px-3 py-2 text-sm leading-relaxed text-zinc-800 dark:border-zinc-800 dark:bg-zinc-900/50 dark:text-zinc-200">{displayPersonnelOrderEditorialBlockText(block).trim() || "—"}</div>{editable ? <button type="button" onClick={() => setEditing(true)} className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm dark:border-zinc-700" data-testid="personnel-order-editorial-basis-edit">{ui.edit}</button> : null}</div>;
   return <div className="space-y-3" data-testid="personnel-order-editorial-basis-editor"><h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{ui.basis}</h4>{typeof imported?.source_text === "string" ? <p className="text-xs text-zinc-500">{ui.imported}: {imported.source_text}</p> : null}{entries.map((entry, index) => <div key={index} className="grid gap-2 rounded-lg border border-zinc-200 p-3 dark:border-zinc-800"><label className="text-sm">{ui.kind}<select value={entry.document_type} onChange={(e) => update(index, { document_type: e.target.value, basis_id: "", other_text: "" })} className="mt-1 w-full rounded border p-2"><option value="">{ui.empty}</option>{types.map((type) => <option key={type} value={type}>{basisTypeLabel(type, locale)}</option>)}<option value="OTHER">{ui.other}</option></select></label>{entry.document_type && entry.document_type !== "OTHER" ? <label className="text-sm">{ui.linked}<select value={entry.basis_id} onChange={(e) => update(index, { basis_id: e.target.value })} className="mt-1 w-full rounded border p-2"><option value="">{ui.empty}</option>{documents.filter((document) => document.document_type === entry.document_type && typeof document.basis_id === "string").map((document) => <option key={String(document.basis_id)} value={String(document.basis_id)}>{String((document.description as Record<string, unknown> | undefined)?.[locale] || (document.description as Record<string, unknown> | undefined)?.ru || (document.description as Record<string, unknown> | undefined)?.kk || document.basis_id)}</option>)}</select></label> : null}{(entry.document_type === "OTHER" || manualCorrection) ? <label className="text-sm">{ui.basis}<textarea value={entry.other_text} onChange={(e) => update(index, { other_text: e.target.value })} className="mt-1 w-full rounded border p-2" /></label> : null}</div>)}<div className="flex flex-wrap gap-2"><button type="button" onClick={() => setEntries((previous) => [...previous, { document_type: "", basis_id: "", other_text: "" }])} className="rounded border px-3 py-1.5 text-sm">{ui.add}</button><button type="button" onClick={() => setManualCorrection((value) => !value)} className="rounded border px-3 py-1.5 text-sm">{ui.manual}</button><button type="button" onClick={() => void save()} disabled={saving} className="rounded bg-zinc-900 px-3 py-1.5 text-sm text-white">{saving ? `${ui.save}…` : ui.save}</button><button type="button" onClick={() => setEditing(false)} className="rounded border px-3 py-1.5 text-sm">{ui.cancel}</button></div></div>;
+}
+
+function TerminationReasonEditor({item,editable,beforeSave,onChanged,onGenerated}: {
+  item:PersonnelOrderItem;
+  editable:boolean;
+  beforeSave?:()=>Promise<boolean>;
+  onChanged?:Props['onOrderChanged'];
+  onGenerated?:Props['onEditorialChanged'];
+}) {
+  const stored=typeof item.payload?.termination_reason==='string' ? item.payload.termination_reason : '';
+  const [reason,setReason]=React.useState(stored);
+  const [saved,setSaved]=React.useState(stored);
+  const [saving,setSaving]=React.useState(false);
+  const [error,setError]=React.useState('');
+  React.useEffect(()=>{setReason(stored);setSaved(stored);setError('');},[item.item_id,stored]);
+  if(item.item_type_code!=='TERMINATION')return null;
+  async function save(){
+    if(!editable || saving || !reason.trim() || reason===saved)return;
+    setSaving(true);setError('');
+    try{
+      if(beforeSave && !(await beforeSave()))throw new Error('Сначала сохраните изменения пункта.');
+      // Read after a pending item edit so changing the reason cannot discard
+      // other payload fields or a manually entered supporting document.
+      const current=(await getPersonnelOrder(item.order_id)).items.find(row=>row.item_id===item.item_id);
+      if(!current || current.item_type_code!=='TERMINATION' || current.item_status!=='ACTIVE')throw new Error('Пункт увольнения недоступен для изменения.');
+      const detail=await updatePersonnelOrderItem(item.order_id,item.item_id,{payload:{...current.payload,termination_reason:reason}});
+      setSaved(reason);onChanged?.(detail);
+      try{onGenerated?.(await generatePersonnelOrderEditorial(item.order_id));}
+      catch(err){setError(`Причина сохранена, но текст приказа не обновлён: ${mapPersonnelOrdersApiError(err,'Повторите формирование текста.')}`);}
+    }catch(err){setError(mapPersonnelOrdersApiError(err,'Не удалось сохранить причину расторжения.'));}
+    finally{setSaving(false);}
+  }
+  return <div className="space-y-2" data-testid={`personnel-order-termination-reason-${item.item_id}`}>
+    <label className="block text-sm font-medium">Причина расторжения трудового договора
+      <select aria-label="Причина расторжения трудового договора" value={reason} disabled={!editable||saving} onChange={event=>{setReason(event.target.value);setError('');}} className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950">
+        <option value="">Выберите причину</option>
+        {PERSONNEL_ORDER_TERMINATION_REASONS.map(entry=><option key={entry.code} value={entry.code}>{entry.ru.charAt(0).toLocaleUpperCase('ru-RU')+entry.ru.slice(1)}</option>)}
+        {reason && !PERSONNEL_ORDER_TERMINATION_REASONS.some(entry=>entry.code===reason) ? <option value={reason}>{reason}</option> : null}
+      </select>
+    </label>
+    {editable && reason!==saved ? <button type="button" disabled={saving||!reason.trim()} onClick={()=>void save()} className="rounded border border-zinc-300 px-3 py-1.5 text-sm disabled:opacity-50 dark:border-zinc-700">{saving?'Сохранение…':'Сохранить причину'}</button> : null}
+    {error ? <p role="alert" className="text-sm text-red-700">{error}</p> : null}
+  </div>;
 }
 
 function PositionTextOverrideEditor({ item, editable, onChanged, manualBody }: { item: PersonnelOrderItem; editable: boolean; onChanged?: Props["onOrderChanged"]; manualBody: boolean }) {
@@ -568,6 +613,13 @@ export default function PersonnelOrderEditorialTextEditor({
                   onSave={handleSave}
                   onReset={handleReset}
                 />
+                <TerminationReasonEditor
+                  item={items.find(item=>item.item_id===section.orderItemId)!}
+                  editable={canWrite && items.find(item=>item.item_id===section.orderItemId)?.item_status==='ACTIVE'}
+                  beforeSave={beforeGenerate}
+                  onChanged={onOrderChanged}
+                  onGenerated={next=>{setState(next);onEditorialChanged?.(next);}}
+                />
                 <BlockEditor
                   label={activeLocale === "kk" ? "Негіз (мәтін құжатта)" : "Основание (текст в документе)"}
                   block={section.basis}
@@ -586,6 +638,14 @@ export default function PersonnelOrderEditorialTextEditor({
               </div>
             );
           })}
+          <div className="space-y-2 border-t border-zinc-200 pt-4 dark:border-zinc-800" data-testid="personnel-order-editorial-requisites">
+            <h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Реквизиты документа</h4>
+            <PersonnelOrderDocumentRequisitesPreview
+              key={`${order.order_date ?? ""}:${order.signed_by_position ?? ""}:${order.signed_by_name ?? ""}`}
+              order={order}
+              locale={activeLocale}
+            />
+          </div>
         </div>
       ) : null}
     </section>

@@ -261,7 +261,7 @@ describe("ArchiveReviewPanel", () => {
   it.each([
     [null, "непроверенной"],
     ["NEEDS_CLARIFICATION" as const, "требующей уточнения"],
-  ])("offers review for a registrar on a %s row", async (reviewOutcome) => {
+  ])("offers review for a registrar on a %s row", async (reviewOutcome, _description) => {
     const item = { ...response().items[0], review_outcome: reviewOutcome };
     mockedListArchiveReview.mockResolvedValueOnce(response({ items: [item], total: 1 }));
 

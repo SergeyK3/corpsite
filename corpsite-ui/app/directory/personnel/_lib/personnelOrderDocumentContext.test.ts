@@ -14,6 +14,16 @@ it("loads explicit forms into one context without inventing a missing case",()=>
   expect(category.document_forms_ru.employee_full_name_genitive_ru).toBe("Saved genitive RU");
   expect(category.document_org_unit.document_genitive_ru).toBe("Saved unit RU");
 });
+it('proposes KK cases only for a recognized name order and keeps saved forms first',()=>{
+  const source={id:'7',fio:'Фидахметова Нургул Маметовна',document_forms_kk:{employee_full_name_genitive_kk:'Ручная сохранённая форма'}};
+  const context=resolvePersonnelDocumentContext(source);
+  expect(context.employeeName).toBe(source.fio);
+  expect(context.values.employee_full_name_dative_kk).toBe('Нургул Маметовна Фидахметоваға');
+  expect(context.values.employee_full_name_genitive_kk).toBe('Ручная сохранённая форма');
+  const manual=mergeDocumentContextValues({...context.values,employee_full_name_dative_kk:'Қолмен түзетілген'},context,context);
+  expect(manual.employee_full_name_dative_kk).toBe('Қолмен түзетілген');
+  expect(resolvePersonnelDocumentContext({id:'8',fio:'Айдар Нургул Төлеген'}).values.employee_full_name_dative_kk).toBe('');
+});
 it("preserves manual corrections and clears the relevant forms on a source change",()=>{
   const old=resolvePersonnelDocumentContext(employee);
   const manual={...old.values,employee_full_name_genitive_ru:"Manual name",position_document_genitive_ru:"Manual position"};

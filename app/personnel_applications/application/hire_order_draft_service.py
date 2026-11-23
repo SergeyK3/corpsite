@@ -189,7 +189,8 @@ def create_hire_order_draft_for_application(
             code="HIRE_DRAFT_NOT_ALLOWED",
         )
 
-    if app.intended_org_unit_id is None or app.intended_position_id is None:
+    if app.intended_org_unit_id is None or (app.intended_position_id is None and
+        not (electronic is not None and app.intended_vacancy_text and app.intended_vacancy_text.strip())):
         raise PersonnelApplicationHireOrderError(
             "Intended org unit and position are required to create HIRE draft.",
             code="HIRE_DRAFT_PLACEMENT_REQUIRED",
@@ -214,7 +215,15 @@ def create_hire_order_draft_for_application(
             "position_title_kk": electronic["position_kk"],
             "position_document_nominative_ru": electronic["position_document_ru"],
             "position_document_possessive_kk": electronic["position_document_kk"],
+            "position_resolution": electronic["position_resolution"],
         })
+        if electronic["position_resolution"] == "unmatched_manual":
+            payload.update({
+                "manual_position_name": electronic["manual_position_name"],
+                "manual_position_document_ru": electronic["manual_position_document_ru"],
+                "document_forms_ru": {"position_document_nominative_ru": electronic["manual_position_document_ru"]},
+                "hire_position_manual_forms": {"ru": True},
+            })
     order_id = _create_draft_hire_order(
         conn,
         application_id=application_id,

@@ -1,7 +1,20 @@
 import { describe, expect, it } from "vitest";
-import { calculateKazakhOrgUnitGenitive, calculateKazakhPersonForm, kazakhInflectWord } from "./kazakhDocumentForms";
+import { calculateKazakhDocumentName, calculateKazakhOrgUnitGenitive, calculateKazakhPersonForm, kazakhInflectWord } from "./kazakhDocumentForms";
 
 describe("Kazakh document form proposals", () => {
+  it('recognizes the surname-first source and proposes a surname-last document name with matching cases',()=>{
+    const source={fio:'Фидахметова Нургул Маметовна'};
+    expect(calculateKazakhDocumentName(source)).toEqual({value:'Нургул Маметовна Фидахметова',needsReview:false});
+    expect(calculateKazakhPersonForm(source,'dative').value).toBe('Нургул Маметовна Фидахметоваға');
+    expect(calculateKazakhPersonForm(source,'genitive').value).toBe('Нургул Маметовна Фидахметованың');
+    expect(source.fio).toBe('Фидахметова Нургул Маметовна');
+    expect(calculateKazakhDocumentName({fio:'Нургул Маметовна Фидахметова'}).value).toBe('Нургул Маметовна Фидахметова');
+  });
+  it('prefers the card name parts and leaves ambiguous strings for manual review',()=>{
+    expect(calculateKazakhDocumentName({fio:'Неоднозначная Строка',first_name:'Нургул',middle_name:'Маметовна',last_name:'Фидахметова'}).value).toBe('Нургул Маметовна Фидахметова');
+    expect(calculateKazakhDocumentName({fio:'Айдар Нургул Төлеген'})).toEqual({value:'',needsReview:true});
+    expect(calculateKazakhPersonForm({fio:'Айдар Нургул Төлеген'},'dative')).toEqual({value:'',needsReview:true});
+  });
   it("keeps an already saved genitive without declining it again",()=>{
     expect(calculateKazakhOrgUnitGenitive('терапия бөлімшесінің').value).toBe('терапия бөлімшесінің');
   });

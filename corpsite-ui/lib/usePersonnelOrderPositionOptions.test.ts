@@ -107,7 +107,7 @@ describe("usePersonnelOrderPositionOptions", () => {
     rerender({ orgUnitId: 73 });
 
     await waitFor(() => {
-      expect(loadScopedPositionOptions.mock.calls.length).toBe(scopedCallsAfterMount + 1);
+    expect(vi.mocked(loadScopedPositionOptions).mock.calls.length).toBe(scopedCallsAfterMount + 1);
     });
     expect(vi.mocked(loadGlobalPositionCatalogCached).mock.calls.length).toBe(globalCallsAfterMount);
   });

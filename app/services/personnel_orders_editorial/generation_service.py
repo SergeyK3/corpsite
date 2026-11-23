@@ -54,6 +54,7 @@ from app.services.personnel_orders_editorial.repository import (
     upsert_order_block,
 )
 from app.services.personnel_orders_editorial.write_lock import ensure_draft_writable
+from app.services.personnel_order_termination_reason import termination_basis_is_explicit
 
 
 def scope_allows(
@@ -125,6 +126,7 @@ def generate_editorial(
         ]
         bases: Dict[int, Dict[str, Any]] = {}
         unpaid_item_ids: list[int] = []
+        reasoned_termination_ids: list[int] = []
         for item in items:
             if bound and int(item["item_id"]) not in bound["items"]:
                 continue
@@ -133,13 +135,15 @@ def generate_editorial(
             item_type_code = str(item["item_type_code"]).strip().upper()
             if item_type_code == "LEAVE.UNPAID.GRANT":
                 unpaid_item_ids.append(int(item["item_id"]))
+            elif item_type_code == "TERMINATION" and (item.get("payload") or {}).get("termination_reason"):
+                reasoned_termination_ids.append(int(item["item_id"]))
             elif item_type_code not in {ORDER_TYPE_SUPPLEMENTARY_PAY, "PERSONAL_DATA_CHANGE", "SERVICE_LENGTH_CHANGE", "EDUCATION_INFORMATION_CHANGE"}:
                 bases[int(item["item_id"])] = ensure_default_basis(active_conn, item)
 
         # A normalized unpaid-leave basis is canonical.  Do not manufacture a
         # row before checking for it: only an actually absent row may fall back
         # to the legacy payload of an older draft.
-        bases.update(load_bases(active_conn, unpaid_item_ids))
+        bases.update(load_bases(active_conn, unpaid_item_ids + reasoned_termination_ids))
 
         for basis in bases.values():
             if basis.get("subject_employee_id") is not None:
@@ -244,11 +248,14 @@ def generate_editorial(
             item_ctx = build_item_ctx(item, employee_name)
             basis = bases.get(item_id)
             item_type_code = str(item["item_type_code"]).strip().upper()
-            if basis is None and item_type_code not in {ORDER_TYPE_SUPPLEMENTARY_PAY, "LEAVE.UNPAID.GRANT", "PERSONAL_DATA_CHANGE", "SERVICE_LENGTH_CHANGE", "EDUCATION_INFORMATION_CHANGE"}:
+            reasoned_termination = item_type_code == "TERMINATION" and bool(item_ctx.get("termination_reason"))
+            if basis is None and not reasoned_termination and item_type_code not in {ORDER_TYPE_SUPPLEMENTARY_PAY, "LEAVE.UNPAID.GRANT", "PERSONAL_DATA_CHANGE", "SERVICE_LENGTH_CHANGE", "EDUCATION_INFORMATION_CHANGE"}:
                 if scope and scope.get("item_id") is not None and int(scope["item_id"]) != item_id:
                     continue
                 basis = ensure_default_basis(active_conn, item)
                 bases[item_id] = basis
+            if reasoned_termination and not termination_basis_is_explicit(basis):
+                basis = None
             subject_id = basis.get("subject_employee_id") if basis else None
             subject_name = names.get(int(subject_id)) if subject_id is not None else employee_name
             basis_fact = {
@@ -258,12 +265,15 @@ def generate_editorial(
                 "childcare_payload": item_ctx.get("childcare_payload"),
                 "org_unit_name": item_ctx.get("org_unit_name"),
                 "basis_type": basis.get("basis_type") if basis else None,
+                "termination_reason": item_ctx.get("termination_reason"),
                 "subject_employee_id": subject_id,
                 "subject_employee_name": subject_name,
                 "document_date": iso_date(basis.get("document_date")) if basis else None,
                 "document_number": basis.get("document_number") if basis else None,
-                "free_text": basis.get("free_text") if basis else None,
+                "free_text": basis.get("free_text") if basis else (item_ctx.get("basis") if isinstance(item_ctx.get("basis"), str) else None),
             }
+            if reasoned_termination and basis_fact["free_text"]:
+                basis_fact["basis_type"] = "OTHER"
             if basis is None and item_type_code == "LEAVE.UNPAID.GRANT":
                 # Legacy drafts stored the application only in payload. Read
                 # it solely when no normalized basis row exists; new and
@@ -292,7 +302,9 @@ def generate_editorial(
                         continue
 
                     try:
-                        if bound and block_type in (ITEM_BLOCK_TYPE_BODY, ITEM_BLOCK_TYPE_BASIS):
+                        if reasoned_termination and block_type == ITEM_BLOCK_TYPE_BASIS:
+                            generated = generate_basis_text(locale, basis_fact)
+                        elif bound and block_type in (ITEM_BLOCK_TYPE_BODY, ITEM_BLOCK_TYPE_BASIS):
                             generated = template_result(bound["items"][item_id][f"{block_type}_template_{locale}"], f"item.{item_id}.{block_type}.{locale}", item_id)
                         elif block_type == ITEM_BLOCK_TYPE_BODY:
                             generated = generate_item_body(locale, item_ctx)

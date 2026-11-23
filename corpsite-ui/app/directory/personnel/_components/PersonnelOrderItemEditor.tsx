@@ -61,6 +61,7 @@ import {
 import { resolvePersonnelOrderDocumentForms, resolvePersonnelOrderOrgUnitForms, savedKazakhEmployeeNameForm } from "../_lib/personnelOrderDocumentForms";
 import { calculateKazakhOrgUnitGenitive, calculateKazakhPersonForm, firstNonEmpty } from "../_lib/kazakhDocumentForms";
 import PersonnelOrderDepartmentPicker from "./PersonnelOrderDepartmentPicker";
+import { PERSONNEL_ORDER_TERMINATION_REASONS } from "../_lib/personnelOrderTerminationReason";
 import PersonnelOrderHirePositionFields from "./PersonnelOrderHirePositionFields";
 import {hirePositionManualForms} from "../_lib/personnelOrderHirePosition";
 import PersonnelOrderHireDepartmentFields from "./PersonnelOrderHireDepartmentFields";
@@ -584,7 +585,7 @@ export default function PersonnelOrderItemEditor({
             err instanceof Error ? err.message : "Не удалось загрузить список сотрудников.",
           );
         }).finally(()=>{if(!cancelled){setEmployeeSearching(false);setEmployeeSearchFinished(true);}});
-    }, 0);
+    }, 250);
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
@@ -659,13 +660,14 @@ export default function PersonnelOrderItemEditor({
     ++employeeSelectionRevision.current;
     setEmployeeId("");setSelectedEmployeeId(null);setPendingNewEmployee(false);setChangingEmployee(false);
     const actor=manualSubjectWording(name);
-    const dativeRu=russianEmployeeDativeForOrder(actor),dativeKk=calculateKazakhPersonForm(actor,"dative").value;
+    const dativeRu=russianEmployeeDativeForOrder(actor),dativeProposal=calculateKazakhPersonForm(actor,"dative"),genitiveProposal=calculateKazakhPersonForm(actor,"genitive");
+    const dativeKk=dativeProposal.needsReview?"":dativeProposal.value;
     setPayloadDraft(previous=>({...previous,unresolved_subject:{full_name:name},person_id:"",assignment_id:undefined,
       document_department:blankDepartment(),document_position:undefined,
       allowance_recipient:previous.allowance_recipient?blankAllowanceRecipient():undefined,
       allowance:previous.allowance?{...previous.allowance,employee_dative_ru:dativeRu,employee_dative_kk:dativeKk}:undefined,
       employee_full_name_dative_ru:dativeRu,employee_full_name_dative_kk:dativeKk,
-      employee_full_name_genitive_ru:russianEmployeeGenitiveForOrder(actor),employee_full_name_genitive_kk:calculateKazakhPersonForm(actor,"genitive").value,
+      employee_full_name_genitive_ru:russianEmployeeGenitiveForOrder(actor),employee_full_name_genitive_kk:genitiveProposal.needsReview?"":genitiveProposal.value,
       employee_full_name_accusative_ru:savedRussianEmployeeNameForm(actor, "accusative")}));
   }
 
@@ -730,14 +732,16 @@ export default function PersonnelOrderItemEditor({
       const storedGenitive = explicitEmployeeKkNameForm(details, "employee_full_name_genitive_kk");
       const automaticDative = calculateKazakhPersonForm(details, "dative");
       const automaticGenitive = calculateKazakhPersonForm(details, "genitive");
+      const proposedDative = automaticDative.needsReview ? "" : automaticDative.value;
+      const proposedGenitive = automaticGenitive.needsReview ? "" : automaticGenitive.value;
       const calculated = new Set<string>();
       if (!storedOrgUnitGenitive && automaticOrgUnitGenitive.value) calculated.add("org_unit_document_genitive_kk");
-      if (!storedDative && automaticDative.value) calculated.add("employee_full_name_dative_kk");
-      if (!storedGenitive && automaticGenitive.value) calculated.add("employee_full_name_genitive_kk");
+      if (!storedDative && proposedDative) calculated.add("employee_full_name_dative_kk");
+      if (!storedGenitive && proposedGenitive) calculated.add("employee_full_name_genitive_kk");
       setCalculatedKkFields(calculated);
       setPayloadDraft((prev) => ({
         ...prev,
-        ...(prev.allowance ? {allowance:{...prev.allowance,employee_dative_ru:russianEmployeeDativeForOrder(details),employee_dative_kk:savedKazakhEmployeeNameForm(details,'dative')||automaticDative.value}} : {}),
+        ...(prev.allowance ? {allowance:{...prev.allowance,employee_dative_ru:russianEmployeeDativeForOrder(details),employee_dative_kk:savedKazakhEmployeeNameForm(details,'dative')||proposedDative}} : {}),
         document_department:prev.document_department?.unit?prev.document_department:departmentFromUnit(assignmentUnit),
         assignment_id:details.active_assignment_id??undefined,
         position_translation_status:details.position?.translation_status,
@@ -752,8 +756,8 @@ export default function PersonnelOrderItemEditor({
         org_unit_title_kk: assignmentUnit?.name_kk || "",
         position_document_nominative_ru: editedPositionForms.current.has("position_document_nominative_ru") ? prev.position_document_nominative_ru : positionForms.position_document_nominative_ru,
         position_document_possessive_kk: editedPositionForms.current.has("position_document_possessive_kk") ? prev.position_document_possessive_kk : positionForms.position_document_possessive_kk,
-        employee_full_name_dative_kk: itemTypeCode === "CONCURRENT_DUTY_START" ? prev.employee_full_name_dative_kk : firstNonEmpty(storedDative, automaticDative.value),
-        employee_full_name_genitive_kk: firstNonEmpty(storedGenitive, automaticGenitive.value),
+        employee_full_name_dative_kk: itemTypeCode === "CONCURRENT_DUTY_START" || manualEmployeeForms.current.has("employee_full_name_dative_kk") ? prev.employee_full_name_dative_kk : firstNonEmpty(storedDative, proposedDative),
+        employee_full_name_genitive_kk: manualEmployeeForms.current.has("employee_full_name_genitive_kk") ? prev.employee_full_name_genitive_kk : firstNonEmpty(storedGenitive, proposedGenitive),
         ...(itemTypeCode === "LEAVE.CHILDCARE.GRANT" ? { employee_full_name_dative_ru: savedRussianEmployeeNameForm(details, "dative"), employee_full_name_genitive_ru: ruGenitiveEdited.current ? prev.employee_full_name_genitive_ru : russianEmployeeGenitiveForOrder(details), position_document_nominative_ru: editedPositionForms.current.has("position_document_nominative_ru") ? prev.position_document_nominative_ru : positionForms.position_document_nominative_ru } : {}),
       }));
       if (itemTypeCode === "CONCURRENT_DUTY_START") fillConcurrentEmployeeForms(details);
@@ -775,14 +779,16 @@ export default function PersonnelOrderItemEditor({
       // detail request failure must not leave calculable name forms empty.
       const automaticDative = calculateKazakhPersonForm({ fio: option.full_name }, "dative");
       const automaticGenitive = calculateKazakhPersonForm({ fio: option.full_name }, "genitive");
+      const proposedDative = automaticDative.needsReview ? "" : automaticDative.value;
+      const proposedGenitive = automaticGenitive.needsReview ? "" : automaticGenitive.value;
       const calculated = new Set<string>();
-      if (automaticDative.value) calculated.add("employee_full_name_dative_kk");
-      if (automaticGenitive.value) calculated.add("employee_full_name_genitive_kk");
+      if (proposedDative) calculated.add("employee_full_name_dative_kk");
+      if (proposedGenitive) calculated.add("employee_full_name_genitive_kk");
       setCalculatedKkFields(calculated);
       setPayloadDraft((prev) => ({
         ...prev,
-        employee_full_name_dative_kk: automaticDative.value,
-        employee_full_name_genitive_kk: automaticGenitive.value,
+        employee_full_name_dative_kk: manualEmployeeForms.current.has("employee_full_name_dative_kk") ? prev.employee_full_name_dative_kk : proposedDative,
+        employee_full_name_genitive_kk: manualEmployeeForms.current.has("employee_full_name_genitive_kk") ? prev.employee_full_name_genitive_kk : proposedGenitive,
       }));
       setCurrentPlacement(null);
     }
@@ -953,7 +959,7 @@ export default function PersonnelOrderItemEditor({
   }
 
   function updatePayloadField<K extends keyof ItemPayloadDraft>(key: K, value: string) {
-    if (key === "employee_full_name_dative_ru" || key === "employee_full_name_dative_kk" || key === "employee_full_name_accusative_ru") manualEmployeeForms.current.add(key);
+    if (key === "employee_full_name_dative_ru" || key === "employee_full_name_dative_kk" || key === "employee_full_name_genitive_kk" || key === "employee_full_name_accusative_ru") manualEmployeeForms.current.add(key);
     if (key === "position_document_possessive_kk" || key === "position_document_nominative_ru" || key === "org_unit_document_genitive_kk") editedPositionForms.current.add(key);
     if (key === "employee_full_name_genitive_ru") ruGenitiveEdited.current = true;
     setCalculatedKkFields((previous) => { const next = new Set(previous); next.delete(String(key)); return next; });
@@ -1725,7 +1731,8 @@ export default function PersonnelOrderItemEditor({
                 className={FIELD_INPUT_CLASS}
               >
                 <option value="">Выберите причину</option>
-                <option value="EMPLOYEE_INITIATIVE">по инициативе работника / жұмыскердің бастамасы бойынша</option>
+                {PERSONNEL_ORDER_TERMINATION_REASONS.map(reason=><option key={reason.code} value={reason.code}>{reason.ru} / {reason.kk}</option>)}
+                {payloadDraft.termination_reason && !PERSONNEL_ORDER_TERMINATION_REASONS.some(reason=>reason.code===payloadDraft.termination_reason) ? <option value={payloadDraft.termination_reason}>{payloadDraft.termination_reason}</option> : null}
               </select>
               {terminationReasonSuggested ? <p className={FIELD_HINT_CLASS} data-testid="personnel-order-termination-reason-suggestion">Определено по основанию: личное заявление работника</p> : null}
           </FormField>

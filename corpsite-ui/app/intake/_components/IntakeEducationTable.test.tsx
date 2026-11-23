@@ -1,3 +1,4 @@
+import { intakeEducationFixture } from "../_lib/intakeTestFixtures";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import * as React from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -24,7 +25,7 @@ describe("IntakeEducationTable", () => {
     render(
       <IntakeEducationTable
         items={[
-          {
+          intakeEducationFixture({
             education_type: "basic",
             institution: "КазНУ",
             year_from: "2014-09-01",
@@ -33,7 +34,7 @@ describe("IntakeEducationTable", () => {
             qualification: "Врач",
             diploma_number: "AB-123456",
             document_type: "diploma",
-          },
+          }),
         ]}
         onChange={vi.fn()}
       />,
@@ -72,7 +73,7 @@ describe("IntakeEducationTable", () => {
     render(
       <IntakeEducationTable
         items={[
-          {
+          intakeEducationFixture({
             education_type: "basic",
             institution: "КазНУ",
             year_from: "2014-09-01",
@@ -80,7 +81,7 @@ describe("IntakeEducationTable", () => {
             specialty: "",
             qualification: "",
             diploma_number: "",
-          },
+          }),
         ]}
         onChange={onChange}
       />,
@@ -106,7 +107,7 @@ describe("IntakeEducationTable", () => {
     render(
       <IntakeEducationTable
         items={[
-          {
+          intakeEducationFixture({
             education_type: "basic",
             institution: "КазНУ",
             year_from: "",
@@ -114,7 +115,7 @@ describe("IntakeEducationTable", () => {
             specialty: "",
             qualification: "",
             diploma_number: "",
-          },
+          }),
         ]}
         onChange={onChange}
       />,
@@ -136,7 +137,7 @@ describe("IntakeEducationTable", () => {
   it("saves document type and number through onChange", () => {
     function StatefulEducationTable() {
       const [items, setItems] = React.useState([
-        {
+        intakeEducationFixture({
           education_type: "basic" as const,
           institution: "КазНУ",
           year_from: "",
@@ -145,7 +146,7 @@ describe("IntakeEducationTable", () => {
           qualification: "",
           document_type: "diploma" as const,
           diploma_number: "",
-        },
+        }),
       ]);
       return <IntakeEducationTable items={items} onChange={setItems} />;
     }
@@ -169,7 +170,7 @@ describe("IntakeEducationTable", () => {
     render(
       <IntakeEducationTable
         items={[
-          {
+          intakeEducationFixture({
             education_type: "basic",
             institution: "КазНМУ",
             year_from: "2014",
@@ -177,7 +178,7 @@ describe("IntakeEducationTable", () => {
             specialty: "",
             qualification: "",
             diploma_number: "",
-          },
+          }),
         ]}
         onChange={vi.fn()}
         focusTestId="intake-education-year-from-0"
@@ -192,7 +193,7 @@ describe("IntakeEducationTable across editor modes", () => {
   it("renders the same education table in public and on-behalf editors", () => {
     const payload = emptyIntakeDraftPayload();
     payload.education = [
-      {
+      intakeEducationFixture({
         education_type: "basic",
         institution: "КазНУ",
         year_from: "2014-09-01",
@@ -201,7 +202,7 @@ describe("IntakeEducationTable across editor modes", () => {
         qualification: "Врач",
         diploma_number: "AB-123456",
         document_type: "diploma",
-      },
+      }),
     ];
 
     const { unmount } = render(

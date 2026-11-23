@@ -58,14 +58,14 @@ export function usePersonnelOrderEmployeeSearch({enabled,initialEmployeeId,initi
  React.useEffect(()=>{
   if(!enabled||state.employee||state.manualName||state.loading||state.query.trim().length<2)return;
   let cancelled=false;const query=state.query.trim();dispatch({type:"searching"});
-  void getEmployees({q:query,status:"active",limit:10,offset:0}).then(result=>{
+  const timer=window.setTimeout(()=>{void getEmployees({q:query,status:"active",limit:10,offset:0}).then(result=>{
    if(cancelled)return;
    const ids=new Set<number>();
    const matches=mapEmployeesResponseToSearchOptions(result,{activeOnly:true}).filter(row=>{if(ids.has(row.employee_id))return false;ids.add(row.employee_id);return true;})
     .map(row=>result.items.find(employee=>Number(employee.id)===row.employee_id)!).filter(Boolean);
    dispatch({type:"matches",matches});
-  }).catch(()=>{if(!cancelled)dispatch({type:"error",error:"Не удалось выполнить поиск сотрудников. Повторите поиск."});});
-  return()=>{cancelled=true;};
+  }).catch(()=>{if(!cancelled)dispatch({type:"error",error:"Не удалось выполнить поиск сотрудников. Повторите поиск."});});},250);
+  return()=>{cancelled=true;window.clearTimeout(timer);};
  },[enabled,state.query,state.employee,state.manualName,state.loading]);
  React.useEffect(()=>()=>{++version.current;seeded.current=false;refreshed.current="";},[]);
  return {...state,input,select,confirmManual:()=>{++version.current;dispatch({type:"manual"});},clear:()=>input("")};

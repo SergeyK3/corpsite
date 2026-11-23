@@ -18,6 +18,7 @@ type UsePersonnelOrderPositionOptionsArgs = {
   orgGroupId: number | null;
   /** When true, skip global catalog and expose only scope=allowed positions for the unit. */
   allowedOnly?: boolean;
+  reloadKey?: number;
 };
 
 type UsePersonnelOrderPositionOptionsResult = {
@@ -26,18 +27,25 @@ type UsePersonnelOrderPositionOptionsResult = {
   scopedOptions: TaskOrgFilterOption[];
   globalOptions: TaskOrgFilterOption[];
   loading: boolean;
+  error: string | null;
 };
+
+const EMPTY_OPTIONS: TaskOrgFilterOption[] = [];
 
 export function usePersonnelOrderPositionOptions({
   enabled,
   orgUnitId,
   orgGroupId,
   allowedOnly = false,
+  reloadKey = 0,
 }: UsePersonnelOrderPositionOptionsArgs): UsePersonnelOrderPositionOptionsResult {
   const [globalOptions, setGlobalOptions] = React.useState<TaskOrgFilterOption[]>([]);
   const [globalLoading, setGlobalLoading] = React.useState(false);
   const [scopedOptions, setScopedOptions] = React.useState<TaskOrgFilterOption[]>([]);
   const [scopedLoading, setScopedLoading] = React.useState(false);
+  const [scopedRequestKey, setScopedRequestKey] = React.useState<string | null>(null);
+  const [scopedError, setScopedError] = React.useState<string | null>(null);
+  const requestKey = enabled && orgUnitId != null ? `${orgUnitId}:${reloadKey}` : null;
 
   React.useEffect(() => {
     if (!enabled || allowedOnly) {
@@ -69,11 +77,16 @@ export function usePersonnelOrderPositionOptions({
     if (!enabled || orgUnitId == null) {
       setScopedOptions([]);
       setScopedLoading(false);
+      setScopedRequestKey(null);
+      setScopedError(null);
       return;
     }
 
     let cancelled = false;
     setScopedLoading(true);
+    setScopedOptions([]);
+    setScopedRequestKey(null);
+    setScopedError(null);
 
     void loadScopedPositionOptions({
       org_unit_id: orgUnitId,
@@ -81,10 +94,17 @@ export function usePersonnelOrderPositionOptions({
       ...(orgUnitId == null && orgGroupId != null ? { org_group_id: orgGroupId } : {}),
     })
       .then((options) => {
-        if (!cancelled) setScopedOptions(options);
+        if (!cancelled) {
+          setScopedOptions(options);
+          setScopedRequestKey(requestKey);
+        }
       })
       .catch(() => {
-        if (!cancelled) setScopedOptions([]);
+        if (!cancelled) {
+          setScopedOptions([]);
+          setScopedRequestKey(requestKey);
+          setScopedError("Не удалось загрузить должности для отделения. Нажмите «Повторить загрузку должностей».");
+        }
       })
       .finally(() => {
         if (!cancelled) setScopedLoading(false);
@@ -93,14 +113,17 @@ export function usePersonnelOrderPositionOptions({
     return () => {
       cancelled = true;
     };
-  }, [enabled, orgGroupId, orgUnitId]);
+  }, [enabled, orgGroupId, orgUnitId, reloadKey]);
+
+  const currentScopedOptions = requestKey != null && scopedRequestKey === requestKey ? scopedOptions : EMPTY_OPTIONS;
+  const currentScopedError = requestKey != null && scopedRequestKey === requestKey ? scopedError : null;
 
   const positionGroups = React.useMemo(
     () =>
       allowedOnly
-        ? buildAllowedPositionSelectGroups(scopedOptions)
-        : buildPersonnelOrderPositionSelectGroups(scopedOptions, globalOptions),
-    [allowedOnly, scopedOptions, globalOptions],
+        ? buildAllowedPositionSelectGroups(currentScopedOptions)
+        : buildPersonnelOrderPositionSelectGroups(currentScopedOptions, globalOptions),
+    [allowedOnly, currentScopedOptions, globalOptions],
   );
 
   const allOptions = React.useMemo(
@@ -111,8 +134,9 @@ export function usePersonnelOrderPositionOptions({
   return {
     positionGroups,
     allOptions,
-    scopedOptions,
+    scopedOptions: currentScopedOptions,
     globalOptions,
-    loading: globalLoading || scopedLoading,
+    loading: globalLoading || scopedLoading || (requestKey != null && scopedRequestKey !== requestKey),
+    error: currentScopedError,
   };
 }

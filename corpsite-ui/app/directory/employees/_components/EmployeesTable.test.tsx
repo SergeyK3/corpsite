@@ -1,3 +1,4 @@
+import { employeeFixture } from "../_lib/employeeTestFixtures";
 // FILE: corpsite-ui/app/directory/employees/_components/EmployeesTable.test.tsx
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -14,7 +15,7 @@ describe("EmployeesTable actions", () => {
   });
 
   const baseProps = {
-    items: [{ employee_id: 42, fio: "Иванов Иван", status: "active", employment_rate: 1 }],
+    items: [employeeFixture({ employee_id: 42, fio: "Иванов Иван", status: "active", employment_rate: 1 })],
     total: 1,
     limit: 50,
     offset: 0,
@@ -25,9 +26,9 @@ describe("EmployeesTable actions", () => {
 
   it("shows the effective assignment type and an explicit missing value", () => {
     render(<EmployeesTable {...baseProps} managementView items={[
-      { employee_id: 42, fio: "Первый", status: "active", type_name: "Врачи" },
-      { employee_id: 43, fio: "Второй", status: "active", type_name: null },
-    ] as any} />);
+      employeeFixture({ employee_id: 42, fio: "Первый", status: "active", type_name: "Врачи" }),
+      employeeFixture({ employee_id: 43, fio: "Второй", status: "active", type_name: null }),
+    ]} />);
     expect(screen.getByRole("columnheader", { name: "Тип" })).toBeInTheDocument();
     expect(screen.getByText("Врачи")).toBeInTheDocument();
     expect(screen.getByText("Не указан")).toBeInTheDocument();
@@ -55,7 +56,7 @@ describe("EmployeesTable actions", () => {
     render(
       <EmployeesTable
         {...baseProps}
-        items={[{ employee_id: 42, person_id: 501, fio: "Иванов Иван", status: "active", employment_rate: 1 }]}
+        items={[employeeFixture({ employee_id: 42, person_id: 501, fio: "Иванов Иван", status: "active", employment_rate: 1 })]}
         onOpenEmployee={onOpenEmployee}
         managementView
         directPersonalCardNav
@@ -107,7 +108,7 @@ describe("EmployeesTable actions", () => {
     render(
       <EmployeesTable
         {...baseProps}
-        items={[{ fio: "Без ID", status: "active" }]}
+        items={[employeeFixture({ fio: "Без ID", status: "active" })]}
         managementView
         directPersonalCardNav
       />,
@@ -173,7 +174,7 @@ describe("EmployeesTable actions", () => {
     render(
       <EmployeesTable
         {...baseProps}
-        items={[{
+        items={[employeeFixture({
           employee_id: 42,
           person_id: 501,
           fio: "Архивный сотрудник",
@@ -187,7 +188,7 @@ describe("EmployeesTable actions", () => {
             order_number: null,
             order_date: null,
           },
-        }]}
+        })]}
         onOpenEmployee={onOpenEmployee}
         managementView
         directPersonalCardNav
@@ -203,7 +204,7 @@ describe("EmployeesTable actions", () => {
     render(
       <EmployeesTable
         {...baseProps}
-        items={[{
+        items={[employeeFixture({
           employee_id: 42,
           person_id: 501,
           fio: "Архивный сотрудник",
@@ -216,7 +217,7 @@ describe("EmployeesTable actions", () => {
             order_number: null,
             order_date: null,
           },
-        }]}
+        })]}
       />,
     );
 

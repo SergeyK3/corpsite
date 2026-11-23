@@ -95,7 +95,7 @@ describe("OrgUnitsAdminClient", () => {
   let unit101Active = true;
   let unit202Active = false;
 
-  function listForParams(params: { status?: string; q?: string } = {}) {
+  function listForParams(params: { status?: string; q?: string; offset?: number } = {}) {
     const all = sampleUnits.map((u) => {
       if (u.unit_id === 101) return { ...u, is_active: unit101Active };
       if (u.unit_id === 202) return { ...u, is_active: unit202Active };

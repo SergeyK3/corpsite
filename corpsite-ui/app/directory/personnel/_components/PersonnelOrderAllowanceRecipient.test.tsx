@@ -2,12 +2,37 @@ import {render,screen,fireEvent,waitFor,cleanup} from '@testing-library/react';
 import {afterEach,expect,it} from 'vitest';
 import {useState} from 'react';
 import type {EmployeeDTO} from '@/app/directory/employees/_lib/types';
-import PersonnelOrderAllowanceRecipient,{blankAllowanceRecipient,recipientBlockers} from './PersonnelOrderAllowanceRecipient';
+import PersonnelOrderAllowanceRecipient,{blankAllowanceRecipient,recipientBlockers,recipientFromAssignment,type AllowanceRecipient} from './PersonnelOrderAllowanceRecipient';
 import {russianEmployeeDativeForOrder,russianEmployeeGenitiveForOrder,russianReferenceCase} from '../_lib/personnelOrderRussianWording';
 const employee={id:'1',fio:'Турымов Алибек Рапхатович',last_name:'Турымов',first_name:'Алибек',middle_name:'Рапхатович',has_current_assignment:true,position:{id:6,name:'Врач',document_possessive_kk:'дәрігері'},org_unit:{unit_id:42,name:'Терапевтическое отделение',document_genitive_kk:'терапия бөлімшесінің'},assignments:[]} as unknown as EmployeeDTO;
 afterEach(cleanup);
-it('calculates source cases and keeps saved forms unchanged',()=>{
- expect(russianReferenceCase('Менеджер','dative')).toBe('менеджеру');
+it('does not turn a pending position title into an approved allowance document form',()=>{
+ const pending:EmployeeDTO={...employee,position:{...employee.position,id:employee.position?.id??6,name:'Процедурная медсестра',name_kk:'Емшара мейіргері',document_form_status:'needs_review'}};
+ expect(recipientFromAssignment(pending).position_kk).toBe('');
+ expect(recipientFromAssignment(pending).position_ru).toBe('Процедурная медсестра');
+});
+it('requires manual review for calculated KK forms and keeps an entered correction',async()=>{
+ const ambiguous={...employee,position:{id:6,name:'Медицинская сестра',name_kk:'Мейіргер'},org_unit:{unit_id:42,name:'Отдел кадров',name_kk:'Кадрлар-әкімшілік бөлімі'},assignments:[]} as unknown as EmployeeDTO;
+ const proposed=recipientFromAssignment(ambiguous);
+ expect(proposed.position_kk).toBe('');
+ expect(proposed.org_unit_kk).toBe('');
+ expect(recipientBlockers(proposed,ambiguous)).toContain('Уточните поле «Должность получателя (KK)».');
+ expect(recipientBlockers(proposed,ambiguous)).toContain('Уточните поле «Подразделение получателя (KK)».');
+ function Form(){const[value,setValue]=useState(blankAllowanceRecipient);return <PersonnelOrderAllowanceRecipient employee={ambiguous} value={value} onChange={setValue}/>;}
+ render(<Form/>);
+ await waitFor(()=>expect(screen.getByLabelText('Подразделение получателя (RU)')).toHaveValue('Отдел кадров'));
+ expect(screen.getByLabelText('Подразделение получателя (KK)')).toHaveValue('');
+ fireEvent.change(screen.getByLabelText('Подразделение получателя (KK)'),{target:{value:'Қолмен тексерілген бөлімнің'}});
+ expect(screen.getByLabelText('Подразделение получателя (KK)')).toHaveValue('Қолмен тексерілген бөлімнің');
+ const saved={...ambiguous,position:{...ambiguous.position,document_possessive_kk:'Сақталған лауазымы'},org_unit:{...ambiguous.org_unit,document_genitive_kk:'Сақталған бөлімнің'}} as EmployeeDTO;
+ expect(recipientFromAssignment(saved)).toMatchObject({position_kk:'Сақталған лауазымы',org_unit_kk:'Сақталған бөлімнің'});
+});
+it('keeps automatic KK unit filling when its calculated form needs no review',()=>{
+ const unambiguous={...employee,org_unit:{unit_id:42,name:'Отдел кадров',name_kk:'Кадрлар бөлімі'}} as unknown as EmployeeDTO;
+ expect(recipientFromAssignment(unambiguous).org_unit_kk).toBe('Кадрлар бөлімінің');
+});
+ it('calculates source cases and keeps saved forms unchanged',()=>{
+expect(russianReferenceCase('Менеджер','dative')).toBe('менеджеру');
  expect(russianReferenceCase('Машинист по стирке белья','dative')).toBe('машинисту по стирке белья');
  expect(russianReferenceCase('Машинист по стирке белья','genitive')).toBe('машиниста по стирке белья');
  expect(russianEmployeeDativeForOrder(employee)).toBe('Турымову Алибеку Рапхатовичу');

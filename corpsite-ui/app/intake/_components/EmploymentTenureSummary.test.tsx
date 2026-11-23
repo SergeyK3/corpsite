@@ -1,3 +1,4 @@
+import { intakeEmploymentFixture } from "../_lib/intakeTestFixtures";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -44,13 +45,13 @@ describe("EmploymentTenureSummary", () => {
     render(
       <EmploymentTenureSummary
         items={[
-          {
+          intakeEmploymentFixture({
             organization: "R1",
             position: "",
             year_from: "2005-06-18",
             year_to: "2008-09-01",
             reason_for_leaving: "",
-          },
+          }),
         ]}
         calculation={sampleCalculation}
       />,
@@ -64,20 +65,20 @@ describe("EmploymentTenureSummary", () => {
     render(
       <EmploymentTenureSummary
         items={[
-          {
+          intakeEmploymentFixture({
             organization: "R1",
             position: "",
             year_from: "2005-06-18",
             year_to: "2008-09-01",
             reason_for_leaving: "",
-          },
-          {
+          }),
+          intakeEmploymentFixture({
             organization: "Broken",
             position: "",
             year_from: "",
             year_to: "",
             reason_for_leaving: "",
-          },
+          }),
         ]}
         calculation={sampleCalculation}
       />,

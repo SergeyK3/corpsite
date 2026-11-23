@@ -10,7 +10,8 @@ from app.services.personnel_order_rate_format import format_template_rate
 from app.services.personnel_orders_editorial.service import get_editorial_state
 from app.services.personnel_orders_editorial.basis_policy import resolve_basis_required
 from app.services.personnel_orders_editorial.position_dictionary import document_nominative_personnel_order_position, localized_personnel_order_position
-from app.services.personnel_order_termination_reason import termination_reason_text
+from app.services.personnel_order_termination_reason import termination_basis_is_explicit, termination_reason_basis_text, termination_reason_text
+from app.services.personnel_order_kazakh_name import document_name_kk
 from app.services.personnel_order_unpaid_leave_contract import UnpaidLeaveContractError, format_leave_date, period_clause_kk, period_clause_ru, period_text, unpaid_leave_period
 
 _FIELDS=("title_ru","title_kk","preamble_ru","preamble_kk","body_template_ru","body_template_kk","basis_template_ru","basis_template_kk")
@@ -119,7 +120,10 @@ def _values(conn:Any,item:Mapping[str,Any],template:Mapping[str,Any]|None=None):
   for field,value in forms.items():
    if not value:
     warnings.append({"code":"KK_DOCUMENT_FORM_MISSING","message":f"Missing confirmed document form: {field}."}); missing.append(field)
- values={"employee.full_name":_name(payload,employee),"employee.full_name_dative_ru":_document_form_ru(payload,"employee.full_name_dative_ru"),"position.title_ru":posru,"position.document_nominative_ru":document_nominative_personnel_order_position(posru),"position.title_kk":poskk,"org_unit.title_ru":unitru,"org_unit.title_kk":unitkk,**forms,"effective_date":str(item.get("effective_date") or ""),"effective_date_local":str(item.get("effective_date") or ""),"termination.reason.ru":termination_reason_text(payload.get("termination_reason") or payload.get("reason"),"ru"),"termination.reason.kk":termination_reason_text(payload.get("termination_reason") or payload.get("reason"),"kk"),"termination.unused_leave_days":str(payload.get("unused_leave_days") or ""),"basis":str(payload.get("basis") or "")}
+ canonical_name=_name(payload,employee)
+ name_snapshot=payload.get("employee")
+ name_parts=name_snapshot.get("name") if isinstance(name_snapshot,Mapping) else None
+ values={"employee.full_name":canonical_name,"employee.full_name.kk":document_name_kk(canonical_name,name=name_parts if isinstance(name_parts,Mapping) else None),"employee.full_name_dative_ru":_document_form_ru(payload,"employee.full_name_dative_ru"),"position.title_ru":posru,"position.document_nominative_ru":document_nominative_personnel_order_position(posru),"position.title_kk":poskk,"org_unit.title_ru":unitru,"org_unit.title_kk":unitkk,**forms,"effective_date":str(item.get("effective_date") or ""),"effective_date_local":str(item.get("effective_date") or ""),"termination.reason.ru":termination_reason_text(payload.get("termination_reason") or payload.get("reason"),"ru"),"termination.reason.kk":termination_reason_text(payload.get("termination_reason") or payload.get("reason"),"kk"),"termination.unused_leave_days":str(payload.get("unused_leave_days") or ""),"basis":str(payload.get("basis") or "")}
  if str(item["item_type_code"]) == "HIRE":
   from app.services.personnel_order_hire_terms import hire_rate, hire_basis_text
   try: values['rate']=str(hire_rate(payload['employment_rate'])) if payload.get('employment_rate') not in (None,'') else ''
@@ -309,9 +313,41 @@ def _preview(conn,order_id,*,lock=True):
  for item in items:
   item_template=templates[int(item["item_id"])]
   warnings,missing_data=[],[]
+
+
+def render_item_template(conn:Any,item:Mapping[str,Any],template:Mapping[str,Any],values:Mapping[str,str], *, item_only:bool=False):
+ """Respect an explicit termination document, otherwise show the selected reason."""
+ payload=item.get('payload') or {}
+ reason=payload.get('termination_reason')
+ if str(item.get('item_type_code') or '').upper() != 'TERMINATION' or not reason:
+  return _render(template,values,item_only=item_only)
+ # All eight fields remain valid during rendering. This copy never edits a
+ # published version or an order's saved template snapshot.
+ rendering_template={**template,'basis_template_ru':'{{termination.reason}}','basis_template_kk':'{{termination.reason}}'}
+ rendered=_render(rendering_template,values,item_only=item_only)
+ basis=conn.execute(text('SELECT basis_type,subject_employee_id,document_date,document_number,free_text FROM public.personnel_order_item_bases WHERE order_item_id=:id'),{'id':item['item_id']}).mappings().first()
+ explicit=termination_basis_is_explicit(basis)
+ manual_text=str((basis or {}).get('free_text') or '').strip() if explicit else ''
+ if not manual_text and not explicit and isinstance(payload.get('basis'),str):manual_text=payload['basis'].strip()
+ if explicit and not manual_text:
+  from app.services.personnel_orders_editorial.generators import generate_basis_text
+  fact={'item_type_code':'TERMINATION','basis_type':basis['basis_type'],'subject_employee_id':basis.get('subject_employee_id'),
+        'subject_employee_name':values.get('employee.full_name'),'document_date':str(basis.get('document_date') or ''),
+        'document_number':basis.get('document_number'),'free_text':basis.get('free_text')}
+  for locale in ('ru','kk'):rendered[f'basis_template_{locale}']=generate_basis_text(locale,fact)['generated_text']
+ else:
+  for locale in ('ru','kk'):rendered[f'basis_template_{locale}']=manual_text or termination_reason_basis_text(reason,locale)
+ return rendered
+def _blocks(conn,order_id,item_ids):
+ return conn.execute(text("SELECT editorial_block_id block_id,'ORDER' scope,NULL::bigint order_item_id,locale,block_type,generated_text,override_text,revision FROM public.personnel_order_editorial_blocks WHERE order_id=:id UNION ALL SELECT item_editorial_block_id,'ITEM',order_item_id,locale,block_type,generated_text,override_text,revision FROM public.personnel_order_item_editorial_blocks WHERE order_item_id=ANY(:items)"),{"id":order_id,"items":item_ids}).mappings().all()
+def _preview(conn,order_id,*,lock=True):
+ order,items,templates=_order(conn,order_id,lock=lock); template=templates[int(items[0]["item_id"])]; combined=len({t["template_version_id"] for t in templates.values()})>1 or order["order_type_code"]=="COMPOSITE"; item_ids=[int(x["item_id"]) for x in items]; entries=[]
+ for item in items:
+  item_template=templates[int(item["item_id"])]
+  warnings,missing_data=[],[]
   try:
    values,warnings,missing_data=_values(conn,item,item_template)
-   rendered=_render(item_template,values,item_only=combined)
+   rendered=render_item_template(conn,item,item_template,values,item_only=combined)
   except TemplateApplicationError as exc:
    missing_data.append(str(exc)); rendered={"body_template_ru":"","body_template_kk":"","basis_template_ru":"","basis_template_kk":""}
   entries.append({"order_item_id":int(item["item_id"]),"item_number":int(item["item_number"]),"template":{key:item_template[key] for key in ("template_version_id","version_number","item_type_code")},"current":{},"proposed":{"body_ru":rendered["body_template_ru"],"body_kk":rendered["body_template_kk"],"basis_ru":rendered["basis_template_ru"],"basis_kk":rendered["basis_template_kk"]},"warnings":warnings,"missing_data":missing_data,"blocked":bool(missing_data)})

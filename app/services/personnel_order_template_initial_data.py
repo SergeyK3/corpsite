@@ -37,7 +37,7 @@ INITIAL_TEXTS_BY_TYPE: Final[dict[str, InitialTexts]] = {'HIRE': {'title_ru': '�
                                      'дней неиспользованного трудового отпуска.',
                  'body_template_kk': '{{org_unit.title_kk}} бөлімшесінің {{position.title_kk}} қызметкері '
                                      '{{employee.full_name}} еңбек шарты {{effective_date}} бастап '
-                                     'бұзылсын.\n'
+                                     'бұзылсын. Жұмыстан босату себебі: {{termination.reason}}.\n'
                                      '\n'
                                      'Бухгалтерлік есеп бөлімі пайдаланылмаған еңбек демалысының '
                                      '{{termination.unused_leave_days}} күнтізбелік күніне есеп айырысу жүргізсін.',

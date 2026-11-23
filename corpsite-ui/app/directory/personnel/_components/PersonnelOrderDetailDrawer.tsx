@@ -706,6 +706,7 @@ export default function PersonnelOrderDetailDrawer({
               <section>
                 <h3 className="mb-3 text-sm font-semibold text-zinc-900 dark:text-zinc-100">Действия</h3>
                 <PersonnelOrderLifecycleActions
+                  unmatchedPosition={Boolean(detail?.items.some(item => item.item_type_code === "HIRE" && item.payload?.position_resolution === "unmatched_manual"))}
                   order={order}
                   itemCount={detail?.items.length || 0}
                   linkedEventCount={linkedEventCount}

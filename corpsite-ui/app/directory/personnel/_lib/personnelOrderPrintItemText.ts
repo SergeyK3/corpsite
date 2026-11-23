@@ -11,6 +11,8 @@ import type { LocalizedText } from "./personnelOrderPrintLocalized";
 import { resolveLocalizedText } from "./personnelOrderPrintLocalized";
 import { resolvePersonnelOrderPositionText } from "./personnelOrderPositionDictionary";
 import { russianEmployeeForOrder, russianOrderAssignment, savedRussianEmployeeNameForm } from "./personnelOrderRussianWording";
+import { personnelOrderTerminationReasonText } from "./personnelOrderTerminationReason";
+import { calculateKazakhDocumentName } from "./kazakhDocumentForms";
 
 export type PersonnelOrderPrintItemContext = {
   itemNumber: number;
@@ -73,7 +75,7 @@ function renderTransfer(ctx: PersonnelOrderPrintItemContext, lang: "kk" | "ru"):
 function renderTermination(ctx: PersonnelOrderPrintItemContext, lang: "kk" | "ru"): string {
   const fio = dash(ctx.employeeName);
   const date = formatPersonnelOrderPrintDate(ctx.effectiveDate, lang);
-  const reason = optionalReason(ctx.terminationReason);
+  const reason = optionalReason(personnelOrderTerminationReasonText(ctx.terminationReason, lang));
   if (lang === "kk") {
     const reasonPart = reason ? ` Негіздеме: ${reason}.` : "";
     return `${fio} ${date} бастап жұмыстан босатылсын.${reasonPart}`;
@@ -189,24 +191,29 @@ export function renderPersonnelOrderPrintItemText(
   }
   const type = String(ctx.itemTypeCode || "").trim().toUpperCase();
   const renderOne = (lang: "kk" | "ru") => {
+    const employee = ctx.payload.employee;
+    const name = employee && typeof employee === "object" ? (employee as Record<string, unknown>).name : null;
+    const parts = name && typeof name === "object" ? name as Record<string, unknown> : {};
+    const proposed = lang === "kk" ? calculateKazakhDocumentName({fio: ctx.employeeName, ...parts}) : null;
+    const view = proposed && !proposed.needsReview ? {...ctx, employeeName: proposed.value} : ctx;
     let text: string;
     switch (type) {
       case "HIRE":
-        text = renderHire(ctx, lang); break;
+        text = renderHire(view, lang); break;
       case "TRANSFER":
-        text = renderTransfer(ctx, lang); break;
+        text = renderTransfer(view, lang); break;
       case "TERMINATION":
-        text = renderTermination(ctx, lang); break;
+        text = renderTermination(view, lang); break;
       case "CONCURRENT_DUTY_START":
-        text = renderConcurrentStart(ctx, lang); break;
+        text = renderConcurrentStart(view, lang); break;
       case "CONCURRENT_DUTY_END":
-        text = renderConcurrentEnd(ctx, lang); break;
+        text = renderConcurrentEnd(view, lang); break;
       case "SUPPLEMENTARY_PAY":
-        text = renderSupplementaryPay(ctx, lang); break;
+        text = renderSupplementaryPay(view, lang); break;
       case "RETURN_FROM_CHILDCARE_LEAVE":
-        text = renderReturnFromChildcareLeave(ctx, lang); break;
+        text = renderReturnFromChildcareLeave(view, lang); break;
       default:
-        text = renderGeneric(ctx, lang);
+        text = renderGeneric(view, lang);
     }
     return text;
   };

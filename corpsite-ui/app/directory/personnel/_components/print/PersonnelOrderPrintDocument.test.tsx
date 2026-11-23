@@ -154,7 +154,7 @@ describe("PersonnelOrderPrintDocument", () => {
     expect(ack).toHaveTextContent("Петрова А.");
     expect(ack).toHaveTextContent("12.07.2026");
     expect(screen.getByTestId("personnel-order-print-executor")).toHaveTextContent("Исполнитель: М. Умерзакова");
-    expect(screen.getByTestId("personnel-order-print-items")).toHaveTextContent("Стаж работы ещё не определён.");
+    expect(screen.getByTestId("personnel-order-print-items")).not.toHaveTextContent("Стаж работы ещё не определён.");
   });
 
   it("uses scoped print document class without Times on toolbar", () => {

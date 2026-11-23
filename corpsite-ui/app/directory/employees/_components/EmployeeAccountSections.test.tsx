@@ -1,3 +1,4 @@
+import { employeeFixture } from "../_lib/employeeTestFixtures";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -42,11 +43,11 @@ describe("EmployeeAccountSections provisioning UX", () => {
   });
 
   it("shows pending account message and create button when user is missing", async () => {
-    vi.mocked(getEmployee).mockResolvedValue({
+    vi.mocked(getEmployee).mockResolvedValue(employeeFixture({
       employee_id: 100,
       fio: "Козгамбаева Ляззат",
       user: null,
-    } as Awaited<ReturnType<typeof getEmployee>>);
+    }) as Awaited<ReturnType<typeof getEmployee>>);
 
     render(<EmployeeAccountSections employeeId="100" showEvents={false} showTelegram={false} />);
 
@@ -57,7 +58,7 @@ describe("EmployeeAccountSections provisioning UX", () => {
   });
 
   it("shows existing account confirmation without create button", async () => {
-    vi.mocked(getEmployee).mockResolvedValue({
+    vi.mocked(getEmployee).mockResolvedValue(employeeFixture({
       employee_id: 100,
       fio: "Козгамбаева Ляззат",
       user: {
@@ -65,7 +66,7 @@ describe("EmployeeAccountSections provisioning UX", () => {
         role_name: "DEP role",
         is_active: true,
       },
-    } as Awaited<ReturnType<typeof getEmployee>>);
+    }) as Awaited<ReturnType<typeof getEmployee>>);
 
     render(<EmployeeAccountSections employeeId="100" showEvents={false} showTelegram={false} />);
 
@@ -79,7 +80,7 @@ describe("EmployeeAccountSections provisioning UX", () => {
 
   it("opens role edit drawer and saves updated role", async () => {
     vi.mocked(getEmployee)
-      .mockResolvedValueOnce({
+      .mockResolvedValueOnce(employeeFixture({
         employee_id: 100,
         fio: "Макибаева",
         user: {
@@ -89,8 +90,8 @@ describe("EmployeeAccountSections provisioning UX", () => {
           role_name: "Руководитель ОВЭиПД",
           is_active: true,
         },
-      } as Awaited<ReturnType<typeof getEmployee>>)
-      .mockResolvedValueOnce({
+      }) as Awaited<ReturnType<typeof getEmployee>>)
+      .mockResolvedValueOnce(employeeFixture({
         employee_id: 100,
         fio: "Макибаева",
         user: {
@@ -100,7 +101,7 @@ describe("EmployeeAccountSections provisioning UX", () => {
           role_name: "Руководитель отдела кадров",
           is_active: true,
         },
-      } as Awaited<ReturnType<typeof getEmployee>>);
+      }) as Awaited<ReturnType<typeof getEmployee>>);
 
     vi.mocked(updateUserRole).mockResolvedValue({
       user_id: 361,
@@ -129,11 +130,11 @@ describe("EmployeeAccountSections provisioning UX", () => {
   });
 
   it("auto-opens user create drawer when initialUserCreateOpen is true", async () => {
-    vi.mocked(getEmployee).mockResolvedValue({
+    vi.mocked(getEmployee).mockResolvedValue(employeeFixture({
       employee_id: 100,
       fio: "Козгамбаева Ляззат",
       user: null,
-    } as Awaited<ReturnType<typeof getEmployee>>);
+    }) as Awaited<ReturnType<typeof getEmployee>>);
 
     render(
       <EmployeeAccountSections
@@ -150,11 +151,11 @@ describe("EmployeeAccountSections provisioning UX", () => {
   });
 
   it("does not auto-open user creation when an account already exists", async () => {
-    vi.mocked(getEmployee).mockResolvedValue({
+    vi.mocked(getEmployee).mockResolvedValue(employeeFixture({
       employee_id: 100,
       fio: "Тестовый сотрудник",
       user: { user_id: 361, login: "test.user", role_id: 5, role_name: "Общий доступ", is_active: true },
-    } as Awaited<ReturnType<typeof getEmployee>>);
+    }) as Awaited<ReturnType<typeof getEmployee>>);
 
     render(
       <EmployeeAccountSections
@@ -171,11 +172,11 @@ describe("EmployeeAccountSections provisioning UX", () => {
   });
 
   it("opens user create drawer from CTA button", async () => {
-    vi.mocked(getEmployee).mockResolvedValue({
+    vi.mocked(getEmployee).mockResolvedValue(employeeFixture({
       employee_id: 100,
       fio: "Козгамбаева Ляззат",
       user: null,
-    } as Awaited<ReturnType<typeof getEmployee>>);
+    }) as Awaited<ReturnType<typeof getEmployee>>);
 
     render(<EmployeeAccountSections employeeId="100" showEvents={false} showTelegram={false} />);
 
@@ -191,7 +192,7 @@ describe("EmployeeAccountSections provisioning UX", () => {
   });
 
   it("shows account summary in readOnly but allows role edit when allowRoleEdit is true", async () => {
-    vi.mocked(getEmployee).mockResolvedValue({
+    vi.mocked(getEmployee).mockResolvedValue(employeeFixture({
       employee_id: 100,
       fio: "Макибаева",
       user: {
@@ -201,7 +202,7 @@ describe("EmployeeAccountSections provisioning UX", () => {
         role_name: "Руководитель ОВЭиПД",
         is_active: true,
       },
-    } as Awaited<ReturnType<typeof getEmployee>>);
+    }) as Awaited<ReturnType<typeof getEmployee>>);
 
     render(
       <EmployeeAccountSections
@@ -224,7 +225,7 @@ describe("EmployeeAccountSections provisioning UX", () => {
   });
 
   it("hides role edit in readOnly when allowRoleEdit is false", async () => {
-    vi.mocked(getEmployee).mockResolvedValue({
+    vi.mocked(getEmployee).mockResolvedValue(employeeFixture({
       employee_id: 100,
       fio: "Макибаева",
       user: {
@@ -234,7 +235,7 @@ describe("EmployeeAccountSections provisioning UX", () => {
         role_name: "Руководитель ОВЭиПД",
         is_active: true,
       },
-    } as Awaited<ReturnType<typeof getEmployee>>);
+    }) as Awaited<ReturnType<typeof getEmployee>>);
 
     render(
       <EmployeeAccountSections

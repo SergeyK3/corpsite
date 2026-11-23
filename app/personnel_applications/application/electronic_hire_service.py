@@ -14,6 +14,8 @@ from sqlalchemy.engine import Connection
 
 from app.services.personnel_orders_editorial.generators import _format_rate_value
 from app.medical_org_groups import SLUG_CLINICAL, SLUG_PARACLINICAL, group_by_id
+from app.services.org_unit_allowed_positions_service import allowed_link_exists
+from app.personnel_applications.application.envelope_projection import sync_envelope_intended_projection
 
 
 class ElectronicHireError(ValueError):
@@ -22,23 +24,74 @@ class ElectronicHireError(ValueError):
         self.code = code
 
 
+def require_unit_group(conn: Connection, *, org_unit_id: int, org_group_id: int | None = None) -> int:
+    """Resolve the same inherited group used by the shared unit selector."""
+    rows = conn.execute(text("""
+        WITH RECURSIVE lineage AS (
+            SELECT unit_id, parent_unit_id, group_id, is_active, 0 AS depth
+            FROM public.org_units WHERE unit_id=:unit
+            UNION ALL
+            SELECT parent.unit_id, parent.parent_unit_id, parent.group_id,
+                   parent.is_active, child.depth + 1
+            FROM public.org_units parent
+            JOIN lineage child ON parent.unit_id=child.parent_unit_id
+            WHERE child.depth < 20
+        )
+        SELECT group_id, is_active, depth FROM lineage ORDER BY depth
+    """), {"unit": org_unit_id}).mappings().all()
+    if not rows or not rows[0]["is_active"]:
+        raise ElectronicHireError("Выбранное отделение недоступно.", "ORG_UNIT_NOT_AVAILABLE")
+    resolved = next((int(row["group_id"]) for row in rows if row["group_id"] is not None), None)
+    if resolved is None or (org_group_id is not None and resolved != org_group_id):
+        raise ElectronicHireError("Группа отделений не соответствует отделению.", "ORG_GROUP_MISMATCH")
+    return resolved
+
+
+def require_allowed_position(conn: Connection, *, org_unit_id: int, position_id: int) -> None:
+    """Use the same active unit-position links as the order editor's allowed list."""
+    if not allowed_link_exists(conn, org_unit_id=org_unit_id, position_id=position_id):
+        raise ElectronicHireError(
+            "Выбранная должность недоступна в этом отделении.", "POSITION_NOT_ALLOWED_IN_UNIT"
+        )
+
+
+def validate_hire_position_input(conn: Connection, *, org_unit_id: int, position_id: int | None,
+                                 manual_position_name: str | None,
+                                 manual_position_document_ru: str | None = None) -> tuple[int | None, str | None, str | None]:
+    """Keep catalog choices and unmatched manual titles separate."""
+    name = " ".join((manual_position_name or "").split())
+    if bool(position_id) == bool(name):
+        raise ElectronicHireError("Выберите должность или введите название вручную.", "POSITION_REQUIRED")
+    if position_id is not None:
+        require_allowed_position(conn, org_unit_id=org_unit_id, position_id=position_id)
+        return position_id, None, None
+    if len(name) > 500:
+        raise ElectronicHireError("Название должности слишком длинное.", "POSITION_NAME_TOO_LONG")
+    document_ru = " ".join((manual_position_document_ru or "").split())
+    if not document_ru or document_ru.casefold() == name.casefold() or len(document_ru) > 500:
+        raise ElectronicHireError(
+            "Укажите форму должности после «на должность».", "POSITION_FORM_REQUIRED"
+        )
+    return None, name, document_ru
+
+
 def load_electronic_hire(conn: Connection, application_id: int, *, lock: bool = False) -> dict[str, Any]:
     row = conn.execute(text(f"""
         SELECT a.application_id, a.person_id, a.application_source, a.status,
                a.application_received_at, a.intended_org_group_id,
-               a.intended_org_unit_id, a.intended_position_id,
+               a.intended_org_unit_id, a.intended_position_id, a.intended_vacancy_text AS manual_position_name,
                a.intended_employment_rate, a.personnel_order_id,
                a.contact_mobile_phone, a.contact_email,
-               e.planned_start_date, e.candidate_checked_at, e.conditions_version, e.approval_mode,
+               e.planned_start_date, e.candidate_checked_at, e.conditions_version, e.approval_mode, e.manual_position_document_ru,
                p.full_name, p.iin,
                ou.name AS org_unit_ru,
                NULLIF(to_jsonb(ou)->>'name_kk', '') AS org_unit_kk,
                NULLIF(to_jsonb(ou)->>'document_genitive_ru', '') AS org_unit_genitive_ru,
                NULLIF(to_jsonb(ou)->>'document_genitive_kk', '') AS org_unit_genitive_kk,
-               pos.name AS position_ru, pos.type_code AS position_type_code,
+               COALESCE(pos.name, a.intended_vacancy_text) AS position_ru, pos.type_code AS position_type_code,
                ou.group_id AS org_unit_group_id,
-               NULLIF(to_jsonb(pos)->>'name_kk', '') AS position_kk,
-               NULLIF(to_jsonb(pos)->>'document_nominative_ru', '') AS position_document_ru,
+               COALESCE(NULLIF(to_jsonb(pos)->>'name_kk', ''), a.intended_vacancy_text) AS position_kk,
+               COALESCE(NULLIF(to_jsonb(pos)->>'document_nominative_ru', ''), e.manual_position_document_ru) AS position_document_ru,
                NULLIF(to_jsonb(pos)->>'document_possessive_kk', '') AS position_document_kk
         FROM public.personnel_applications a
         JOIN public.electronic_hire_applications e USING (application_id)
@@ -50,17 +103,26 @@ def load_electronic_hire(conn: Connection, application_id: int, *, lock: bool = 
     """), {"id": application_id}).mappings().first()
     if row is None:
         raise ElectronicHireError("Электронное заявление не найдено.", "APPLICATION_NOT_FOUND")
-    return dict(row)
+    result = dict(row)
+    result["position_resolution"] = (
+        "matched_manual" if result["intended_position_id"] is not None and result["manual_position_name"]
+        else "catalog" if result["intended_position_id"] is not None else "unmatched_manual"
+    )
+    return result
 
 
 def conditions(application: dict[str, Any]) -> dict[str, Any]:
     rate = application.get("intended_employment_rate")
-    return {
+    result = {
         "org_unit_id": application.get("intended_org_unit_id"),
         "position_id": application.get("intended_position_id"),
         "employment_rate": str(Decimal(str(rate)).normalize()) if rate is not None else None,
         "planned_start_date": str(application.get("planned_start_date")) if application.get("planned_start_date") else None,
     }
+    if application.get("manual_position_name"):
+        result["manual_position_name"] = application["manual_position_name"]
+        result["manual_position_document_ru"] = application.get("manual_position_document_ru")
+    return result
 
 
 def conditions_hash(application: dict[str, Any]) -> str:
@@ -155,6 +217,8 @@ def require_current_approval(conn: Connection, order_id: int) -> None:
     if row is None:
         raise ElectronicHireError("Приказ о приёме не связан с электронным заявлением.", "APPLICATION_REQUIRED")
     application = load_electronic_hire(conn, int(row["application_id"]))
+    if application["position_resolution"] == "unmatched_manual":
+        raise ElectronicHireError("Должность требует сопоставления со справочником.", "POSITION_RECONCILIATION_REQUIRED")
     items = conn.execute(text("""
         SELECT effective_date, payload FROM public.personnel_order_items
         WHERE order_id=:id AND item_type_code='HIRE' AND item_status='ACTIVE'
@@ -168,6 +232,9 @@ def require_current_approval(conn: Connection, order_id: int) -> None:
               "position_id": payload.get("position_id"),
               "employment_rate": str(Decimal(str(payload.get("employment_rate"))).normalize()) if payload.get("employment_rate") is not None else None,
               "planned_start_date": str(item["effective_date"]) if item["effective_date"] else None}
+    if application.get("manual_position_name"):
+        actual["manual_position_name"] = payload.get("manual_position_name")
+        actual["manual_position_document_ru"] = payload.get("manual_position_document_ru")
     if actual != expected or int(payload.get("person_id") or 0) != int(application["person_id"]):
         raise ElectronicHireError("Условия проекта отличаются от согласованного заявления.", "ORDER_CONDITIONS_MISMATCH")
     if application["approval_mode"] == "paper":
@@ -191,6 +258,11 @@ def order_has_hire_item(conn: Connection, order_id: int) -> bool:
 
 def render_application(conn: Connection, application_id: int) -> dict[str, str]:
     app = load_electronic_hire(conn, application_id)
+    if app["position_resolution"] == "matched_manual":
+        app["position_ru"] = app["manual_position_name"]
+        app["position_kk"] = app["manual_position_name"]
+        app["position_document_ru"] = app["manual_position_document_ru"]
+        app["position_document_kk"] = None
     rate = _format_rate_value(app["intended_employment_rate"])
     start = app["planned_start_date"]
     if not start or not app["org_unit_ru"] or not app["position_ru"]:
@@ -225,9 +297,10 @@ def render_application(conn: Connection, application_id: int) -> dict[str, str]:
     }
 
 
-def update_conditions(conn: Connection, application_id: int, *, org_unit_id: int, position_id: int,
+def update_conditions(conn: Connection, application_id: int, *, org_unit_id: int, position_id: int | None,
                       employment_rate: Decimal, planned_start_date: date,
-                      actor_user_id: int | None = None, mode_change_reason: str | None = None) -> dict[str, Any]:
+                      actor_user_id: int | None = None, mode_change_reason: str | None = None,
+                      manual_position_name: str | None = None, manual_position_document_ru: str | None = None) -> dict[str, Any]:
     app = load_electronic_hire(conn, application_id, lock=True)
     if app["status"] in {"completed", "cancelled", "withdrawn"}:
         raise ElectronicHireError("Заявление закрыто.", "APPLICATION_CLOSED")
@@ -238,9 +311,22 @@ def update_conditions(conn: Connection, application_id: int, *, org_unit_id: int
             raise ElectronicHireError("Условия можно менять только до публикации приказа.", "ORDER_ALREADY_PUBLISHED")
     if not (Decimal("0") < employment_rate <= Decimal("2")):
         raise ElectronicHireError("Ставка должна быть больше нуля и не выше двух.", "RATE_INVALID")
+    org_group_id = require_unit_group(conn, org_unit_id=org_unit_id)
+    position_id, manual_position_name, manual_position_document_ru = validate_hire_position_input(
+        conn, org_unit_id=org_unit_id, position_id=position_id,
+        manual_position_name=manual_position_name, manual_position_document_ru=manual_position_document_ru,
+    )
+    if app["position_resolution"] == "unmatched_manual" and position_id is not None:
+        raise ElectronicHireError("Должность требует сопоставления со справочником.", "POSITION_RECONCILIATION_REQUIRED")
+    if app["position_resolution"] == "matched_manual" and position_id is not None:
+        manual_position_name = app["manual_position_name"]
+        manual_position_document_ru = app["manual_position_document_ru"]
     requested = {"org_unit_id": org_unit_id, "position_id": position_id,
                  "employment_rate": str(Decimal(str(employment_rate)).normalize()),
                  "planned_start_date": str(planned_start_date)}
+    if manual_position_name:
+        requested["manual_position_name"] = manual_position_name
+        requested["manual_position_document_ru"] = manual_position_document_ru
     if conditions(app) == requested:
         return app
     new_mode = app["approval_mode"]
@@ -250,16 +336,19 @@ def update_conditions(conn: Connection, application_id: int, *, org_unit_id: int
         new_mode = configured_approval_mode(conn, org_unit_id)
     conn.execute(text("""
         UPDATE public.personnel_applications
-        SET intended_org_unit_id=:unit, intended_position_id=:position,
+        SET intended_org_group_id=:group_id, intended_org_unit_id=:unit, intended_position_id=:position,
+            intended_vacancy_text=:manual_name,
             intended_employment_rate=:rate, updated_at=now()
         WHERE application_id=:id
-    """), {"unit": org_unit_id, "position": position_id, "rate": employment_rate, "id": application_id})
+    """), {"group_id": org_group_id, "unit": org_unit_id, "position": position_id, "manual_name": manual_position_name, "rate": employment_rate, "id": application_id})
+    sync_envelope_intended_projection(conn, int(app["person_id"]))
     conn.execute(text("""
         UPDATE public.electronic_hire_applications
-        SET planned_start_date=:start, conditions_version=conditions_version+1, candidate_checked_at=NULL,
+        SET planned_start_date=:start, manual_position_document_ru=:manual_document,
+            conditions_version=conditions_version+1, candidate_checked_at=NULL,
             candidate_checked_by_user_id=NULL, approval_mode=:mode, updated_at=now()
         WHERE application_id=:id
-    """), {"start": planned_start_date, "mode": new_mode, "id": application_id})
+    """), {"start": planned_start_date, "manual_document": manual_position_document_ru, "mode": new_mode, "id": application_id})
     if int(app["intended_org_unit_id"]) != org_unit_id:
         conn.execute(text("""
             INSERT INTO public.hire_approval_mode_audit
@@ -277,12 +366,28 @@ def update_conditions(conn: Connection, application_id: int, *, org_unit_id: int
         if item is None:
             raise ElectronicHireError("Пункт проекта приказа не найден.", "ORDER_ITEM_NOT_FOUND")
         payload = dict(item["payload"] or {})
-        payload.update({"org_unit_id": org_unit_id, "position_id": position_id,
+        payload.update({"org_group_id": org_group_id, "org_unit_id": org_unit_id,
                         "employment_rate": float(employment_rate),
                         "source_org_unit_name": updated["org_unit_ru"],
                         "source_position_name": updated["position_ru"],
                         "org_unit_title_kk": updated["org_unit_kk"],
-                        "position_title_kk": updated["position_kk"]})
+                        "position_title_kk": updated["position_kk"],
+                        "position_resolution": updated["position_resolution"],
+                        "position_document_nominative_ru": updated["position_document_ru"],
+                        "document_forms_ru": {"position_document_nominative_ru": updated["position_document_ru"]},
+                        "hire_position_manual_forms": {"ru": position_id is None}})
+        if position_id is None:
+            payload.pop("position_id", None)
+            payload["manual_position_name"] = manual_position_name
+            payload["manual_position_document_ru"] = manual_position_document_ru
+        else:
+            payload["position_id"] = position_id
+            if manual_position_name is None:
+                payload.pop("manual_position_name", None)
+                payload.pop("manual_position_document_ru", None)
+            else:
+                payload["manual_position_name"] = manual_position_name
+                payload["manual_position_document_ru"] = manual_position_document_ru
         conn.execute(text("""
             UPDATE public.personnel_order_items
             SET effective_date=:start, payload=CAST(:payload AS jsonb)
