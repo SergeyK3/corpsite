@@ -23,7 +23,7 @@ export const dynamic = "force-dynamic";
 const MAX_PDF_BYTES = 15 * 1024 * 1024;
 
 type RouteParams = {
-  params: Promise<{ orderId: string }> | { orderId: string };
+  params: Promise<{ orderId: string }>;
 };
 
 function jsonError(status: number, code: string, message: string): NextResponse {
