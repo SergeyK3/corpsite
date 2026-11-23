@@ -46,6 +46,8 @@ export default function ElectronicHireApplicationDrawer({ open, onClose }: Props
   const [error, setError] = React.useState("");
   const [uploaded, setUploaded] = React.useState("");
   const [existing, setExisting] = React.useState<Array<{application_id: number; full_name: string; status: string}>>([]);
+  const [existingLoadError, setExistingLoadError] = React.useState(false);
+  const [existingReloadKey, setExistingReloadKey] = React.useState(0);
   const [orderId, setOrderId] = React.useState<number | null>(null);
   const [notification, setNotification] = React.useState("");
   const { options: units, loading: unitsLoading, error: unitsError } = useOrgUnitScopeOptions(null, open);
@@ -55,6 +57,17 @@ export default function ElectronicHireApplicationDrawer({ open, onClose }: Props
   const canSavePosition = unitId != null && (manualPosition
     ? newPositionName.trim().length > 0 && newPositionDocumentRu.trim().length > 0
     : positionValid);
+  const positionHint = manualPosition
+    ? "Выбрано ручное название. Список должностей отключён; вернитесь к выбору из справочника при необходимости."
+    : unitId == null
+      ? "Сначала выберите отделение."
+      : positionsLoading
+        ? "Загружаем должности для выбранного отделения…"
+        : positionsError
+          ? positionsError
+          : positions.length === 0
+            ? "В этом отделении нет доступных справочных должностей. Введите название вручную и отправьте его на уточнение."
+            : null;
 
   React.useEffect(() => {
     if (!manualPosition && positionId != null && unitId != null && !positionsLoading && !positionsError && !positions.some(row => row.id === positionId)) {
@@ -62,7 +75,15 @@ export default function ElectronicHireApplicationDrawer({ open, onClose }: Props
     }
   }, [manualPosition, positionId, unitId, positionsLoading, positionsError, positions]);
 
-  React.useEffect(() => { if (open) void listElectronicHireApplications().then(result => setExisting(result.items)).catch(() => {}); }, [open]);
+  React.useEffect(() => {
+    if (!open) return;
+    let active = true;
+    setExistingLoadError(false);
+    void listElectronicHireApplications()
+      .then(result => { if (active) setExisting(result.items); })
+      .catch(() => { if (active) { setExisting([]); setExistingLoadError(true); } });
+    return () => { active = false; };
+  }, [open, existingReloadKey]);
 
   React.useEffect(() => {
     if (!open || query.trim().length < 2) { setMatches([]); return; }
@@ -180,6 +201,7 @@ export default function ElectronicHireApplicationDrawer({ open, onClose }: Props
     <aside className="h-full w-full max-w-2xl overflow-y-auto border-l border-zinc-200 bg-white p-6 text-zinc-900 shadow-xl">
       <div className="mb-5 flex items-start justify-between gap-4"><div><h2 className="text-xl font-semibold">Заявление о приёме на работу</h2><p className="text-sm text-zinc-600">Электронное заявление и планируемые условия приёма</p></div><button onClick={onClose} className="rounded border px-3 py-1">Закрыть</button></div>
       {error && <p role="alert" className="mb-4 rounded bg-red-50 p-3 text-sm text-red-800">{error}</p>}
+      {existingLoadError && <div role="alert" className="mb-4 rounded bg-red-50 p-3 text-sm text-red-800">Не удалось загрузить заявления. Сервис приёма на работу может быть недоступен. <button type="button" className="underline" onClick={() => setExistingReloadKey(key => key + 1)}>Повторить загрузку заявлений</button></div>}
       {applicationId == null ? <form onSubmit={create} className="space-y-4">
         {existing.length > 0 && <div className="rounded border bg-zinc-50 p-3 text-sm"><h3 className="mb-2 font-medium">Незавершённые заявления</h3><ul className="space-y-1">{existing.map(row => <li key={row.application_id}><button type="button" className="underline" onClick={() => void openExisting(row.application_id)}>№{row.application_id} · {row.full_name}</button></li>)}</ul></div>}
         <label className="block text-sm">Поиск среди ранее уволенных<input className={field} value={query} onChange={e => setQuery(e.target.value)} placeholder="ФИО или ИИН" /></label>
@@ -187,10 +209,11 @@ export default function ElectronicHireApplicationDrawer({ open, onClose }: Props
         <div className="grid gap-3 sm:grid-cols-2"><label className="text-sm">ИИН<input required minLength={12} maxLength={12} className={field} value={iin} onChange={e => setIin(e.target.value)} /></label><label className="text-sm">ФИО кандидата<input required className={field} value={fullName} onChange={e => setFullName(e.target.value)} /></label></div>
         <label className="block text-sm">Дата рождения<input type="date" className={field} value={birthDate} onChange={e => setBirthDate(e.target.value)} /></label>
         <div className="grid gap-3 sm:grid-cols-2"><label className="text-sm">Дата заявления<input type="date" required className={field} value={received} onChange={e => setReceived(e.target.value)} /></label><label className="text-sm">Планируемая дата начала работы<input type="date" required className={field} value={start} onChange={e => setStart(e.target.value)} /></label></div>
-        <label className="block text-sm">Отделение<select required disabled={unitsLoading || !!unitsError} className={field} value={unitId ?? ""} onChange={e => setUnitId(Number(e.target.value) || null)}><option value="">{unitsLoading ? "Загрузка отделений…" : unitsError ? "Ошибка загрузки отделений" : "Выберите отделение"}</option>{units.map(row => <option key={row.unit_id} value={row.unit_id}>{row.name}</option>)}</select></label>
+        <label className="block text-sm">Отделение<select required disabled={unitsLoading || !!unitsError} className={field} value={unitId ?? ""} onChange={e => { setUnitId(Number(e.target.value) || null); setPositionId(null); }}><option value="">{unitsLoading ? "Загрузка отделений…" : unitsError ? "Ошибка загрузки отделений" : "Выберите отделение"}</option>{units.map(row => <option key={row.unit_id} value={row.unit_id}>{row.name}</option>)}</select></label>
         {unitsError && <p role="alert" className="text-sm text-red-700">{unitsError}</p>}
         <label className="block text-sm">Должность<select required={!manualPosition} disabled={manualPosition || unitId == null || positionsLoading || !!positionsError || positions.length === 0} className={field} value={positionValid ? positionId ?? "" : ""} onChange={e => setPositionId(Number(e.target.value) || null)}><option value="">{unitId == null ? "Сначала выберите отделение" : positionsLoading ? "Загрузка должностей…" : positionsError ? "Ошибка загрузки должностей" : positions.length === 0 ? "Нет доступных должностей" : "Выберите должность"}</option>{positions.map(row => <option key={row.id} value={row.id}>{row.label}</option>)}</select></label>
-        {positionsError && <p role="alert" className="text-sm text-red-700">{positionsError}</p>}
+        {positionHint && <p role={positionsError && !manualPosition ? "alert" : "status"} className={`text-sm ${positionsError && !manualPosition ? "text-red-700" : "text-amber-800"}`}>{positionHint}</p>}
+        {positionsError && !manualPosition && <button type="button" className="text-sm underline" onClick={() => setPositionReloadKey(key => key + 1)}>Повторить загрузку должностей</button>}
         <button type="button" className="text-sm underline" onClick={() => setManualPosition(value => !value)}>{manualPosition ? "Выбрать должность из списка" : "Нет подходящей должности? Ввести вручную"}</button>
         {manualPosition && <label className="block text-sm">Название должности вручную<input required maxLength={500} className={field} value={newPositionName} onChange={e => setNewPositionName(e.target.value)} /></label>}
         {manualPosition && <p className="text-xs text-zinc-600">Название сохранится в этом заявлении без связи со справочником должностей.</p>}
@@ -212,10 +235,11 @@ export default function ElectronicHireApplicationDrawer({ open, onClose }: Props
           <a className="underline" href={`/directory/personnel/position-reconciliation?request_id=${review.request_id}`}>Показать историю и изменения</a>
         </section>}
         <details className="rounded border p-3"><summary className="cursor-pointer font-medium">Изменить условия приёма</summary><div className="mt-3 space-y-3">
-          <label className="block text-sm">Отделение<select disabled={unitsLoading || !!unitsError} className={field} value={unitId ?? ""} onChange={e => setUnitId(Number(e.target.value) || null)}><option value="">{unitsLoading ? "Загрузка отделений…" : unitsError ? "Ошибка загрузки отделений" : "Выберите отделение"}</option>{units.map(row => <option key={row.unit_id} value={row.unit_id}>{row.name}</option>)}</select></label>
+          <label className="block text-sm">Отделение<select disabled={unitsLoading || !!unitsError} className={field} value={unitId ?? ""} onChange={e => { setUnitId(Number(e.target.value) || null); setPositionId(null); }}><option value="">{unitsLoading ? "Загрузка отделений…" : unitsError ? "Ошибка загрузки отделений" : "Выберите отделение"}</option>{units.map(row => <option key={row.unit_id} value={row.unit_id}>{row.name}</option>)}</select></label>
           {unitsError && <p role="alert" className="text-sm text-red-700">{unitsError}</p>}
           <label className="block text-sm">Должность<select disabled={manualPosition || unitId == null || positionsLoading || !!positionsError || positions.length === 0} className={field} value={positionValid ? positionId ?? "" : ""} onChange={e => setPositionId(Number(e.target.value) || null)}><option value="">{unitId == null ? "Сначала выберите отделение" : positionsLoading ? "Загрузка должностей…" : positionsError ? "Ошибка загрузки должностей" : positions.length === 0 ? "Нет доступных должностей" : "Выберите должность"}</option>{positions.map(row => <option key={row.id} value={row.id}>{row.label}</option>)}</select></label>
-          {positionsError && <p role="alert" className="text-sm text-red-700">{positionsError}</p>}
+          {positionHint && <p role={positionsError && !manualPosition ? "alert" : "status"} className={`text-sm ${positionsError && !manualPosition ? "text-red-700" : "text-amber-800"}`}>{positionHint}</p>}
+          {positionsError && !manualPosition && <button type="button" className="text-sm underline" onClick={() => setPositionReloadKey(key => key + 1)}>Повторить загрузку должностей</button>}
           <button type="button" className="text-sm underline" onClick={() => setManualPosition(value => !value)}>{manualPosition ? "Выбрать должность из списка" : "Нет подходящей должности? Ввести вручную"}</button>
           {manualPosition && <label className="block text-sm">Название должности вручную<input maxLength={500} className={field} value={newPositionName} onChange={e => setNewPositionName(e.target.value)} /></label>}
           {manualPosition && <p className="text-xs text-zinc-600">Название сохранится в этом заявлении без связи со справочником должностей.</p>}

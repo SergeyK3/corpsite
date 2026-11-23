@@ -103,7 +103,7 @@ export function usePersonnelOrderPositionOptions({
         if (!cancelled) {
           setScopedOptions([]);
           setScopedRequestKey(requestKey);
-          setScopedError("Не удалось загрузить должности. Повторите выбор отделения.");
+          setScopedError("Не удалось загрузить должности для отделения. Нажмите «Повторить загрузку должностей».");
         }
       })
       .finally(() => {
