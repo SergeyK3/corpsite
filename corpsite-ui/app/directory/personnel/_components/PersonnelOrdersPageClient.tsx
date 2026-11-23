@@ -2,6 +2,7 @@
 import PersonnelOrderDateFilter from "./PersonnelOrderDateFilter";
 
 import * as React from "react";
+import { apiFetchJson } from "@/lib/api";
 import ExportExcelButton from "@/components/ExportExcelButton";
 import { allExportPages, type ExcelTable } from "@/lib/tableExport";
 import { formatPersonnelOrderDate, formatPersonnelOrderNumber } from "../_lib/personnelOrdersApi.client";
@@ -87,6 +88,8 @@ export default function PersonnelOrdersPageClient() {
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [createOpen, setCreateOpen] = React.useState(false);
   const [applicationOpen, setApplicationOpen] = React.useState(false);
+  const [canResolvePositions, setCanResolvePositions] = React.useState(false);
+  React.useEffect(() => { void apiFetchJson<{can_resolve: boolean}>("/directory/electronic-hire/position-reconciliation/capabilities").then(result => setCanResolvePositions(result.can_resolve)).catch(() => {}); }, []);
   const [toast, setToast] = React.useState<string | null>(null);
   const [employeeQuery, setEmployeeQuery] = React.useState("");
   const [filterResetKey, setFilterResetKey] = React.useState(0);
@@ -287,6 +290,7 @@ export default function PersonnelOrdersPageClient() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          {canResolvePositions && <a href="/directory/personnel/position-reconciliation" className="rounded-lg border border-amber-500 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-950">Должности требуют сопоставления</a>}
           <a href="/directory/personnel/hire-approvals" className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium dark:border-zinc-700">Визы руководителя</a>
           <button type="button" onClick={() => setCreateOpen(true)}
             className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium dark:border-zinc-700"

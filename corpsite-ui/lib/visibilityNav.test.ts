@@ -59,6 +59,20 @@ describe("visibilityNav", () => {
     expect(canAccessDirectoryRoute("/tasks", observerWithAssignment)).toBe(false);
   });
 
+  it("lets an authenticated department head open the scoped hire approval page", () => {
+    expect(canAccessDirectoryRoute("/directory/personnel/hire-approvals", observerPlain)).toBe(true);
+    expect(canAccessDirectoryRoute("/directory/personnel/hire-approvals", null)).toBe(false);
+    expect(canAccessDirectoryRoute("/directory/personnel/orders", observerPlain)).toBe(false);
+  });
+
+  it("allows the Person card route for card readers without opening the HR section", () => {
+    const cardRoute = "/directory/personnel/persons/100/card";
+    expect(canAccessDirectoryRoute(cardRoute, observerWithAssignment)).toBe(false);
+    expect(canAccessDirectoryRoute(cardRoute, { ...observerWithAssignment, has_personnel_card_read: true })).toBe(true);
+    expect(canAccessDirectoryRoute("/directory/personnel/journal", { ...observerWithAssignment, has_personnel_card_read: true })).toBe(false);
+    expect(canAccessDirectoryRoute(cardRoute, hrHead)).toBe(true);
+  });
+
   it("canAccessDirectoryRoute allows position cabinet stub sections without task read access", () => {
     expect(canAccessDirectoryRoute("/dashboards", observerWithAssignment)).toBe(true);
     expect(canAccessDirectoryRoute("/profile/personal-card", observerWithAssignment)).toBe(true);

@@ -1,7 +1,11 @@
 """Electronic HIRE contract on the disposable PostgreSQL database."""
 from datetime import UTC, date, datetime
 from decimal import Decimal
+from contextlib import nullcontext
+from types import SimpleNamespace
 from uuid import uuid4
+
+import json
 
 import pytest
 from sqlalchemy import text
@@ -12,6 +16,8 @@ from app.personnel_applications.application.hire_order_draft_service import crea
 from app.personnel_applications.application.registration_service import register_personnel_application
 from app.personnel_applications.domain.errors import PersonnelApplicationHireOrderError
 from app.services.personnel_order_hire_from_person_service import validate_hire_person_candidate
+from app.services.personnel_orders_editorial.mapper import build_item_ctx
+from app.services import personnel_order_template_application_service as templates
 from app.services.personnel_orders_apply_service import apply_personnel_order_in_conn
 from app.services.personnel_orders_command_service import (
     PersonnelOrderValidationError,
@@ -26,6 +32,11 @@ def _setup(conn, *, former: bool = False):
     user = int(conn.execute(text("SELECT user_id FROM public.users WHERE is_active=TRUE ORDER BY user_id LIMIT 1")).scalar_one())
     unit = int(conn.execute(text("SELECT unit_id FROM public.org_units ORDER BY unit_id LIMIT 1")).scalar_one())
     position = int(conn.execute(text("SELECT position_id FROM public.positions ORDER BY position_id LIMIT 1")).scalar_one())
+    conn.execute(text("""
+        INSERT INTO public.org_unit_allowed_positions(org_unit_id, position_id, is_active)
+        VALUES (:unit, :position, TRUE)
+        ON CONFLICT (org_unit_id, position_id) DO UPDATE SET is_active=TRUE
+    """), {"unit": unit, "position": position})
     existing_head = conn.execute(text("SELECT user_id FROM public.org_unit_managers WHERE unit_id=:unit AND manager_type='HEAD' AND is_active=TRUE"), {"unit": unit}).scalar_one_or_none()
     if existing_head is None:
         conn.execute(text("INSERT INTO public.org_unit_managers(unit_id,user_id,manager_type,is_active) VALUES (:unit,:user,'HEAD',TRUE)"), {"unit": unit, "user": user})
@@ -70,6 +81,156 @@ def _complete_card(conn, person_id: int):
     """), {"id": person_id})
 
 
+def test_manual_position_create_keeps_catalog_unchanged(monkeypatch):
+    from app.directory import electronic_hire_routes as routes
+
+    with engine.connect() as conn:
+        txn = conn.begin()
+        try:
+            actor = int(conn.execute(text("SELECT user_id FROM public.users WHERE is_active=TRUE ORDER BY user_id LIMIT 1")).scalar_one())
+            unit = int(conn.execute(text("SELECT unit_id FROM public.org_units ORDER BY unit_id LIMIT 1")).scalar_one())
+            positions_before = conn.execute(text("SELECT count(*) FROM public.positions")).scalar_one()
+            links_before = conn.execute(text("SELECT count(*) FROM public.org_unit_allowed_positions")).scalar_one()
+            monkeypatch.setattr(routes, "engine", SimpleNamespace(begin=lambda: nullcontext(conn)))
+            monkeypatch.setattr(routes, "_hr_user_id", lambda user: actor)
+            title = "Учебная ручная должность " + uuid4().hex[:12]
+            created = routes.create_electronic_hire(routes.ElectronicHireCreateIn(
+                iin=f"9{uuid4().int % 10**11:011d}", full_name="Тестова Айгуль",
+                application_received_at=date(2026, 11, 23), planned_start_date=date(2026, 12, 4),
+                org_unit_id=unit, manual_position_name=title,
+                manual_position_document_ru="учебную ручную должность " + title.rsplit(" ", 1)[-1],
+                employment_rate=Decimal("1"),
+            ), user={"user_id": actor})
+            reopened = hire.load_electronic_hire(conn, created["application_id"])
+            assert created["position_id"] is None
+            assert created["position_resolution"] == reopened["position_resolution"] == "unmatched_manual"
+            assert reopened["manual_position_name"] == title
+            assert conn.execute(text("SELECT count(*) FROM public.positions")).scalar_one() == positions_before
+            assert conn.execute(text("SELECT count(*) FROM public.org_unit_allowed_positions")).scalar_one() == links_before
+        finally:
+            txn.rollback()
+def test_position_selection_two_units_manual_title_and_order_transfer():
+    with engine.connect() as conn:
+        txn = conn.begin()
+        try:
+            result, head, first_unit, first_position, _ = _setup(conn)
+            second_unit = int(conn.execute(text("""
+                SELECT unit_id FROM public.org_units WHERE unit_id<>:first ORDER BY unit_id LIMIT 1
+            """), {"first": first_unit}).scalar_one())
+            second_position = int(conn.execute(text("""
+                SELECT position_id FROM public.positions WHERE position_id<>:first ORDER BY position_id LIMIT 1
+            """), {"first": first_position}).scalar_one())
+            conn.execute(text("""
+                INSERT INTO public.org_unit_allowed_positions(org_unit_id, position_id, is_active)
+                VALUES (:unit, :position, TRUE)
+                ON CONFLICT (org_unit_id, position_id) DO UPDATE SET is_active=TRUE
+            """), {"unit": second_unit, "position": second_position})
+            assert hire.require_allowed_position(conn, org_unit_id=first_unit, position_id=first_position) is None
+            assert hire.require_allowed_position(conn, org_unit_id=second_unit, position_id=second_position) is None
+            with pytest.raises(hire.ElectronicHireError) as invalid:
+                hire.require_allowed_position(conn, org_unit_id=second_unit, position_id=first_position)
+            assert invalid.value.code == "POSITION_NOT_ALLOWED_IN_UNIT"
+            with pytest.raises(hire.ElectronicHireError) as invalid_save:
+                hire.update_conditions(conn, result.application_id, org_unit_id=second_unit,
+                    position_id=first_position, employment_rate=Decimal("1"), planned_start_date=date(2026, 12, 3))
+            assert invalid_save.value.code == "POSITION_NOT_ALLOWED_IN_UNIT"
+            assert hire.load_electronic_hire(conn, result.application_id)["intended_org_unit_id"] == first_unit
+            hire.update_conditions(conn, result.application_id, org_unit_id=second_unit,
+                position_id=second_position, employment_rate=Decimal("1"), planned_start_date=date(2026, 12, 3))
+            reopened = hire.load_electronic_hire(conn, result.application_id)
+            assert (reopened["intended_org_unit_id"], reopened["intended_position_id"]) == (second_unit, second_position)
+            title = "Учебная должность " + uuid4().hex[:12]
+            document_title = "учебную должность " + title.rsplit(" ", 1)[-1]
+            positions_before = conn.execute(text("SELECT count(*) FROM public.positions")).scalar_one()
+            links_before = conn.execute(text("SELECT count(*) FROM public.org_unit_allowed_positions")).scalar_one()
+            hire.update_conditions(conn, result.application_id, org_unit_id=second_unit,
+                position_id=None, manual_position_name=title, manual_position_document_ru=document_title,
+                employment_rate=Decimal("1"), planned_start_date=date(2026, 12, 3))
+            manual = hire.load_electronic_hire(conn, result.application_id)
+            assert manual["position_ru"] == manual["manual_position_name"] == title
+            assert manual["intended_position_id"] is None
+            assert manual["position_resolution"] == "unmatched_manual"
+            assert conn.execute(text("SELECT count(*) FROM public.positions")).scalar_one() == positions_before
+            assert conn.execute(text("SELECT count(*) FROM public.org_unit_allowed_positions")).scalar_one() == links_before
+            assert document_title in hire.render_application(conn, result.application_id)["ru"]
+            _complete_card(conn, result.person_id)
+            draft = create_hire_order_draft_for_application(conn, application_id=result.application_id, created_by_user_id=head)
+            payload = conn.execute(text("""
+                SELECT payload FROM public.personnel_order_items WHERE order_id=:id AND item_type_code='HIRE'
+            """), {"id": draft.personnel_order_id}).scalar_one()
+            assert payload["org_unit_id"] == second_unit
+            assert "position_id" not in payload
+            assert payload["manual_position_name"] == title
+            assert payload["manual_position_document_ru"] == document_title
+            assert payload["position_resolution"] == "unmatched_manual"
+            item_context = build_item_ctx({"item_type_code": "HIRE", "payload": payload,
+                "effective_date": date(2026, 12, 3)}, None)
+            assert item_context["position_name"] == title
+            assert item_context["position_document_nominative_ru"] == document_title
+            assert item_context["hire_position_manual_forms"]["ru"] is True
+            second_head = hire.resolve_unit_head(conn, second_unit)
+            if second_head is None:
+                conn.execute(text("""
+                    INSERT INTO public.org_unit_managers(unit_id,user_id,manager_type,is_active)
+                    VALUES (:unit,:user,'HEAD',TRUE)
+                """), {"unit": second_unit, "user": head})
+                second_head = head
+            hire.record_visa(conn, result.application_id, actor_user_id=second_head, decision="approved", explanation=None)
+            with pytest.raises(hire.ElectronicHireError) as unmatched:
+                hire.require_current_approval(conn, draft.personnel_order_id)
+            assert unmatched.value.code == "POSITION_RECONCILIATION_REQUIRED"
+            with pytest.raises(hire.ElectronicHireError) as direct_selection:
+                hire.update_conditions(conn, result.application_id, org_unit_id=second_unit,
+                    position_id=second_position, employment_rate=Decimal("1"), planned_start_date=date(2026, 12, 3))
+            assert direct_selection.value.code == "POSITION_RECONCILIATION_REQUIRED"
+        finally:
+            txn.rollback()
+def test_first_published_hire_template_application_creates_editorial_blocks():
+    with engine.connect() as conn:
+        txn = conn.begin()
+        try:
+            published = conn.execute(text("""
+                SELECT print_title_ru, print_title_kk FROM public.personnel_order_template_versions
+                WHERE item_type_code='HIRE' AND status='PUBLISHED' LIMIT 1
+            """)).first()
+            if published is None:
+                pytest.skip("requires the published HIRE template in the isolated test catalog")
+            if not all(str(value or "").strip() for value in published):
+                pytest.skip("requires approved RU/KK print headings for the published HIRE template")
+            application, hr, _, _, _ = _setup(conn)
+            _complete_card(conn, application.person_id)
+            order = create_hire_order_draft_for_application(
+                conn, application_id=application.application_id, created_by_user_id=hr)
+            order_id = order.personnel_order_id
+            item_id = int(conn.execute(text("SELECT item_id FROM public.personnel_order_items WHERE order_id=:id"),
+                                       {"id": order_id}).scalar_one())
+            conn.execute(text("""
+                UPDATE public.personnel_order_items
+                SET payload=payload || CAST(:extra AS jsonb)
+                WHERE item_id=:id
+            """), {"id": item_id, "extra": json.dumps({
+                "document_forms_ru": {"employee_full_name_accusative_ru": "Тестову Айгуль", "position_document_nominative_ru": "врача"},
+                "document_forms_kk": {"position_document_possessive_kk": "дәрігердің"},
+                "hire_position_manual_forms": {"ru": True},
+                "hire_basis": {"ru": "Заявление", "kk": "Өтініш"},
+            }, ensure_ascii=False)})
+            preview = templates._preview(conn, order_id)
+            assert not preview["items"][0]["blocked"]
+            assert templates._blocks(conn, order_id, [item_id]) == []
+
+            templates.apply_template_application_tx(
+                conn, order_id, hr, expected_document_revision=preview["order_revision"])
+
+            blocks = templates._blocks(conn, order_id, [item_id])
+            assert len(blocks) == 8
+            generated = {(block["scope"], block["locale"], block["block_type"]): block["generated_text"]
+                         for block in blocks}
+            for locale in ("ru", "kk"):
+                assert generated[("ORDER", locale, "title")] == preview["order_proposed"][f"title_{locale}"]
+                assert generated[("ITEM", locale, "body")] == preview["items"][0]["proposed"][f"body_{locale}"]
+                assert "0,75" in generated[("ITEM", locale, "body")]
+        finally:
+            txn.rollback()
 def test_new_candidate_statement_card_gate_visa_and_reapproval(monkeypatch):
     with engine.connect() as conn:
         txn = conn.begin()
@@ -86,6 +247,11 @@ def test_new_candidate_statement_card_gate_visa_and_reapproval(monkeypatch):
             _complete_card(conn, result.person_id)
             created = create_hire_order_draft_for_application(conn, application_id=result.application_id, created_by_user_id=head)
             assert not created.idempotent_replay
+            selected_payload = conn.execute(text("""
+                SELECT payload FROM public.personnel_order_items WHERE order_id=:id AND item_type_code='HIRE'
+            """), {"id": created.personnel_order_id}).scalar_one()
+            assert (selected_payload["org_unit_id"], selected_payload["position_id"]) == (unit, position)
+            assert selected_payload["position_resolution"] == "catalog"
             assert create_hire_order_draft_for_application(conn, application_id=result.application_id, created_by_user_id=head).idempotent_replay
             with pytest.raises(hire.ElectronicHireError, match="виза"):
                 hire.require_current_approval(conn, created.personnel_order_id)
@@ -188,7 +354,8 @@ def test_link_24_hours_reissue_keeps_draft_and_revokes_old(monkeypatch):
                 _resolve_link_by_token(conn, first.raw_token)
             assert _resolve_link_by_token(conn, second.raw_token)[1].link_id == second.link_id
             assert conn.execute(text("SELECT payload->>'test' FROM public.personnel_intake_drafts WHERE application_id=:id"), {"id": result.application_id}).scalar_one() == "keep"
-            conn.execute(text("UPDATE public.personnel_intake_links SET expires_at=now()-interval '1 second' WHERE link_id=:id"), {"id": second.link_id})
+            # The application and PostgreSQL clocks may differ by a few seconds.
+            conn.execute(text("UPDATE public.personnel_intake_links SET expires_at=now()-interval '10 seconds' WHERE link_id=:id"), {"id": second.link_id})
             with pytest.raises(PersonnelIntakeTokenError):
                 _resolve_link_by_token(conn, second.raw_token)
             assert conn.execute(text("SELECT payload->>'test' FROM public.personnel_intake_drafts WHERE application_id=:id"), {"id": result.application_id}).scalar_one() == "keep"

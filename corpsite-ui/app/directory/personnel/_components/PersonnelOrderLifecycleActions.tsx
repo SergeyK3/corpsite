@@ -25,6 +25,7 @@ import PersonnelOrderVoidDialog from "./PersonnelOrderVoidDialog";
 
 type Props = {
   order: PersonnelOrderHeader;
+  unmatchedPosition?: boolean;
   itemCount: number;
   linkedEventCount: number;
   onChanged: (detail: PersonnelOrderDetailResponse) => void;
@@ -33,6 +34,7 @@ type Props = {
 
 export default function PersonnelOrderLifecycleActions({
   order,
+  unmatchedPosition = false,
   itemCount,
   linkedEventCount,
   onChanged,
@@ -51,9 +53,9 @@ export default function PersonnelOrderLifecycleActions({
   const hasRegistrationFields = Boolean(String(order.order_number || "").trim() && order.order_date);
   const allowed = (permission: string) => !me?.is_documentation_viewer &&
     (!me?.is_sysadmin_assistant || me.assistant_permissions?.[permission] === true);
-  const canReady = allowed("ASSISTANT_PERSONNEL_ORDERS_EDIT") && String(order.status).toUpperCase() === "DRAFT";
-  const canRegister = allowed("ASSISTANT_PERSONNEL_ORDERS_REGISTER") && canRegisterPersonnelOrder(order.status);
-  const canApply = allowed("ASSISTANT_PERSONNEL_ORDERS_APPLY") && canApplyPersonnelOrderAction(order.status, linkedEventCount);
+  const canReady = !unmatchedPosition && allowed("ASSISTANT_PERSONNEL_ORDERS_EDIT") && String(order.status).toUpperCase() === "DRAFT";
+  const canRegister = !unmatchedPosition && allowed("ASSISTANT_PERSONNEL_ORDERS_REGISTER") && canRegisterPersonnelOrder(order.status);
+  const canApply = !unmatchedPosition && allowed("ASSISTANT_PERSONNEL_ORDERS_APPLY") && canApplyPersonnelOrderAction(order.status, linkedEventCount);
   const canVoid = !me?.is_sysadmin_assistant && !me?.is_documentation_viewer && canVoidPersonnelOrder(order.status) && !order.is_archived;
   const canArchive =
     me?.has_personnel_orders_archive === true &&
@@ -113,6 +115,7 @@ export default function PersonnelOrderLifecycleActions({
 
   return (
     <div className="space-y-3" data-testid="personnel-order-lifecycle-actions">
+      {unmatchedPosition && <p role="status" className="rounded border-2 border-amber-500 bg-amber-50 p-3 text-sm text-amber-950">Должность требует сопоставления со справочником. Отправьте на уточнение в разделе заявления выше; после решения снова проверьте и согласуйте проект приказа.</p>}
       <div className="flex flex-wrap gap-2">
         {canReady ? (
           <button

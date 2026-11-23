@@ -4,20 +4,23 @@ from __future__ import annotations
 from datetime import date
 from decimal import Decimal
 import os
+import logging
 from pathlib import Path
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from typing import Any, Literal
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.auth import get_current_user
 from app.db.engine import engine
 from app.directory.rbac import require_personnel_admin_or_403
 from app.personnel_applications.application.electronic_hire_service import (
     ElectronicHireError, conditions_hash, current_visa, dispatch_approval_notification, load_electronic_hire, mark_candidate_checked,
-    record_visa, render_application, resolve_unit_head, retry_approval_notification, update_conditions,
+    record_visa, render_application, require_unit_group, validate_hire_position_input, resolve_unit_head, retry_approval_notification, update_conditions,
 )
 from app.personnel_applications.application.registration_service import register_personnel_application
 from app.personnel_applications.domain.errors import (
@@ -28,8 +31,15 @@ from app.personnel_applications.domain.errors import (
 from app.personnel_intake.infrastructure.photo_storage import ensure_intake_photo_storage_root, resolve_path_within_root
 from app.personnel_intake.application.hr_link_access_service import get_hr_intake_link_display
 from app.personnel_applications.application.electronic_hire_service import send_telegram_text
+from app.personnel_applications.application.position_reconciliation_service import (
+    request_position_review, latest_position_review, list_position_reviews,
+    position_review_history, resolve_position_review,
+)
+from app.security.admin_permissions import POSITION_RECONCILIATION_RESOLVE, has_admin_permission
+from app.security.directory_scope import is_system_admin
 
 router = APIRouter(prefix="/electronic-hire", tags=["electronic-hire"])
+logger = logging.getLogger(__name__)
 
 
 def _hr_user_id(user: dict) -> int:
@@ -52,7 +62,9 @@ class ElectronicHireCreateIn(BaseModel):
     planned_start_date: date
     org_group_id: int | None = None
     org_unit_id: int = Field(ge=1)
-    position_id: int = Field(ge=1)
+    position_id: int | None = Field(default=None, ge=1)
+    manual_position_name: str | None = Field(default=None, max_length=500)
+    manual_position_document_ru: str | None = Field(default=None, max_length=500)
     employment_rate: Decimal = Field(gt=0, le=2)
     contact_mobile_phone: str | None = None
     contact_email: str | None = None
@@ -61,7 +73,9 @@ class ElectronicHireCreateIn(BaseModel):
 
 class ElectronicHireConditionsIn(BaseModel):
     org_unit_id: int = Field(ge=1)
-    position_id: int = Field(ge=1)
+    position_id: int | None = Field(default=None, ge=1)
+    manual_position_name: str | None = Field(default=None, max_length=500)
+    manual_position_document_ru: str | None = Field(default=None, max_length=500)
     employment_rate: Decimal = Field(gt=0, le=2)
     planned_start_date: date
 
@@ -69,6 +83,131 @@ class ElectronicHireConditionsIn(BaseModel):
 class VisaIn(BaseModel):
     decision: str
     explanation: str | None = None
+
+
+class PositionReviewRequestIn(BaseModel):
+    explanation: str = Field(min_length=1, max_length=2000)
+
+
+class PositionReviewDecisionIn(BaseModel):
+    mode: Literal["existing", "link", "new"]
+    position_id: int | None = Field(default=None, ge=1)
+    new_position: dict[str, Any] | None = None
+    decision_note: str | None = Field(default=None, max_length=2000)
+
+
+def _can_resolve(user: dict) -> bool:
+    uid = user.get("user_id") or user.get("id")
+    return bool(uid and (is_system_admin(user) or has_admin_permission(int(uid), POSITION_RECONCILIATION_RESOLVE)))
+
+
+def _resolver_id(user: dict) -> int:
+    if not _can_resolve(user):
+        raise HTTPException(403, {"code": "POSITION_RECONCILIATION_PERMISSION_REQUIRED",
+                                  "message": "Требуется адресное разрешение на сопоставление должностей."})
+    return int(user.get("user_id") or user.get("id"))
+
+
+@router.get("/position-reconciliation/capabilities")
+def position_reconciliation_capabilities(user: dict = Depends(get_current_user)) -> dict:
+    return {"can_resolve": _can_resolve(user)}
+
+
+@router.post("/applications/{application_id}/position-request")
+def post_position_request(application_id: int, body: PositionReviewRequestIn,
+                          user: dict = Depends(get_current_user)) -> dict:
+    actor = _hr_user_id(user)
+    try:
+        with engine.begin() as conn:
+            return request_position_review(conn, application_id=application_id,
+                                           actor_user_id=actor, explanation=body.explanation)
+    except ElectronicHireError as exc:
+        raise _error(exc) from exc
+
+
+@router.get("/applications/{application_id}/position-request")
+def get_position_request(application_id: int, user: dict = Depends(get_current_user)) -> dict:
+    _hr_user_id(user)
+    with engine.connect() as conn:
+        load_electronic_hire(conn, application_id)
+        request = latest_position_review(conn, application_id)
+        return {"request": request,
+                "history": position_review_history(conn, int(request["request_id"])) if request else []}
+
+
+@router.get("/position-requests")
+def get_position_requests(status: str | None = None,
+                          user: dict = Depends(get_current_user)) -> dict:
+    _resolver_id(user)
+    try:
+        with engine.connect() as conn:
+            return {"items": list_position_reviews(conn, status=status)}
+    except ElectronicHireError as exc:
+        raise _error(exc) from exc
+
+
+@router.get("/position-reconciliation/positions")
+def get_position_reconciliation_positions(org_unit_id: int, q: str = "",
+                                          user: dict = Depends(get_current_user)) -> dict:
+    _resolver_id(user)
+    with engine.connect() as conn:
+        rows = conn.execute(text("""
+            SELECT p.position_id, p.name, p.name_kk, p.document_nominative_ru,
+                   p.document_possessive_kk,
+                   EXISTS(SELECT 1 FROM public.org_unit_allowed_positions l
+                          WHERE l.org_unit_id=:unit AND l.position_id=p.position_id
+                            AND l.is_active=TRUE) AS allowed
+            FROM public.positions p
+            WHERE :q='' OR p.name ILIKE :pattern OR p.name_kk ILIKE :pattern
+            ORDER BY p.name, p.position_id LIMIT 200
+        """), {"unit": org_unit_id, "q": q.strip(), "pattern": f"%{q.strip()}%"}).mappings().all()
+    return {"items": [dict(row) for row in rows]}
+
+
+@router.get("/position-requests/historical-unresolved")
+def get_historical_unresolved(user: dict = Depends(get_current_user)) -> dict:
+    _resolver_id(user)
+    with engine.connect() as conn:
+        rows = conn.execute(text("""
+            SELECT a.application_id, a.personnel_order_id, a.intended_vacancy_text AS source_title,
+                   a.intended_org_unit_id, o.status AS order_status
+            FROM public.personnel_applications a
+            JOIN public.electronic_hire_applications e USING(application_id)
+            JOIN public.personnel_orders o ON o.order_id=a.personnel_order_id
+            WHERE a.intended_position_id IS NULL AND a.intended_vacancy_text IS NOT NULL
+              AND o.status IN ('SIGNED','REGISTERED')
+            ORDER BY a.application_id DESC
+        """)).mappings().all()
+    return {"items": [dict(row) for row in rows]}
+
+
+@router.get("/position-requests/{request_id}")
+def get_position_request_detail(request_id: int, user: dict = Depends(get_current_user)) -> dict:
+    _resolver_id(user)
+    with engine.connect() as conn:
+        request = next((item for item in list_position_reviews(conn)
+                        if int(item["request_id"]) == request_id), None)
+        if request is None:
+            raise HTTPException(404, "Position request not found")
+        return {"request": request, "history": position_review_history(conn, request_id)}
+
+
+@router.post("/position-requests/{request_id}/resolve")
+def post_position_request_decision(request_id: int, body: PositionReviewDecisionIn,
+                                   user: dict = Depends(get_current_user)) -> dict:
+    actor = _resolver_id(user)
+    try:
+        with engine.begin() as conn:
+            result = resolve_position_review(conn, request_id=request_id, actor_user_id=actor,
+                                             mode=body.mode, position_id=body.position_id,
+                                             new_position=body.new_position,
+                                             decision_note=body.decision_note)
+        if result["reapproval_required"]:
+            with engine.begin() as conn:
+                result["notification"] = dispatch_approval_notification(conn, int(result["application_id"]))
+        return result
+    except ElectronicHireError as exc:
+        raise _error(exc) from exc
 
 
 @router.get("/former-candidates")
@@ -96,25 +235,36 @@ def create_electronic_hire(body: ElectronicHireCreateIn, user: dict = Depends(ge
     actor = _hr_user_id(user)
     try:
         with engine.begin() as conn:
+            org_group_id = require_unit_group(conn, org_unit_id=body.org_unit_id, org_group_id=body.org_group_id)
+            position_id, manual_name, manual_document = validate_hire_position_input(
+                conn, org_unit_id=body.org_unit_id, position_id=body.position_id,
+                manual_position_name=body.manual_position_name,
+                manual_position_document_ru=body.manual_position_document_ru,
+            )
             result = register_personnel_application(
                 conn, iin_raw=body.iin, full_name=body.full_name,
                 birth_date=body.birth_date, application_received_at=body.application_received_at,
                 vacancy_check_status="pending", vacancy_checked_at=None,
-                vacancy_checked_by_user_id=None, intended_org_group_id=body.org_group_id,
-                intended_org_unit_id=body.org_unit_id, intended_position_id=body.position_id,
-                intended_employment_rate=body.employment_rate, intended_vacancy_text=None,
+                vacancy_checked_by_user_id=None, intended_org_group_id=org_group_id,
+                intended_org_unit_id=body.org_unit_id, intended_position_id=position_id,
+                intended_employment_rate=body.employment_rate, intended_vacancy_text=manual_name,
                 contact_mobile_phone=body.contact_mobile_phone, contact_email=body.contact_email,
                 hr_note=None, idempotency_key=body.idempotency_key,
                 registered_by_user_id=actor, actor_id=f"user:{actor}", application_source="electronic",
             )
             if result.action == "created":
                 conn.execute(text("""
-                    INSERT INTO public.electronic_hire_applications (application_id, planned_start_date)
-                    VALUES (:id, :start)
-                """), {"id": result.application_id, "start": body.planned_start_date})
+                    INSERT INTO public.electronic_hire_applications
+                        (application_id, planned_start_date, manual_position_document_ru)
+                    VALUES (:id, :start, :manual_document)
+                """), {"id": result.application_id, "start": body.planned_start_date,
+                        "manual_document": manual_document})
             app = load_electronic_hire(conn, result.application_id)
             return {"application_id": result.application_id, "person_id": result.person_id,
                     "card_href": result.card_href, "action": result.action,
+                    "position_id": app["intended_position_id"],
+                    "manual_position_name": app["manual_position_name"],
+                    "position_resolution": app["position_resolution"],
                     "planned_start_date": app["planned_start_date"]}
     except ElectronicHireError as exc:
         raise _error(exc) from exc
@@ -131,16 +281,24 @@ def create_electronic_hire(body: ElectronicHireCreateIn, user: dict = Depends(ge
 @router.get("/applications")
 def list_electronic_hire(user: dict = Depends(get_current_user)) -> dict:
     _hr_user_id(user)
-    with engine.connect() as conn:
-        rows = conn.execute(text("""
+    try:
+        with engine.connect() as conn:
+            rows = conn.execute(text("""
             SELECT a.application_id, a.person_id, p.full_name, a.status,
+                   a.intended_position_id, a.intended_vacancy_text AS manual_position_name,
+                   CASE WHEN a.intended_position_id IS NULL AND a.intended_vacancy_text IS NOT NULL
+                        THEN 'unmatched_manual' ELSE 'catalog' END AS position_resolution,
                    e.planned_start_date, a.personnel_order_id
             FROM public.electronic_hire_applications e
             JOIN public.personnel_applications a USING (application_id)
             JOIN public.persons p ON p.person_id=a.person_id
             WHERE a.status NOT IN ('completed','cancelled','withdrawn','expired')
             ORDER BY a.application_id DESC LIMIT 50
-        """)).mappings().all()
+            """)).mappings().all()
+    except SQLAlchemyError as exc:
+        logger.exception("Could not list electronic hire applications")
+        raise HTTPException(503, {"code": "ELECTRONIC_HIRE_UNAVAILABLE",
+                                  "message": "Сервис заявлений временно недоступен. Повторите загрузку позже."}) from exc
     return {"items": [dict(row) for row in rows]}
 
 
@@ -169,7 +327,9 @@ def patch_electronic_hire_conditions(application_id: int, body: ElectronicHireCo
         with engine.begin() as conn:
             result = update_conditions(conn, application_id, org_unit_id=body.org_unit_id,
                                      position_id=body.position_id, employment_rate=body.employment_rate,
-                                     planned_start_date=body.planned_start_date)
+                                     planned_start_date=body.planned_start_date,
+                                     manual_position_name=body.manual_position_name,
+                                     manual_position_document_ru=body.manual_position_document_ru)
         if result["personnel_order_id"] is not None:
             with engine.begin() as conn:
                 dispatch_approval_notification(conn, application_id)
@@ -247,6 +407,9 @@ def get_electronic_hire_by_order(order_id: int, user: dict = Depends(get_current
             WHERE application_id=:id ORDER BY visa_id DESC
         """), {"id": app["application_id"]}).mappings().all()
         return {"application_id": app["application_id"], "full_name": app["full_name"],
+                "position_resolution": app["position_resolution"],
+                "manual_position_name": app["manual_position_name"],
+                "position_request": latest_position_review(conn, int(app["application_id"])),
                 "current_visa": current_visa(conn, app),
                 "visas": [{**dict(visa), "is_current": visa["conditions_hash"] == conditions_hash(app)} for visa in visas]}
 
