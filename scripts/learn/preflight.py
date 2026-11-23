@@ -27,8 +27,8 @@ def main() -> None:
     with create_engine(url, pool_pre_ping=True).connect() as conn:
         if conn.execute(text("SELECT current_database()")).scalar_one() != "corpsite_learn":
             raise SystemExit("Connected to the wrong database")
-        if conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one() != "learning008":
-            raise SystemExit("Run Alembic migrations through learning008 first")
+        if conn.execute(text("SELECT version_num FROM alembic_version")).scalar_one() != "ehalt20261123":
+            raise SystemExit("Run Alembic migrations through ehalt20261123 first")
         for variable, table, column in (
             ("CORPSITE_TRAINING_UNIT_ID", "org_units", "unit_id"),
             ("CORPSITE_TRAINING_PARENT_UNIT_ID", "org_units", "unit_id"),
