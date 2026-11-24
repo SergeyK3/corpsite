@@ -22,11 +22,13 @@ import { ENFORCEMENT_NOTICE, GRANT_SAFETY_WARNINGS, buildEffectiveAccessSummary 
 import ErrorBanner, { InfoBanner, SuccessBanner } from "../shared/ErrorBanner";
 import PersonnelUserTargetSearch from "../shared/PersonnelUserTargetSearch";
 import TargetSearchField from "../shared/TargetSearchField";
+import PeopleAccessView from "./PeopleAccessView";
 
 const TARGET_TYPES = ["USER", "EMPLOYEE", "PERSON", "ASSIGNMENT", "POSITION", "ORG_UNIT"];
 const SCOPE_TYPES = ["GLOBAL", "ORG_UNIT", "SELF"];
 
 export default function AccessTab() {
+  const [view, setView] = useState<"people" | "journal">("people");
   const [grants, setGrants] = useState<AccessGrant[]>([]);
   const [roles, setRoles] = useState<AccessRoleRef[]>([]);
   const [guardMode, setGuardMode] = useState<GuardModeInfo | null>(null);
@@ -143,6 +145,11 @@ export default function AccessTab() {
 
   return (
     <div className="space-y-4">
+      <div className="flex gap-2 border-b border-zinc-200 pb-3 dark:border-zinc-700">
+        <button type="button" onClick={() => setView("people")} aria-current={view === "people" ? "page" : undefined} className={`rounded-lg px-4 py-2 text-sm ${view === "people" ? "bg-blue-600 text-white" : "border border-zinc-300 dark:border-zinc-700"}`}>По сотрудникам</button>
+        <button type="button" onClick={() => setView("journal")} aria-current={view === "journal" ? "page" : undefined} className={`rounded-lg px-4 py-2 text-sm ${view === "journal" ? "bg-blue-600 text-white" : "border border-zinc-300 dark:border-zinc-700"}`}>Технический журнал выдач</button>
+      </div>
+      {view === "people" ? <PeopleAccessView /> : <>
       <InfoBanner message={ENFORCEMENT_NOTICE} />
       {guardMode?.shadow_mode ? (
         <InfoBanner message="Режим проверки прав: shadow." />
@@ -405,6 +412,7 @@ export default function AccessTab() {
           </div>
         )}
       </section>
+      </>}
     </div>
   );
 }

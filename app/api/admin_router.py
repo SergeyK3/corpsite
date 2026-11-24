@@ -34,6 +34,7 @@ from app.api.admin_schemas import (
 from app.api.telegram_health_schemas import TelegramHealthResponse
 from app.security.admin_guard import require_sysadmin_api
 from app.services.access_grant_service import grant_access, list_access_grants, revoke_access
+from app.services.access_people_view_service import get_access_person, list_access_people
 from app.services.access_resolver_service import explain_effective_access, resolve_effective_access
 from app.services.admin_users_service import (
     force_password_change,
@@ -299,6 +300,25 @@ def admin_list_access_grants(
         limit=limit,
         offset=offset,
     )
+
+
+@router.get("/access/people")
+def admin_list_access_people(
+    _admin: Dict[str, Any] = Depends(require_sysadmin_api),
+) -> Dict[str, Any]:
+    return list_access_people()
+
+
+@router.get("/access/people/{user_id}")
+def admin_get_access_person(
+    user_id: int,
+    show_revoked: bool = Query(default=False),
+    _admin: Dict[str, Any] = Depends(require_sysadmin_api),
+) -> Dict[str, Any]:
+    try:
+        return get_access_person(user_id, show_revoked=show_revoked)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.post("/access/grants", response_model=AccessGrantResponse)
