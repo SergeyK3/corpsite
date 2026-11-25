@@ -78,12 +78,27 @@
 Заявление завершено. Зафиксированная версия нового приказа — ID 3, старого №59 — ID 2.
 Первый staging отдельно прошёл аналогичный сценарий с заявлением 79 и приказом 68.
 
-## Выкладка
+## Выкладка и контроль
 
-Production staging создаёт `scripts/release/stage_order67_prod.sh` из полного
-архива с SHA `fbe378d5…`; скрипт сверяет манифест, собирает frontend с production
-`.env.production` и проверяет backend. Сборка production staging завершилась,
-BUILD_ID `gutL2EpaNG11YUiPbSggB`. Перед переключением требуется резервная
-копия БД `corpsite`, миграция `ehpt20261123 -> eha005` и проверка опубликованной HIRE.
-Production сервисы `corpsite-backend` и `corpsite-frontend` переключаются на
-этот staging вместе, с последующей проверкой здоровья и версии источников.
+Production staging создан `scripts/release/stage_order67_prod.sh` из полного
+архива с SHA `fbe378d5…`; скрипт сверил 4015 файлов, собрал frontend с production
+`.env.production` и проверил backend. BUILD_ID `gutL2EpaNG11YUiPbSggB`.
+
+`scripts/release/deploy_order67_prod.sh` повторно сверил SHA архива и манифест,
+создал проверенную `pg_restore --list` резервную копию
+`/opt/projects/corpsite/backups/order67-20261125T143823Z-before.dump` (3,8 МБ),
+применил миграции `ehpt20261123 -> eha005` и переключил `corpsite-backend` и
+`corpsite-frontend` на
+`/opt/projects/corpsite/releases/20261125-order67-fbe378d5c3e2/{backend,frontend}`.
+Оба сервиса активны; локальные health и frontend проходят, публичный
+`https://mmc.004.kz/` отвечает HTTP 200.
+
+После выкладки HIRE в production по-прежнему опубликован как ID 19 с обеими
+положенными преамбулами. Среди старых HIRE черновиков 18 закреплены на ID 19,
+43 остались без закреплённой версии; массовых изменений привязок не было.
+Production приказ №59 подписан и не связан с тестовым черновиком №59.
+В production нет кандидата «Тестовая Майра» и приказов `EHA-TEST-*`.
+Режим согласования после миграции остаётся `paper` по умолчанию; реальных
+руководителей подразделений типа HEAD в production пока нет, поэтому электронное
+согласование конкретного подразделения требует отдельной настройки его реального
+руководителя и включения режима администратором.
