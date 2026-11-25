@@ -33,7 +33,8 @@ set +a
 before=$(cd "$stage/backend" && .venv/bin/python -m alembic current)
 [[ $before == ehpt20261123* ]] || { echo "Unexpected migration: $before" >&2; exit 1; }
 backup=/opt/projects/corpsite/backups/order67-$(date -u +%Y%m%dT%H%M%SZ)-before.dump
-pg_dump "$DATABASE_URL" --format=custom --file="$backup"
+pg_dsn=${DATABASE_URL/postgresql+psycopg2:/postgresql:}
+pg_dump "$pg_dsn" --format=custom --file="$backup"
 pg_restore --list "$backup" >/dev/null
 echo "BACKUP=$backup"
 
