@@ -82,7 +82,8 @@
 
 Production staging создаёт `scripts/release/stage_order67_prod.sh` из полного
 архива с SHA `fbe378d5…`; скрипт сверяет манифест, собирает frontend с production
-`.env.production` и проверяет backend. Перед переключением требуется резервная
+`.env.production` и проверяет backend. Сборка production staging завершилась,
+BUILD_ID `gutL2EpaNG11YUiPbSggB`. Перед переключением требуется резервная
 копия БД `corpsite`, миграция `ehpt20261123 -> eha005` и проверка опубликованной HIRE.
 Production сервисы `corpsite-backend` и `corpsite-frontend` переключаются на
 этот staging вместе, с последующей проверкой здоровья и версии источников.

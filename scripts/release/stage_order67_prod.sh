@@ -41,6 +41,7 @@ install -m 0600 "$base/corpsite-ui/.env.production" "$stage/frontend/.env.produc
 (
   cd "$stage/frontend"
   export NEXT_TELEMETRY_DISABLED=1
+  export NEXT_DEPLOYMENT_ID=order67-${expected_sha:0:12}
   node node_modules/next/dist/bin/next build --webpack > "$stage/frontend/order67-build.log" 2>&1
 )
 printf 'PROD_STAGE=%s\nBUILD_ID=%s\n' "$stage" "$(cat "$stage/frontend/.next/BUILD_ID")"
