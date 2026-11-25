@@ -19,6 +19,7 @@ import {
 } from "../_lib/electronicHireApi.client";
 import PersonnelApplicationIntakeOnBehalfDrawer from "./PersonnelApplicationIntakeOnBehalfDrawer";
 import PersonnelApplicationIntakeLinkPanel from "./PersonnelApplicationIntakeLinkPanel";
+import PersonnelApplicationIntakeMemo from "./PersonnelApplicationIntakeMemo";
 import PersonnelApplicationIntakeReviewDrawer from "./PersonnelApplicationIntakeReviewDrawer";
 import HiringDocumentChecklistActions from "./HiringDocumentChecklistActions";
 
@@ -472,6 +473,7 @@ export default function ElectronicHireApplicationDrawer({ open, onClose }: Props
           </>}
           {paperAttachmentHref && <a className="text-blue-700 underline" href={paperAttachmentHref} target="_blank" rel="noreferrer">Открыть скан согласования</a>}
         </section>}
+        <PersonnelApplicationIntakeMemo />
         <div className="flex flex-wrap gap-2">{personId && <a className="rounded bg-zinc-900 px-3 py-2 text-sm text-white" href={`/directory/personnel/persons/${personId}/card`} target="_blank" rel="noreferrer">Открыть ЛК</a>}<button className="rounded border px-3 py-2 text-sm" onClick={() => setAssist(true)}>Заполнить с кадровиком</button><button className="rounded border px-3 py-2 text-sm" data-testid="electronic-hire-intake-issue" disabled={busy || intakeLinkDisplayState === "active"} onClick={() => void issue(false)}>Выдать ссылку на 24 часа</button></div>
         {link && <PersonnelApplicationIntakeLinkPanel intakeUrlPath={link} publicUrl={publicLink} copyButtonLabel="Скопировать ссылку кандидата" actionsDisabled={busy || intakeLinkDisplayState !== "active"} />}
         {intakeLinkDisplayState === "active" && <button className="text-sm underline" disabled={busy} onClick={() => void issue(true)}>Перевыпустить ссылку</button>}

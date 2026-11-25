@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import ElectronicHireApplicationDrawer from "./ElectronicHireApplicationDrawer";
+import { INTAKE_CANDIDATE_MEMO_TEXT } from "./PersonnelApplicationIntakeMemo";
 import * as workflow from "../_lib/personnelApplicantWorkflow";
 
 const listApplications = vi.fn();
@@ -97,11 +98,17 @@ it("copies an existing link twice, then opens the existing review after submissi
   expect(getElectronicHireOrderPreview).toHaveBeenCalledWith(77);
   const copyButton = await screen.findByRole("button", { name: "Скопировать ссылку кандидата" });
   await waitFor(() => expect(copyButton).toBeEnabled());
+  const memo = screen.getByTestId("intake-candidate-memo");
+  expect(memo).toHaveTextContent("Обрезать фото можно прямо в анкете.");
+  expect(memo.compareDocumentPosition(screen.getByTestId("electronic-hire-intake-issue")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   fireEvent.click(copyButton);
   fireEvent.click(copyButton);
   await waitFor(() => expect(copy).toHaveBeenCalledTimes(2));
   expect(copy).toHaveBeenNthCalledWith(1, "https://test.mmc.004.kz/intake/test-token");
   expect(copy).toHaveBeenNthCalledWith(2, "https://test.mmc.004.kz/intake/test-token");
+  fireEvent.click(screen.getByTestId("intake-copy-link-with-memo-button"));
+  await waitFor(() => expect(copy).toHaveBeenCalledTimes(3));
+  expect(copy).toHaveBeenNthCalledWith(3, `${INTAKE_CANDIDATE_MEMO_TEXT}\n\nОткрыть анкету: https://test.mmc.004.kz/intake/test-token`);
   expect(reissueIntakeLink).not.toHaveBeenCalled();
 
   submitted = true;
