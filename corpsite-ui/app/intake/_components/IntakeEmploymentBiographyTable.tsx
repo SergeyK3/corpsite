@@ -49,7 +49,7 @@ function EmploymentRowEditor({
   readOnly?: boolean;
   onPatch: (patch: Partial<IntakeEmploymentBiographyEntry>) => void;
 }) {
-  const currentlyEmployed = isIntakeEmploymentCurrent(item);
+  const [currentlyEmployed, setCurrentlyEmployed] = React.useState(() => isIntakeEmploymentCurrent(item));
   const periodError = currentlyEmployed
     ? null
     : resolveIntakePeriodRangeError(item.start_date, item.end_date);
@@ -104,7 +104,8 @@ function EmploymentRowEditor({
             checked={currentlyEmployed}
             data-testid={`intake-employment-current-${index}`}
             onChange={(event) => {
-              onPatch({ end_date: event.target.checked ? null : item.end_date });
+              setCurrentlyEmployed(event.target.checked);
+              if (event.target.checked) onPatch({ end_date: null });
             }}
           />
           <span className="text-sm text-zinc-700 dark:text-zinc-300">Работает по настоящее время</span>
