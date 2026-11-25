@@ -82,6 +82,15 @@ describe("intakeAdditional", () => {
     expect(normalized.academic_titles[0].document_number).toBe("LEG-1");
   });
 
+  it("retains a partially filled academic degree without a selected degree", () => {
+    const normalized = normalizeIntakeAdditionalPayload({
+      academic_degrees: [{ completed_at: "2024-09-25" }],
+    });
+    expect(normalized.academic_degrees).toHaveLength(1);
+    expect(normalized.academic_degrees[0]).toMatchObject({ degree: "", completed_at: "2024-09-25" });
+    expect(normalized.academic_titles).toHaveLength(0);
+  });
+
   it("keeps structured academic degree and title fields separate", () => {
     expect(
       normalizeIntakeAcademicDegreeEntry({

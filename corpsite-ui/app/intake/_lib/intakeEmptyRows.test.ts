@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { emptyIntakeDraftPayload, toCanonicalIntakeV2, toIntakeFormPayload } from "./intakeApi.client";
 import { emptyIntakeEducationEntry } from "./intakeEducation";
-import { emptyIntakeForeignLanguageEntry } from "./intakeAdditional";
+import { emptyIntakeAcademicDegreeEntry, emptyIntakeForeignLanguageEntry } from "./intakeAdditional";
 import { isIntakeListRowEmpty } from "./intakeEmptyRows";
 import { collectIntakeSubmitIssues } from "./intakeSubmitValidation";
 import { formatTypedIntakePeriodDate, parseIntakePeriodInput } from "./intakePeriodFormat";
@@ -34,5 +34,14 @@ describe("intake row and date handling", () => {
     expect(parseIntakePeriodInput("25092024")).toBe("2024-09-25");
     expect(formatTypedIntakePeriodDate("2024")).toBe("2024");
     expect(parseIntakePeriodInput("2024")).toBe("2024");
+  });
+
+  it("requires the missing degree after retaining a date-only academic row", () => {
+    const payload = emptyIntakeDraftPayload();
+    payload.contacts.mobile_phone = "+77012345678";
+    payload.additional.academic_degrees = [{ ...emptyIntakeAcademicDegreeEntry(), completed_at: "2024-09-25" }];
+    expect(collectIntakeSubmitIssues(payload).map((issue) => issue.focusTestId)).toEqual([
+      "intake-academic-degree-degree-0",
+    ]);
   });
 });
