@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useIntakeFieldError } from "./IntakeFormFields";
 
 import {
   filterIntakeDictionaryOptions,
@@ -37,6 +38,7 @@ export default function IntakeDictionaryCombobox({
   testId,
   compact = false,
 }: IntakeDictionaryComboboxProps) {
+  const fieldError = useIntakeFieldError(testId);
   const listId = React.useId();
   const inputRef = React.useRef<HTMLInputElement>(null);
 
@@ -174,6 +176,7 @@ export default function IntakeDictionaryCombobox({
           aria-autocomplete="list"
           aria-label={label}
           data-testid={testId}
+          aria-invalid={Boolean(fieldError) || undefined}
           value={inputValue}
           readOnly={readOnly}
           autoComplete="off"
@@ -192,7 +195,7 @@ export default function IntakeDictionaryCombobox({
             }, 0);
           }}
           onKeyDown={handleKeyDown}
-          className={compact ? COMPACT_INPUT_CLASS : INPUT_CLASS}
+          className={`${compact ? COMPACT_INPUT_CLASS : INPUT_CLASS} ${fieldError ? "border-red-500" : ""}`}
         />
         {!readOnly ? (
           <span
@@ -206,6 +209,7 @@ export default function IntakeDictionaryCombobox({
           </span>
         ) : null}
       </div>
+      {fieldError ? <span className="mt-1 block text-xs text-red-700" data-testid={testId ? `${testId}-error` : undefined}>{fieldError}</span> : null}
       {showList ? (
         <ul
           id={listId}

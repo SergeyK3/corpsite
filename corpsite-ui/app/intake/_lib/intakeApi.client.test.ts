@@ -46,8 +46,8 @@ describe("canonical payload form adapter", () => {
     };
     expect(form.contacts.email).toBe("");
     expect(form.military.rank).toBe("");
-    expect(form.education[0].start_date).toBe("");
-    expect(form.employment_biography[0].end_date).toBe("");
+    expect(form.education).toHaveLength(0);
+    expect(form.employment_biography).toHaveLength(0);
     expect(form.relatives[0].birth_year).toBe("");
     expect(form.training[0].hours).toBe(840);
     expect(form.training[0].hours_is_manual).toBe(false);
@@ -107,7 +107,7 @@ describe("canonical payload form adapter", () => {
     expect(canonical.relatives[0]).toMatchObject({ birth_date: "1990-02-03", workplace: "Клиника" });
   });
 
-  it("preserves valid canonical row ids and serializes empty optional fields as null", () => {
+  it("skips empty rows even when they have valid canonical ids", () => {
     const education = emptyIntakeEducationEntry();
     const training = emptyIntakeTrainingEntry();
     const relative = emptyIntakeRelativeEntry();
@@ -123,9 +123,8 @@ describe("canonical payload form adapter", () => {
       relatives: Array<Record<string, unknown>>;
     };
 
-    expect(canonical.education[0]).toMatchObject({ record_id: "a0ed72da-6ccf-4ef2-8d4a-3bb2c9097c08", start_date: null, document_number: null });
-    expect(canonical.education[0].record_id).toBe("a0ed72da-6ccf-4ef2-8d4a-3bb2c9097c08");
-    expect(canonical.training[0]).toMatchObject({ record_id: "b2c7e524-cf07-4a84-9a8d-7f52a88fb8f4", end_date: null, hours: null });
+    expect(canonical.education).toHaveLength(0);
+    expect(canonical.training).toHaveLength(0);
     expect(canonical.relatives[0]).toMatchObject({ record_id: "c3d8e635-df18-4f95-b9c9-8f63a99fc9f5", relationship_other: "крёстная мать", birth_date: null, workplace: null });
   });
 });

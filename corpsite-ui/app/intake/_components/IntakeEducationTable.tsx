@@ -2,6 +2,9 @@
 
 import * as React from "react";
 
+import { isIntakeListRowEmpty } from "../_lib/intakeEmptyRows";
+import { focusIntakeListEditor } from "../_lib/intakeListFocus";
+
 import {
   IntakeDateField,
   IntakeSelectField,
@@ -231,9 +234,16 @@ export default function IntakeEducationTable({
   }
 
   function handleAdd() {
+    const emptyIndex = items.findIndex((item) => isIntakeListRowEmpty("education", item));
+    if (emptyIndex >= 0) {
+      setExpandedIndex(emptyIndex);
+      focusIntakeListEditor(`intake-education-editor-${emptyIndex}`);
+      return;
+    }
     const nextItems = [...items, emptyIntakeEducationEntry()];
     onChange(nextItems);
     setExpandedIndex(nextItems.length - 1);
+    focusIntakeListEditor(`intake-education-editor-${nextItems.length - 1}`);
   }
 
   function toggleExpand(index: number) {

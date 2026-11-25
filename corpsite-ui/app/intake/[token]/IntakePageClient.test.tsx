@@ -1049,6 +1049,7 @@ describe("IntakePageClient", () => {
 
   it("shows success screen after submit", async () => {
     const payload = intakeApi.emptyIntakeDraftPayload();
+    payload.personal.iin = "900520123456";
     payload.personal.last_name = "Сидоров";
     payload.personal.first_name = "Сидор";
     payload.personal.birth_date = "1990-05-20";

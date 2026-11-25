@@ -2,6 +2,9 @@
 
 import * as React from "react";
 
+import { isIntakeListRowEmpty } from "../_lib/intakeEmptyRows";
+import { focusIntakeListEditor } from "../_lib/intakeListFocus";
+
 import TrainingSummaryBlocks from "@/components/TrainingSummaryBlocks";
 import { trainingSummaryRecordFromIntakeEntry } from "@/lib/trainingSummary";
 import { IntakeDateField, IntakeSelectField, IntakeTextField } from "./IntakeFormFields";
@@ -271,9 +274,16 @@ export default function IntakeTrainingTable({
   }
 
   function handleAdd() {
+    const emptyIndex = items.findIndex((item) => isIntakeListRowEmpty("training", item));
+    if (emptyIndex >= 0) {
+      setExpandedIndex(emptyIndex);
+      focusIntakeListEditor(`intake-training-editor-${emptyIndex}`);
+      return;
+    }
     const nextItems = [...items, emptyIntakeTrainingEntry()];
     onChange(nextItems);
     setExpandedIndex(nextItems.length - 1);
+    focusIntakeListEditor(`intake-training-editor-${nextItems.length - 1}`);
   }
 
   function toggleExpand(index: number) {

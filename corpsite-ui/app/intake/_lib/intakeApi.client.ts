@@ -2,6 +2,7 @@ import { readJsonSafe, toApiError } from "@/lib/api";
 import { formatThrownError } from "@/lib/i18n";
 import { resolveApiUrl } from "@/lib/apiBase";
 import { normalizeIntakeRecordId } from "./intakeRecordId";
+import { stripEmptyIntakeRows } from "./intakeEmptyRows";
 
 export type IntakeEducationType = "basic" | "internship" | "residency" | "masters" | "phd";
 
@@ -454,7 +455,7 @@ function normalizeIntakeResponsePayload<T extends { payload: IntakeDraftPayload 
 
 /** Convert legacy or persisted v2 payload into safe controlled-input values. */
 export function toIntakeFormPayload(payload: IntakeDraftPayload): IntakeDraftPayload {
-  return normalizeIntakeResponsePayload({ payload }).payload;
+  return stripEmptyIntakeRows(normalizeIntakeResponsePayload({ payload }).payload);
 }
 
 function nullable(value: unknown): string | null {
@@ -480,6 +481,7 @@ export async function submitIntakeDraft(
 
 /** Convert the UI's legacy-compatible view model to the persisted v2 contract. */
 export function toCanonicalIntakeV2(payload: IntakeDraftPayload): Record<string, unknown> {
+  payload = stripEmptyIntakeRows(payload);
   const additional = payload.additional;
   for (const key of ["foreign_languages", "awards", "academic_degrees", "academic_titles"] as const) {
     if (additional[`${key}_none`] && additional[key].length) {

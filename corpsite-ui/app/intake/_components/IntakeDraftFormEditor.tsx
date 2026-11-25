@@ -6,7 +6,7 @@ import IntakeAdditionalStep from "./IntakeAdditionalStep";
 import IntakeDictionaryCombobox from "./IntakeDictionaryCombobox";
 import IntakeEducationTable from "./IntakeEducationTable";
 import IntakeEmploymentBiographyTable from "./IntakeEmploymentBiographyTable";
-import { IntakeDateField, IntakeSelectField, IntakeTextField } from "./IntakeFormFields";
+import { IntakeDateField, IntakeSelectField, IntakeTextField, IntakeFieldErrorsProvider } from "./IntakeFormFields";
 import IntakeMilitaryCombobox from "./IntakeMilitaryCombobox";
 import IntakePhotoUpload from "./IntakePhotoUpload";
 import IntakeRelativesTable from "./IntakeRelativesTable";
@@ -162,7 +162,7 @@ function StepContacts({
 
   return (
     <div className="grid gap-4">
-      <IntakeTextField label="Мобильный телефон" value={c.mobile_phone} onChange={(v) => set("mobile_phone", v)} readOnly={readOnly} required />
+      <IntakeTextField label="Мобильный телефон" value={c.mobile_phone} onChange={(v) => set("mobile_phone", v)} readOnly={readOnly} required testId="intake-mobile-phone" hint="Введите +7 и 10 цифр номера" inputMode="tel" explicitError={c.mobile_phone.trim() && !/^\+7\d{10}$/.test(c.mobile_phone.trim()) ? "Введите +7 и 10 цифр номера" : undefined} />
       <IntakeTextField label="Email" value={c.email} onChange={(v) => set("email", v)} readOnly={readOnly} type="email" />
       <IntakeTextField
         label="Адрес регистрации"
@@ -301,6 +301,7 @@ export type IntakeDraftFormEditorProps = {
   initialFocusTestId?: string | null;
   intakeToken?: string;
   applicationId?: number;
+  fieldErrors?: Record<string, string>;
 };
 
 export default function IntakeDraftFormEditor({
@@ -332,6 +333,7 @@ export default function IntakeDraftFormEditor({
   initialFocusTestId = null,
   intakeToken,
   applicationId,
+  fieldErrors = {},
 }: IntakeDraftFormEditorProps) {
   const currentStep = INTAKE_STEPS[stepIndex];
   const blockStepNavigation = readOnly && allowStepNavigation !== true;
@@ -410,6 +412,8 @@ export default function IntakeDraftFormEditor({
         <main className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
           {error ? <p className="mb-4 text-sm text-red-600">{error}</p> : null}
 
+          <IntakeFieldErrorsProvider errors={fieldErrors}>
+
           {currentStep.id === "personal" ? (
             <StepPersonal
               payload={payload}
@@ -476,6 +480,7 @@ export default function IntakeDraftFormEditor({
               onNavigateToDateIssue={navigateToDateIssue}
             />
           ) : null}
+          </IntakeFieldErrorsProvider>
 
           <div className="mt-8 flex flex-wrap items-center justify-between gap-2 sm:gap-3">
             <div className="flex flex-wrap items-center gap-2">

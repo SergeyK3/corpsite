@@ -2,6 +2,9 @@
 
 import * as React from "react";
 
+import { isIntakeListRowEmpty } from "../_lib/intakeEmptyRows";
+import { focusIntakeListEditor } from "../_lib/intakeListFocus";
+
 import IntakeDictionaryCombobox from "./IntakeDictionaryCombobox";
 import {
   INTAKE_COMPACT_TABLE_EDITOR_ROW_CLASS,
@@ -290,9 +293,16 @@ export default function IntakeAcademicDegreesTable({
 
   function handleAdd() {
     onDeclaredEmptyChange(false);
+    const emptyIndex = items.findIndex((item) => isIntakeListRowEmpty("academic_degrees", item));
+    if (emptyIndex >= 0) {
+      setExpandedIndex(emptyIndex);
+      focusIntakeListEditor(`intake-academic-degree-editor-${emptyIndex}`);
+      return;
+    }
     const nextItems = [...items, emptyIntakeAcademicDegreeEntry()];
     onChange(nextItems);
     setExpandedIndex(nextItems.length - 1);
+    focusIntakeListEditor(`intake-academic-degree-editor-${nextItems.length - 1}`);
   }
 
   function handleDeclaredEmptyChange(nextDeclaredEmpty: boolean) {

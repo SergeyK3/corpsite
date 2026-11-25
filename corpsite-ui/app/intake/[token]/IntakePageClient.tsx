@@ -17,6 +17,7 @@ import {
 } from "../_lib/intakeApi.client";
 import { collectIntakeDateValidationIssues, resolveIntakeDateIssueStepIndex } from "../_lib/intakeDateValidation";
 import { openIntakePdfByToken } from "../_lib/intakePdfOpen.client";
+import { collectIntakeSubmitIssues } from "../_lib/intakeSubmitValidation";
 
 export default function IntakePageClient() {
   const params = useParams<{ token: string }>();
@@ -33,6 +34,8 @@ export default function IntakePageClient() {
   const [submitting, setSubmitting] = React.useState(false);
   const [pdfGenerating, setPdfGenerating] = React.useState(false);
   const [initialFocusTestId, setInitialFocusTestId] = React.useState<string | null>(null);
+  const [submitAttempted, setSubmitAttempted] = React.useState(false);
+  const submitIssues = React.useMemo(() => submitAttempted ? collectIntakeSubmitIssues(payload) : [], [payload, submitAttempted]);
 
   const autosaveTimer = React.useRef<number | null>(null);
 
@@ -105,6 +108,15 @@ export default function IntakePageClient() {
     if (!payload.personal.last_name.trim() || !payload.personal.first_name.trim() ||
         !/^\d{12}$/.test(payload.personal.iin.trim()) || !payload.personal.birth_date.trim()) {
       setError("Укажите фамилию, имя, ИИН из 12 цифр и дату рождения.");
+      return;
+    }
+    setSubmitAttempted(true);
+    const firstIssue = collectIntakeSubmitIssues(payload)[0];
+    if (firstIssue) {
+      const index = INTAKE_STEPS.findIndex((step) => step.id === firstIssue.stepId);
+      setStepIndex(index >= 0 ? index : 0);
+      setInitialFocusTestId(firstIssue.focusTestId);
+      setError("Исправьте выделенные поля перед отправкой анкеты.");
       return;
     }
     setSubmitting(true);
@@ -182,6 +194,7 @@ export default function IntakePageClient() {
       onGeneratePdf={() => void handleGeneratePdf()}
       pdfGenerating={pdfGenerating}
       initialFocusTestId={initialFocusTestId}
+      fieldErrors={Object.fromEntries(submitIssues.map((issue) => [issue.focusTestId, issue.message]))}
       intakeToken={token}
     />
   );

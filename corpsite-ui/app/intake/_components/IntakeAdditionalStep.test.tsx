@@ -27,9 +27,10 @@ describe("IntakeAdditionalStep", () => {
   it("saves foreign language row after add and edit", async () => {
     render(<StatefulAdditionalStep />);
     fireEvent.click(screen.getByTestId("intake-foreign-languages-add-button"));
-    const languageSelect = await screen.findByTestId("intake-foreign-language-language-0");
+    const desktop = await screen.findByTestId("intake-foreign-languages-desktop-view");
+    const languageSelect = within(desktop).getByTestId("intake-foreign-language-language-0");
     fireEvent.change(languageSelect, { target: { value: "Английский" } });
-    fireEvent.change(screen.getByTestId("intake-foreign-language-proficiency-0"), {
+    fireEvent.change(within(desktop).getByTestId("intake-foreign-language-proficiency-0"), {
       target: { value: "Выше среднего (B2)" },
     });
 

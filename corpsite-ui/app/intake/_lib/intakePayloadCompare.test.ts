@@ -48,6 +48,7 @@ describe("intakePayloadCompare", () => {
     const canonical = canonicalizeIntakePayloadForCompare(payload);
 
     expect(canonical.personal).toEqual({
+      iin: "",
       last_name: "Петров",
       first_name: "Пётр",
       middle_name: "",
@@ -60,6 +61,7 @@ describe("intakePayloadCompare", () => {
       photo_file_id: "",
     });
     expect(Object.keys(canonical.personal)).toEqual([
+      "iin",
       "last_name",
       "first_name",
       "middle_name",

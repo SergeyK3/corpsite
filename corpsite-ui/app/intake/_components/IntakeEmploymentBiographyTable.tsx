@@ -2,7 +2,11 @@
 
 import * as React from "react";
 
+import { isIntakeListRowEmpty } from "../_lib/intakeEmptyRows";
+import { focusIntakeListEditor } from "../_lib/intakeListFocus";
+
 import PersonnelDayDateField from "@/lib/PersonnelDayDateField";
+import { useIntakeFieldError } from "./IntakeFormFields";
 import EmploymentTenureSummary, { useEmploymentTenureCalculation } from "./EmploymentTenureSummary";
 import {
   emptyIntakeEmploymentBiographyEntry,
@@ -50,6 +54,9 @@ function EmploymentRowEditor({
   onPatch: (patch: Partial<IntakeEmploymentBiographyEntry>) => void;
 }) {
   const [currentlyEmployed, setCurrentlyEmployed] = React.useState(() => isIntakeEmploymentCurrent(item));
+  const organizationError = useIntakeFieldError(`intake-employment-organization-${index}`);
+  const positionError = useIntakeFieldError(`intake-employment-position-${index}`);
+  const startDateError = useIntakeFieldError(`intake-employment-year-from-${index}`);
   const periodError = currentlyEmployed
     ? null
     : resolveIntakePeriodRangeError(item.start_date, item.end_date);
@@ -66,9 +73,11 @@ function EmploymentRowEditor({
           value={item.organization_original}
           readOnly={readOnly}
           data-testid={`intake-employment-organization-${index}`}
+          aria-invalid={Boolean(organizationError) || undefined}
           onChange={(event) => onPatch({ organization_original: event.target.value, organization_normalized: event.target.value })}
-          className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm read-only:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950 dark:read-only:bg-zinc-900"
+          className={`mt-1 w-full rounded-lg border bg-white px-3 py-2 text-sm read-only:bg-zinc-50 dark:bg-zinc-950 dark:read-only:bg-zinc-900 ${organizationError ? "border-red-500" : "border-zinc-300 dark:border-zinc-700"}`}
         />
+        {organizationError ? <span className="mt-1 block text-xs text-red-700" data-testid={`intake-employment-organization-${index}-error`}>{organizationError}</span> : null}
       </label>
       <label className="block sm:col-span-2">
         <span className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Должность</span>
@@ -77,10 +86,13 @@ function EmploymentRowEditor({
           value={item.position_original}
           readOnly={readOnly}
           data-testid={`intake-employment-position-${index}`}
+          aria-invalid={Boolean(positionError) || undefined}
           onChange={(event) => onPatch({ position_original: event.target.value, position_normalized: event.target.value })}
-          className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm read-only:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-950 dark:read-only:bg-zinc-900"
+          className={`mt-1 w-full rounded-lg border bg-white px-3 py-2 text-sm read-only:bg-zinc-50 dark:bg-zinc-950 dark:read-only:bg-zinc-900 ${positionError ? "border-red-500" : "border-zinc-300 dark:border-zinc-700"}`}
         />
+        {positionError ? <span className="mt-1 block text-xs text-red-700" data-testid={`intake-employment-position-${index}-error`}>{positionError}</span> : null}
       </label>
+      <div>
       <PersonnelDayDateField
         label="Дата начала"
         value={item.start_date ?? ""}
@@ -88,7 +100,10 @@ function EmploymentRowEditor({
         readOnly={readOnly}
         testId={`intake-employment-year-from-${index}`}
         mode="document"
+        inputClassName={`mt-1 w-full rounded-lg border bg-white px-3 py-2 text-sm read-only:bg-zinc-50 dark:bg-zinc-950 dark:read-only:bg-zinc-900 ${startDateError ? "border-red-500" : "border-zinc-300 dark:border-zinc-700"}`}
       />
+      {startDateError ? <span className="mt-1 block text-xs text-red-700" data-testid={`intake-employment-year-from-${index}-error`}>{startDateError}</span> : null}
+      </div>
       <PersonnelDayDateField
         label="Дата окончания"
         value={item.end_date ?? ""}
@@ -273,9 +288,16 @@ export default function IntakeEmploymentBiographyTable({
   }
 
   function handleAdd() {
+    const emptyIndex = canonicalItems.findIndex((item) => isIntakeListRowEmpty("employment_biography", item));
+    if (emptyIndex >= 0) {
+      setExpandedIndex(emptyIndex);
+      focusIntakeListEditor(`intake-employment-editor-${emptyIndex}`);
+      return;
+    }
     const nextItems = [...canonicalItems, emptyIntakeEmploymentBiographyEntry()];
     onChange(nextItems);
     setExpandedIndex(nextItems.length - 1);
+    focusIntakeListEditor(`intake-employment-editor-${nextItems.length - 1}`);
   }
 
   function toggleExpand(index: number) {

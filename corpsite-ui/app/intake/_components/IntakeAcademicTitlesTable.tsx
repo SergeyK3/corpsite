@@ -2,6 +2,9 @@
 
 import * as React from "react";
 
+import { isIntakeListRowEmpty } from "../_lib/intakeEmptyRows";
+import { focusIntakeListEditor } from "../_lib/intakeListFocus";
+
 import IntakeDictionaryCombobox from "./IntakeDictionaryCombobox";
 import { INTAKE_COMPACT_TABLE_EDITOR_ROW_CLASS, IntakeCompactTableEditorCell } from "./IntakeCompactTableEditor";
 import { IntakeDateField, IntakeTextField } from "./IntakeFormFields";
@@ -287,9 +290,16 @@ export default function IntakeAcademicTitlesTable({
 
   function handleAdd() {
     onDeclaredEmptyChange(false);
+    const emptyIndex = items.findIndex((item) => isIntakeListRowEmpty("academic_titles", item));
+    if (emptyIndex >= 0) {
+      setExpandedIndex(emptyIndex);
+      focusIntakeListEditor(`intake-academic-title-editor-${emptyIndex}`);
+      return;
+    }
     const nextItems = [...items, emptyIntakeAcademicTitleEntry()];
     onChange(nextItems);
     setExpandedIndex(nextItems.length - 1);
+    focusIntakeListEditor(`intake-academic-title-editor-${nextItems.length - 1}`);
   }
 
   function handleDeclaredEmptyChange(nextDeclaredEmpty: boolean) {

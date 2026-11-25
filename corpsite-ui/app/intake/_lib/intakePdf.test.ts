@@ -2,6 +2,7 @@ import { intakeEducationFixture, intakeTrainingFixture } from "./intakeTestFixtu
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 
 import { emptyIntakeDraftPayload, type IntakeDraftPayload } from "./intakeApi.client";
+import { emptyIntakeEducationEntry } from "./intakeEducation";
 import {
   buildIntakePdfContentDisposition,
   buildIntakePdfFilename,
@@ -295,6 +296,19 @@ describe("intakePdfHtmlDocument", () => {
 
     expect(html).toContain("Английский — Выше среднего (B2)");
     expect(html).not.toContain("Английский (Выше среднего (B2))");
+  });
+
+  it("omits completely empty rows from an older draft when building the PDF", () => {
+    const payload = samplePayload();
+    payload.education.push(emptyIntakeEducationEntry());
+    payload.additional.foreign_languages = [{ language: "", proficiency: "" }];
+    const model = buildIntakePdfViewModel({ applicationId: 42, payload, summaries: sampleSummaries(payload) });
+    const html = buildIntakePdfHtmlDocument(model);
+
+    expect(model.payload.education).toHaveLength(1);
+    expect(model.payload.additional.foreign_languages).toHaveLength(0);
+    expect(html).toContain('data-testid="intake-pdf-additional-languages"');
+    expect(html).toContain("Иностранные языки: 0 зап.");
   });
 
   it("allows additional section to flow after military without forced page break", () => {

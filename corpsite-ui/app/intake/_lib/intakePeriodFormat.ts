@@ -13,7 +13,23 @@ export function formatIntakeBirthDateForDisplay(raw: string | null | undefined):
 }
 
 export function parseIntakePeriodInput(input: string): string {
-  return parsePersonnelDateInput(input, "day");
+  const text = input.trim();
+  if (/^\d{5,8}$/.test(text)) {
+    const digits = text.slice(0, 8);
+    if (digits.length === 8) {
+      return parsePersonnelDateInput(`${digits.slice(0, 2)}.${digits.slice(2, 4)}.${digits.slice(4)}`, "day");
+    }
+    return text;
+  }
+  return parsePersonnelDateInput(text, "day");
+}
+
+export function formatTypedIntakePeriodDate(raw: string): string {
+  const text = raw.trim();
+  if (!/^\d+$/.test(text)) return raw;
+  const digits = text.slice(0, 8);
+  if (digits.length <= 4) return digits;
+  return `${digits.slice(0, 2)}.${digits.slice(2, 4)}.${digits.slice(4)}`;
 }
 
 export function formatIntakePeriodRange(
