@@ -1,4 +1,5 @@
 import { intakeEmploymentFixture } from "../_lib/intakeTestFixtures";
+import * as React from "react";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -150,6 +151,36 @@ describe("IntakeEmploymentBiographyTable", () => {
     expect(onChange).toHaveBeenCalledWith([
       expect.objectContaining({ end_date: null }),
     ]);
+  });
+
+  it("allows an end date after unchecking current employment and clears it when checked again", () => {
+    mockTenureCalculation();
+    function StatefulTable() {
+      const [items, setItems] = React.useState([intakeEmploymentFixture({
+        organization: "Клиника А", position: "Врач", year_from: "2024-01-01", year_to: null,
+      })]);
+      return <IntakeEmploymentBiographyTable items={items} onChange={setItems} />;
+    }
+    render(<StatefulTable />);
+
+    expandEmploymentRow(0);
+    const desktop = screen.getByTestId("intake-employment-desktop-view");
+    const checkbox = within(desktop).getByTestId("intake-employment-current-0");
+    const endDate = within(desktop).getByTestId("intake-employment-year-to-0");
+    expect(checkbox).toBeChecked();
+    expect(endDate).toHaveAttribute("readonly");
+
+    fireEvent.click(checkbox);
+    expect(checkbox).not.toBeChecked();
+    expect(endDate).not.toHaveAttribute("readonly");
+    fireEvent.change(endDate, { target: { value: "31.10.2026" } });
+    fireEvent.blur(endDate);
+    expect(endDate).toHaveValue("31.10.2026");
+
+    fireEvent.click(checkbox);
+    expect(checkbox).toBeChecked();
+    expect(endDate).toHaveValue("");
+    expect(endDate).toHaveAttribute("readonly");
   });
 });
 
