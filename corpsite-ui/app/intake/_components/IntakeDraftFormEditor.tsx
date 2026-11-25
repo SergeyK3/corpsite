@@ -82,6 +82,7 @@ function StepPersonal({
           onPayloadChange={onChange}
         />
         <div className="grid min-w-0 flex-1 gap-4 sm:grid-cols-2">
+          <IntakeTextField label="ИИН" value={p.iin} onChange={(v) => set("iin", v)} readOnly={readOnly} required testId="intake-iin" />
           <IntakeTextField label="Фамилия" value={p.last_name} onChange={(v) => set("last_name", v)} readOnly={readOnly} required />
           <IntakeTextField label="Имя" value={p.first_name} onChange={(v) => set("first_name", v)} readOnly={readOnly} required />
           <IntakeTextField label="Отчество" value={p.middle_name} onChange={(v) => set("middle_name", v)} readOnly={readOnly} />
@@ -216,7 +217,7 @@ function StepMilitary({
   readOnly?: boolean;
 }) {
   const m = payload.military;
-  const composition = normalizeIntakeMilitaryComposition(m.composition);
+  const composition = normalizeIntakeMilitaryComposition(m.composition ?? "");
   const rankOptions = React.useMemo(
     () => getIntakeMilitaryRankOptions(composition),
     [composition],
@@ -234,7 +235,7 @@ function StepMilitary({
             ...payload,
             military: {
               ...m,
-              ...applyIntakeMilitaryCompositionChange(nextComposition, m.rank),
+              ...applyIntakeMilitaryCompositionChange(nextComposition, m.rank ?? ""),
             },
           })
         }
@@ -244,7 +245,7 @@ function StepMilitary({
       />
       <IntakeMilitaryCombobox
         label="Воинское звание"
-        value={m.rank}
+        value={m.rank ?? ""}
         onChange={(v) => set("rank", v)}
         options={rankOptions}
         readOnly={readOnly}
@@ -252,21 +253,21 @@ function StepMilitary({
         allowFreeText={composition === "other"}
         testId="intake-military-rank"
       />
-      <IntakeTextField label="Статус" value={m.status} onChange={(v) => set("status", v)} readOnly={readOnly} />
-      <IntakeTextField label="Категория" value={m.category} onChange={(v) => set("category", v)} readOnly={readOnly} />
+      <IntakeTextField label="Статус" value={m.status ?? ""} onChange={(v) => set("status", v)} readOnly={readOnly} />
+      <IntakeTextField label="Категория" value={m.category ?? ""} onChange={(v) => set("category", v)} readOnly={readOnly} />
       <IntakeTextField
         label="Номер ВУС"
-        value={m.specialty_code}
+        value={m.specialty_code ?? ""}
         onChange={(v) => set("specialty_code", sanitizeMilitarySpecialtyCodeInput(v))}
         readOnly={readOnly}
         testId="intake-military-specialty-code"
         maxLength={7}
         inputMode="numeric"
       />
-      <IntakeTextField label="Категория годности" value={m.fitness_category} onChange={(v) => set("fitness_category", v)} readOnly={readOnly} />
-      <IntakeTextField label="Военкомат" value={m.commissariat} onChange={(v) => set("commissariat", v)} readOnly={readOnly} />
-      <IntakeTextField label="Группа учёта" value={m.registration_group} onChange={(v) => set("registration_group", v)} readOnly={readOnly} />
-      <IntakeTextField label="Категория учёта" value={m.registration_category} onChange={(v) => set("registration_category", v)} readOnly={readOnly} />
+      <IntakeTextField label="Категория годности" value={m.fitness_category ?? ""} onChange={(v) => set("fitness_category", v)} readOnly={readOnly} />
+      <IntakeTextField label="Военкомат" value={m.commissariat ?? ""} onChange={(v) => set("commissariat", v)} readOnly={readOnly} />
+      <IntakeTextField label="Группа учёта" value={m.registration_group ?? ""} onChange={(v) => set("registration_group", v)} readOnly={readOnly} />
+      <IntakeTextField label="Категория учёта" value={m.registration_category ?? ""} onChange={(v) => set("registration_category", v)} readOnly={readOnly} />
     </div>
   );
 }

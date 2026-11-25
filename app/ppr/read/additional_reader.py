@@ -60,6 +60,11 @@ def _load_intake_additional_profile(conn: Connection, person_id: int) -> dict[st
                 SELECT d.payload->'additional' AS additional
                 FROM public.personnel_intake_drafts d
                 JOIN public.personnel_applications a ON a.application_id = d.application_id
+                JOIN public.personnel_intake_transfers t
+                  ON t.application_id = a.application_id AND t.status = 'completed'
+                JOIN public.personnel_intake_section_reviews r
+                  ON r.application_id = a.application_id
+                 AND r.section_code = 'additional' AND r.status = 'accepted'
                 WHERE a.person_id = :person_id
                 ORDER BY d.updated_at DESC
                 LIMIT 1

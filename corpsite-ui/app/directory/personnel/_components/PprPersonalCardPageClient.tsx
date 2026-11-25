@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { russianTransferAccusative } from "../_lib/personnelOrderTransferAccusative";
 
 import { PERSONAL_CARD_TITLE } from "@/lib/personnelCardTerminology";
 import { useCurrentUser } from "@/lib/currentUser";
@@ -16,6 +17,7 @@ import {
 } from "../_lib/personnelApplicantWorkflow";
 import {
   getPersonApplicationsHistory,
+  createHireOrderDraft,
   type PersonnelApplicationDetail,
 } from "../_lib/personnelApplicationsApi.client";
 import {
@@ -172,6 +174,10 @@ export default function PprPersonalCardPageClient({
   const [selfContacts, setSelfContacts] = React.useState<SelfContacts | null>(null);
   const [pdfError, setPdfError] = React.useState<string | null>(null);
   const [activeApplication, setActiveApplication] = React.useState<PersonnelApplicationDetail | null>(null);
+  const [hireOrderBusy, setHireOrderBusy] = React.useState(false);
+  const [hireOrderError, setHireOrderError] = React.useState<string | null>(null);
+  const [hireNameFormOpen, setHireNameFormOpen] = React.useState(false);
+  const [hireNameAccusativeRu, setHireNameAccusativeRu] = React.useState("");
   const [fallbackEmployeeId, setFallbackEmployeeId] = React.useState<string | null>(null);
   const [migrationCells, setMigrationCells] = React.useState<Partial<Record<MigrationSection, MigrationCell>>>({});
   const [migrationUniverses, setMigrationUniverses] = React.useState<MigrationUniverse[]>([]);
@@ -418,6 +424,22 @@ export default function PprPersonalCardPageClient({
     if (!result.ok) setPdfError(result.error);
   }
 
+  async function openHireOrderFromCard(nameAccusativeRu?: string) {
+    if (!activeApplication || resolvedPersonId == null || hireOrderBusy) return;
+    setHireOrderError(null);
+    setHireOrderBusy(true);
+    try {
+      const orderId = activeApplication.personnel_order_id
+        ?? (await createHireOrderDraft(activeApplication.application_id, nameAccusativeRu)).personnel_order_id;
+      const returnTo = `/directory/personnel/persons/${resolvedPersonId}/card`;
+      router.push(`/directory/personnel/orders?order_id=${orderId}&tab=data&hire_person_id=${resolvedPersonId}&edit_hire_item=1&return_to=${encodeURIComponent(returnTo)}`);
+    } catch (error) {
+      setHireOrderError(error instanceof Error ? error.message : "Не удалось открыть черновик приказа о приёме.");
+    } finally {
+      setHireOrderBusy(false);
+    }
+  }
+
   return (
     <div className="w-full">
       <div
@@ -474,11 +496,12 @@ export default function PprPersonalCardPageClient({
           {canCreateHireOrder ? (
             <button
               type="button"
-              onClick={() =>
-                router.push(
-                  `/directory/personnel/orders?create=1&hire_person_id=${resolvedPersonId}&order_type=HIRE`,
-                )
-              }
+              onClick={() => {
+                if (activeApplication?.personnel_order_id) { void openHireOrderFromCard(); return; }
+                setHireNameAccusativeRu(russianTransferAccusative({fio:displayName}));
+                setHireNameFormOpen(true);
+              }}
+              disabled={hireOrderBusy}
               className="rounded border border-amber-400 bg-amber-100 px-4 py-2 text-sm font-medium text-amber-950 dark:border-amber-700 dark:bg-amber-900/40 dark:text-amber-50"
               data-testid="ppr-applicant-create-hire-order"
             >
@@ -486,6 +509,18 @@ export default function PprPersonalCardPageClient({
             </button>
           ) : null}
         </div>
+        {hireNameFormOpen && !activeApplication?.personnel_order_id ? <form className="mt-3 flex flex-wrap items-end gap-2 rounded border border-amber-300 p-3" onSubmit={event=>{
+          event.preventDefault();
+          if (!hireNameAccusativeRu.trim()) {setHireOrderError("Укажите ФИО в винительном падеже RU.");return;}
+          void openHireOrderFromCard(hireNameAccusativeRu.trim());
+        }}>
+          <label className="min-w-64 flex-1 text-sm">ФИО в винительном падеже (RU)
+            <input data-testid="hire-name-accusative-ru" required maxLength={300} value={hireNameAccusativeRu} onChange={event=>setHireNameAccusativeRu(event.target.value)} className="mt-1 block w-full rounded border bg-transparent p-2"/>
+          </label>
+          <button type="submit" disabled={hireOrderBusy} className="rounded border border-amber-500 px-3 py-2 text-sm" data-testid="confirm-hire-order-draft">Проверено — создать черновик</button>
+          <button type="button" onClick={()=>setHireNameFormOpen(false)} className="rounded border px-3 py-2 text-sm">Отмена</button>
+        </form> : null}
+        {hireOrderError ? <p role="alert" className="mt-2 text-sm text-red-700">{hireOrderError}</p> : null}
         {selfMode && pdfError ? <p role="alert" className="mt-3 text-sm text-red-700">{pdfError}</p> : null}
         {isApplicant ? (
           <p className="mt-2 text-sm text-amber-900 dark:text-amber-100">

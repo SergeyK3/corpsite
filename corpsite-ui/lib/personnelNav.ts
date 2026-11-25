@@ -74,6 +74,15 @@ export function isHrProcessesRoute(pathname: string): boolean {
 
 export const PERSONNEL_DIRECTORY_NAV_HREF = "/directory/staff";
 export const HR_PROCESSES_NAV_HREF = "/directory/personnel/journal";
+export const PERSONNEL_FILE_REVIEW_HREF = "/directory/personnel/file-review";
+
+export function isPersonnelFileReviewRoute(pathname: string): boolean {
+  return pathname === PERSONNEL_FILE_REVIEW_HREF || pathname.startsWith(`${PERSONNEL_FILE_REVIEW_HREF}/`);
+}
+
+export function canSeePersonnelFileReviewNav(me: MeInfo | null | undefined): boolean {
+  return me?.has_personnel_files_review === true;
+}
 
 export type PersonnelNavItem = {
   href: string;
@@ -120,6 +129,12 @@ export const PERSONNEL_JOURNAL_NAV_ITEM: PersonnelNavItem = {
   matchPrefixes: ["/directory/personnel/journal"],
 };
 
+export const PERSONNEL_FILE_REVIEW_NAV_ITEM: PersonnelNavItem = {
+  href: PERSONNEL_FILE_REVIEW_HREF,
+  title: "Кадровые процессы",
+  matchPrefixes: [PERSONNEL_FILE_REVIEW_HREF],
+};
+
 export function canSeePprMigrationNav(me: MeInfo | null | undefined): boolean {
   return String(me?.role_code ?? "").toUpperCase() === "HR_HEAD" ||
     (me?.is_sysadmin_assistant === true && me.ppr_stage_permissions?.["0"] === true);
@@ -149,6 +164,7 @@ export function buildPersonnelSidebarNavItems(me: MeInfo | null | undefined): Pe
   if (canSeePersonnelDirectoryNav(me)) items.push(PERSONNEL_DIRECTORY_NAV_ITEM);
   if (canSeeHrProcessesNav(me)) items.push(HR_PROCESSES_NAV_ITEM);
   else if (canSeePersonnelJournalNav(me)) items.push(PERSONNEL_JOURNAL_NAV_ITEM);
+  else if (canSeePersonnelFileReviewNav(me)) items.push(PERSONNEL_FILE_REVIEW_NAV_ITEM);
   if (canSeePprMigrationNav(me)) items.push(PPR_MIGRATION_NAV_ITEM);
   if (canSeeWorkingContactsNav(me)) items.push(WORKING_CONTACTS_NAV_ITEM);
   return items;
@@ -224,6 +240,7 @@ export function shouldShowPrimaryAdminNavItem(
 ): boolean {
   if (item.href === WORKING_CONTACTS_NAV_ITEM.href) return canSeeWorkingContactsNav(me);
   if (item.href === PPR_MIGRATION_NAV_ITEM.href) return canSeePprMigrationNav(me);
+  if (item.href === PERSONNEL_FILE_REVIEW_HREF) return canSeePersonnelFileReviewNav(me);
   if ((me?.is_documentation_viewer || me?.is_sysadmin_assistant) && ["/admin/regular-tasks/catch-up", "/admin/sync", "/tasks"].includes(item.href)) return false;
   if (item.href === "/admin/system/personnel-lifecycle") return opts.showPersonnelLifecycleNav;
   if (item.href === "/admin/system/personnel-identity/operations") {

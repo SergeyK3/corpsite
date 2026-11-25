@@ -59,7 +59,7 @@ class PersonnelApplicationRegisterOut(BaseModel):
 
 class PersonnelApplicationDetailOut(BaseModel):
     application_id: int
-    person_id: int
+    person_id: int | None
     full_name: str | None = None
     iin: str | None = None
     status: str

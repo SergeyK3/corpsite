@@ -102,6 +102,11 @@ export default function IntakePageClient() {
 
   async function handleSubmit() {
     if (!token || readOnly) return;
+    if (!payload.personal.last_name.trim() || !payload.personal.first_name.trim() ||
+        !/^\d{12}$/.test(payload.personal.iin.trim()) || !payload.personal.birth_date.trim()) {
+      setError("Укажите фамилию, имя, ИИН из 12 цифр и дату рождения.");
+      return;
+    }
     setSubmitting(true);
     setError(null);
     try {

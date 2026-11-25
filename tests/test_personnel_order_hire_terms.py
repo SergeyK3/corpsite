@@ -2,6 +2,12 @@ import pytest
 from app.services.personnel_order_hire_terms import hire_rate, hire_basis_text, validate_hire_terms
 
 
+def test_hire_position_after_na_dolzhnost_uses_genitive():
+    from app.services.personnel_order_hire_wording import hire_position_accusative_ru
+    assert hire_position_accusative_ru("Санитарка") == "санитарки"
+    assert hire_position_accusative_ru("Врач") == "врача"
+
+
 def test_historical_certificate_names_override_dictionary_snapshot_and_allow_no_selection():
     from app.services.personnel_order_hire_terms import normalize_hire_details,normalize_hire_basis
     for specialty in (None,{'medical_specialty_id':41,'name_ru':'Радиология','name_kk':'Радиология'}):
@@ -119,6 +125,8 @@ def test_hire_manual_position_kk_takes_precedence_over_title_snapshot(nominal_kk
         'org_unit_name': {'ru': 'SYNTHETIC RU UNIT', 'kk': 'SYNTHETIC KK UNIT'},
         'document_forms_kk': {'position_document_possessive_kk': 'Сынақ лауазымы'},
         'document_position': {'name': 'SYNTHETIC RU POSITION', 'name_kk': nominal_kk, 'document_possessive_kk': ''},
+         'document_forms_ru': {'employee_full_name_accusative_ru': 'SYNTHETIC ACCUSATIVE PERSON', 'position_document_nominative_ru': 'SYNTHETIC ACCUSATIVE POSITION'},
+         'hire_position_manual_forms': {'ru': True, 'kk': False},
         'employment_rate': 1, 'basis_other_text': 'SYNTHETIC BASIS', 'hire_basis':{'ru':'SYNTHETIC BASIS','kk':'SYNTHETIC BASIS'},
     }}
     values, _, _ = _values(conn, item, template)
@@ -138,6 +146,8 @@ def test_hire_legacy_position_without_kk_cannot_use_russian_fallback():
     item = {'item_type_code': 'HIRE', 'employee_id': None, 'effective_date': '2026-11-04', 'payload': {
         'source_employee_name': 'SYNTHETIC PERSON', 'position_name': {'ru': 'SYNTHETIC RU POSITION'},
         'org_unit_name': {'ru': 'SYNTHETIC RU UNIT', 'kk': 'SYNTHETIC KK UNIT'},
+         'document_forms_ru': {'employee_full_name_accusative_ru': 'SYNTHETIC ACCUSATIVE PERSON', 'position_document_nominative_ru': 'SYNTHETIC ACCUSATIVE POSITION'},
+         'hire_position_manual_forms': {'ru': True, 'kk': False},
         'employment_rate': 1, 'basis_other_text': 'SYNTHETIC BASIS', 'hire_basis':{'ru':'SYNTHETIC BASIS','kk':'SYNTHETIC BASIS'},
     }}
     values, _, _ = _values(conn, item, template)
@@ -164,6 +174,8 @@ def test_hire_effective_date_uses_common_formatters_for_template_and_generated_t
         item = {'item_type_code': 'HIRE', 'employee_id': None, 'effective_date': day, 'payload': {
             'source_employee_name': 'SYNTHETIC PERSON', 'position_name': {'ru': 'SYNTHETIC RU', 'kk': 'SYNTHETIC KK'},
             'org_unit_name': {'ru': 'SYNTHETIC RU UNIT', 'kk': 'SYNTHETIC KK UNIT'},
+             'document_forms_ru': {'employee_full_name_accusative_ru': 'SYNTHETIC ACCUSATIVE PERSON', 'position_document_nominative_ru': 'SYNTHETIC ACCUSATIVE POSITION'},
+             'hire_position_manual_forms': {'ru': True, 'kk': False},
             'employment_rate': 1, 'basis_other_text': 'SYNTHETIC BASIS', 'hire_basis':{'ru':'SYNTHETIC BASIS','kk':'SYNTHETIC BASIS'},
         }}
         values, _, _ = _values(conn, item, template)

@@ -35,6 +35,24 @@ function renderPanel(selectedItem: Record<string, unknown>) {
 }
 
 describe("TaskDetailPanel report link", () => {
+  it("links a hire task to its visa and shows the saved decision", () => {
+    renderPanel({
+      task_id: 41,
+      source_kind: "electronic_hire",
+      status_code: "REJECTED",
+      requires_report: false,
+      electronic_hire_application_id: 26,
+      electronic_hire_decision: "rejected",
+      electronic_hire_explanation: "Не подходит дата начала",
+    });
+    expect(screen.getByRole("link", { name: "Перейти к визе заявления №26" }))
+      .toHaveAttribute("href", "/directory/personnel/hire-approvals?application_id=26#hire-approval-26");
+    expect(screen.getByText(/Пояснение: Не подходит дата начала/)).toBeInTheDocument();
+    expect(screen.getByText("Кадровый процесс")).toBeInTheDocument();
+    expect(screen.getByText("Приём на работу")).toBeInTheDocument();
+    expect(screen.queryByText("Отчёт не отправлен")).not.toBeInTheDocument();
+  });
+
   it("report_link=null shows fallback and hides copy button", () => {
     renderPanel({
       task_id: 10019,

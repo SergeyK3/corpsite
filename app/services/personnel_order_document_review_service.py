@@ -44,7 +44,15 @@ def _review(conn, order_id: int, *, lock: bool = False) -> Dict[str, Any]:
     for item in items:
         if not str(item["item_type_code"] or "").strip(): blockers.append({"code": "MISSING_ITEM_TYPE", "item_id": int(item["item_id"])})
         payload = item["payload"] or {}
-        if item["employee_id"] is None and not str(payload.get("unresolved_subject") or payload.get("source_full_name") or "").strip():
+        linked_hire_person = (
+            item["item_type_code"] == "HIRE"
+            and isinstance(payload.get("person_id"), int)
+            and payload["person_id"] > 0
+            and bool(str(payload.get("source_employee_name") or "").strip())
+            and bool(conn.execute(text("SELECT 1 FROM public.persons WHERE person_id=:id AND full_name=:name"),
+                                  {"id": payload["person_id"], "name": str(payload["source_employee_name"]).strip()}).scalar())
+        )
+        if item["employee_id"] is None and not linked_hire_person and not str(payload.get("unresolved_subject") or payload.get("source_full_name") or "").strip():
             blockers.append({"code": "MISSING_SUBJECT", "item_id": int(item["item_id"])})
     block_rows = conn.execute(text("""SELECT locale, review_status FROM public.personnel_order_editorial_blocks WHERE order_id=:id
         UNION ALL SELECT locale, review_status FROM public.personnel_order_item_editorial_blocks ib

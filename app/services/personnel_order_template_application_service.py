@@ -8,6 +8,7 @@ from app.db.engine import engine
 from app.services.personnel_order_template_validation import validate_template_texts
 from app.services.personnel_order_rate_format import format_template_rate
 from app.services.personnel_orders_editorial.service import get_editorial_state
+from app.services.personnel_orders_editorial.basis_policy import resolve_basis_required
 from app.services.personnel_orders_editorial.position_dictionary import document_nominative_personnel_order_position, localized_personnel_order_position
 from app.services.personnel_order_termination_reason import termination_basis_is_explicit, termination_reason_basis_text, termination_reason_text
 from app.services.personnel_order_kazakh_name import document_name_kk
@@ -163,6 +164,21 @@ def _values(conn:Any,item:Mapping[str,Any],template:Mapping[str,Any]|None=None):
   values["org_unit.title_ru"]=str(unit.get("name") or "")
   values["org_unit.title_kk"]=str(unit.get("name_kk") or "")
   values["org_unit.document_genitive_kk"]=str(unit.get("document_genitive_kk") or "")
+ if str(item["item_type_code"]) == "HIRE":
+  from app.services.personnel_order_hire_wording import hire_department_destination_kk, hire_position_accusative_ru
+  from app.services.personnel_order_transfer_name import confirmed_transfer_accusative
+  values["employee.full_name.kk"] = _name(payload,employee)
+  values["org_unit.destination_kk"] = hire_department_destination_kk(values["org_unit.title_kk"])
+  ru_body = str((template or {}).get("body_template_ru") or "")
+  if "Принять на работу {{employee.full_name}}" in ru_body:
+   values["employee.full_name.hire_ru"] = confirmed_transfer_accusative(payload)
+   if not values["employee.full_name.hire_ru"]:
+    raise TemplateApplicationError("Уточните вручную ФИО в винительном падеже RU для приказа о приёме")
+  if "на должность {{position.title_ru}}" in ru_body:
+   manual = payload.get("hire_position_manual_forms")
+   manual_ru = saved_ru if isinstance(manual, Mapping) and manual.get("ru") is True else ""
+   try: values["position.title_ru"] = hire_position_accusative_ru(values["position.title_ru"], manual_ru)
+   except ValueError as exc: raise TemplateApplicationError(str(exc)) from exc
  if unpaid:
   try: p=unpaid_leave_period(payload)
   except UnpaidLeaveContractError as exc: raise TemplateApplicationError(str(exc)) from exc
@@ -249,6 +265,9 @@ def _render(template:Mapping[str,Any],values:Mapping[str,str], *, draft_preview:
   if template.get('item_type_code') == 'HIRE' and key in ('body_template_ru', 'body_template_kk'):
    from app.services.personnel_order_hire_position_quotes import hire_body_template_without_position_quotes
    value = hire_body_template_without_position_quotes(value)
+   if key == 'body_template_kk':
+    from app.services.personnel_order_hire_wording import hire_body_template_with_department
+    value = hire_body_template_with_department(value)
   if template.get('item_type_code') == 'PERSONAL_DATA_CHANGE':
    from app.services.personnel_order_personal_data_contract import adapt_identity_date_clause
    value = adapt_identity_date_clause(value, values)
@@ -262,6 +281,10 @@ def _render(template:Mapping[str,Any],values:Mapping[str,str], *, draft_preview:
        and re.search(r'Перевести\s*$', source_text[:match.start()], re.IGNORECASE)
        and token in {'employee.full_name', 'employee.full_name_dative_ru', 'employee.full_name_accusative_ru'}):
     token = 'employee.full_name_accusative_ru'
+   if (template.get('item_type_code') == 'HIRE' and key == 'body_template_ru'
+       and re.search(r'Принять\s+на\s+работу\s*$', source_text[:match.start()], re.IGNORECASE)
+       and token == 'employee.full_name'):
+    token = 'employee.full_name.hire_ru'
    value=values.get(f"{token}.{'kk' if key.endswith('_kk') else 'ru'}",values.get(token,""))
    value=format_template_rate(str(template['item_type_code']),token,value)
    missing.add(token) if not value.strip() and token not in optional_tokens and not token.startswith("basis.application_") else None
@@ -375,11 +398,30 @@ def apply_template_application_tx(conn: Any, order_id: int, actor_user_id: int, 
     before = _blocks(conn, order_id, [int(x["item_id"]) for x in items])
     for lang in ("ru", "kk"):
         for block in ("title", "preamble"):
-            conn.execute(text("UPDATE public.personnel_order_editorial_blocks SET generated_text=:v,override_text=NULL,revision=revision+1,updated_at=now() WHERE order_id=:id AND locale=:l AND block_type=:b"), {"v": preview["order_proposed"][f"{block}_{lang}"], "id": order_id, "l": lang, "b": block})
+            conn.execute(text("""
+                INSERT INTO public.personnel_order_editorial_blocks
+                    (order_id, locale, block_type, generated_text, generated_at)
+                VALUES (:id, :l, :b, :v, now())
+                ON CONFLICT (order_id, locale, block_type) DO UPDATE
+                SET generated_text=EXCLUDED.generated_text, override_text=NULL,
+                    generated_at=now(), revision=public.personnel_order_editorial_blocks.revision+1,
+                    updated_at=now()
+            """), {"v": preview["order_proposed"][f"{block}_{lang}"], "id": order_id, "l": lang, "b": block})
+    item_types = {int(item["item_id"]): str(item["item_type_code"]) for item in items}
     for entry in preview["items"]:
         for lang in ("ru", "kk"):
             for block in ("body", "basis"):
-                conn.execute(text("UPDATE public.personnel_order_item_editorial_blocks SET generated_text=:v,override_text=NULL,revision=revision+1,updated_at=now() WHERE order_item_id=:id AND locale=:l AND block_type=:b"), {"v": entry["proposed"][f"{block}_{lang}"], "id": entry["order_item_id"], "l": lang, "b": block})
+                conn.execute(text("""
+                    INSERT INTO public.personnel_order_item_editorial_blocks
+                        (order_item_id, locale, block_type, generated_text, generated_at, basis_required)
+                    VALUES (:id, :l, :b, :v, now(), :basis_required)
+                    ON CONFLICT (order_item_id, locale, block_type) DO UPDATE
+                    SET generated_text=EXCLUDED.generated_text, override_text=NULL,
+                        generated_at=now(), revision=public.personnel_order_item_editorial_blocks.revision+1,
+                        updated_at=now()
+                """), {"v": entry["proposed"][f"{block}_{lang}"], "id": entry["order_item_id"],
+                       "l": lang, "b": block,
+                       "basis_required": block == "basis" and resolve_basis_required(item_types[entry["order_item_id"]])[0]})
     if AUDIT_INSERT_HOOK:
         AUDIT_INSERT_HOOK()
     # One history row per exact version; old multi-item snapshots remain readable.

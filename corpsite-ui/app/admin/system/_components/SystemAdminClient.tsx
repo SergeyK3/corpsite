@@ -17,6 +17,7 @@ import EnrollmentTab from "./tabs/EnrollmentTab";
 import UserLinkageReviewTab from "./tabs/UserLinkageReviewTab";
 import UsersTab from "./tabs/UsersTab";
 import VisibilityTab from "./tabs/VisibilityTab";
+import HireApprovalRolloutTab from "./tabs/HireApprovalRolloutTab";
 import TelegramStatusPanel from "./TelegramStatusPanel";
 import PersonnelOrderQualityControlPanel from "./PersonnelOrderQualityControlPanel";
 import DataCleanupCenter from "../data-cleanup/_components/DataCleanupCenter";
@@ -30,7 +31,8 @@ type MainTab =
   | "visibility"
   | "user-linkage-review"
   | "quality-control"
-  | "data-cleanup";
+  | "data-cleanup"
+  | "hire-approval-rollout";
 
 const TABS: { id: MainTab; label: string }[] = [
   { id: "users", label: "Пользователи" },
@@ -53,6 +55,7 @@ function tabButtonClass(active: boolean): string {
 
 export default function SystemAdminClient() {
   const me = useCurrentUser();
+  const canManageHireRollout = me?.is_system_admin === true;
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState<MainTab>(searchParams.get("section") === "data-cleanup" ? "data-cleanup" : "users");
 
@@ -85,6 +88,7 @@ export default function SystemAdminClient() {
         {me?.has_user_access_admin ? <Link href="/admin/system/access-management" className={tabButtonClass(false)}>Управление доступом</Link> : null}
         {canSeeTestPersonnelAdmin(me) ? <button type="button" onClick={() => setActiveTab("data-cleanup")} className={tabButtonClass(activeTab === "data-cleanup")}>Очистка данных</button> : null}
         {me?.is_system_admin ? <button type="button" onClick={() => setActiveTab("quality-control")} className={tabButtonClass(activeTab === "quality-control")} aria-current={activeTab === "quality-control" ? "page" : undefined}>Контроль качества приказов</button> : null}
+        {canManageHireRollout ? <button type="button" onClick={() => setActiveTab("hire-approval-rollout")} className={tabButtonClass(activeTab === "hire-approval-rollout")} aria-current={activeTab === "hire-approval-rollout" ? "page" : undefined}>Внедрение электронного согласования</button> : null}
       </nav>
 
       <div className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-950">
@@ -96,6 +100,7 @@ export default function SystemAdminClient() {
         {activeTab === "user-linkage-review" ? <UserLinkageReviewTab /> : null}
         {activeTab === "audit" ? <AuditTab /> : null}
         {activeTab === "quality-control" ? <PersonnelOrderQualityControlPanel /> : null}
+        {activeTab === "hire-approval-rollout" && canManageHireRollout ? <HireApprovalRolloutTab /> : null}
         {activeTab === "data-cleanup" ? <DataCleanupCenter /> : null}
       </div>
     </div>

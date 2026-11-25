@@ -123,7 +123,7 @@ def normalize_intake_payload(payload: dict[str, Any]) -> dict[str, Any]:
     additional = source.get("additional") if isinstance(source.get("additional"), dict) else {}
     result: dict[str, Any] = {
         "schema_version": 2,
-        "personal": {key: _text(personal.get(key)) for key in ("last_name", "first_name", "middle_name", "birth_date", "birth_place")},
+        "personal": {key: _text(personal.get(key)) for key in ("iin", "last_name", "first_name", "middle_name", "birth_date", "birth_place")},
         "contacts": {"email": _text(contacts.get("email")), "mobile_phone": _phone(contacts.get("mobile_phone")), "residence_address": _text(contacts.get("residence_address")), "registration_address": _text(contacts.get("registration_address"))},
         "education": [_education(x, i) for i, x in enumerate(_records(source.get("education")))],
         "training": [_training(x, i) for i, x in enumerate(_records(source.get("training")))],
@@ -132,7 +132,7 @@ def normalize_intake_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "current_step": _text(source.get("current_step")) or "personal",
     }
     result["personal"].update({"gender": _text(personal.get("gender")), "citizenship": _text(personal.get("citizenship")), "nationality": _text(personal.get("nationality")), "photo_file_id": _text(personal.get("photo_file_id"))})
-    # personnel_number and IIN are HR/application-owned and are intentionally absent.
+    # Personnel number remains HR-owned; the applicant supplies IIN for identity review.
     for name in ("foreign_languages", "awards", "academic_degrees", "academic_titles"):
         entries = [_additional_item(x, i, name) for i, x in enumerate(_records(additional.get(name)))]
         none = bool(additional.get(f"{name}_none"))

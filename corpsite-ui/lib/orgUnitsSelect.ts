@@ -94,9 +94,16 @@ function dedupeOrgUnitOptions(items: OrgUnitSelectOption[]): OrgUnitSelectOption
       byUnitId.set(item.unit_id, item);
       continue;
     }
-    if (existing.group_id == null && item.group_id != null) {
-      byUnitId.set(item.unit_id, item);
-    }
+    // The tree can omit document forms that are present in the flat directory.
+    // Merge the same record by ID instead of letting the first response mask them.
+    byUnitId.set(item.unit_id, {
+      ...existing,
+      group_id: item.group_id ?? existing.group_id,
+      name: item.name || existing.name,
+      name_kk: item.name_kk || existing.name_kk,
+      document_genitive_ru: item.document_genitive_ru || existing.document_genitive_ru,
+      document_genitive_kk: item.document_genitive_kk || existing.document_genitive_kk,
+    });
   }
 
   return Array.from(byUnitId.values()).sort((a, b) => a.name.localeCompare(b.name, "ru"));

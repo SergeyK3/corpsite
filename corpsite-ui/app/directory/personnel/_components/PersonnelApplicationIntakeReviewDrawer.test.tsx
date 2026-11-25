@@ -118,7 +118,59 @@ describe("PersonnelApplicationIntakeReviewDrawer", () => {
 
     expect(await screen.findByTestId("intake-review-section-personal")).toBeInTheDocument();
     const drawer = screen.getAllByTestId("intake-review-drawer")[0];
-    expect(within(drawer).getByTestId("intake-transfer-button")).toHaveTextContent("Перенести в PPR");
+    expect(within(drawer).getByTestId("intake-transfer-button")).toHaveTextContent("Перенести в личную карточку");
+    expect(within(drawer).getByTestId("intake-review-summary")).toHaveTextContent("Принято: 3 · Ждёт проверки: 0 · Возвращено на доработку: 0 · Пропущено: 4");
+  });
+
+  it("shows the saved section status and counts from the API, including after reopening", async () => {
+    const pendingState: api.IntakeReviewState = {
+      ...reviewState,
+      can_transfer: false,
+      sections: reviewState.sections.map((section) => section.section_code === "personal"
+        ? { ...section, status: "pending" }
+        : section),
+    };
+    const acceptedState: api.IntakeReviewState = { ...reviewState };
+    const getState = vi.spyOn(api, "getIntakeReviewState")
+      .mockResolvedValueOnce(pendingState)
+      .mockResolvedValue(acceptedState);
+    vi.spyOn(api, "acceptIntakeSection").mockResolvedValue(acceptedState);
+
+    const { rerender } = render(
+      <PersonnelApplicationIntakeReviewDrawer applicationId={42} open onClose={() => {}} />,
+    );
+    const personal = await screen.findByTestId("intake-review-section-personal");
+    expect(within(personal).getByText("Ждёт проверки")).toBeInTheDocument();
+    expect(screen.getByTestId("intake-review-summary")).toHaveTextContent("Принято: 2 · Ждёт проверки: 1");
+
+    fireEvent.click(within(personal).getByRole("button", { name: "Принять" }));
+    expect(await within(personal).findByText("Принято")).toBeInTheDocument();
+    expect(screen.getByTestId("intake-review-summary")).toHaveTextContent("Принято: 3 · Ждёт проверки: 0");
+
+    rerender(<PersonnelApplicationIntakeReviewDrawer applicationId={42} open={false} onClose={() => {}} />);
+    rerender(<PersonnelApplicationIntakeReviewDrawer applicationId={42} open onClose={() => {}} />);
+    await waitFor(() => expect(getState).toHaveBeenCalledTimes(2));
+    expect(within(await screen.findByTestId("intake-review-section-personal")).getByText("Принято")).toBeInTheDocument();
+    expect(screen.getByTestId("intake-review-summary")).toHaveTextContent("Принято: 3 · Ждёт проверки: 0");
+  });
+
+  it("shows a save error beside the section and keeps the server status", async () => {
+    const pendingState: api.IntakeReviewState = {
+      ...reviewState,
+      can_transfer: false,
+      sections: reviewState.sections.map((section) => section.section_code === "personal"
+        ? { ...section, status: "pending" }
+        : section),
+    };
+    vi.spyOn(api, "getIntakeReviewState").mockResolvedValue(pendingState);
+    vi.spyOn(api, "acceptIntakeSection").mockRejectedValue(new Error("Сервер недоступен"));
+    render(<PersonnelApplicationIntakeReviewDrawer applicationId={42} open onClose={() => {}} />);
+
+    const personal = await screen.findByTestId("intake-review-section-personal");
+    fireEvent.click(within(personal).getByRole("button", { name: "Принять" }));
+    expect(await within(personal).findByRole("alert")).toHaveTextContent("Сервер недоступен");
+    expect(within(personal).getByText("Ждёт проверки")).toBeInTheDocument();
+    expect(screen.getByTestId("intake-review-summary")).toHaveTextContent("Принято: 2 · Ждёт проверки: 1");
   });
 
   it("calls transfer API and shows audit after success", async () => {

@@ -25,7 +25,7 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 export default function PersonnelApplicationEmploymentSection({ detail, journalReturnHref }: Props) {
-  if (detail.status !== "completed" || detail.employee_id == null) {
+  if (detail.status !== "completed" || detail.employee_id == null || detail.person_id == null) {
     return null;
   }
 

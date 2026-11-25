@@ -22,7 +22,7 @@ from app.personnel_intake.application.intake_mapper import (
     map_training_records,
     parse_date_value,
 )
-from app.personnel_intake.application.review_service import load_intake_review_state
+from app.personnel_intake.application.review_service import intake_target_identity_confirmed, load_intake_review_state
 from app.personnel_intake.domain.errors import PersonnelIntakeTransferError
 from app.personnel_intake.domain.models import IntakeTransferSnapshot
 from app.personnel_intake.domain.review_status import (
@@ -144,23 +144,39 @@ def _transfer_general_and_contacts(
     application_id: int,
     person_id: int,
     payload: dict,
+    transfer_personal: bool,
+    transfer_contacts: bool,
+    transferred_by_user_id: int,
 ) -> None:
     personal = payload.get("personal") or {}
     contacts = payload.get("contacts") or {}
     full_name = build_full_name(personal)
     birth_date = parse_date_value(personal.get("birth_date"))
-    if full_name:
+    if transfer_personal and full_name:
         conn.execute(
-            text("UPDATE public.persons SET full_name = :full_name WHERE person_id = :person_id"),
-            {"full_name": full_name, "person_id": int(person_id)},
+            text("""
+                UPDATE public.persons
+                SET full_name = :full_name,
+                    last_name = COALESCE(NULLIF(BTRIM(:last_name), ''), last_name),
+                    first_name = COALESCE(NULLIF(BTRIM(:first_name), ''), first_name),
+                    middle_name = NULLIF(BTRIM(:middle_name), '')
+                WHERE person_id = :person_id
+            """),
+            {
+                "full_name": full_name,
+                "last_name": str(personal.get("last_name") or ""),
+                "first_name": str(personal.get("first_name") or ""),
+                "middle_name": str(personal.get("middle_name") or ""),
+                "person_id": int(person_id),
+            },
         )
-    if birth_date is not None:
+    if transfer_personal and birth_date is not None:
         conn.execute(
             text("UPDATE public.persons SET birth_date = :birth_date WHERE person_id = :person_id"),
             {"birth_date": birth_date, "person_id": int(person_id)},
         )
-    phone = str(contacts.get("mobile_phone") or "").strip() or None
-    email = str(contacts.get("email") or "").strip() or None
+    phone = (str(contacts.get("mobile_phone") or "").strip() or None) if transfer_contacts else None
+    email = (str(contacts.get("email") or "").strip() or None) if transfer_contacts else None
     conn.execute(
         text(
             """
@@ -173,6 +189,37 @@ def _transfer_general_and_contacts(
         ),
         {"phone": phone, "email": email, "application_id": int(application_id)},
     )
+    if transfer_contacts:
+        conn.execute(
+            text("""
+                INSERT INTO public.person_contacts
+                    (person_id, mobile_phone, email, registration_address, residence_address,
+                     created_by_user_id, updated_by_user_id, source_kind)
+                VALUES
+                    (:person_id, :phone, :email, :registration_address, :residence_address,
+                     :user_id, :user_id, 'PERSONNEL_INTAKE')
+                ON CONFLICT (person_id) DO UPDATE SET
+                    mobile_phone = EXCLUDED.mobile_phone,
+                    email = EXCLUDED.email,
+                    registration_address = EXCLUDED.registration_address,
+                    residence_address = EXCLUDED.residence_address,
+                    version = person_contacts.version + 1,
+                    updated_at = now(),
+                    updated_by_user_id = :user_id,
+                    source_kind = 'PERSONNEL_INTAKE'
+                WHERE (person_contacts.mobile_phone, person_contacts.email,
+                       person_contacts.registration_address, person_contacts.residence_address)
+                      IS DISTINCT FROM
+                      (EXCLUDED.mobile_phone, EXCLUDED.email,
+                       EXCLUDED.registration_address, EXCLUDED.residence_address)
+            """),
+            {
+                "person_id": int(person_id), "phone": phone, "email": email,
+                "registration_address": str(contacts.get("registration_address") or "").strip() or None,
+                "residence_address": str(contacts.get("residence_address") or "").strip() or None,
+                "user_id": int(transferred_by_user_id),
+            },
+        )
 
 
 def _run_section_commands(
@@ -319,6 +366,10 @@ def transfer_intake_to_ppr(
 
     app_repo = SqlAlchemyPersonnelApplicationRepository(conn)
     app = app_repo.require_by_id(application_id)
+    if not intake_target_identity_confirmed(conn, app):
+        raise PersonnelIntakeTransferError(
+            "Сначала подтвердите личность претендента по документу.", code="IDENTITY_NOT_CONFIRMED"
+        )
     if app.status not in {APPLICATION_STATUS_UNDER_REVIEW, APPLICATION_STATUS_REVIEW_COMPLETED}:
         raise PersonnelIntakeTransferError(
             f"Application status {app.status} does not allow transfer.",
@@ -348,6 +399,9 @@ def transfer_intake_to_ppr(
                 application_id=application_id,
                 person_id=app.person_id,
                 payload=payload,
+                transfer_personal=personal_ok,
+                transfer_contacts=contacts_ok,
+                transferred_by_user_id=transferred_by_user_id,
             )
             transferred_sections.append(PPR_TRANSFER_SECTION_GENERAL)
             all_command_ids.append(intake_command_id(application_id, "general", 0))

@@ -144,6 +144,7 @@ export const INTAKE_EDUCATION_TYPE_OPTIONS: ReadonlyArray<{
 
 export type IntakeDraftPayload = {
   personal: {
+    iin: string;
     last_name: string;
     first_name: string;
     middle_name: string;
@@ -281,6 +282,7 @@ export function resolveIntakeOnBehalfInitialStepIndex(): number {
 export function emptyIntakeDraftPayload(): IntakeDraftPayload {
   return {
     personal: {
+      iin: "",
       last_name: "",
       first_name: "",
       middle_name: "",
@@ -437,7 +439,7 @@ function normalizeIntakeResponsePayload<T extends { payload: IntakeDraftPayload 
   }));
   const personal = {
     ...sourcePersonal,
-    ...formTextFields(sourcePersonal, ["last_name", "first_name", "middle_name", "birth_date", "birth_place", "gender", "citizenship", "nationality", "photo_file_id"]),
+    ...formTextFields(sourcePersonal, ["iin", "last_name", "first_name", "middle_name", "birth_date", "birth_place", "gender", "citizenship", "nationality", "photo_file_id"]),
   };
   const contacts = {
     ...sourceContacts,

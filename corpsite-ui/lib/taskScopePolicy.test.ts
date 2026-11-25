@@ -74,4 +74,9 @@ describe("isTaskSystemAdmin", () => {
       false,
     );
   });
+
+  it("does not grant task administration from a role code or a damaged role name", () => {
+    expect(isTaskSystemAdmin({ user_id: 7, role_id: 4, role_code: "ADMIN" })).toBe(false);
+    expect(isTaskSystemAdmin({ user_id: 8, role_id: 5, role_name_ru: "Системный администратор" })).toBe(false);
+  });
 });

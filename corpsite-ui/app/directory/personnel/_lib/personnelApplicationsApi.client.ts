@@ -26,7 +26,7 @@ export type PersonnelApplicationRegisterResponse = {
 
 export type PersonnelApplicationDetail = {
   application_id: number;
-  person_id: number;
+  person_id: number | null;
   full_name?: string | null;
   iin?: string | null;
   status: string;
@@ -710,7 +710,7 @@ export async function getDirectorResolutionAudit(
   return (body as { items: DirectorResolutionAuditItem[] }).items;
 }
 
-export async function createHireOrderDraft(applicationId: number): Promise<{
+export async function createHireOrderDraft(applicationId: number, employeeFullNameAccusativeRu?: string): Promise<{
   application_id: number;
   personnel_order_id: number;
   idempotent_replay: boolean;
@@ -720,7 +720,7 @@ export async function createHireOrderDraft(applicationId: number): Promise<{
   const res = await fetch(resolveApiUrl(path), {
     method: "POST",
     headers: authHeaders(true),
-    body: JSON.stringify({}),
+    body: JSON.stringify(employeeFullNameAccusativeRu == null ? {} : {employee_full_name_accusative_ru:employeeFullNameAccusativeRu}),
     cache: "no-store",
   });
   const body = await readJsonSafe(res);

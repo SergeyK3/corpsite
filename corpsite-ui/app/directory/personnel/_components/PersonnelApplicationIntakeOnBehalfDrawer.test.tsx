@@ -27,6 +27,7 @@ const submitIntakeOnBehalfDraftMock = vi.mocked(api.submitIntakeOnBehalfDraft);
 function buildSessionPayload(): IntakeDraftPayload {
   return {
     personal: {
+      iin: "900101000000",
       last_name: "Иванов",
       first_name: "Иван",
       middle_name: "",

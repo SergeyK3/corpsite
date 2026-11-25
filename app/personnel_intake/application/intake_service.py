@@ -6,7 +6,7 @@ import os
 import secrets
 import re
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from sqlalchemy.engine import Connection
@@ -167,10 +167,10 @@ def issue_intake_link(
     reissue: bool = False,
 ) -> IssueIntakeLinkResult:
     """Issue a new protected intake link for an application."""
-    _require_application(conn, application_id)
+    application = _require_application(conn, application_id)
     repo = SqlAlchemyPersonnelIntakeRepository(conn)
     now = _now_utc()
-    expires_at = now + timedelta(days=_intake_link_ttl_days())
+    expires_at = now + (timedelta(hours=24) if application.application_source == "electronic" else timedelta(days=_intake_link_ttl_days()))
 
     active = repo.get_active_link_for_application(application_id)
     if active is not None and not reissue:
@@ -584,7 +584,11 @@ def submit_intake_draft_for_application(
             code="ALREADY_SUBMITTED",
         )
 
-    _validate_submit_payload(draft.payload)
+    application = SqlAlchemyPersonnelApplicationRepository(conn).require_by_id(application_id)
+    _validate_submit_payload(
+        draft.payload,
+        require_identity=application.application_source == "electronic" and application.person_id is None,
+    )
 
     draft = repo.mark_draft_submitted(draft.draft_id, submitted_at=now)
     link = repo.mark_link_submitted(link.link_id, submitted_at=now)
@@ -609,7 +613,7 @@ def submit_intake_draft_for_application(
     )
 
 
-def _validate_submit_payload(payload: dict[str, Any]) -> None:
+def _validate_submit_payload(payload: dict[str, Any], *, require_identity: bool = False) -> None:
     payload = normalize_employment_biography_payload(payload)
     personal = payload.get("personal") or {}
     contacts = payload.get("contacts") or {}
@@ -618,6 +622,16 @@ def _validate_submit_payload(payload: dict[str, Any]) -> None:
         errors.append("personal.last_name")
     if not str(personal.get("first_name") or "").strip():
         errors.append("personal.first_name")
+    if require_identity:
+        from app.domain.iin import IinValidationError, normalize_and_validate_iin
+        from app.personnel_intake.application.intake_mapper import parse_date_value
+        try:
+            normalize_and_validate_iin(str(personal.get("iin") or ""))
+        except IinValidationError:
+            errors.append("personal.iin")
+        birth = parse_date_value(personal.get("birth_date"))
+        if birth is None or birth > date.today():
+            errors.append("personal.birth_date")
     if not str(contacts.get("mobile_phone") or "").strip():
         errors.append("contacts.mobile_phone")
     elif not re.fullmatch(r"\+7\d{10}", str(contacts.get("mobile_phone"))):

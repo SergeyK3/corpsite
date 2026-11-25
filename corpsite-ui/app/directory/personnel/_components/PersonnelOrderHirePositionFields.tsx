@@ -22,6 +22,11 @@ export default function PersonnelOrderHirePositionFields({value, positions: opti
   const [placement, setPlacement] = React.useState({left: 0, top: 0, width: 0, maxHeight: 192});
   const id = React.useId();
   const words = normalize(open ? fields[open === "ru" ? "name_ru" : "name_kk"] : "").split(/\s+/).filter(Boolean);
+  const selectedReference = options.find(row => row.id === value.id);
+  const missingDocumentForms = selectedReference ? [
+    !selectedReference.document_nominative_ru?.trim() ? "Документная форма RU" : "",
+    !selectedReference.document_possessive_kk?.trim() ? "Документная форма KK" : "",
+  ].filter(Boolean) : [];
   const found = options.filter(row =>
     (open !== "kk" || Boolean(row.name_kk?.trim()))
     && (browseAll || words.every(word => normalize(`${row.name} ${row.name_kk || ""}`).includes(word)))
@@ -102,5 +107,10 @@ export default function PersonnelOrderHirePositionFields({value, positions: opti
     {loading && !open ? <p role="status">Загружаются должности…</p> : null}
     {error ? <p role="alert">Не удалось загрузить справочник должностей. Сохранённый текст оставлен без изменений.</p> : null}
     {!loading && !error && value.id != null && !value.kk.trim() ? <p role="status" className="text-sm text-amber-700">Для выбранной должности нет утверждённого названия KK. Запросите согласование перевода.</p> : null}
+    {!loading && !error && value.id != null && !value.kk.trim() ? <p role="status" className="text-sm text-amber-700">Должность «{value.ru || `#${value.id}`}»: отсутствует утверждённое название KK. Согласуйте перевод в справочнике должностей или заполните документную форму здесь.</p> : null}
+    {!loading && !error && missingDocumentForms.length ? <p role="status" className="text-sm text-amber-700">
+      Должность «{selectedReference?.name || value.ru}»: в справочнике не согласованы {missingDocumentForms.join(", ")}.
+      Согласуйте эти поля в <a href="/directory/positions" className="underline">справочнике должностей</a>; рассчитанную форму в текущем черновике проверьте.
+    </p> : null}
   </fieldset>;
 }

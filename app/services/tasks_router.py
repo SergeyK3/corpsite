@@ -161,6 +161,11 @@ def _user_is_approver_for_task(conn, task_id: int, user_id: int, role_id: int) -
     return bool(row)
 
 
+def _reject_electronic_hire_task_mutation(task: Dict[str, Any]) -> None:
+    if str(task.get("source_kind") or "") == "electronic_hire":
+        raise HTTPException(status_code=409, detail="Решение по этой задаче принимается через визу заявления.")
+
+
 @router.get("")
 @router.get("/")
 def list_tasks(
@@ -293,6 +298,8 @@ def list_tasks(
                     """.strip()
                 )
         # System admin + scope=team: no visibility filter — true "all tasks" list.
+        if not is_system_admin:
+            where.append("(t.source_kind <> 'electronic_hire' OR h.head_user_id = :current_user_id)")
 
         if scope == "team" and executor_role_id is not None:
             erid = int(executor_role_id)
@@ -389,6 +396,7 @@ def list_tasks(
             {scope_prefix}
             SELECT COUNT(1)
             FROM public.tasks t
+            LEFT JOIN public.electronic_hire_approval_tasks h ON h.task_id=t.task_id
             LEFT JOIN public.task_statuses ts ON ts.status_id = t.status_id
             LEFT JOIN public.roles er ON er.role_id = t.executor_role_id
             LEFT JOIN public.regular_tasks rt ON rt.regular_task_id = t.regular_task_id
@@ -410,8 +418,12 @@ def list_tasks(
                 er.code AS executor_role_code,
                 er.name AS executor_role_name,
                 er.name AS executor_role_name_ru,
-                ex.executor_user_id,
-                ex.executor_name,
+                COALESCE(h.head_user_id, ex.executor_user_id) AS executor_user_id,
+                COALESCE(hu.full_name, ex.executor_name) AS executor_name,
+                h.application_id AS electronic_hire_application_id,
+                h.head_user_id AS electronic_hire_head_user_id,
+                h.decision AS electronic_hire_decision,
+                h.explanation AS electronic_hire_explanation,
                 t.assignment_scope,
                 t.status_id,
                 t.task_kind,
@@ -436,6 +448,8 @@ def list_tasks(
                 tr.approved_by AS report_approved_by,
                 tr.current_comment AS report_current_comment
             FROM public.tasks t
+            LEFT JOIN public.electronic_hire_approval_tasks h ON h.task_id=t.task_id
+            LEFT JOIN public.users hu ON hu.user_id=h.head_user_id
             LEFT JOIN public.task_statuses ts ON ts.status_id = t.status_id
             LEFT JOIN public.roles er ON er.role_id = t.executor_role_id
             LEFT JOIN public.regular_tasks rt ON rt.regular_task_id = t.regular_task_id
@@ -841,6 +855,7 @@ def submit_report(
             task_row=task,
             include_archived=False,
         )
+        _reject_electronic_hire_task_mutation(task)
 
         if not can_report_or_update(current_user_id=current_user_id, current_role_id=role_id, task_row=task):
             raise_error(ErrorCode.TASK_FORBIDDEN_REPORT, extra={"task_id": int(task_id)})
@@ -896,6 +911,7 @@ def approve_report(
                 task = task
             else:
                 raise
+        _reject_electronic_hire_task_mutation(task)
 
         if not can_approve(current_user_id=current_user_id, current_role_id=role_id, task_row=task):
             raise_error(
@@ -951,6 +967,7 @@ def reject_report(
                 task = task
             else:
                 raise
+        _reject_electronic_hire_task_mutation(task)
 
         if not can_approve(current_user_id=current_user_id, current_role_id=role_id, task_row=task):
             raise_error(
@@ -995,6 +1012,7 @@ def archive_task(
             task_row=task,
             include_archived=True,
         )
+        _reject_electronic_hire_task_mutation(task)
 
         if (not _is_system_admin_role_id(role_id)) and int(task.get("initiator_user_id") or 0) != int(current_user_id):
             raise HTTPException(status_code=404, detail="Task not found")
@@ -1033,6 +1051,7 @@ def patch_task(
             task_row=task,
             include_archived=False,
         )
+        _reject_electronic_hire_task_mutation(task)
 
         is_admin = _is_system_admin_role_id(role_id)
         is_initiator = int(task.get("initiator_user_id") or 0) == int(current_user_id)
@@ -1186,6 +1205,7 @@ def delete_task(
             task_row=task,
             include_archived=True,
         )
+        _reject_electronic_hire_task_mutation(task)
 
         if hard:
             if not _is_system_admin_role_id(role_id):

@@ -127,6 +127,19 @@ export function formatPersonnelDateRange(
   return from || to;
 }
 
+/** Card periods keep exact dates only when both endpoints carry day precision. */
+export function formatPersonnelCardPeriod(
+  fromRaw: string | null | undefined,
+  toRaw: string | null | undefined,
+): string {
+  const from = String(fromRaw ?? "").trim();
+  const to = String(toRaw ?? "").trim();
+  const hasFullDate = (value: string) => ISO_DATE_RE.test(value) || RU_DATE_RE.test(value);
+  return formatPersonnelDateRange(from, to, {
+    precision: hasFullDate(from) && hasFullDate(to) ? "day" : "year",
+  });
+}
+
 export function formatPersonnelDateTime(value: string | null | undefined): string {
   const text = String(value ?? "").trim();
   if (!text) return "—";

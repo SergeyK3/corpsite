@@ -46,6 +46,87 @@ export type AccessGrant = {
   revoked_by_user_id?: number | null;
 };
 
+export type AccessPersonAccount = {
+  user_id: number;
+  employee_id: number | null;
+  full_name: string | null;
+  login: string | null;
+  is_active: boolean;
+  role_id: number | null;
+  role_code: string | null;
+  role_name: string | null;
+};
+
+export type AccessPersonRow = {
+  employee_id: number;
+  full_name: string;
+  has_current_assignment: boolean;
+  position_id: number | null;
+  position_name: string | null;
+  org_unit_id: number | null;
+  org_unit_name: string | null;
+  org_group_id: number | null;
+  users: AccessPersonAccount[];
+};
+
+export type AccessPeopleResponse = {
+  items: AccessPersonRow[];
+  unlinked_accounts: AccessPersonAccount[];
+};
+
+export type AccessSource = {
+  grant_id: number;
+  active: boolean;
+  status: string;
+  source_type: "personal" | "role" | "related";
+  target_type: string;
+  target_id: number;
+  role_name: string | null;
+  role_code: string | null;
+  role_assigned_at: string | null;
+  grant_created_at: string | null;
+  starts_at: string | null;
+  ends_at: string | null;
+  granted_by_user_id: number | null;
+  grantor_label: string | null;
+  reason: string | null;
+  revoked_at: string | null;
+  revoked_by_user_id: number | null;
+  revoker_label: string | null;
+  audit: { event_type: string; happened_at: string | null; actor_label: string | null; reason: string | null }[];
+};
+
+export type AccessPersonRight = {
+  code: string;
+  label: string;
+  section: string;
+  resource_key: string | null;
+  scope_type: string;
+  scope_id: number | null;
+  scope_unit_name: string | null;
+  include_subtree: boolean;
+  active: boolean;
+  sources: AccessSource[];
+};
+
+export type AccessPersonDetail = {
+  user_id: number;
+  is_active: boolean;
+  role_name: string | null;
+  role_code: string | null;
+  implicit_sources: string[];
+  items: AccessPersonRight[];
+  coverage_note: string;
+};
+
+export function fetchAccessPeople(): Promise<AccessPeopleResponse> {
+  return apiFetchJson<AccessPeopleResponse>("/admin/access/people");
+}
+
+export function fetchAccessPerson(userId: number, showRevoked: boolean): Promise<AccessPersonDetail> {
+  return apiFetchJson<AccessPersonDetail>(`/admin/access/people/${userId}`, { query: { show_revoked: showRevoked } });
+}
+
 export type AccessGrantCreate = {
   access_role_id: number;
   target_type: string;

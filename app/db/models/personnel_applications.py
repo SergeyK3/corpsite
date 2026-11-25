@@ -26,10 +26,10 @@ class PersonnelApplication(Base):
         primary_key=True,
         autoincrement=True,
     )
-    person_id: Mapped[int] = mapped_column(
+    person_id: Mapped[int | None] = mapped_column(
         BigInteger,
         ForeignKey("persons.person_id", ondelete="RESTRICT"),
-        nullable=False,
+        nullable=True,
     )
     status: Mapped[str] = mapped_column(
         Text,

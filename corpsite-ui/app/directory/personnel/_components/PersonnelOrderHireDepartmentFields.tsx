@@ -103,5 +103,12 @@ export default function PersonnelOrderHireDepartmentFields({value, options, onCh
     ] as const).map(([key, label]) => <label key={key} className="block space-y-1"><span>{label}</span>
       <input aria-label={label} value={fields[key]} maxLength={300} onChange={event => edit(key, event.target.value)} className="block w-full rounded border bg-transparent p-2"/>
     </label>)}</div>
+    {value.unit && (!fields.name_kk.trim() || !fields.genitive_ru.trim() || !fields.genitive_kk.trim()) ? <p role="status" className="text-sm text-amber-700">
+      Для подразделения «{fields.name_ru || value.unit.name}» требуется согласовать: {[
+        !fields.name_kk.trim() ? "название KK" : "",
+        !fields.genitive_ru.trim() ? "родительный падеж RU" : "",
+        !fields.genitive_kk.trim() ? "ілік септік KK" : "",
+      ].filter(Boolean).join(", ")}. Согласуйте формы с ответственным за справочник подразделений; значения для этого приказа можно заполнить в полях выше.
+    </p> : null}
   </fieldset>;
 }

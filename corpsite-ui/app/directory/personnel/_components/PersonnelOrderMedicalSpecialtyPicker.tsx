@@ -4,7 +4,7 @@ import {apiFetchJson} from "@/lib/api";
 import {matchesMedicalSpecialtyWords} from '../_lib/medicalSpecialtySearch';
 
 export type MedicalSpecialtySnapshot={medical_specialty_id:number;name_ru:string;name_kk:string};
-type Row={medical_specialty_id:number;name:string;name_kk:string|null;is_active:boolean;search_aliases?:string[]};
+type Row={medical_specialty_id:number;code?:string;name:string;name_kk:string|null;is_active:boolean;search_aliases?:string[]};
 export default function PersonnelOrderMedicalSpecialtyPicker({value,onChange,disabled=false,required=false,allowMissingKk=false,allWordsSearch=false,hint}:{value?:MedicalSpecialtySnapshot|null;onChange:(value:MedicalSpecialtySnapshot|null)=>void;disabled?:boolean;required?:boolean;allowMissingKk?:boolean;allWordsSearch?:boolean;hint?:string}){
  const [rows,setRows]=React.useState<Row[]>([]),[query,setQuery]=React.useState(""),[loading,setLoading]=React.useState(true),[error,setError]=React.useState(""),[retry,setRetry]=React.useState(0);
  const [open,setOpen]=React.useState(false),[editing,setEditing]=React.useState(false);
@@ -32,6 +32,6 @@ export default function PersonnelOrderMedicalSpecialtyPicker({value,onChange,dis
   <p className="text-xs">{hint??(required?"Выберите специальность из справочника. Сохраняются ID и названия RU/KK.":"Специальность сохраняется только в пункте приказа. Без выбора текст формируется без скобок.")}</p>
   {loading&&<p role="status">Загружаются специальности…</p>}
   {error&&<p role="alert">{error} <button type="button" disabled={disabled} onClick={()=>setRetry(n=>n+1)}>Повторить загрузку</button></p>}
-  {listVisible&&<div id={`${id}-options`} role="listbox" aria-label="Медицинские специальности" className="max-h-48 overflow-y-auto rounded border">{found.map(r=><button type="button" role="option" aria-selected={r.medical_specialty_id===value?.medical_specialty_id} key={r.medical_specialty_id} disabled={disabled||!r.name_kk&&!allowMissingKk} onMouseDown={e=>e.preventDefault()} onClick={()=>select(r)} className="block w-full px-3 py-2 text-left hover:bg-zinc-100 dark:hover:bg-zinc-800">{r.name} / {r.name_kk||"нет названия KK"}</button>)}{!found.length&&<p className="p-2">Совпадений нет.</p>}</div>}
+  {listVisible&&<div id={`${id}-options`} role="listbox" aria-label="Медицинские специальности" className="max-h-48 overflow-y-auto rounded border">{found.map(r=><button type="button" role="option" aria-selected={r.medical_specialty_id===value?.medical_specialty_id} key={r.medical_specialty_id} disabled={disabled||!r.name_kk&&!allowMissingKk} onMouseDown={e=>e.preventDefault()} onClick={()=>select(r)} className="block w-full px-3 py-2 text-left hover:bg-zinc-100 dark:hover:bg-zinc-800">{r.name} / {r.name_kk||`нет названия KK · ${r.code||"#"+r.medical_specialty_id}`}</button>)}{!found.length&&<p className="p-2">Совпадений нет.</p>}</div>}
  </div>;
 }
