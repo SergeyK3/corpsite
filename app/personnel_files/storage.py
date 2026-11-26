@@ -61,9 +61,25 @@ def render(content: bytes, mime: str, kind: str) -> list[bytes]:
         raise ValueError('Файл пуст или превышает 10 МиБ.')
     if kind == 'photo':
         from app.personnel_intake.domain.photo_validation import validate_intake_photo_bytes
+        from app.personnel_intake.domain.errors import PersonnelIntakeValidationError
         if mime != 'image/jpeg':
             raise ValueError('Для фото лица требуется JPEG.')
-        validate_intake_photo_bytes(content, content_type=mime)
+        try:
+            validate_intake_photo_bytes(content, content_type=mime)
+        except PersonnelIntakeValidationError as exc:
+            messages = {
+                'Photo file is empty.': 'Выберите непустой файл JPEG.',
+                'Photo exceeds 500 KB limit.': 'Фото превышает допустимый размер 500 КБ.',
+                'Only JPEG photos are accepted.': 'Для фото требуется файл JPEG.',
+                'SVG images are not allowed.': 'Файл SVG нельзя использовать как фото.',
+                'Unsupported photo content.': 'Содержимое файла не подходит для фото.',
+                'Photo must be JPEG.': 'Содержимое файла должно быть JPEG.',
+                'Photo could not be decoded as JPEG.': 'Не удалось прочитать файл как JPEG.',
+            }
+            message = messages.get(str(exc), 'Фото не прошло проверку формата.')
+            if str(exc).startswith('Photo must be 600x800 pixels.'):
+                message = 'Фото должно иметь размер 600 × 800 пикселей.'
+            raise ValueError(message) from exc
     if mime in {'image/jpeg', 'image/png'}:
         with warnings.catch_warnings():
             warnings.simplefilter('error', Image.DecompressionBombWarning)
@@ -105,10 +121,16 @@ def render(content: bytes, mime: str, kind: str) -> list[bytes]:
 
 def prepare(key: str, content: bytes, mime: str, kind: str) -> tuple[str, int]:
     destination = path(key, 'original')
-    destination.parent.mkdir(mode=0o700, parents=True, exist_ok=False)
     try:
+        # On Windows, mode=0o700 creates an ACL that can exclude the service
+        # process; inherit the configured storage root's ACL instead.
+        if os.name == 'nt':
+            destination.parent.mkdir(parents=True, exist_ok=False)
+        else:
+            destination.parent.mkdir(mode=0o700, parents=True, exist_ok=False)
         with destination.open('xb') as handle:
-            os.chmod(destination, 0o600)
+            if os.name != 'nt':
+                os.chmod(destination, 0o600)
             handle.write(content)
         scan(destination)
         try:
@@ -120,11 +142,17 @@ def prepare(key: str, content: bytes, mime: str, kind: str) -> tuple[str, int]:
         for index, page in enumerate(pages, 1):
             page_path = path(key, f'page-{index}.png')
             with page_path.open('xb') as handle:
-                os.chmod(page_path, 0o600)
+                if os.name != 'nt':
+                    os.chmod(page_path, 0o600)
                 handle.write(page)
         return hashlib.sha256(content).hexdigest(), len(pages)
-    except BaseException:
-        discard(key)
+    except BaseException as exc:
+        try:
+            discard(key)
+        except OSError:
+            pass
+        if isinstance(exc, OSError):
+            raise HTTPException(503, 'Хранилище файлов временно недоступно. Обратитесь к администратору.') from exc
         raise
 
 

@@ -27,6 +27,14 @@ async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+function changeError(caught: unknown, fallback: string): string {
+  if (caught && typeof caught === "object" && "message" in caught && typeof caught.message === "string" && !(caught instanceof TypeError)) {
+    return caught.message;
+  }
+  if (caught instanceof TypeError) return "Не удалось связаться с сервером. Проверьте подключение и повторите попытку.";
+  return fallback;
+}
+
 export function ChangeButton({ onClick }: { onClick: () => void }) {
   return <button type="button" className={buttonClass} onClick={onClick}>Внести изменения</button>;
 }
@@ -73,7 +81,7 @@ export function SelfPhotoChanges() {
       if (latest) { body.append("set_id", latest.set_id); body.append("expected_revision", String(latest.revision)); body.append("expected_version_id", latest.version_id); }
       const result = await api<PhotoVersion>("/api/personnel-files/me", { method: "POST", body });
       setLatest(result); setFile(null); setPreview(null); setOpen(false);
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "Не удалось отправить фото."); }
+    } catch (caught) { setError(changeError(caught, "Не удалось отправить фото.")); }
     finally { setBusy(false); }
   }
   return <div className="space-y-2" data-testid="self-photo-changes">
@@ -118,13 +126,13 @@ export function SelfRelativeChanges({ records }: { records: Relative[] }) {
       const updated = await api<Request>(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
       setRequests((old) => [updated, ...old.filter((item) => item.request_id !== updated.request_id)]);
       setOpen(false);
-    } catch (caught) { setError(caught instanceof Error ? caught.message : "Не удалось отправить заявку."); }
+    } catch (caught) { setError(changeError(caught, "Не удалось отправить заявку.")); }
     finally { setBusy(false); }
   }
   return <div className="mt-3 space-y-3" data-testid="self-relative-changes">
-    <div className="flex items-center justify-between gap-3"><h2 className="text-lg font-semibold">Родственники</h2><ChangeButton onClick={() => { setSelected(null); setDraft(null); setOpen(true); }} /></div>
+    <div className="flex items-center justify-between gap-3"><h2 className="text-lg font-semibold">Родственники</h2>{records.length > 0 && <ChangeButton onClick={() => { if (records.length === 1) edit(records[0], latestFor(records[0])?.status === "returned" ? latestFor(records[0]) : undefined); else { setSelected(null); setDraft(null); setOpen(true); } }} />}</div>
     <p className="text-sm text-zinc-600">Исправление действующей записи будет проверено кадровиком.</p>
-    {records.length === 0 && <p className="text-sm text-zinc-500">Действующих записей нет.</p>}
+    {records.length === 0 && <p className="text-sm text-zinc-500">Записей о родственниках пока нет. Исправлять пока нечего.</p>}
     {records.map((record) => { const request = latestFor(record); return <div key={record.record_id} className="rounded-lg border p-3 text-sm"><div className="flex flex-wrap items-center justify-between gap-2"><strong>{record.full_name}</strong><button type="button" className={buttonClass} onClick={() => edit(record, request?.status === "returned" ? request : undefined)} disabled={request?.status === "pending"}>Исправить</button></div><p>Степень родства: {record.relationship_type}</p>{request && <p className="mt-2"><ChangeStatus state={request.status} reason={request.reason} /></p>}{request?.status === "returned" && <button type="button" className="mt-2 text-blue-700 underline" onClick={() => edit(record, request)}>Открыть предложенные значения</button>}</div>; })}
     {error && !open && <p role="alert" className="text-sm text-red-700">{error}</p>}
     {open && <ChangeModal title="Исправление записи о родственнике" onClose={() => setOpen(false)}>
