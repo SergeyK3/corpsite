@@ -65,6 +65,7 @@ def relatives(seeded, database, monkeypatch):
             return type('Result', (), {'section_record_id': new_id})()
 
     monkeypatch.setattr(changes, 'PprSectionApplicationService', FakePprService)
+    monkeypatch.setattr(changes, '_ensure_ppr_envelope', lambda *_: None)
     app = FastAPI()
     app.include_router(router)
     app.dependency_overrides[get_current_user] = lambda: seeded[1]

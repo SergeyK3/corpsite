@@ -11,8 +11,15 @@ from sqlalchemy.exc import IntegrityError
 
 from app.db.engine import engine
 from app.ppr.application.authorization import PersonnelCardEditAuthorizationAdapter
-from app.ppr.application.command_models import PprCommandEnvelope
+from app.ppr.application.command_models import (
+    COMMAND_TYPE_MATERIALIZE_PPR,
+    MaterializePprPayload,
+    PprCommandEnvelope,
+)
+from app.ppr.application.lifecycle_service import PprLifecycleApplicationService
 from app.ppr.application.section_service import PprSectionApplicationService
+from app.ppr.domain.errors import PprNotMaterializedError
+from app.ppr.domain.models import HR_RELATIONSHIP_EMPLOYED
 from app.ppr.infrastructure.application_unit_of_work import PprApplicationUnitOfWork
 from app.api.ppr_errors import map_ppr_mutation_error
 from app.api.ppr_card_command_router import Relative
@@ -55,6 +62,26 @@ def _event(conn, request_id: UUID, user: dict, action: str, detail: dict):
 def _public(row: dict) -> dict:
     return {key: row.get(key) for key in ("request_id", "relative_id", "expected_updated_at", "proposed",
         "status", "revision", "submitted_at", "decided_at", "reason", "approved_relative_id")}
+
+
+def _ensure_ppr_envelope(conn, user: dict, person_id: int, request_id: UUID) -> None:
+    uow = PprApplicationUnitOfWork().bind_participating(conn)
+    if uow.envelopes.exists_envelope(person_id):
+        return
+    PprLifecycleApplicationService(
+        authorization=PersonnelCardEditAuthorizationAdapter(user),
+    ).materialize_ppr_participating(
+        uow,
+        PprCommandEnvelope(
+            command_id=f"relative-request-{request_id}:materialize",
+            command_type=COMMAND_TYPE_MATERIALIZE_PPR,
+            actor_id=str(user["user_id"]),
+            requested_at=datetime.now(UTC),
+            person_id=person_id,
+            payload=MaterializePprPayload(hr_relationship_context=HR_RELATIONSHIP_EMPLOYED),
+            audit_source="EMPLOYEE_REQUEST_REVIEW",
+        ),
+    )
 
 
 def list_mine(user: dict) -> list[dict]:
@@ -146,10 +173,13 @@ def decide(user: dict, request_id: UUID, expected_revision: int, action: str, re
                 payload={"record_id": int(row["relative_id"]), "expected_updated_at": row["expected_updated_at"],
                          "replacement": Relative.model_validate(row["proposed"]).model_dump()}, audit_source="EMPLOYEE_REQUEST_REVIEW")
             try:
+                _ensure_ppr_envelope(conn, user, person_id, request_id)
                 result = PprSectionApplicationService(
                     authorization=PersonnelCardEditAuthorizationAdapter(user),
                     uow_factory=lambda: PprApplicationUnitOfWork().bind_participating(conn),
                 ).supersede_relative(envelope)
+            except PprNotMaterializedError as exc:
+                raise HTTPException(409, "Личная карточка не подготовлена для изменения. Обновите очередь и повторите попытку.") from exc
             except Exception as exc:
                 mapped = map_ppr_mutation_error(exc)
                 if mapped is not None:

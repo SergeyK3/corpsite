@@ -4,8 +4,8 @@ import * as React from "react";
 
 const WIDTH = 600;
 const HEIGHT = 800;
-const MIN_CROP_WIDTH = 480;
-const MIN_CROP_HEIGHT = 640;
+const MIN_CROP_WIDTH = 360;
+const MIN_CROP_HEIGHT = 480;
 const MAX_CROP_SCALE = Math.min(WIDTH / MIN_CROP_WIDTH, HEIGHT / MIN_CROP_HEIGHT);
 const MAX_BYTES = 500 * 1024;
 
@@ -106,6 +106,10 @@ export default function PhotoCropEditor({ source, onReady, onError }: {
 
   const coverScale = image ? Math.max(WIDTH / image.naturalWidth, HEIGHT / image.naturalHeight) : 1;
   const maxZoom = Math.max(1, MAX_CROP_SCALE / coverScale);
+  const canZoom = maxZoom > 1 + 1e-6;
+  const cropWidth = WIDTH / (coverScale * zoom);
+  const cropHeight = HEIGHT / (coverScale * zoom);
+  const mayLoseSharpness = cropWidth < 480 - 1e-6 || cropHeight < 640 - 1e-6;
 
   return image && <div className="mt-4 space-y-3">
     <p className="text-sm">Перетащите фото для выбора кадра 3:4. Масштаб задаётся ползунком.</p>
@@ -127,14 +131,15 @@ export default function PhotoCropEditor({ source, onReady, onError }: {
         if (moves[event.key]) { event.preventDefault(); changeOffset(moves[event.key].x, moves[event.key].y); }
       }}
     />
-    <label className="block text-sm">Масштаб: {zoom.toFixed(2)}×
-      <input type="range" min={1} max={maxZoom} step={0.01} value={zoom} disabled={maxZoom === 1}
+    {canZoom ? <label className="block text-sm">Масштаб: {zoom.toFixed(2)}×
+      <input type="range" min={1} max={maxZoom} step={0.01} value={zoom}
         onChange={(event) => {
           const next = Number(event.target.value);
           onReady(null, null);
           setZoom(next);
           setOffset((previous) => image ? clampOffset(image, next, previous) : previous);
         }} className="mt-1 block w-52" />
-    </label>
+    </label> : <p className="text-sm text-zinc-600">Приближение недоступно: исходное фото уже даёт минимальный кадр 360 × 480 пикселей.</p>}
+    {mayLoseSharpness && <p className="text-sm text-amber-700">При увеличении фото может потерять чёткость</p>}
   </div>;
 }

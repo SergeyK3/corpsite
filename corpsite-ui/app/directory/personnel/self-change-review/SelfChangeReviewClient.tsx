@@ -25,6 +25,9 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 function decisionError(caught: unknown): string {
   if (caught instanceof TypeError) return "Ответ сервера не получен. Обновите очередь и проверьте статус заявки перед повторной попыткой.";
   if (caught && typeof caught === "object" && "message" in caught && typeof caught.message === "string") {
+    if (/PPR envelope not materialized|person_id\s*=\s*\d+/i.test(caught.message)) {
+      return "Решение не сохранено: личная карточка не подготовлена для изменения. Обновите очередь и повторите попытку.";
+    }
     const status = "status" in caught && typeof caught.status === "number" ? caught.status : null;
     return status !== null && status < 500 ? `Решение не сохранено: ${caught.message}` : `Не удалось подтвердить решение: ${caught.message}`;
   }
