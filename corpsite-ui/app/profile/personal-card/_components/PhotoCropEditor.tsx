@@ -4,6 +4,9 @@ import * as React from "react";
 
 const WIDTH = 600;
 const HEIGHT = 800;
+const MIN_CROP_WIDTH = 480;
+const MIN_CROP_HEIGHT = 640;
+const MAX_CROP_SCALE = Math.min(WIDTH / MIN_CROP_WIDTH, HEIGHT / MIN_CROP_HEIGHT);
 const MAX_BYTES = 500 * 1024;
 
 type Offset = { x: number; y: number };
@@ -51,8 +54,8 @@ export default function PhotoCropEditor({ source, onReady, onError }: {
         onError("Исходное фото слишком большое для обработки.");
         return;
       }
-      if (Math.max(WIDTH / loaded.naturalWidth, HEIGHT / loaded.naturalHeight) > 1) {
-        onError("Исходное фото слишком маленькое для кадра 600 × 800 пикселей.");
+      if (Math.max(WIDTH / loaded.naturalWidth, HEIGHT / loaded.naturalHeight) > MAX_CROP_SCALE) {
+        onError(`Исходное фото: ${loaded.naturalWidth} × ${loaded.naturalHeight} пикселей. Минимальный кадр: ${MIN_CROP_WIDTH} × ${MIN_CROP_HEIGHT} пикселей.`);
         return;
       }
       setZoom(1);
@@ -102,7 +105,7 @@ export default function PhotoCropEditor({ source, onReady, onError }: {
   }
 
   const coverScale = image ? Math.max(WIDTH / image.naturalWidth, HEIGHT / image.naturalHeight) : 1;
-  const maxZoom = Math.max(1, Math.min(3, 1 / coverScale));
+  const maxZoom = Math.max(1, MAX_CROP_SCALE / coverScale);
 
   return image && <div className="mt-4 space-y-3">
     <p className="text-sm">Перетащите фото для выбора кадра 3:4. Масштаб задаётся ползунком.</p>

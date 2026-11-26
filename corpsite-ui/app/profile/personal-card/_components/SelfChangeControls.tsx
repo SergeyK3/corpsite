@@ -95,6 +95,7 @@ export function SelfPhotoChanges() {
     {latest && statusLabel[latest.state] && <p className="text-sm">Заявка на фото: <ChangeStatus state={latest.state} reason={latest.reason} /></p>}
     {open && <ChangeModal title="Замена фото" onClose={() => setOpen(false)}>
       <p className="mt-3 text-sm text-zinc-600">Новое фото уйдёт кадровику на проверку. Действующее фото останется в карточке до одобрения.</p>
+      <p className="mt-2 text-sm text-zinc-600">Выберите JPEG, из которого можно выделить кадр не меньше 480 × 640 пикселей. Итоговый файл будет JPEG 600 × 800 пикселей, не более 500 КБ.</p>
       <div className="mt-4 flex gap-4">{current && <div><p className="text-xs">Сейчас</p><img src={current} alt="Действующее фото" className="mt-1 h-32 w-32 rounded object-cover" /></div>}{preview && <div><p className="text-xs">Итоговый JPEG 600 × 800</p><img src={preview} alt="Итоговое фото 600 на 800" className="mt-1 h-32 w-24 rounded object-cover" /></div>}</div>
       <label className="mt-4 block text-sm">Выберите исходный JPEG<input type="file" accept="image/jpeg" className={fieldClass} onChange={(event) => { setFile(null); setPreview(null); setError(""); setSource(event.target.files?.[0] ?? null); setSourceKey((value) => value + 1); }} /></label>
       {source && <PhotoCropEditor key={sourceKey} source={source} onReady={cropReady} onError={cropError} />}
