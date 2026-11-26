@@ -13,6 +13,7 @@ import {
 import { canSeeHrProcessesNav, canSeePersonnelJournalNav } from "@/lib/personnelNav";
 
 const BASE_ITEMS = [
+  { href: "/directory/personnel/self-change-review", title: "Заявки сотрудников", prefixes: ["/directory/personnel/self-change-review"] },
   { href: "/directory/personnel/journal", title: "Кадровый журнал", prefixes: ["/directory/personnel/journal"] },
   {
     href: "/directory/personnel/lk",

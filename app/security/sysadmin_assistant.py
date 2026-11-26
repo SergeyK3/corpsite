@@ -41,6 +41,13 @@ def is_assistant(user: dict[str, Any]) -> bool:
     return str(user.get("role_code") or "").upper() == ROLE_CODE
 
 
+def has_hr_support(user: dict[str, Any]) -> bool:
+    if not is_assistant(user):
+        return False
+    from app.security.admin_permissions import has_admin_permission
+    return has_admin_permission(int(user["user_id"]), "ASSISTANT_HR_SUPPORT")
+
+
 def assistant_order_operation_allowed(user: dict[str, Any]) -> bool:
     action = _action.get()
     return bool(is_assistant(user) and action and action["actor_user_id"] == int(user["user_id"]))

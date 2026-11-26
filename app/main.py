@@ -49,6 +49,9 @@ from app.api.ppr_stage3_training_router import router as ppr_stage3_training_rou
 from app.api.ppr_migration_status_router import router as ppr_migration_status_router
 from app.api.ppr_router import router as ppr_router
 from app.api.ppr_self_router import router as ppr_self_router
+from app.api.relative_change_request_router import router as relative_change_request_router
+from app.personnel_files.photo_router import router as personnel_files_router
+from app.personnel_files.upload_limit import PersonnelFileUploadLimit
 from app.api.ppr_self_orders_router import router as ppr_self_orders_router
 from app.api.ppr_command_router import router as ppr_command_router
 from app.api.ppr_card_command_router import router as ppr_card_command_router
@@ -147,7 +150,10 @@ app.include_router(ppr_stage2_education_router)
 app.include_router(ppr_stage3_training_router)
 app.include_router(ppr_migration_status_router)
 app.include_router(ppr_router)
+app.add_middleware(PersonnelFileUploadLimit)
+app.include_router(personnel_files_router)
 app.include_router(ppr_self_router)
+app.include_router(relative_change_request_router)
 app.include_router(ppr_self_orders_router)
 app.include_router(ppr_command_router)
 app.include_router(ppr_card_command_router)

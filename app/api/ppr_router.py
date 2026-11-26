@@ -1,8 +1,6 @@
 """PPR composite read REST API (R7 — read-only)."""
 from __future__ import annotations
 
-import hmac
-from uuid import uuid4
 from typing import Any
 
 from fastapi import APIRouter, Depends, File, HTTPException, Path, UploadFile
@@ -25,14 +23,7 @@ from app.db.models.person_photos import MAX_PHOTO_BYTE_SIZE, MIME_TYPE_JPEG
 from app.security.personnel_card_edit import require_personnel_card_edit_for_person
 from app.security.personnel_admin_guard import evaluate_personnel_admin_access
 from app.directory.common import as_http500
-from app.person_photos.application.manual_upload_service import register_manual_person_photo
-from app.person_photos.domain.models import RegisterManualPersonPhotoRequest
-from app.person_photos.infrastructure.photo_storage import (
-    read_canonical_photo,
-    sha256_hex,
-    validate_canonical_photo_bytes,
-)
-from app.person_photos.infrastructure.repository import PersonPhotoRepository
+from app.services.ppr_person_photo_read_service import load_verified_person_photo
 from app.personnel_intake.domain.errors import PersonnelIntakeValidationError
 from app.ppr.application.config import assert_ppr_read_path_activation_allowed
 from app.ppr.domain.models import HR_RELATIONSHIP_CANDIDATE
@@ -72,24 +63,8 @@ def get_ppr_person_photo(
             resolved_employee_id=summary.employee_id,
         )
 
-        from app.db.engine import engine
-
-        with engine.connect() as conn:
-            photo = PersonPhotoRepository(conn).get_active_photo(summary.person_id)
-        if photo is None or photo.mime_type != MIME_TYPE_JPEG:
-            raise HTTPException(status_code=404, detail="Person photo not found.")
-
-        try:
-            content = read_canonical_photo(photo.storage_rel_path)
-            if content is None:
-                raise FileNotFoundError
-            validate_canonical_photo_bytes(content)
-            if not hmac.compare_digest(
-                sha256_hex(content),
-                photo.checksum_sha256.strip().lower(),
-            ):
-                raise ValueError("Canonical photo checksum mismatch.")
-        except (OSError, ValueError, PersonnelIntakeValidationError):
+        content = load_verified_person_photo(summary.person_id, user=user)
+        if content is None:
             raise HTTPException(status_code=404, detail="Person photo not found.")
 
         return Response(
@@ -132,20 +107,13 @@ async def post_ppr_person_photo(
         if len(content) > MAX_PHOTO_BYTE_SIZE:
             raise HTTPException(status_code=422, detail="Photo exceeds 500 KB limit.")
 
-        result = register_manual_person_photo(
-            RegisterManualPersonPhotoRequest(
-                person_id=summary.person_id,
-                jpeg_content=content,
-                actor_user_id=int(user["user_id"]),
-                request_id=uuid4().hex,
-                correlation_id=f"ppr-person-photo-upload:{summary.person_id}",
-                allow_replace=True,
-            )
-        )
+        from app.personnel_files.service import submit
+        result = submit(user, summary.person_id, kind="photo", title="Фото лица",
+                        content=content, mime=MIME_TYPE_JPEG, filename=file.filename or "photo.jpg")
         return {
             "person_id": summary.person_id,
-            "person_photo_id": result.person_photo_id,
-            "status": result.status,
+            "version_id": result["version_id"],
+            "status": "pending",
         }
     except PersonnelIntakeValidationError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

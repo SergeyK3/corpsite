@@ -11,6 +11,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Path
+from fastapi.responses import Response
 from sqlalchemy import text
 
 from app.api.ppr_mappers import composite_to_response
@@ -31,6 +32,8 @@ from app.api.ppr_self_schemas import (
 )
 from app.auth import get_current_user
 from app.db.engine import engine
+from app.db.models.person_photos import MIME_TYPE_JPEG
+from app.services.ppr_person_photo_read_service import load_verified_person_photo
 from app.ppr.application.authorization import SelfPersonalCardAuthorizationAdapter
 from app.ppr.application.command_models import MaterializePprPayload, PprCommandEnvelope
 from app.ppr.application.config import assert_ppr_read_path_activation_allowed
@@ -76,6 +79,18 @@ def get_my_ppr_card(
             additional=mapped.additional,
         ),
     )
+
+
+@router.get("/me/photo")
+def get_my_ppr_photo(user: dict[str, Any] = Depends(get_current_user)) -> Response:
+    assert_ppr_read_path_activation_allowed()
+    resolution = _self_access_service.resolve_for_user(user)
+    if resolution.status != "READY" or resolution.composite is None:
+        raise HTTPException(404, "Person photo not found.")
+    content = load_verified_person_photo(int(resolution.composite.person_id), user=user)
+    if content is None:
+        raise HTTPException(404, "Person photo not found.")
+    return Response(content, media_type=MIME_TYPE_JPEG, headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"})
 
 
 @router.get("/me/operational-assignment", response_model=PprSelfOperationalAssignmentResponse)
