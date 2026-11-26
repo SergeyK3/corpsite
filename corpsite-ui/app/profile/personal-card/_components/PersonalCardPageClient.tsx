@@ -119,7 +119,7 @@ function PersonalCardTabs({ card, operationalAssignment, onSaved }: { card: Self
       ]} /></Card>}
       {activeTab === "access" && <Card title="Доступ"><p className="mt-3">Сведения об учётной записи и смена пароля доступны в <a className="text-blue-700 underline" href="/profile">профиле</a>.</p></Card>}
       {activeTab === "military" && <Card title="Воинский учёт"><Records sectionCode="PPR-MILITARY" card={card} /></Card>}
-      {activeTab === "family" && <Card><SelfRelativeChanges records={(card.sections["PPR-FAMILY"]?.active ?? []) as React.ComponentProps<typeof SelfRelativeChanges>["records"]} /></Card>}
+      {activeTab === "family" && <Card><SelfRelativeChanges records={(card.sections["PPR-FAMILY"]?.active ?? []) as React.ComponentProps<typeof SelfRelativeChanges>["records"]} onSaved={onSaved} /></Card>}
       {activeTab === "languages" && <div className="space-y-4"><Card title="Знание иностранных языков"><p className="mt-3 text-base text-zinc-700 dark:text-zinc-300">{card.additional.foreign_languages.length ? card.additional.foreign_languages.map((item) => `${item.language} — ${displayForeignLanguageLevel(item.proficiency)}`).join(", ") : emptyText}</p></Card><LanguagesEditor onSaved={onSaved} /></div>}
     </div>
   </div>;
@@ -136,8 +136,8 @@ export default function PersonalCardPageClient() {
   }, []);
   useEffect(() => {
     const controller = new AbortController();
-    void reload(controller.signal).catch((error: unknown) => { if (!(error instanceof DOMException && error.name === "AbortError")) setState({ kind: "unavailable" }); });
-    return () => controller.abort();
-  }, []);
+    const timer = window.setTimeout(() => { void reload(controller.signal).catch((error: unknown) => { if (!(error instanceof DOMException && error.name === "AbortError")) setState({ kind: "unavailable" }); }); }, 0);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [reload]);
   return <PositionCabinetSectionShell title="Личная карточка">{state.kind === "loading" && <p data-testid="self-personal-card-loading" className="text-base">Загрузка личной карточки…</p>}{state.kind === "ready" && <PersonalCardTabs card={state.card} operationalAssignment={state.operationalAssignment} onSaved={() => reload()} />}{state.kind === "person-not-linked" && <div className="rounded-xl border border-zinc-200 p-4 text-base dark:border-zinc-800" data-testid="self-personal-card-person-not-linked"><p className="font-medium">Личная карточка ещё не создана.</p><p className="mt-2 text-zinc-600 dark:text-zinc-400">Обратитесь в отдел кадров, чтобы создать и связать вашу личную карточку.</p></div>}{state.kind === "unavailable" && <div className="rounded-xl border border-zinc-200 p-4 text-base dark:border-zinc-800" data-testid="self-personal-card-unavailable">Карточка пока недоступна. Обратитесь в отдел кадров.</div>}</PositionCabinetSectionShell>;
 }

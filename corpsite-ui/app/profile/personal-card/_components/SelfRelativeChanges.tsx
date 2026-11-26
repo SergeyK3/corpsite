@@ -23,7 +23,7 @@ function values(record: Relative | Proposal): Proposal {
   return Object.fromEntries(fields.map((key) => [key, record[key] ?? null])) as Proposal;
 }
 
-export default function SelfRelativeChanges({ records }: { records: Relative[] }) {
+export default function SelfRelativeChanges({ records, onSaved }: { records: Relative[]; onSaved: () => Promise<void> }) {
   const [requests, setRequests] = React.useState<Request[]>([]);
   const [open, setOpen] = React.useState(false);
   const [mode, setMode] = React.useState<"addition" | "correction">("correction");
@@ -34,10 +34,23 @@ export default function SelfRelativeChanges({ records }: { records: Relative[] }
   const [detailsOpen, setDetailsOpen] = React.useState(false);
   const [error, setError] = React.useState("");
   const [busy, setBusy] = React.useState(false);
+  const requestSnapshot = React.useRef<string | null>(null);
+  const onSavedRef = React.useRef(onSaved);
+  React.useEffect(() => { onSavedRef.current = onSaved; }, [onSaved]);
 
   React.useEffect(() => {
-    void api<{ items: Request[] }>("/api/ppr/me/relative-change-requests")
-      .then((data) => setRequests(data.items)).catch(() => setError("Не удалось загрузить заявки."));
+    let active = true;
+    const refresh = () => { void api<{ items: Request[] }>("/api/ppr/me/relative-change-requests")
+      .then((data) => { if (active) {
+        setRequests(data.items);
+        const snapshot = JSON.stringify(data.items.map((item) => [item.request_id, item.status, item.revision]));
+        if (requestSnapshot.current !== snapshot) { requestSnapshot.current = snapshot; void onSavedRef.current(); }
+      } })
+      .catch(() => { if (active) setError("Не удалось загрузить заявки."); }); };
+    refresh();
+    window.addEventListener("focus", refresh);
+    const timer = window.setInterval(refresh, 15000);
+    return () => { active = false; window.removeEventListener("focus", refresh); window.clearInterval(timer); };
   }, []);
 
   const latestFor = (record: Relative) => requests.find((item) =>
@@ -108,7 +121,7 @@ export default function SelfRelativeChanges({ records }: { records: Relative[] }
         }} />}
       </div>
     </div>
-    <p className="text-sm text-zinc-600">Новая запись или исправление действующей записи поступят кадровику на проверку.</p>
+    <p className="text-sm text-zinc-600">Новая запись или исправление действующей записи поступят кадровику на проверку. Сведения принимаются со слов сотрудника, подтверждающие документы не требуются.</p>
     {pendingAddition && <p className="text-sm text-amber-800">Новый родственник уже на проверке. Дождитесь решения кадровика.</p>}
     {records.length === 0 && <p className="text-sm text-zinc-500">Записей о родственниках пока нет. Добавьте первого родственника.</p>}
     {records.map((record) => {
@@ -121,13 +134,13 @@ export default function SelfRelativeChanges({ records }: { records: Relative[] }
             aria-describedby={pending ? `relative-pending-${record.record_id}` : undefined}>Исправить</button></div>
         <p>Степень родства: {relationshipTypeLabel(record.relationship_type)}</p>
         {pending && <p id={`relative-pending-${record.record_id}`} className="mt-2 text-sm text-amber-800">Исправление уже отправлено кадровику. Дождитесь решения.</p>}
-        {request && <p className="mt-2"><ChangeStatus state={request.status} reason={request.reason} /></p>}
-        {request?.status === "returned" && <button type="button" className="mt-2 text-blue-700 underline" onClick={() => edit(record, request)}>Открыть предложенные значения</button>}
+        {request && <ChangeStatus subject={request.request_kind === "addition" ? `Заявка на нового родственника: ${record.full_name}` : `Заявка на исправление сведений о родственнике: ${record.full_name}`} state={request.status} reason={request.reason} />}
+        {request?.status === "returned" && <button type="button" className="mt-2 text-blue-700 underline" onClick={() => edit(record, request)}>Исправить и отправить повторно</button>}
       </div>;
     })}
     {additions.map((request) => <div key={request.request_id} className="rounded-lg border p-3 text-sm">
       <strong>Новый родственник: {request.proposed.full_name}</strong>
-      <p className="mt-2"><ChangeStatus state={request.status} reason={request.reason} /></p>
+      <ChangeStatus subject={`Заявка на нового родственника: ${request.proposed.full_name}`} state={request.status} reason={request.reason} />
       {request.status === "returned" && <button type="button" className="mt-2 text-blue-700 underline" onClick={() => add(request)}>Исправить и отправить повторно</button>}
     </div>)}
     {error && !open && <p role="alert" className="text-sm text-red-700">{error}</p>}

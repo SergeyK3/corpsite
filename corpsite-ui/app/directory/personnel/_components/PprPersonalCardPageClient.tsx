@@ -76,6 +76,8 @@ type Props = {
   canEditPprSections?: boolean;
   review?: {
     pendingSections: PprCardSectionId[];
+    activeSection: PprCardSectionId;
+    onSelectSection: (section: PprCardSectionId) => void;
     generalPanel?: React.ReactNode;
     familyPanel?: React.ReactNode;
     footer?: React.ReactNode;
@@ -130,7 +132,6 @@ export default function PprPersonalCardPageClient({
   const [migrationCells, setMigrationCells] = React.useState<Partial<Record<MigrationSection, MigrationCell>>>({});
   const [migrationUniverses, setMigrationUniverses] = React.useState<MigrationUniverse[]>([]);
   const [correctionMode, setCorrectionMode] = React.useState(false);
-  const [reviewSection, setReviewSection] = React.useState<PprCardSectionId>("general");
   const scrolledSectionRef = React.useRef<PprCardSectionId | null>(null);
 
   const resolvedPersonId = ppr?.identity.resolved_person_id ?? (personId ? Number(personId) : null);
@@ -454,9 +455,10 @@ export default function PprPersonalCardPageClient({
               </div>
             ) : null}
 
-            {review ? <PersonalCardSectionTabs sections={visibleCardSections} active={reviewSection}
-              onSelect={setReviewSection} pending={review.pendingSections} />
+            {review ? <PersonalCardSectionTabs sections={visibleCardSections} active={review.activeSection}
+              onSelect={review.onSelectSection} pending={review.pendingSections} />
               : <PprCardSectionNav sections={visibleCardSections} />}
+            {review?.footer}
 
             {canReadMigration && migrationUniverses.length > 1 ? (
               <label className="block text-sm" data-testid="ppr-migration-universe-selector">
@@ -468,7 +470,7 @@ export default function PprPersonalCardPageClient({
               </label>
             ) : null}
 
-            <ReviewCardSectionContext.Provider value={review ? reviewSection : null}>
+            <ReviewCardSectionContext.Provider value={review ? review.activeSection : null}>
             <div className="space-y-5">
               {ppr.additional.status_facts.length > 0 ? (
                 <section className="hidden print:block" data-testid="ppr-print-note-section">
@@ -705,7 +707,6 @@ export default function PprPersonalCardPageClient({
               </p>
             </div>
             </ReviewCardSectionContext.Provider>
-            {review?.footer}
           </>
         ) : null}
       </div>

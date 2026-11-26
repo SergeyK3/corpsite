@@ -9,12 +9,16 @@ type PhotoVersion = { version_id: string; set_id: string; kind: string; state: s
 
 const buttonClass = "rounded-md border border-blue-600 px-3 py-1.5 text-sm font-medium text-blue-700 hover:bg-blue-50 dark:text-blue-300";
 const fieldClass = "mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm dark:border-zinc-700 dark:bg-zinc-950";
-const statusLabel: Record<string, string> = { pending: "На проверке", approved: "Одобрено", returned: "Возвращено" };
+const statusLabel: Record<string, string> = { pending: "Отправлено кадровику на проверку", approved: "Одобрено кадровиком", returned: "Возвращено кадровиком" };
 const statusClass: Record<string, string> = { pending: "bg-amber-100 text-amber-900", approved: "bg-emerald-100 text-emerald-900", returned: "bg-rose-100 text-rose-900" };
 
-export function ChangeStatus({ state, reason }: { state: string; reason?: string }) {
+export function ChangeStatus({ state, reason, subject }: { state: string; reason?: string; subject: string }) {
   if (!statusLabel[state]) return null;
-  return <span><span className={`rounded-full px-2 py-1 text-xs font-medium ${statusClass[state]}`}>{statusLabel[state]}</span>{state === "returned" && reason ? <span className="ml-2 text-sm">{reason}</span> : null}</span>;
+  return <div role="status" className="mt-2 space-y-2 text-sm">
+    <p className="font-medium">{subject}{state === "returned" ? " возвращена кадровиком" : ""}</p>
+    <span className={`inline-block rounded-full px-2 py-1 text-xs font-medium ${statusClass[state]}`}>{statusLabel[state]}</span>
+    {state === "returned" && reason ? <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-rose-950 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-100"><strong>Причина возврата</strong><p className="mt-1">{reason}</p></div> : null}
+  </div>;
 }
 
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -61,26 +65,51 @@ export function SelfPhotoChanges() {
   const [confirmation, setConfirmation] = React.useState("");
   const [retryNeedsConfirmation, setRetryNeedsConfirmation] = React.useState(false);
   const [retryConfirmed, setRetryConfirmed] = React.useState(false);
-  const loadLatest = React.useCallback(async () => {
-    setLatestLoaded(false);
+  const photoLoadSequence = React.useRef(0);
+  const loadLatest = React.useCallback(async (silent = false) => {
+    if (!silent) setLatestLoaded(false);
     const files = await api<{ items: PhotoVersion[] }>("/api/personnel-files/me");
     const newest = files.items.filter((item) => item.kind === "photo").sort((a, b) => b.created_at.localeCompare(a.created_at))[0] ?? null;
     setLatest(newest);
     setLatestLoaded(true);
     return newest;
   }, []);
+  const loadCurrent = React.useCallback(async () => {
+    const sequence = ++photoLoadSequence.current;
+    const response = await fetch(resolveApiUrl("/api/ppr/me/photo"), { headers: buildHeaders(), cache: "no-store" });
+    if (sequence !== photoLoadSequence.current) return;
+    if (response.ok) {
+      const blob = await response.blob();
+      if (sequence === photoLoadSequence.current) setCurrent(URL.createObjectURL(blob));
+    } else if (response.status === 404) setCurrent(null);
+    else throw new Error("Не удалось загрузить текущее фото.");
+  }, []);
   React.useEffect(() => {
     let alive = true;
-    void (async () => {
-      const [photo] = await Promise.all([
-        fetch(resolveApiUrl("/api/ppr/me/photo"), { headers: buildHeaders(), cache: "no-store" }),
-        loadLatest(),
-      ]);
-      if (!alive) return;
-      if (photo.ok) setCurrent(URL.createObjectURL(await photo.blob()));
-    })().catch(() => { if (alive) setError("Не удалось загрузить состояние фото."); });
-    return () => { alive = false; };
-  }, [loadLatest]);
+    void Promise.all([loadCurrent(), loadLatest()]).catch(() => { if (alive) setError("Не удалось загрузить состояние фото."); });
+    return () => { alive = false; photoLoadSequence.current += 1; };
+  }, [loadCurrent, loadLatest]);
+  React.useEffect(() => {
+    let active = true;
+    let checking = false;
+    const refresh = async () => {
+      if (!active || checking) return;
+      checking = true;
+      try {
+        const newest = await loadLatest(true);
+        if (active && (newest?.version_id !== latest?.version_id || newest?.revision !== latest?.revision || newest?.state !== latest?.state)) {
+          if (newest?.state !== "pending") setConfirmation("");
+          await loadCurrent();
+        }
+      } catch { if (active) setError("Не удалось обновить статус фото. Обновите карточку."); }
+      finally { checking = false; }
+    };
+    const onVisibility = () => { if (document.visibilityState === "visible") void refresh(); };
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", onVisibility);
+    const timer = latest?.state === "pending" ? window.setInterval(() => void refresh(), 15000) : null;
+    return () => { active = false; window.removeEventListener("focus", refresh); document.removeEventListener("visibilitychange", onVisibility); if (timer !== null) window.clearInterval(timer); };
+  }, [latest?.revision, latest?.state, latest?.version_id, loadCurrent, loadLatest]);
   React.useEffect(() => () => { if (current) URL.revokeObjectURL(current); }, [current]);
   React.useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
   React.useEffect(() => {
@@ -136,7 +165,7 @@ export function SelfPhotoChanges() {
     {!latestLoaded && !error && <p className="text-sm text-zinc-500">Загружаем состояние фото…</p>}
     {error && !open && <p role="alert" className="text-sm text-red-700">{error} <button type="button" className="underline" onClick={() => { setError(""); void loadLatest().catch(() => setError("Не удалось загрузить состояние фото.")); }}>Обновить статус фото</button></p>}
     {confirmation && <p role="status" className="text-sm text-emerald-700">{confirmation}</p>}
-    {latest && statusLabel[latest.state] && <p className="text-sm">Заявка на фото: <ChangeStatus state={latest.state} reason={latest.reason} /></p>}
+    {latest && statusLabel[latest.state] && <ChangeStatus subject="Заявка на новое фото" state={latest.state} reason={latest.reason} />}
     {open && <ChangeModal title="Замена фото" onClose={() => { if (!busyRef.current) setOpen(false); }}>
       <p className="mt-3 text-sm text-zinc-600">Новое фото уйдёт кадровику на проверку. Действующее фото останется в карточке до одобрения.</p>
       <p className="mt-2 text-sm text-zinc-600">Выберите JPEG, из которого можно выделить кадр не меньше 360 × 480 пикселей. При приближении кадра меньше 480 × 640 пикселей фото может потерять чёткость. Итоговый файл будет JPEG 600 × 800 пикселей, не более 500 КБ.</p>

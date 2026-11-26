@@ -98,6 +98,7 @@ export default function SelfChangeReviewClient() {
   const [busy, setBusy] = React.useState(false);
   const [stale, setStale] = React.useState(false);
   const [reviewEpoch, setReviewEpoch] = React.useState(0);
+  const [activeSection, setActiveSection] = React.useState<PprCardSectionId>("general");
   const load = React.useCallback(async () => {
     const results = await Promise.allSettled([
       request<{ items: Photo[] }>("/api/personnel-files/review-queue"),
@@ -115,6 +116,13 @@ export default function SelfChangeReviewClient() {
     return true;
   }, []);
   React.useEffect(() => { void load(); }, [load]);
+  React.useEffect(() => {
+    if (selectedPersonId !== null) return;
+    const refresh = () => { void load(); };
+    window.addEventListener("focus", refresh);
+    const timer = window.setInterval(refresh, 15000);
+    return () => { window.removeEventListener("focus", refresh); window.clearInterval(timer); };
+  }, [load, selectedPersonId]);
   const people = new Map<number, { name: string; photos: Photo[]; relatives: RelativeRequest[] }>();
   for (const photo of photos) {
     const person = people.get(photo.person_id) ?? { name: photo.full_name, photos: [], relatives: [] };
@@ -131,6 +139,10 @@ export default function SelfChangeReviewClient() {
   ] : [];
   const ready = items.length > 0 && items.every((item) => decisions[item.id] &&
     (decisions[item.id] !== "return" || (reasons[item.id] ?? "").trim()));
+  const chosenCount = items.filter((item) => Boolean(decisions[item.id])).length;
+  const missingDecisionSections = [...new Set(items.filter((item) => !decisions[item.id]).map((item) => item.kind === "photo" ? "general" as const : "family" as const))];
+  const missingReasonSections = [...new Set(items.filter((item) => decisions[item.id] === "return" && !(reasons[item.id] ?? "").trim()).map((item) => item.kind === "photo" ? "general" as const : "family" as const))];
+  const sectionName = (section: "general" | "family") => section === "general" ? "Фото" : "Родственники";
 
   async function refreshForReview() {
     if (await load()) {
@@ -164,11 +176,13 @@ export default function SelfChangeReviewClient() {
       } else setError(decisionError(caught));
     } finally { setBusy(false); }
   }
-  const actions = (id: string) => <fieldset className="mt-4 flex flex-wrap items-center gap-3 text-sm" disabled={busy || stale}>
+  const actions = (id: string, kind: "photo" | "relative") => <fieldset className="mt-4 flex flex-wrap items-center gap-3 text-sm" disabled={busy || stale}>
     <legend className="font-medium">Решение по заявке</legend>
     <label><input type="radio" name={`decision-${id}`} checked={decisions[id] === "approve"} onChange={() => setDecisions((old) => ({ ...old, [id]: "approve" }))} /> Одобрить</label>
     <label><input type="radio" name={`decision-${id}`} checked={decisions[id] === "return"} onChange={() => setDecisions((old) => ({ ...old, [id]: "return" }))} /> Вернуть с пояснением</label>
-    {decisions[id] === "return" && <label>Пояснение для возврата<input className="ml-2 rounded border px-2 py-2 dark:bg-zinc-950" value={reasons[id] ?? ""} onChange={(event) => setReasons((old) => ({ ...old, [id]: event.target.value }))} /></label>}
+    {decisions[id] === "return" && <div className="w-full"><label className="block font-medium">Пояснение для возврата<input className="mt-1 block w-full max-w-xl rounded border px-2 py-2 font-normal dark:bg-zinc-950" value={reasons[id] ?? ""} onChange={(event) => setReasons((old) => ({ ...old, [id]: event.target.value }))} /></label>
+      {kind === "relative" && <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-300">Укажите, какие сведения нужно исправить. Подтверждающие документы не требуются</p>}
+    </div>}
   </fieldset>;
   const pendingSections: PprCardSectionId[] = selected ? [
     ...(selected.photos.length ? ["general" as const] : []),
@@ -177,38 +191,50 @@ export default function SelfChangeReviewClient() {
   const generalPanel = selected?.photos.length ? <section className="mt-5 border-t pt-4">
     <h3 className="text-lg font-semibold">Фото на проверке</h3>
     {selected.photos.map((photo) => <article key={photo.version_id} className="my-3 rounded-lg border p-4">
-      <PhotoCompare photo={photo} actions={actions(photo.version_id)} />
+      <PhotoCompare photo={photo} actions={actions(photo.version_id, "photo")} />
     </article>)}
   </section> : null;
   const familyPanel = selected?.relatives.length ? <section className="mt-5 border-t pt-4">
     <h3 className="text-lg font-semibold">Предложенные изменения</h3>
+    <p className="mt-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-950 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-100">Сведения принимаются со слов сотрудника. Если они заполнены без явной ошибки или противоречия, одобрите заявку. Свидетельство о рождении, реквизиты, сканы и другие подтверждающие документы не требуются.</p>
     {selected.relatives.map((item) => <article key={item.request_id} className="my-3 rounded-lg border p-4">
       <h4 className="font-medium">{item.request_kind === "addition" ? "Новый родственник" : `Исправление записи #${item.relative_id}`}</h4>
       <div className="mt-3 overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr><th>Поле</th><th>Сейчас</th><th>Предложено</th></tr></thead><tbody>{fields.map(([key, label]) => <tr key={key} className="border-t"><th className="py-2">{label}</th><td className="py-2">{relativeValue(key, item.current[key])}</td><td className="py-2">{relativeValue(key, item.proposed[key])}</td></tr>)}</tbody></table></div>
-      {actions(item.request_id)}
+      {actions(item.request_id, "relative")}
     </article>)}
   </section> : null;
-  const reviewFooter = <div className="mt-5 border-t pt-4">
-    <p className="mb-3 text-sm text-zinc-600">{items.length} {requestWord(items.length)} на проверке. Решения применятся вместе после завершения проверки.</p>
-    {stale && <button type="button" className="mb-3 rounded border px-4 py-2 text-sm" onClick={() => void refreshForReview()}>Обновить карточку и перепроверить</button>}
-    <button type="button" disabled={!ready || busy || stale} className="block rounded bg-blue-700 px-4 py-2 text-white disabled:opacity-50" onClick={() => void complete()}>{busy ? "Завершаем проверку…" : "Завершить проверку"}</button>
+  const sectionLinks = (sections: ("general" | "family")[]) => sections.map((section, index) => <React.Fragment key={section}>{index > 0 ? ", " : null}<button type="button" className="font-semibold text-blue-700 underline underline-offset-2 hover:text-blue-900 dark:text-blue-300" onClick={() => setActiveSection(section)}>{sectionName(section)}</button></React.Fragment>);
+  const reviewFooter = <div className="sticky top-14 z-20 mt-4 rounded-xl border-2 border-blue-500 bg-white p-4 shadow-lg dark:bg-zinc-950" data-testid="review-progress">
+    <div className="flex flex-wrap items-center justify-between gap-4">
+      <div><p className="text-lg font-bold">Выбрано {chosenCount} из {items.length} решений</p>
+        {missingDecisionSections.length > 0 && <p className="mt-1 text-sm">Осталось: {sectionLinks(missingDecisionSections)}</p>}
+        {missingReasonSections.length > 0 && <p className="mt-1 text-sm text-rose-700 dark:text-rose-300">Укажите причину возврата: {sectionLinks(missingReasonSections)}</p>}
+        {ready && <p className="mt-1 text-sm text-emerald-700">Все решения готовы. Они применятся вместе после завершения проверки.</p>}
+        {stale && <p className="mt-1 text-sm text-rose-700">Состав или версия заявок изменились. Обновите карточку и перепроверьте решения.</p>}
+      </div>
+      <button type="button" disabled={!ready || busy || stale} className="rounded-lg bg-blue-700 px-6 py-3 text-base font-semibold text-white shadow-sm hover:bg-blue-800 disabled:cursor-not-allowed disabled:opacity-50" onClick={() => void complete()}>{busy ? "Завершаем проверку…" : "Завершить проверку"}</button>
+    </div>
+    {stale && <button type="button" className="mt-3 rounded border px-4 py-2 text-sm" onClick={() => void refreshForReview()}>Обновить карточку и перепроверить</button>}
   </div>;
   return <div className="space-y-5 p-4">{!selected && <h1 className="text-2xl font-semibold">Изменения личных карточек на проверке</h1>}
     {confirmation && <p role="status" className="rounded border border-emerald-400 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200">{confirmation}</p>}
     {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
     {error && !selected && <button type="button" className="rounded border px-3 py-1.5 text-sm" onClick={() => void refreshForReview()}>Обновить очередь</button>}
-    {!selected && <section><h2 className="text-lg font-semibold">Очередь сотрудников</h2>
+    {!selected && <section><div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-lg font-semibold">Очередь сотрудников</h2><button type="button" className="rounded-md border px-3 py-2 text-sm font-medium" onClick={() => void load()}>Обновить очередь</button></div>
       {people.size === 0 && <p className="mt-3 text-sm text-zinc-500">Нет заявок на проверке.</p>}
       <div className="mt-3 space-y-2">{[...people.entries()].map(([personId, person]) => {
         const count = person.photos.length + person.relatives.length;
-        return <button key={personId} type="button" className="block w-full rounded-lg border p-3 text-left hover:bg-zinc-50 dark:hover:bg-zinc-900" onClick={() => { setSelectedPersonId(personId); setDecisions({}); setReasons({}); setStale(false); setError(""); }}>
-          {person.name} · {count} {requestWord(count)} · {[person.photos.length && "Фото", person.relatives.length && "Родственники"].filter(Boolean).join(", ")}
+        return <button key={personId} type="button" className="group block w-full rounded-xl border-2 border-zinc-300 bg-white p-5 text-left shadow-sm transition hover:border-blue-500 hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600 dark:border-zinc-700 dark:bg-zinc-950 dark:hover:border-blue-400 dark:hover:bg-zinc-900" onClick={() => { setSelectedPersonId(personId); setActiveSection("general"); setDecisions({}); setReasons({}); setStale(false); setError(""); }}>
+          <span className="block text-xl font-bold">{person.name}</span>
+          <span className="mt-2 block text-base font-semibold">На проверке: {count} {requestWord(count)}</span>
+          <span className="mt-3 flex flex-wrap gap-2">{person.photos.length > 0 && <span className="rounded-full border border-blue-500 bg-blue-100 px-3 py-1 text-sm font-semibold text-blue-950 dark:bg-blue-950 dark:text-blue-100">Фото</span>}{person.relatives.length > 0 && <span className="rounded-full border border-rose-500 bg-rose-100 px-3 py-1 text-sm font-semibold text-rose-950 dark:bg-rose-950 dark:text-rose-100">Родственники</span>}</span>
+          <span className="mt-4 inline-block rounded-md bg-blue-700 px-4 py-2 text-sm font-semibold text-white group-hover:bg-blue-800">Открыть на проверку →</span>
         </button>;
       })}</div>
     </section>}
     {selected && selectedPersonId !== null && <PprPersonalCardPageClient key={`${selectedPersonId}-${reviewEpoch}`}
       personId={String(selectedPersonId)} canEditPprSections={false}
-      review={{ pendingSections, generalPanel, familyPanel, footer: reviewFooter,
+      review={{ pendingSections, activeSection, onSelectSection: setActiveSection, generalPanel, familyPanel, footer: reviewFooter,
         onBack: () => { setSelectedPersonId(null); setStale(false); setError(""); } }} />}
   </div>;
 }
