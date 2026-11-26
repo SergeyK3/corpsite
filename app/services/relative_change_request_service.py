@@ -1,4 +1,4 @@
-"""Employee-owned proposals for correcting an existing PPR relative."""
+"""Employee-owned proposals for adding or correcting a PPR relative."""
 from __future__ import annotations
 
 import json
@@ -23,6 +23,7 @@ from app.ppr.domain.models import HR_RELATIONSHIP_EMPLOYED
 from app.ppr.infrastructure.application_unit_of_work import PprApplicationUnitOfWork
 from app.api.ppr_errors import map_ppr_mutation_error
 from app.api.ppr_card_command_router import Relative
+from app.db.models.personnel_migration import RELATIONSHIP_TYPES
 from app.security.personnel_card_edit import has_personnel_card_edit, require_personnel_card_edit_for_person
 from app.services.self_personal_card_access_service import SelfPersonalCardAccessService
 
@@ -60,8 +61,15 @@ def _event(conn, request_id: UUID, user: dict, action: str, detail: dict):
 
 
 def _public(row: dict) -> dict:
-    return {key: row.get(key) for key in ("request_id", "relative_id", "expected_updated_at", "proposed",
+    return {key: row.get(key) for key in ("request_id", "request_kind", "relative_id", "expected_updated_at", "proposed",
         "status", "revision", "submitted_at", "decided_at", "reason", "approved_relative_id")}
+
+
+def _validate_addition(proposed: dict) -> None:
+    if not str(proposed.get("full_name") or "").strip():
+        raise HTTPException(422, "Укажите ФИО родственника.")
+    if proposed.get("relationship_type") not in RELATIONSHIP_TYPES:
+        raise HTTPException(422, "Выберите степень родства.")
 
 
 def _ensure_ppr_envelope(conn, user: dict, person_id: int, request_id: UUID) -> None:
@@ -113,7 +121,25 @@ def submit(user: dict, relative_id: int, expected_updated_at: datetime, proposed
         raise HTTPException(409, "По этой записи уже есть заявка на проверке.") from exc
 
 
-def resubmit(user: dict, request_id: UUID, expected_revision: int, expected_updated_at: datetime, proposed: dict) -> dict:
+def submit_addition(user: dict, proposed: dict) -> dict:
+    person_id = _self_person(user)
+    _validate_addition(proposed)
+    request_id = uuid4()
+    try:
+        with engine.begin() as conn:
+            row = conn.execute(text("""INSERT INTO public.person_relative_change_requests
+                (request_id,person_id,request_kind,proposed,status,submitted_by)
+                VALUES(:rid,:pid,'addition',CAST(:proposed AS jsonb),'pending',:uid)
+                RETURNING *"""), {"rid": str(request_id), "pid": person_id,
+                "proposed": json.dumps(proposed, ensure_ascii=False),
+                "uid": int(user["user_id"])}).mappings().one()
+            _event(conn, request_id, user, "submitted", {"current": None, "proposed": proposed})
+        return _public(dict(row))
+    except IntegrityError as exc:
+        raise HTTPException(409, "Новый родственник уже ожидает проверки кадровиком.") from exc
+
+
+def resubmit(user: dict, request_id: UUID, expected_revision: int, expected_updated_at: datetime | None, proposed: dict) -> dict:
     person_id = _self_person(user)
     try:
         with engine.begin() as conn:
@@ -122,9 +148,17 @@ def resubmit(user: dict, request_id: UUID, expected_revision: int, expected_upda
                 raise HTTPException(404, "Заявка не найдена.")
             if row["status"] != "returned" or row["revision"] != expected_revision:
                 raise HTTPException(409, "Заявка изменилась. Обновите карточку.")
-            current = _relative(conn, person_id, int(row["relative_id"]))
-            if current["lifecycle_status"] != "active" or current["updated_at"] != expected_updated_at:
-                raise HTTPException(409, "Запись изменилась. Обновите карточку.")
+            current = None
+            if row["request_kind"] == "correction":
+                if expected_updated_at is None:
+                    raise HTTPException(422, "Укажите версию исправляемой записи.")
+                current = _relative(conn, person_id, int(row["relative_id"]))
+                if current["lifecycle_status"] != "active" or current["updated_at"] != expected_updated_at:
+                    raise HTTPException(409, "Запись изменилась. Обновите карточку.")
+            else:
+                if expected_updated_at is not None:
+                    raise HTTPException(422, "Для нового родственника версия записи не требуется.")
+                _validate_addition(proposed)
             changed = conn.execute(text("""UPDATE public.person_relative_change_requests SET
                 expected_updated_at=:expected,proposed=CAST(:proposed AS jsonb),status='pending',
                 revision=revision+1,submitted_at=now(),decided_by=NULL,decided_at=NULL,reason=''
@@ -134,7 +168,7 @@ def resubmit(user: dict, request_id: UUID, expected_revision: int, expected_upda
             _event(conn, request_id, user, "resubmitted", {"current": current, "proposed": proposed})
             return _public(dict(changed))
     except IntegrityError as exc:
-        raise HTTPException(409, "По этой записи уже есть заявка на проверке.") from exc
+        raise HTTPException(409, "Заявка о родственнике уже находится на проверке.") from exc
 
 
 def review_queue(user: dict) -> list[dict]:
@@ -151,7 +185,8 @@ def review_queue(user: dict) -> list[dict]:
             except HTTPException:
                 continue
             items.append({**_public(row), "person_id": row["person_id"], "employee_name": row["employee_name"],
-                          "current": _relative(conn, int(row["person_id"]), int(row["relative_id"]))})
+                          "current": _relative(conn, int(row["person_id"]), int(row["relative_id"]))
+                          if row["request_kind"] == "correction" else {}})
         return items
 
 
@@ -162,22 +197,26 @@ def decide(user: dict, request_id: UUID, expected_revision: int, action: str, re
         require_personnel_card_edit_for_person(user, person_id)
         if row["status"] != "pending" or row["revision"] != expected_revision:
             raise HTTPException(409, "Решение устарело. Обновите очередь.")
-        current = _relative(conn, person_id, int(row["relative_id"]))
+        current = _relative(conn, person_id, int(row["relative_id"])) if row["request_kind"] == "correction" else None
         approved_id = None
         if action == "approve":
-            if current["lifecycle_status"] != "active" or current["updated_at"] != row["expected_updated_at"]:
+            if current is not None and (current["lifecycle_status"] != "active" or current["updated_at"] != row["expected_updated_at"]):
                 raise HTTPException(409, "Запись о родственнике изменилась. Заявку нельзя применить.")
+            proposed = Relative.model_validate(row["proposed"]).model_dump()
+            adding = row["request_kind"] == "addition"
             envelope = PprCommandEnvelope(command_id=f"relative-request-{request_id}",
-                command_type="PersonnelCardSupersedeRelatives", actor_id=str(user["user_id"]),
-                requested_at=datetime.now(UTC), person_id=person_id,
-                payload={"record_id": int(row["relative_id"]), "expected_updated_at": row["expected_updated_at"],
-                         "replacement": Relative.model_validate(row["proposed"]).model_dump()}, audit_source="EMPLOYEE_REQUEST_REVIEW")
+                command_type="PersonnelCardAddRelatives" if adding else "PersonnelCardSupersedeRelatives",
+                actor_id=str(user["user_id"]), requested_at=datetime.now(UTC), person_id=person_id,
+                payload=proposed if adding else {"record_id": int(row["relative_id"]),
+                    "expected_updated_at": row["expected_updated_at"], "replacement": proposed},
+                audit_source="EMPLOYEE_REQUEST_REVIEW")
             try:
                 _ensure_ppr_envelope(conn, user, person_id, request_id)
-                result = PprSectionApplicationService(
+                section_service = PprSectionApplicationService(
                     authorization=PersonnelCardEditAuthorizationAdapter(user),
                     uow_factory=lambda: PprApplicationUnitOfWork().bind_participating(conn),
-                ).supersede_relative(envelope)
+                )
+                result = section_service.add_relative(envelope) if adding else section_service.supersede_relative(envelope)
             except PprNotMaterializedError as exc:
                 raise HTTPException(409, "Личная карточка не подготовлена для изменения. Обновите очередь и повторите попытку.") from exc
             except Exception as exc:

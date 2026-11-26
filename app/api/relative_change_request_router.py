@@ -21,8 +21,16 @@ class Proposal(BaseModel):
     proposed: Relative
 
 
-class Resubmission(Proposal):
+class Addition(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    proposed: Relative
+
+
+class Resubmission(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     expected_revision: int = Field(ge=1)
+    expected_updated_at: datetime | None = None
+    proposed: Relative
 
 
 class Decision(BaseModel):
@@ -40,6 +48,11 @@ def my_requests(user: dict = Depends(get_current_user)):
 @router.post("/me/relatives/{relative_id}/change-requests", status_code=201)
 def submit(body: Proposal, relative_id: int = Path(ge=1), user: dict = Depends(get_current_user)):
     return service.submit(user, relative_id, body.expected_updated_at, body.proposed.model_dump(mode="json"))
+
+
+@router.post("/me/relatives/change-requests", status_code=201)
+def submit_addition(body: Addition, user: dict = Depends(get_current_user)):
+    return service.submit_addition(user, body.proposed.model_dump(mode="json"))
 
 
 @router.post("/me/relative-change-requests/{request_id}/resubmit")

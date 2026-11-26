@@ -34,6 +34,15 @@ def relatives(seeded, database, monkeypatch):
             spec.loader.exec_module(migration)
             with Operations.context(MigrationContext.configure(conn)):
                 migration.upgrade()
+        if not conn.execute(text("""SELECT 1 FROM information_schema.columns
+            WHERE table_schema='public' AND table_name='person_relative_change_requests'
+              AND column_name='request_kind'""")).first():
+            spec = importlib.util.spec_from_file_location(
+                'relative_add_migration', Path('alembic/versions/selfrel002_relative_add_requests.py'))
+            migration = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(migration)
+            with Operations.context(MigrationContext.configure(conn)):
+                migration.upgrade()
         conn.execute(text("""INSERT INTO person_relatives(person_id,relationship_type,full_name)
             VALUES (1,'spouse','Fictional spouse'),(2,'child','Other fictional relative')"""))
     monkeypatch.setattr(changes, 'engine', database)
@@ -62,6 +71,16 @@ def relatives(seeded, database, monkeypatch):
                     VALUES (:pid,:relationship_type,:full_name,:birth_date,:birth_place,:organization_name,
                     :residence_address,:notes) RETURNING relative_id"""),
                     {'pid': envelope.person_id, **envelope.payload['replacement']}).scalar_one()
+            return type('Result', (), {'section_record_id': new_id})()
+
+        def add_relative(self, envelope):
+            with database.begin() as conn:
+                new_id = conn.execute(text("""INSERT INTO person_relatives
+                    (person_id,relationship_type,full_name,birth_date,birth_place,organization_name,
+                     residence_address,notes) VALUES
+                    (:pid,:relationship_type,:full_name,:birth_date,:birth_place,:organization_name,
+                     :residence_address,:notes) RETURNING relative_id"""),
+                    {'pid': envelope.person_id, **envelope.payload}).scalar_one()
             return type('Result', (), {'section_record_id': new_id})()
 
     monkeypatch.setattr(changes, 'PprSectionApplicationService', FakePprService)
@@ -145,3 +164,45 @@ def test_relative_ownership_permission_and_stale_conflict(relatives):
     returned = client.post(path, json={'expected_revision': 1, 'action': 'return',
                                        'reason': 'The source record changed; review the new values'})
     assert returned.status_code == 200 and returned.json()['status'] == 'returned'
+
+
+def test_new_relative_return_resubmit_approve_keeps_existing_record(relatives):
+    client, app, actors, database = relatives
+    proposal = _proposal('Fictional child') | {'relationship_type': 'daughter',
+        'residence_address': 'Проживает со мной'}
+    created = client.post('/api/ppr/me/relatives/change-requests', json={'proposed': proposal})
+    assert created.status_code == 201, created.text
+    request = created.json()
+    assert request['request_kind'] == 'addition'
+    assert request['relative_id'] is None and request['expected_updated_at'] is None
+    assert client.post('/api/ppr/me/relatives/change-requests', json={'proposed': proposal}).status_code == 409
+    with database.connect() as conn:
+        assert conn.execute(text("SELECT count(*) FROM person_relatives WHERE person_id=1 AND lifecycle_status='active'")).scalar_one() == 1
+
+    path = f"/api/ppr/relative-change-requests/{request['request_id']}/decision"
+    app.dependency_overrides[get_current_user] = lambda: actors[2]
+    assert client.post(path, json={'expected_revision': 1, 'action': 'approve'}).status_code == 403
+    app.dependency_overrides[get_current_user] = lambda: actors[3]
+    queue = client.get('/api/ppr/relative-change-requests/review-queue').json()['items']
+    assert queue[0]['request_kind'] == 'addition' and queue[0]['current'] == {}
+    returned = client.post(path, json={'expected_revision': 1, 'action': 'return', 'reason': 'Clarify name'})
+    assert returned.status_code == 200 and returned.json()['status'] == 'returned'
+
+    app.dependency_overrides[get_current_user] = lambda: actors[1]
+    revised = proposal | {'full_name': 'Corrected fictional child'}
+    resubmitted = client.post(f"/api/ppr/me/relative-change-requests/{request['request_id']}/resubmit",
+        json={'expected_revision': 2, 'proposed': revised})
+    assert resubmitted.status_code == 200 and resubmitted.json()['status'] == 'pending'
+    app.dependency_overrides[get_current_user] = lambda: actors[3]
+    approved = client.post(path, json={'expected_revision': 3, 'action': 'approve'})
+    assert approved.status_code == 200, approved.text
+    new_id = approved.json()['approved_relative_id']
+    assert new_id != 1 and approved.json()['status'] == 'approved'
+    with database.connect() as conn:
+        rows = conn.execute(text("""SELECT relative_id,full_name,lifecycle_status FROM person_relatives
+            WHERE person_id=1 ORDER BY relative_id""")).mappings().all()
+        assert [(row['relative_id'], row['lifecycle_status']) for row in rows] == [(1, 'active'), (new_id, 'active')]
+        assert rows[1]['full_name'] == 'Corrected fictional child'
+        events = conn.execute(text("""SELECT action FROM person_relative_change_events
+            WHERE request_id=:rid ORDER BY event_id"""), {'rid': request['request_id']}).scalars().all()
+        assert events == ['submitted', 'return', 'resubmitted', 'approve']

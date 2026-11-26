@@ -10,7 +10,8 @@ import { displayEmploymentRate, displayOperationalStatus } from "../_lib/operati
 import { downloadMyPersonalCardPdf } from "../_lib/selfPersonCardPdfOpen.client";
 import { displayForeignLanguageLevel } from "../_lib/foreignLanguageDisplay";
 import { ContactsEditor, EducationEditor, EmploymentEditor, LanguagesEditor, type EmploymentRecordForEdit } from "./SelfEditors";
-import { SelfPhotoChanges, SelfRelativeChanges } from "./SelfChangeControls";
+import { SelfPhotoChanges } from "./SelfChangeControls";
+import SelfRelativeChanges from "./SelfRelativeChanges";
 
 type TabId = "overview" | "contacts" | "education" | "employment" | "languages" | "relatives" | "other";
 type LoadState = { kind: "loading" } | { kind: "ready"; card: SelfPersonalCard; operationalAssignment: SelfOperationalAssignment } | { kind: "person-not-linked" } | { kind: "unavailable" };
