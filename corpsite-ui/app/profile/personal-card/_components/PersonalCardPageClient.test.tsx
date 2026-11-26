@@ -82,7 +82,8 @@ describe("PersonalCardPageClient", () => {
     expect(getMyOperationalAssignmentMock).toHaveBeenCalledWith({ signal: expect.any(AbortSignal) });
     expect(screen.getByText("Иванов Иван Иванович")).toBeInTheDocument();
     expect(screen.getByTestId("self-personal-card-download-pdf")).toBeInTheDocument();
-    expect(screen.getAllByRole("tab")).toHaveLength(6);
+    expect(screen.getAllByRole("tab")).toHaveLength(7);
+    expect(screen.getByRole("tab", { name: "Родственники" })).toBeInTheDocument();
     expect(screen.queryByTestId("self-contacts-editor")).not.toBeInTheDocument();
     expect(screen.queryByTestId("self-education-editor")).not.toBeInTheDocument();
     expect(screen.queryByTestId("self-languages-editor")).not.toBeInTheDocument();

@@ -111,6 +111,8 @@ const RELATIONSHIP_TYPE_LABELS: Record<string, string> = {
   other_close: "Иной близкий родственник",
 };
 
+export const relationshipTypeOptions = Object.entries(RELATIONSHIP_TYPE_LABELS).map(([value, label]) => ({ value, label }));
+
 export function relationshipTypeLabel(value: string | null | undefined): string {
   if (!value) return "—";
   return RELATIONSHIP_TYPE_LABELS[value] || value;
