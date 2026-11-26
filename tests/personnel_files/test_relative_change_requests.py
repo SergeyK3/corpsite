@@ -13,6 +13,9 @@ from sqlalchemy import text
 from app.auth import get_current_user
 from app.api.relative_change_request_router import router
 from app.services import relative_change_request_service as changes
+from app.services import self_change_review_service as review
+from app.personnel_files import service as files
+from tests.personnel_files.test_policy_and_validation import image
 
 
 @pytest.fixture
@@ -206,3 +209,60 @@ def test_new_relative_return_resubmit_approve_keeps_existing_record(relatives):
         events = conn.execute(text("""SELECT action FROM person_relative_change_events
             WHERE request_id=:rid ORDER BY event_id"""), {'rid': request['request_id']}).scalars().all()
         assert events == ['submitted', 'return', 'resubmitted', 'approve']
+
+
+def test_group_review_rolls_back_photo_when_relative_source_is_stale(relatives, monkeypatch):
+    client, app, actors, database = relatives
+    monkeypatch.setattr(review, 'require_personnel_card_edit_for_person',
+                        changes.require_personnel_card_edit_for_person)
+    photo = files.submit(actors[1], 1, kind='photo', title='Fictional portrait',
+        content=image(), mime='image/jpeg', filename='fictional.jpg')
+    original = _original(database)
+    relative = client.post('/api/ppr/me/relatives/1/change-requests',
+        json={'expected_updated_at': original.isoformat(), 'proposed': _proposal()}).json()
+    decisions = [
+        {'kind': 'photo', 'id': str(photo['version_id']), 'expected_revision': photo['revision'],
+         'action': 'approve', 'reason': ''},
+        {'kind': 'relative', 'id': str(relative['request_id']), 'expected_revision': relative['revision'],
+         'action': 'approve', 'reason': ''},
+    ]
+    with pytest.raises(HTTPException) as forbidden:
+        review.complete(actors[1], 1, decisions)
+    assert forbidden.value.status_code == 403
+    with database.begin() as conn:
+        conn.execute(text("UPDATE person_relatives SET updated_at=updated_at + interval '1 minute' WHERE relative_id=1"))
+    with pytest.raises(HTTPException) as conflict:
+        review.complete(actors[3], 1, decisions)
+    assert conflict.value.status_code == 409
+    with database.connect() as conn:
+        assert conn.execute(text("SELECT state FROM personnel_file_versions WHERE version_id=:id"),
+                            {'id': photo['version_id']}).scalar_one() == 'pending'
+        assert conn.execute(text("SELECT status FROM person_relative_change_requests WHERE request_id=:id"),
+                            {'id': relative['request_id']}).scalar_one() == 'pending'
+        assert conn.execute(text("SELECT count(*) FROM personnel_file_events WHERE version_id=:id AND action='approve'"),
+                            {'id': photo['version_id']}).scalar_one() == 0
+
+
+def test_group_review_approves_photo_and_returns_relative_together(relatives, monkeypatch):
+    client, app, actors, database = relatives
+    monkeypatch.setattr(review, 'require_personnel_card_edit_for_person',
+                        changes.require_personnel_card_edit_for_person)
+    photo = files.submit(actors[1], 1, kind='photo', title='Fictional portrait',
+        content=image(), mime='image/jpeg', filename='fictional.jpg')
+    original = _original(database)
+    relative = client.post('/api/ppr/me/relatives/1/change-requests',
+        json={'expected_updated_at': original.isoformat(), 'proposed': _proposal()}).json()
+    result = review.complete(actors[3], 1, [
+        {'kind': 'photo', 'id': str(photo['version_id']), 'expected_revision': photo['revision'],
+         'action': 'approve', 'reason': ''},
+        {'kind': 'relative', 'id': str(relative['request_id']), 'expected_revision': relative['revision'],
+         'action': 'return', 'reason': 'Уточните сведения.'},
+    ])
+    assert {(item['kind'], item['status']) for item in result['results']} == {
+        ('photo', 'approved'), ('relative', 'returned')}
+    with database.connect() as conn:
+        assert conn.execute(text("SELECT state FROM personnel_file_versions WHERE version_id=:id"),
+                            {'id': photo['version_id']}).scalar_one() == 'approved'
+        assert conn.execute(text("SELECT status,reason FROM person_relative_change_requests WHERE request_id=:id"),
+                            {'id': relative['request_id']}).one() == ('returned', 'Уточните сведения.')
+        assert conn.execute(text("SELECT lifecycle_status FROM person_relatives WHERE relative_id=1")).scalar_one() == 'active'

@@ -146,46 +146,54 @@ def decide(user, version_id, *, expected_revision, action, reason, expected_cert
     with engine.begin() as conn:
         require_schema(conn)
         initial = row(conn, version_id)
-        pid = initial['person_id']
-        conn.execute(text('SELECT person_id FROM public.persons WHERE person_id=:pid FOR NO KEY UPDATE'), {'pid': pid}).one()
-        r = row(conn, version_id, lock=True)
-        rights = access(conn, user, pid)
-        if not rights.reviewer:
-            denied(user, pid, version_id)
-        if r['revision'] != expected_revision:
-            raise HTTPException(409, 'Решение устарело. Обновите список файлов.')
-        try:
-            state = transition(r['state'], action, reason)
-        except ValueError as exc:
-            raise HTTPException(409, str(exc)) from exc
-        comparison = None
-        if action == 'approve':
-            latest = conn.execute(text('SELECT max(version_no) FROM public.personnel_file_versions WHERE set_id=:sid'), {'sid': r['set_id']}).scalar_one()
-            if r['version_no'] != latest:
-                raise HTTPException(409, 'Нельзя одобрить устаревшую версию.')
-            if r['kind']=='certificate':
-                comparison = certificates.context(conn, r, lock=True)
-                if not comparison['can_approve']:
-                    # Separate append-only denial audit; do not wait on the locked version FK.
-                    with engine.begin() as audit_conn:
-                        event(audit_conn, user, pid, None, 'replacement_blocked', {'version_id': version_id, 'comparison': comparison})
-                    raise HTTPException(409, comparison['basis']['description'])
-                if expected_certificate_context != comparison['context_token']:
-                    raise HTTPException(409, 'Сравнение сертификатов изменилось. Откройте решение заново.')
-                certificates.publish(conn, r, comparison)
-            storage.read(r['storage_key'], r['checksum_sha256'])
-            old = conn.execute(text("UPDATE public.personnel_file_versions SET state='superseded',revision=revision+1 WHERE set_id=:sid AND state='approved' RETURNING version_id"), {'sid': r['set_id']}).scalars().all()
-            for previous in old:
-                event(conn, user, pid, previous, 'superseded', {'replacement_version_id': version_id, 'certificate_comparison': comparison})
-        conn.execute(text('''UPDATE public.personnel_file_versions SET state=:state,revision=revision+1,
-            decided_by=:uid,decided_at=now(),reason=:reason WHERE version_id=:vid'''),
-            {'state': state, 'uid': user['user_id'], 'reason': reason.strip(), 'vid': version_id})
-        if r['kind']=='certificate' and r['registry_created_by_upload'] and action=='return':
-            conn.execute(text("UPDATE employee_documents SET verification_status='REJECTED',updated_at=now() WHERE document_id=:id"), {'id': r['employee_document_id']})
-        if r['kind']=='certificate' and r.get('employee_document_id') and action=='revoke':
-            conn.execute(text("UPDATE employee_documents SET lifecycle_status='SUPERSEDED',updated_at=now() WHERE document_id=:id"), {'id': r['employee_document_id']})
-        event(conn, user, pid, version_id, action, {'before': r['state'], 'after': state, 'reason': reason.strip(), 'employee_document_id': r.get('employee_document_id'), 'certificate_comparison': comparison})
-        return public(row(conn, version_id), rights, conn)
+        conn.execute(text('SELECT person_id FROM public.persons WHERE person_id=:pid FOR NO KEY UPDATE'), {'pid': initial['person_id']}).one()
+        return decide_participating(conn, user, version_id, expected_revision=expected_revision,
+            action=action, reason=reason, expected_certificate_context=expected_certificate_context)
+
+
+def decide_participating(conn, user, version_id, *, expected_revision, action, reason,
+                         expected_certificate_context=None):
+    """Apply a file decision inside a caller-owned transaction after the Person lock."""
+    require_schema(conn)
+    r = row(conn, version_id, lock=True)
+    pid = r['person_id']
+    rights = access(conn, user, pid)
+    if not rights.reviewer:
+        denied(user, pid, version_id)
+    if r['revision'] != expected_revision:
+        raise HTTPException(409, 'Решение устарело. Обновите список файлов.')
+    try:
+        state = transition(r['state'], action, reason)
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    comparison = None
+    if action == 'approve':
+        latest = conn.execute(text('SELECT max(version_no) FROM public.personnel_file_versions WHERE set_id=:sid'), {'sid': r['set_id']}).scalar_one()
+        if r['version_no'] != latest:
+            raise HTTPException(409, 'Нельзя одобрить устаревшую версию.')
+        if r['kind']=='certificate':
+            comparison = certificates.context(conn, r, lock=True)
+            if not comparison['can_approve']:
+                # Separate append-only denial audit; do not wait on the locked version FK.
+                with engine.begin() as audit_conn:
+                    event(audit_conn, user, pid, None, 'replacement_blocked', {'version_id': version_id, 'comparison': comparison})
+                raise HTTPException(409, comparison['basis']['description'])
+            if expected_certificate_context != comparison['context_token']:
+                raise HTTPException(409, 'Сравнение сертификатов изменилось. Откройте решение заново.')
+            certificates.publish(conn, r, comparison)
+        storage.read(r['storage_key'], r['checksum_sha256'])
+        old = conn.execute(text("UPDATE public.personnel_file_versions SET state='superseded',revision=revision+1 WHERE set_id=:sid AND state='approved' RETURNING version_id"), {'sid': r['set_id']}).scalars().all()
+        for previous in old:
+            event(conn, user, pid, previous, 'superseded', {'replacement_version_id': version_id, 'certificate_comparison': comparison})
+    conn.execute(text('''UPDATE public.personnel_file_versions SET state=:state,revision=revision+1,
+        decided_by=:uid,decided_at=now(),reason=:reason WHERE version_id=:vid'''),
+        {'state': state, 'uid': user['user_id'], 'reason': reason.strip(), 'vid': version_id})
+    if r['kind']=='certificate' and r['registry_created_by_upload'] and action=='return':
+        conn.execute(text("UPDATE employee_documents SET verification_status='REJECTED',updated_at=now() WHERE document_id=:id"), {'id': r['employee_document_id']})
+    if r['kind']=='certificate' and r.get('employee_document_id') and action=='revoke':
+        conn.execute(text("UPDATE employee_documents SET lifecycle_status='SUPERSEDED',updated_at=now() WHERE document_id=:id"), {'id': r['employee_document_id']})
+    event(conn, user, pid, version_id, action, {'before': r['state'], 'after': state, 'reason': reason.strip(), 'employee_document_id': r.get('employee_document_id'), 'certificate_comparison': comparison})
+    return public(row(conn, version_id), rights, conn)
 
 
 def review_context(user, version_id):

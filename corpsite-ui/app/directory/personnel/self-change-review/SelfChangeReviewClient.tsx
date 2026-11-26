@@ -16,6 +16,12 @@ function relativeValue(key: string, value: unknown): string {
   return key === "relationship_type" ? relationshipTypeLabel(typeof value === "string" ? value : null) : String(value ?? "—");
 }
 
+function requestWord(count: number): string {
+  if (count % 10 === 1 && count % 100 !== 11) return "заявка";
+  if (count % 10 >= 2 && count % 10 <= 4 && (count % 100 < 12 || count % 100 > 14)) return "заявки";
+  return "заявок";
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(resolveApiUrl(path), { ...init, headers: buildHeaders(init.headers as Record<string, string> | undefined), cache: "no-store" });
   if (!response.ok) throw toApiError(response.status, await readJsonSafe(response), { method: init.method ?? "GET", url: path });
@@ -64,7 +70,7 @@ function PhotoCompare({ photo, actions }: { photo: Photo; actions: React.ReactNo
     <div><p className="text-sm font-medium">Текущее фото</p>{current ? <img src={current} alt="Текущее фото" className="mt-2 h-48 w-36 rounded object-contain" /> : <p className="mt-2 text-sm text-zinc-500">Фото отсутствует</p>}</div>
     <div className="flex flex-wrap items-start gap-5">
       <div><p className="text-sm font-medium">Новое фото на проверке</p>{proposed ? <button type="button" onClick={() => setLargeOpen(true)} aria-label="Открыть новое фото крупно" className="mt-2 rounded text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-600"><img src={proposed} alt="Новое фото на проверке" className="h-48 w-36 rounded object-contain" /><span className="mt-1 block text-sm text-blue-700 underline dark:text-blue-300">Открыть крупно</span></button> : <p className="mt-2 text-sm text-zinc-500">Загрузка фото…</p>}</div>
-      <div className="min-w-56"><p className="text-sm font-semibold">Решение по новому фото</p>{actions}</div>
+      <div className="min-w-56">{actions}</div>
     </div>
     {largeOpen && proposed && <div role="presentation" className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4" onMouseDown={(event) => { if (event.target === event.currentTarget) setLargeOpen(false); }}>
       <section role="dialog" aria-modal="true" aria-label={`Новое фото на проверке: ${photo.full_name}`} className="max-h-[95vh] w-full max-w-[700px] overflow-y-auto rounded-xl bg-white p-4 text-zinc-900 shadow-xl dark:bg-zinc-950 dark:text-zinc-50">
@@ -78,48 +84,105 @@ function PhotoCompare({ photo, actions }: { photo: Photo; actions: React.ReactNo
 export default function SelfChangeReviewClient() {
   const [photos, setPhotos] = React.useState<Photo[]>([]);
   const [relatives, setRelatives] = React.useState<RelativeRequest[]>([]);
+  const [selectedPersonId, setSelectedPersonId] = React.useState<number | null>(null);
+  const [decisions, setDecisions] = React.useState<Record<string, "approve" | "return">>({});
   const [reasons, setReasons] = React.useState<Record<string, string>>({});
   const [error, setError] = React.useState("");
-  const [decisionErrors, setDecisionErrors] = React.useState<Record<string, string>>({});
   const [confirmation, setConfirmation] = React.useState("");
-  const [busy, setBusy] = React.useState<string | null>(null);
+  const [busy, setBusy] = React.useState(false);
+  const [stale, setStale] = React.useState(false);
   const load = React.useCallback(async () => {
     const results = await Promise.allSettled([
       request<{ items: Photo[] }>("/api/personnel-files/review-queue"),
       request<{ items: RelativeRequest[] }>("/api/ppr/relative-change-requests/review-queue"),
     ]);
-    if (results[0].status === "fulfilled") setPhotos(results[0].value.items.filter((item) => item.kind === "photo"));
-    if (results[1].status === "fulfilled") setRelatives(results[1].value.items);
     const unavailable = [results[0].status === "rejected" ? "фото" : null, results[1].status === "rejected" ? "родственников" : null].filter(Boolean);
-    setError(unavailable.length ? `Не удалось обновить очередь ${unavailable.join(" и ")}.` : "");
+    if (unavailable.length) {
+      setError(`Не удалось обновить очередь ${unavailable.join(" и ")}.`);
+      setStale(true);
+      return false;
+    }
+    setPhotos((results[0] as PromiseFulfilledResult<{ items: Photo[] }>).value.items.filter((item) => item.kind === "photo"));
+    setRelatives((results[1] as PromiseFulfilledResult<{ items: RelativeRequest[] }>).value.items);
+    setError("");
+    return true;
   }, []);
   React.useEffect(() => { void load(); }, [load]);
-  async function decide(kind: "photo" | "relative", id: string, revision: number, action: "approve" | "return", employeeName: string, requestKind: "correction" | "addition" = "correction") {
-    setBusy(id);
-    setDecisionErrors((old) => { const updated = { ...old }; delete updated[id]; return updated; });
-    try {
-      const reason = reasons[id] ?? "";
-      const path = kind === "photo" ? `/api/personnel-files/versions/${id}/decision` : `/api/ppr/relative-change-requests/${id}/decision`;
-      const result = await request<{ state?: string; status?: string }>(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ expected_revision: revision, action, reason }) });
-      const actual = kind === "photo" ? result.state : result.status;
-      const expected = action === "approve" ? "approved" : "returned";
-      if (actual !== expected) {
-        setDecisionErrors((old) => ({ ...old, [id]: `Сервер вернул статус «${actual ?? "неизвестен"}». Обновите очередь перед следующим решением.` }));
-        void load();
-        return;
-      }
-      if (kind === "photo") setPhotos((old) => old.filter((item) => item.version_id !== id));
-      else setRelatives((old) => old.filter((item) => item.request_id !== id));
-      setConfirmation(kind === "photo"
-        ? `Новое фото сотрудника ${employeeName} ${action === "approve" ? "одобрено" : "возвращено с пояснением"}. Решение сохранено.`
-        : `${requestKind === "addition" ? "Новый родственник" : "Исправление родственника"} сотрудника ${employeeName} ${action === "approve" ? "одобрено" : "возвращено с пояснением"}. Решение сохранено.`);
-      void load();
-    } catch (caught) { setDecisionErrors((old) => ({ ...old, [id]: decisionError(caught) })); }
-    finally { setBusy(null); }
+  const people = new Map<number, { name: string; photos: Photo[]; relatives: RelativeRequest[] }>();
+  for (const photo of photos) {
+    const person = people.get(photo.person_id) ?? { name: photo.full_name, photos: [], relatives: [] };
+    person.photos.push(photo); people.set(photo.person_id, person);
   }
-  const actions = (kind: "photo" | "relative", id: string, revision: number, employeeName: string, requestKind: "correction" | "addition" = "correction") => <div className={kind === "photo" ? "mt-2 flex flex-col items-start gap-2" : "mt-4 flex flex-wrap items-end gap-2"}><button type="button" disabled={busy === id} onClick={() => void decide(kind, id, revision, "approve", employeeName, requestKind)} className="rounded bg-emerald-700 px-3 py-2 text-sm text-white disabled:opacity-50">{kind === "photo" ? "Одобрить новое фото" : "Одобрить"}</button><label className="text-sm">Пояснение для возврата<input className="mt-1 block rounded border px-2 py-2 dark:bg-zinc-950" value={reasons[id] ?? ""} onChange={(event) => setReasons((old) => ({ ...old, [id]: event.target.value }))} /></label><button type="button" disabled={busy === id || !(reasons[id] ?? "").trim()} onClick={() => void decide(kind, id, revision, "return", employeeName, requestKind)} className="rounded border border-amber-600 px-3 py-2 text-sm disabled:opacity-50">{kind === "photo" ? "Вернуть новое фото с пояснением" : "Вернуть с пояснением"}</button>{decisionErrors[id] && <p role="alert" className="text-sm text-red-700 dark:text-red-300">{decisionErrors[id]}</p>}</div>;
-  return <div className="space-y-5 p-4"><h1 className="text-2xl font-semibold">Изменения личных карточек на проверке</h1>{confirmation && <p role="status" className="rounded border border-emerald-400 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200">{confirmation}</p>}{error && <p role="alert" className="text-sm text-red-700">{error}</p>}
-    <section><h2 className="text-lg font-semibold">Фото</h2>{photos.length === 0 && <p className="text-sm text-zinc-500">Нет заявок.</p>}{photos.map((photo) => <article key={photo.version_id} className="my-3 rounded-lg border p-4"><h3 className="font-medium">{photo.full_name} · фото</h3><PhotoCompare photo={photo} actions={actions("photo", photo.version_id, photo.revision, photo.full_name)} /></article>)}</section>
-    <section><h2 className="text-lg font-semibold">Родственники</h2>{relatives.length === 0 && <p className="text-sm text-zinc-500">Нет заявок.</p>}{relatives.map((item) => <article key={item.request_id} className="my-3 rounded-lg border p-4"><h3 className="font-medium">{item.employee_name} · {item.request_kind === "addition" ? "Новый родственник" : `запись #${item.relative_id}`}</h3><div className="mt-3 overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr><th>Поле</th><th>Сейчас</th><th>Предложено</th></tr></thead><tbody>{fields.map(([key, label]) => <tr key={key} className="border-t"><th className="py-2">{label}</th><td className="py-2">{relativeValue(key, item.current[key])}</td><td className="py-2">{relativeValue(key, item.proposed[key])}</td></tr>)}</tbody></table></div>{actions("relative", item.request_id, item.revision, item.employee_name, item.request_kind)}</article>)}</section>
+  for (const relative of relatives) {
+    const person = people.get(relative.person_id) ?? { name: relative.employee_name, photos: [], relatives: [] };
+    person.relatives.push(relative); people.set(relative.person_id, person);
+  }
+  const selected = selectedPersonId === null ? null : people.get(selectedPersonId);
+  const items = selected ? [
+    ...selected.photos.map((item) => ({ kind: "photo" as const, id: item.version_id, revision: item.revision })),
+    ...selected.relatives.map((item) => ({ kind: "relative" as const, id: item.request_id, revision: item.revision })),
+  ] : [];
+  const ready = items.length > 0 && items.every((item) => decisions[item.id] &&
+    (decisions[item.id] !== "return" || (reasons[item.id] ?? "").trim()));
+
+  async function refreshForReview() {
+    if (await load()) {
+      setDecisions({}); setReasons({}); setStale(false); setConfirmation("");
+    }
+  }
+  async function complete() {
+    if (selectedPersonId === null || !ready || busy || stale) return;
+    setBusy(true); setError("");
+    try {
+      const result = await request<{ results: { kind: string; id: string; status: string }[] }>(
+        `/api/ppr/self-change-review/persons/${selectedPersonId}/complete`, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ decisions: items.map((item) => ({ kind: item.kind, id: item.id,
+            expected_revision: item.revision, action: decisions[item.id], reason: reasons[item.id] ?? "" })) }),
+        });
+      if (result.results.length !== items.length || result.results.some((item) =>
+        item.status !== (decisions[item.id] === "approve" ? "approved" : "returned"))) {
+        throw new Error("Сервер вернул неполный результат. Обновите очередь и проверьте решения.");
+      }
+      setConfirmation(`Проверка сотрудника ${selected?.name ?? ""} завершена. Все решения сохранены вместе.`);
+      setPhotos((old) => old.filter((item) => item.person_id !== selectedPersonId));
+      setRelatives((old) => old.filter((item) => item.person_id !== selectedPersonId));
+      setSelectedPersonId(null); setDecisions({}); setReasons({});
+      void load();
+    } catch (caught) {
+      const conflict = caught && typeof caught === "object" && "status" in caught && caught.status === 409;
+      if (conflict) {
+        setStale(true);
+        setError("Заявки сотрудника изменились. Ни одно решение не применено. Обновите карточку и перепроверьте все заявки.");
+      } else setError(decisionError(caught));
+    } finally { setBusy(false); }
+  }
+  const actions = (id: string) => <fieldset className="mt-4 flex flex-wrap items-center gap-3 text-sm" disabled={busy || stale}>
+    <legend className="font-medium">Решение по заявке</legend>
+    <label><input type="radio" name={`decision-${id}`} checked={decisions[id] === "approve"} onChange={() => setDecisions((old) => ({ ...old, [id]: "approve" }))} /> Одобрить</label>
+    <label><input type="radio" name={`decision-${id}`} checked={decisions[id] === "return"} onChange={() => setDecisions((old) => ({ ...old, [id]: "return" }))} /> Вернуть с пояснением</label>
+    {decisions[id] === "return" && <label>Пояснение для возврата<input className="ml-2 rounded border px-2 py-2 dark:bg-zinc-950" value={reasons[id] ?? ""} onChange={(event) => setReasons((old) => ({ ...old, [id]: event.target.value }))} /></label>}
+  </fieldset>;
+  return <div className="space-y-5 p-4"><h1 className="text-2xl font-semibold">Изменения личных карточек на проверке</h1>
+    {confirmation && <p role="status" className="rounded border border-emerald-400 bg-emerald-50 px-3 py-2 text-sm text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200">{confirmation}</p>}
+    {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+    {error && !selected && <button type="button" className="rounded border px-3 py-1.5 text-sm" onClick={() => void refreshForReview()}>Обновить очередь</button>}
+    {!selected && <section><h2 className="text-lg font-semibold">Очередь сотрудников</h2>
+      {people.size === 0 && <p className="mt-3 text-sm text-zinc-500">Нет заявок на проверке.</p>}
+      <div className="mt-3 space-y-2">{[...people.entries()].map(([personId, person]) => {
+        const count = person.photos.length + person.relatives.length;
+        return <button key={personId} type="button" className="block w-full rounded-lg border p-3 text-left hover:bg-zinc-50 dark:hover:bg-zinc-900" onClick={() => { setSelectedPersonId(personId); setDecisions({}); setReasons({}); setStale(false); setError(""); }}>
+          {person.name} · {count} {requestWord(count)} · {[person.photos.length && "Фото", person.relatives.length && "Родственники"].filter(Boolean).join(", ")}
+        </button>;
+      })}</div>
+    </section>}
+    {selected && <section><button type="button" className="text-sm text-blue-700 underline" onClick={() => { setSelectedPersonId(null); setStale(false); setError(""); }}>К очереди сотрудников</button>
+      <h2 className="mt-3 text-2xl font-semibold">{selected.name}</h2>
+      <p className="text-sm text-zinc-600">{items.length} {requestWord(items.length)} на проверке. Решения применятся вместе после завершения проверки.</p>
+      {selected.photos.length > 0 && <section className="mt-5"><h3 className="text-xl font-semibold">Фото</h3>{selected.photos.map((photo) => <article key={photo.version_id} className="my-3 rounded-lg border p-4"><PhotoCompare photo={photo} actions={actions(photo.version_id)} /></article>)}</section>}
+      {selected.relatives.length > 0 && <section className="mt-5"><h3 className="text-xl font-semibold">Родственники</h3>{selected.relatives.map((item) => <article key={item.request_id} className="my-3 rounded-lg border p-4"><h4 className="font-medium">{item.request_kind === "addition" ? "Новый родственник" : `Исправление записи #${item.relative_id}`}</h4><div className="mt-3 overflow-x-auto"><table className="w-full text-left text-sm"><thead><tr><th>Поле</th><th>Сейчас</th><th>Предложено</th></tr></thead><tbody>{fields.map(([key, label]) => <tr key={key} className="border-t"><th className="py-2">{label}</th><td className="py-2">{relativeValue(key, item.current[key])}</td><td className="py-2">{relativeValue(key, item.proposed[key])}</td></tr>)}</tbody></table></div>{actions(item.request_id)}</article>)}</section>}
+      {stale && <button type="button" className="rounded border px-4 py-2 text-sm" onClick={() => void refreshForReview()}>Обновить карточку и перепроверить</button>}
+      <button type="button" disabled={!ready || busy || stale} className="mt-5 block rounded bg-blue-700 px-4 py-2 text-white disabled:opacity-50" onClick={() => void complete()}>{busy ? "Завершаем проверку…" : "Завершить проверку"}</button>
+    </section>}
   </div>;
 }

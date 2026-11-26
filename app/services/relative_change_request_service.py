@@ -106,6 +106,8 @@ def submit(user: dict, relative_id: int, expected_updated_at: datetime, proposed
     request_id = uuid4()
     try:
         with engine.begin() as conn:
+            conn.execute(text("SELECT person_id FROM public.persons WHERE person_id=:pid FOR NO KEY UPDATE"),
+                         {"pid": person_id}).one()
             current = _relative(conn, person_id, relative_id)
             if current["lifecycle_status"] != "active" or current["updated_at"] != expected_updated_at:
                 raise HTTPException(409, "Запись изменилась. Обновите карточку.")
@@ -127,6 +129,8 @@ def submit_addition(user: dict, proposed: dict) -> dict:
     request_id = uuid4()
     try:
         with engine.begin() as conn:
+            conn.execute(text("SELECT person_id FROM public.persons WHERE person_id=:pid FOR NO KEY UPDATE"),
+                         {"pid": person_id}).one()
             row = conn.execute(text("""INSERT INTO public.person_relative_change_requests
                 (request_id,person_id,request_kind,proposed,status,submitted_by)
                 VALUES(:rid,:pid,'addition',CAST(:proposed AS jsonb),'pending',:uid)
@@ -143,6 +147,8 @@ def resubmit(user: dict, request_id: UUID, expected_revision: int, expected_upda
     person_id = _self_person(user)
     try:
         with engine.begin() as conn:
+            conn.execute(text("SELECT person_id FROM public.persons WHERE person_id=:pid FOR NO KEY UPDATE"),
+                         {"pid": person_id}).one()
             row = _request(conn, request_id)
             if row["person_id"] != person_id or row["submitted_by"] != int(user["user_id"]):
                 raise HTTPException(404, "Заявка не найдена.")
@@ -192,49 +198,61 @@ def review_queue(user: dict) -> list[dict]:
 
 def decide(user: dict, request_id: UUID, expected_revision: int, action: str, reason: str) -> dict:
     with engine.begin() as conn:
-        row = _request(conn, request_id)
-        person_id = int(row["person_id"])
-        require_personnel_card_edit_for_person(user, person_id)
-        if row["status"] != "pending" or row["revision"] != expected_revision:
-            raise HTTPException(409, "Решение устарело. Обновите очередь.")
-        current = _relative(conn, person_id, int(row["relative_id"])) if row["request_kind"] == "correction" else None
-        approved_id = None
-        if action == "approve":
-            if current is not None and (current["lifecycle_status"] != "active" or current["updated_at"] != row["expected_updated_at"]):
-                raise HTTPException(409, "Запись о родственнике изменилась. Заявку нельзя применить.")
-            proposed = Relative.model_validate(row["proposed"]).model_dump()
-            adding = row["request_kind"] == "addition"
-            envelope = PprCommandEnvelope(command_id=f"relative-request-{request_id}",
-                command_type="PersonnelCardAddRelatives" if adding else "PersonnelCardSupersedeRelatives",
-                actor_id=str(user["user_id"]), requested_at=datetime.now(UTC), person_id=person_id,
-                payload=proposed if adding else {"record_id": int(row["relative_id"]),
-                    "expected_updated_at": row["expected_updated_at"], "replacement": proposed},
-                audit_source="EMPLOYEE_REQUEST_REVIEW")
-            try:
-                _ensure_ppr_envelope(conn, user, person_id, request_id)
-                section_service = PprSectionApplicationService(
-                    authorization=PersonnelCardEditAuthorizationAdapter(user),
-                    uow_factory=lambda: PprApplicationUnitOfWork().bind_participating(conn),
-                )
-                result = section_service.add_relative(envelope) if adding else section_service.supersede_relative(envelope)
-            except PprNotMaterializedError as exc:
-                raise HTTPException(409, "Личная карточка не подготовлена для изменения. Обновите очередь и повторите попытку.") from exc
-            except Exception as exc:
-                mapped = map_ppr_mutation_error(exc)
-                if mapped is not None:
-                    raise mapped from exc
-                raise
-            approved_id = result.section_record_id
-            status = "approved"
-        else:
-            if not reason.strip():
-                raise HTTPException(422, "Укажите пояснение для возврата.")
-            status = "returned"
-        updated = conn.execute(text("""UPDATE public.person_relative_change_requests SET status=:status,
-            revision=revision+1,decided_by=:uid,decided_at=now(),reason=:reason,
-            approved_relative_id=:approved_id WHERE request_id=:rid RETURNING *"""),
-            {"rid": str(request_id), "status": status, "uid": int(user["user_id"]),
-             "reason": reason.strip(), "approved_id": approved_id}).mappings().one()
-        _event(conn, request_id, user, action, {"current": current, "proposed": row["proposed"],
-            "reason": reason.strip(), "approved_relative_id": approved_id})
-        return _public(dict(updated))
+        target = conn.execute(text("SELECT person_id FROM public.person_relative_change_requests WHERE request_id=:rid"),
+                              {"rid": str(request_id)}).scalar_one_or_none()
+        if target is None:
+            raise HTTPException(404, "Заявка не найдена.")
+        conn.execute(text("SELECT person_id FROM public.persons WHERE person_id=:pid FOR NO KEY UPDATE"),
+                     {"pid": target}).one()
+        return decide_participating(conn, user, request_id, expected_revision, action, reason)
+
+
+def decide_participating(conn, user: dict, request_id: UUID, expected_revision: int,
+                         action: str, reason: str) -> dict:
+    """Apply a relative decision inside a caller-owned transaction after the Person lock."""
+    row = _request(conn, request_id)
+    person_id = int(row["person_id"])
+    require_personnel_card_edit_for_person(user, person_id)
+    if row["status"] != "pending" or row["revision"] != expected_revision:
+        raise HTTPException(409, "Решение устарело. Обновите очередь.")
+    current = _relative(conn, person_id, int(row["relative_id"])) if row["request_kind"] == "correction" else None
+    approved_id = None
+    if action == "approve":
+        if current is not None and (current["lifecycle_status"] != "active" or current["updated_at"] != row["expected_updated_at"]):
+            raise HTTPException(409, "Запись о родственнике изменилась. Заявку нельзя применить.")
+        proposed = Relative.model_validate(row["proposed"]).model_dump()
+        adding = row["request_kind"] == "addition"
+        envelope = PprCommandEnvelope(command_id=f"relative-request-{request_id}",
+            command_type="PersonnelCardAddRelatives" if adding else "PersonnelCardSupersedeRelatives",
+            actor_id=str(user["user_id"]), requested_at=datetime.now(UTC), person_id=person_id,
+            payload=proposed if adding else {"record_id": int(row["relative_id"]),
+                "expected_updated_at": row["expected_updated_at"], "replacement": proposed},
+            audit_source="EMPLOYEE_REQUEST_REVIEW")
+        try:
+            _ensure_ppr_envelope(conn, user, person_id, request_id)
+            section_service = PprSectionApplicationService(
+                authorization=PersonnelCardEditAuthorizationAdapter(user),
+                uow_factory=lambda: PprApplicationUnitOfWork().bind_participating(conn),
+            )
+            result = section_service.add_relative(envelope) if adding else section_service.supersede_relative(envelope)
+        except PprNotMaterializedError as exc:
+            raise HTTPException(409, "Личная карточка не подготовлена для изменения. Обновите очередь и повторите попытку.") from exc
+        except Exception as exc:
+            mapped = map_ppr_mutation_error(exc)
+            if mapped is not None:
+                raise mapped from exc
+            raise
+        approved_id = result.section_record_id
+        status = "approved"
+    else:
+        if not reason.strip():
+            raise HTTPException(422, "Укажите пояснение для возврата.")
+        status = "returned"
+    updated = conn.execute(text("""UPDATE public.person_relative_change_requests SET status=:status,
+        revision=revision+1,decided_by=:uid,decided_at=now(),reason=:reason,
+        approved_relative_id=:approved_id WHERE request_id=:rid RETURNING *"""),
+        {"rid": str(request_id), "status": status, "uid": int(user["user_id"]),
+         "reason": reason.strip(), "approved_id": approved_id}).mappings().one()
+    _event(conn, request_id, user, action, {"current": current, "proposed": row["proposed"],
+        "reason": reason.strip(), "approved_relative_id": approved_id})
+    return _public(dict(updated))

@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.auth import get_current_user
 from app.api.ppr_card_command_router import Relative
 from app.services import relative_change_request_service as service
+from app.services import self_change_review_service
 
 router = APIRouter(prefix="/api/ppr", tags=["relative-change-requests"])
 
@@ -38,6 +39,20 @@ class Decision(BaseModel):
     expected_revision: int = Field(ge=1)
     action: Literal["approve", "return"]
     reason: str = Field(default="", max_length=2000)
+
+
+class ReviewItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    kind: Literal["photo", "relative"]
+    id: UUID
+    expected_revision: int = Field(ge=1)
+    action: Literal["approve", "return"]
+    reason: str = Field(default="", max_length=2000)
+
+
+class CompleteReview(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    decisions: list[ReviewItem] = Field(min_length=1)
 
 
 @router.get("/me/relative-change-requests")
@@ -69,3 +84,9 @@ def review_queue(user: dict = Depends(get_current_user)):
 @router.post("/relative-change-requests/{request_id}/decision")
 def decide(request_id: UUID, body: Decision, user: dict = Depends(get_current_user)):
     return service.decide(user, request_id, body.expected_revision, body.action, body.reason)
+
+
+@router.post("/self-change-review/persons/{person_id}/complete")
+def complete_review(person_id: int, body: CompleteReview, user: dict = Depends(get_current_user)):
+    return self_change_review_service.complete(user, person_id,
+        [item.model_dump(mode="json") for item in body.decisions])
