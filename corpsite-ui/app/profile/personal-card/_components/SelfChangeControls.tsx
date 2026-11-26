@@ -47,6 +47,8 @@ export function ChangeModal({ title, children, onClose }: { title: string; child
 export function SelfPhotoChanges() {
   const [open, setOpen] = React.useState(false);
   const [current, setCurrent] = React.useState<string | null>(null);
+  const [pendingPhoto, setPendingPhoto] = React.useState<{ versionId: string; url: string } | null>(null);
+  const [pendingPhotoError, setPendingPhotoError] = React.useState<string | null>(null);
   const [preview, setPreview] = React.useState<string | null>(null);
   const [file, setFile] = React.useState<File | null>(null);
   const [source, setSource] = React.useState<File | null>(null);
@@ -81,6 +83,19 @@ export function SelfPhotoChanges() {
   }, [loadLatest]);
   React.useEffect(() => () => { if (current) URL.revokeObjectURL(current); }, [current]);
   React.useEffect(() => () => { if (preview) URL.revokeObjectURL(preview); }, [preview]);
+  React.useEffect(() => {
+    if (latest?.state !== "pending") return;
+    let active = true;
+    void fetch(resolveApiUrl(`/api/personnel-files/versions/${latest.version_id}/preview`), {
+      headers: buildHeaders(), cache: "no-store",
+    }).then(async (response) => {
+      if (!response.ok) throw new Error("preview unavailable");
+      const blob = await response.blob();
+      if (active) setPendingPhoto({ versionId: latest.version_id, url: URL.createObjectURL(blob) });
+    }).catch(() => { if (active) setPendingPhotoError(latest.version_id); });
+    return () => { active = false; };
+  }, [latest?.state, latest?.version_id]);
+  React.useEffect(() => () => { if (pendingPhoto) URL.revokeObjectURL(pendingPhoto.url); }, [pendingPhoto]);
   const cropReady = React.useCallback((cropped: File | null, url: string | null) => { setFile(cropped); setPreview(url); }, []);
   const cropError = React.useCallback((message: string) => { setFile(null); setPreview(null); setError(message); }, []);
 
@@ -110,7 +125,14 @@ export function SelfPhotoChanges() {
     } finally { busyRef.current = false; setBusy(false); }
   }
   return <div className="space-y-2" data-testid="self-photo-changes">
-    <div className="flex items-center gap-3">{current ? <img src={current} alt="Текущее фото" className="h-24 w-24 rounded-lg object-cover" /> : <div className="flex h-24 w-24 items-center justify-center rounded-lg bg-zinc-100 text-xs text-zinc-500">Фото отсутствует</div>}<ChangeButton disabled={!latestLoaded} onClick={() => setOpen(true)} /></div>
+    <div className="flex flex-wrap items-start gap-5">
+      <div><p className="mb-2 text-sm font-medium">Текущее фото</p>{current ? <img src={current} alt="Текущее фото" className="h-32 w-24 rounded-lg object-contain" /> : <div className="flex h-32 w-24 items-center justify-center rounded-lg bg-zinc-100 px-2 text-center text-xs text-zinc-500">Фото отсутствует</div>}</div>
+      {latest?.state === "pending" && <div><p className="mb-2 text-sm font-medium">Новое фото на проверке</p>
+        {pendingPhoto?.versionId === latest.version_id ? <img src={pendingPhoto.url} alt="Новое фото на проверке" className="h-32 w-24 rounded-lg object-contain" />
+          : <div className="flex h-32 w-24 items-center rounded-lg border px-2 text-center text-xs text-zinc-500">{pendingPhotoError === latest.version_id ? "Не удалось загрузить отправленный кадр. Обновите карточку." : "Загружаем отправленный кадр…"}</div>}
+      </div>}
+      <div className="pt-7"><ChangeButton disabled={!latestLoaded} onClick={() => setOpen(true)} /></div>
+    </div>
     {!latestLoaded && !error && <p className="text-sm text-zinc-500">Загружаем состояние фото…</p>}
     {error && !open && <p role="alert" className="text-sm text-red-700">{error} <button type="button" className="underline" onClick={() => { setError(""); void loadLatest().catch(() => setError("Не удалось загрузить состояние фото.")); }}>Обновить статус фото</button></p>}
     {confirmation && <p role="status" className="text-sm text-emerald-700">{confirmation}</p>}
@@ -118,7 +140,7 @@ export function SelfPhotoChanges() {
     {open && <ChangeModal title="Замена фото" onClose={() => { if (!busyRef.current) setOpen(false); }}>
       <p className="mt-3 text-sm text-zinc-600">Новое фото уйдёт кадровику на проверку. Действующее фото останется в карточке до одобрения.</p>
       <p className="mt-2 text-sm text-zinc-600">Выберите JPEG, из которого можно выделить кадр не меньше 360 × 480 пикселей. При приближении кадра меньше 480 × 640 пикселей фото может потерять чёткость. Итоговый файл будет JPEG 600 × 800 пикселей, не более 500 КБ.</p>
-      <div className="mt-4 flex gap-4">{current && <div><p className="text-xs">Сейчас</p><img src={current} alt="Действующее фото" className="mt-1 h-32 w-32 rounded object-cover" /></div>}{preview && <div><p className="text-xs">Итоговый JPEG 600 × 800</p><img src={preview} alt="Итоговое фото 600 на 800" className="mt-1 h-32 w-24 rounded object-cover" /></div>}</div>
+      <div className="mt-4 flex gap-4">{current && <div><p className="text-xs">Текущее фото</p><img src={current} alt="Действующее фото" className="mt-1 h-32 w-24 rounded object-contain" /></div>}{preview && <div><p className="text-xs">Итоговый JPEG 600 × 800</p><img src={preview} alt="Итоговое фото 600 на 800" className="mt-1 h-32 w-24 rounded object-contain" /></div>}</div>
       <label className="mt-4 block text-sm">Выберите исходный JPEG<input type="file" accept="image/jpeg" className={fieldClass} onChange={(event) => { setFile(null); setPreview(null); setError(""); setRetryConfirmed(false); setSource(event.target.files?.[0] ?? null); setSourceKey((value) => value + 1); }} /></label>
       {source && <PhotoCropEditor key={sourceKey} source={source} onReady={cropReady} onError={cropError} />}
       {error && <p role="alert" className="mt-3 text-sm text-red-700">{error}</p>}
