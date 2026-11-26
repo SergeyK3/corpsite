@@ -26,7 +26,7 @@ export type PersonnelApplicationRegisterResponse = {
 
 export type PersonnelApplicationDetail = {
   application_id: number;
-  person_id: number;
+  person_id: number | null;
   full_name?: string | null;
   iin?: string | null;
   status: string;
@@ -407,10 +407,10 @@ export type IntakeOnBehalfSubmitResponse = {
 };
 
 export async function getIntakeOnBehalfEditSession(applicationId: number): Promise<IntakeOnBehalfEditSession> {
-  const path = `${PERSONNEL_APPLICATIONS_BASE_PATH}/${applicationId}/intake/draft/on-behalf-edit`;
-  const res = await fetch(resolveApiUrl(path), { method: "GET", headers: authHeaders(), cache: "no-store" });
+  const path = `${PERSONNEL_APPLICATIONS_BASE_PATH}/${applicationId}/intake/draft/on-behalf-open`;
+  const res = await fetch(resolveApiUrl(path), { method: "POST", headers: authHeaders(), cache: "no-store" });
   const body = await readJsonSafe(res);
-  if (!res.ok) throw toApiError(res.status, body, { method: "GET", url: path });
+  if (!res.ok) throw toApiError(res.status, body, { method: "POST", url: path });
   return body as IntakeOnBehalfEditSession;
 }
 
@@ -710,7 +710,7 @@ export async function getDirectorResolutionAudit(
   return (body as { items: DirectorResolutionAuditItem[] }).items;
 }
 
-export async function createHireOrderDraft(applicationId: number): Promise<{
+export async function createHireOrderDraft(applicationId: number, employeeFullNameAccusativeRu?: string): Promise<{
   application_id: number;
   personnel_order_id: number;
   idempotent_replay: boolean;
@@ -720,7 +720,7 @@ export async function createHireOrderDraft(applicationId: number): Promise<{
   const res = await fetch(resolveApiUrl(path), {
     method: "POST",
     headers: authHeaders(true),
-    body: JSON.stringify({}),
+    body: JSON.stringify(employeeFullNameAccusativeRu == null ? {} : {employee_full_name_accusative_ru:employeeFullNameAccusativeRu}),
     cache: "no-store",
   });
   const body = await readJsonSafe(res);

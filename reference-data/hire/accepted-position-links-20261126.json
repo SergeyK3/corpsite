@@ -1,0 +1,2497 @@
+{
+  "source": "test.mmc.004.kz active catalog 2026-11-26; shared production unit codes only",
+  "approved_positions": [
+    {
+      "job_code": "PHYSICIAN_ORDINATOR",
+      "job_nameru": "Врач-ординатор",
+      "job_namekk": "Дәрігер-ординатор",
+      "hire_document_ru": "врача-ординатора",
+      "hire_document_kk": "дәрігер-ординатор",
+      "category": "medical",
+      "type_code": null
+    },
+    {
+      "job_code": "WARD_NURSE",
+      "job_nameru": "Постовая медсестра",
+      "job_namekk": "Палаталық (посттық) мейіргер",
+      "hire_document_ru": "постовой медсестры",
+      "hire_document_kk": "палаталық (посттық) мейіргер",
+      "category": "medical",
+      "type_code": null
+    },
+    {
+      "job_code": "PROCEDURE_NURSE",
+      "job_nameru": "Процедурная медсестра",
+      "job_namekk": "Емшара кабинетінің мейіргері",
+      "hire_document_ru": "процедурной медсестры",
+      "hire_document_kk": "емшара кабинетінің мейіргері",
+      "category": "medical",
+      "type_code": null
+    },
+    {
+      "job_code": "DRESSING_NURSE",
+      "job_nameru": "Перевязочная медсестра",
+      "job_namekk": "Таңу мейіргері",
+      "hire_document_ru": "перевязочной медсестры",
+      "hire_document_kk": "таңу мейіргері",
+      "category": "medical",
+      "type_code": null
+    },
+    {
+      "job_code": "JUNIOR_NURSE",
+      "job_nameru": "Младшая медсестра",
+      "job_namekk": "Кіші мейіргер",
+      "hire_document_ru": "младшей медсестры",
+      "hire_document_kk": "кіші мейіргер",
+      "category": "medical",
+      "type_code": 3
+    },
+    {
+      "job_code": "WARD_ORDERLY",
+      "job_nameru": "Санитарка палатная",
+      "job_namekk": "Палаталық санитар",
+      "hire_document_ru": "палатной санитарки",
+      "hire_document_kk": "палаталық санитар",
+      "category": "other",
+      "type_code": null
+    },
+    {
+      "job_code": "PROCEDURE_ORDERLY",
+      "job_nameru": "Санитарка процедурной",
+      "job_namekk": "Емшара кабинетінің санитары",
+      "hire_document_ru": "санитарки процедурной",
+      "hire_document_kk": "емшара кабинетінің санитары",
+      "category": "medical",
+      "type_code": 3
+    },
+    {
+      "job_code": "DRESSING_ORDERLY",
+      "job_nameru": "Санитарка перевязочной",
+      "job_namekk": "Таңу кабинетінің санитары",
+      "hire_document_ru": "санитарки перевязочной",
+      "hire_document_kk": "таңу кабинетінің санитары",
+      "category": "medical",
+      "type_code": 3
+    },
+    {
+      "job_code": "BATH_ORDERLY",
+      "job_nameru": "Ваннщица",
+      "job_namekk": "Санитар-ваннашы",
+      "hire_document_ru": "ваннщицы",
+      "hire_document_kk": "санитар-ваннашы",
+      "category": "medical",
+      "type_code": 3
+    },
+    {
+      "job_code": "RESTROOM_CLEANER",
+      "job_nameru": "Уборщица туалетов",
+      "job_namekk": "Дәретханаларды тазалаушы",
+      "hire_document_ru": "уборщицы туалетов",
+      "hire_document_kk": "дәретханаларды тазалаушы",
+      "category": "technical",
+      "type_code": 4
+    },
+    {
+      "job_code": "SENIOR_XRAY_TECH",
+      "job_nameru": "Старший рентген-лаборант",
+      "job_namekk": "Аға рентген зертханашысы",
+      "hire_document_ru": "старшего рентген-лаборанта",
+      "hire_document_kk": "аға рентген зертханашысы",
+      "category": "medical",
+      "type_code": 2
+    },
+    {
+      "job_code": "FELDSHER_LAB_TECH",
+      "job_nameru": "Фельдшер-лаборант",
+      "job_namekk": "Фельдшер-зертханашы",
+      "hire_document_ru": "фельдшера-лаборанта",
+      "hire_document_kk": "фельдшер-зертханашы",
+      "category": "medical",
+      "type_code": 2
+    },
+    {
+      "job_code": "XRAY_TECH",
+      "job_nameru": "Рентген-лаборант",
+      "job_namekk": "Рентген зертханашысы",
+      "hire_document_ru": "рентген-лаборанта",
+      "hire_document_kk": "рентген зертханашысы",
+      "category": "medical",
+      "type_code": null
+    }
+  ],
+  "approved_group_positions": {
+    "Клинические": [
+      "DEPARTMENT_HEAD_UNSPECIFIED",
+      "SENIOR_NURSE",
+      "SISTER_HOUSEKEEPER",
+      "BUFFET_WORKER",
+      "PHYSICIAN_ORDINATOR",
+      "WARD_NURSE",
+      "PROCEDURE_NURSE",
+      "DRESSING_NURSE",
+      "JUNIOR_NURSE",
+      "WARD_ORDERLY",
+      "PROCEDURE_ORDERLY",
+      "DRESSING_ORDERLY",
+      "BATH_ORDERLY",
+      "RESTROOM_CLEANER"
+    ],
+    "Параклинические": [
+      "DEPARTMENT_HEAD_UNSPECIFIED",
+      "SENIOR_NURSE",
+      "SENIOR_LAB_ASSISTANT",
+      "NURSE",
+      "SANITARY_WORKER_FEMALE",
+      "PHYSICIAN_ORDINATOR",
+      "SENIOR_XRAY_TECH",
+      "FELDSHER_LAB_TECH",
+      "XRAY_TECH"
+    ]
+  },
+  "excluded_from_new_hire": [
+    "SANITARY_BUFFET_WORKER"
+  ],
+  "existing_position_names": {
+    "DEPARTMENT_HEAD_UNSPECIFIED": "Заведующий отделением",
+    "SENIOR_NURSE": "Старшая медсестра",
+    "SISTER_HOUSEKEEPER": "сестра-хозяйка",
+    "BUFFET_WORKER": "Буфетчица",
+    "SENIOR_LAB_ASSISTANT": "Старший лаборант",
+    "NURSE": "Медсестра",
+    "SANITARY_WORKER_FEMALE": "Санитарка",
+    "SANITARY_BUFFET_WORKER": "Санитарка-буфетчица"
+  },
+  "aliases": {
+    "Врач-ординатор": "врач ординатор",
+    "Постовая медсестра": "медсестра постовая",
+    "Перевязочная медсестра": "медсестра перевязочная",
+    "Рентген-лаборант": "рентгенлаборант"
+  },
+  "links": [
+    {
+      "unit_code": "ACC",
+      "position_name": "Архивариус",
+      "sort_order": 10
+    },
+    {
+      "unit_code": "ACC",
+      "position_name": "Бухгалтер",
+      "sort_order": 20
+    },
+    {
+      "unit_code": "ACC",
+      "position_name": "Бухгалтер-кассир",
+      "sort_order": 30
+    },
+    {
+      "unit_code": "ACC",
+      "position_name": "Главный бухгалтер",
+      "sort_order": 40
+    },
+    {
+      "unit_code": "ADMIN",
+      "position_name": "Директор",
+      "sort_order": 10
+    },
+    {
+      "unit_code": "ADMIN",
+      "position_name": "Заместитель директора по административным вопросам",
+      "sort_order": 20
+    },
+    {
+      "unit_code": "ADMIN",
+      "position_name": "Зам по диспансеру и внутр экспертизе",
+      "sort_order": 30
+    },
+    {
+      "unit_code": "ADMIN",
+      "position_name": "Зам по лечебной работе",
+      "sort_order": 40
+    },
+    {
+      "unit_code": "ADMISSION",
+      "position_name": "Заведующий отделением",
+      "sort_order": 1
+    },
+    {
+      "unit_code": "ADMISSION",
+      "position_name": "Старшая медсестра",
+      "sort_order": 2
+    },
+    {
+      "unit_code": "ADMISSION",
+      "position_name": "Старший лаборант",
+      "sort_order": 3
+    },
+    {
+      "unit_code": "ADMISSION",
+      "position_name": "Медсестра",
+      "sort_order": 4
+    },
+    {
+      "unit_code": "ADMISSION",
+      "position_name": "Санитарка",
+      "sort_order": 5
+    },
+    {
+      "unit_code": "ADMISSION",
+      "position_name": "Врач-ординатор",
+      "sort_order": 6
+    },
+    {
+      "unit_code": "ADMISSION",
+      "position_name": "Старший рентген-лаборант",
+      "sort_order": 7
+    },
+    {
+      "unit_code": "ADMISSION",
+      "position_name": "Фельдшер-лаборант",
+      "sort_order": 8
+    },
+    {
+      "unit_code": "ADMISSION",
+      "position_name": "Рентген-лаборант",
+      "sort_order": 9
+    },
+    {
+      "unit_code": "ADMISSION",
+      "position_name": "Врач",
+      "sort_order": 10
+    },
+    {
+      "unit_code": "ADMISSION",
+      "position_name": "Руководитель приемного отделения",
+      "sort_order": 30
+    },
+    {
+      "unit_code": "ADMISSION",
+      "position_name": "Санитар",
+      "sort_order": 40
+    },
+    {
+      "unit_code": "ADMISSION",
+      "position_name": "сестра-хозяйка",
+      "sort_order": 50
+    },
+    {
+      "unit_code": "AMB_SURG",
+      "position_name": "Заведующий отделением",
+      "sort_order": 1
+    },
+    {
+      "unit_code": "AMB_SURG",
+      "position_name": "Старшая медсестра",
+      "sort_order": 2
+    },
+    {
+      "unit_code": "AMB_SURG",
+      "position_name": "сестра-хозяйка",
+      "sort_order": 3
+    },
+    {
+      "unit_code": "AMB_SURG",
+      "position_name": "Буфетчица",
+      "sort_order": 4
+    },
+    {
+      "unit_code": "AMB_SURG",
+      "position_name": "Врач-ординатор",
+      "sort_order": 5
+    },
+    {
+      "unit_code": "AMB_SURG",
+      "position_name": "Постовая медсестра",
+      "sort_order": 6
+    },
+    {
+      "unit_code": "AMB_SURG",
+      "position_name": "Процедурная медсестра",
+      "sort_order": 7
+    },
+    {
+      "unit_code": "AMB_SURG",
+      "position_name": "Перевязочная медсестра",
+      "sort_order": 8
+    },
+    {
+      "unit_code": "AMB_SURG",
+      "position_name": "Младшая медсестра",
+      "sort_order": 9
+    },
+    {
+      "unit_code": "AMB_SURG",
+      "position_name": "Врач",
+      "sort_order": 10
+    },
+    {
+      "unit_code": "AMB_SURG",
+      "position_name": "Санитарка палатная",
+      "sort_order": 10
+    },
+    {
+      "unit_code": "AMB_SURG",
+      "position_name": "Санитарка процедурной",
+      "sort_order": 11
+    },
+    {
+      "unit_code": "AMB_SURG",
+      "position_name": "Санитарка перевязочной",
+      "sort_order": 12
+    },
+    {
+      "unit_code": "AMB_SURG",
+      "position_name": "Ваннщица",
+      "sort_order": 13
+    },
+    {
+      "unit_code": "AMB_SURG",
+      "position_name": "Уборщица туалетов",
+      "sort_order": 14
+    },
+    {
+      "unit_code": "AMB_SURG",
+      "position_name": "Заведующий отделением амбулаторной хирургии",
+      "sort_order": 20
+    },
+    {
+      "unit_code": "AMB_SURG",
+      "position_name": "Медсестра",
+      "sort_order": 30
+    },
+    {
+      "unit_code": "AMB_SURG",
+      "position_name": "Санитар",
+      "sort_order": 40
+    },
+    {
+      "unit_code": "Amb_chem",
+      "position_name": "Заведующий отделением",
+      "sort_order": 1
+    },
+    {
+      "unit_code": "Amb_chem",
+      "position_name": "Старшая медсестра",
+      "sort_order": 2
+    },
+    {
+      "unit_code": "Amb_chem",
+      "position_name": "сестра-хозяйка",
+      "sort_order": 3
+    },
+    {
+      "unit_code": "Amb_chem",
+      "position_name": "Буфетчица",
+      "sort_order": 4
+    },
+    {
+      "unit_code": "Amb_chem",
+      "position_name": "Врач-ординатор",
+      "sort_order": 5
+    },
+    {
+      "unit_code": "Amb_chem",
+      "position_name": "Постовая медсестра",
+      "sort_order": 6
+    },
+    {
+      "unit_code": "Amb_chem",
+      "position_name": "Процедурная медсестра",
+      "sort_order": 7
+    },
+    {
+      "unit_code": "Amb_chem",
+      "position_name": "Перевязочная медсестра",
+      "sort_order": 8
+    },
+    {
+      "unit_code": "Amb_chem",
+      "position_name": "Младшая медсестра",
+      "sort_order": 9
+    },
+    {
+      "unit_code": "Amb_chem",
+      "position_name": "Санитарка палатная",
+      "sort_order": 10
+    },
+    {
+      "unit_code": "Amb_chem",
+      "position_name": "Санитарка процедурной",
+      "sort_order": 11
+    },
+    {
+      "unit_code": "Amb_chem",
+      "position_name": "Санитарка перевязочной",
+      "sort_order": 12
+    },
+    {
+      "unit_code": "Amb_chem",
+      "position_name": "Ваннщица",
+      "sort_order": 13
+    },
+    {
+      "unit_code": "Amb_chem",
+      "position_name": "Уборщица туалетов",
+      "sort_order": 14
+    },
+    {
+      "unit_code": "CDL",
+      "position_name": "Заведующий отделением",
+      "sort_order": 1
+    },
+    {
+      "unit_code": "CDL",
+      "position_name": "Старшая медсестра",
+      "sort_order": 2
+    },
+    {
+      "unit_code": "CDL",
+      "position_name": "Старший лаборант",
+      "sort_order": 3
+    },
+    {
+      "unit_code": "CDL",
+      "position_name": "Медсестра",
+      "sort_order": 4
+    },
+    {
+      "unit_code": "CDL",
+      "position_name": "Санитарка",
+      "sort_order": 5
+    },
+    {
+      "unit_code": "CDL",
+      "position_name": "Врач-ординатор",
+      "sort_order": 6
+    },
+    {
+      "unit_code": "CDL",
+      "position_name": "Старший рентген-лаборант",
+      "sort_order": 7
+    },
+    {
+      "unit_code": "CDL",
+      "position_name": "Фельдшер-лаборант",
+      "sort_order": 8
+    },
+    {
+      "unit_code": "CDL",
+      "position_name": "Рентген-лаборант",
+      "sort_order": 9
+    },
+    {
+      "unit_code": "CDL",
+      "position_name": "Врач",
+      "sort_order": 10
+    },
+    {
+      "unit_code": "CDL",
+      "position_name": "Лаборант",
+      "sort_order": 20
+    },
+    {
+      "unit_code": "CDL",
+      "position_name": "Санитар",
+      "sort_order": 30
+    },
+    {
+      "unit_code": "CDL",
+      "position_name": "сестра-хозяйка",
+      "sort_order": 40
+    },
+    {
+      "unit_code": "CDL",
+      "position_name": "Специалист",
+      "sort_order": 50
+    },
+    {
+      "unit_code": "CHEMO_01",
+      "position_name": "Заведующий отделением",
+      "sort_order": 1
+    },
+    {
+      "unit_code": "CHEMO_01",
+      "position_name": "Старшая медсестра",
+      "sort_order": 2
+    },
+    {
+      "unit_code": "CHEMO_01",
+      "position_name": "сестра-хозяйка",
+      "sort_order": 3
+    },
+    {
+      "unit_code": "CHEMO_01",
+      "position_name": "Буфетчица",
+      "sort_order": 4
+    },
+    {
+      "unit_code": "CHEMO_01",
+      "position_name": "Врач-ординатор",
+      "sort_order": 5
+    },
+    {
+      "unit_code": "CHEMO_01",
+      "position_name": "Постовая медсестра",
+      "sort_order": 6
+    },
+    {
+      "unit_code": "CHEMO_01",
+      "position_name": "Процедурная медсестра",
+      "sort_order": 7
+    },
+    {
+      "unit_code": "CHEMO_01",
+      "position_name": "Перевязочная медсестра",
+      "sort_order": 8
+    },
+    {
+      "unit_code": "CHEMO_01",
+      "position_name": "Младшая медсестра",
+      "sort_order": 9
+    },
+    {
+      "unit_code": "CHEMO_01",
+      "position_name": "Врач",
+      "sort_order": 10
+    },
+    {
+      "unit_code": "CHEMO_01",
+      "position_name": "Санитарка палатная",
+      "sort_order": 10
+    },
+    {
+      "unit_code": "CHEMO_01",
+      "position_name": "Санитарка процедурной",
+      "sort_order": 11
+    },
+    {
+      "unit_code": "CHEMO_01",
+      "position_name": "Санитарка перевязочной",
+      "sort_order": 12
+    },
+    {
+      "unit_code": "CHEMO_01",
+      "position_name": "Ваннщица",
+      "sort_order": 13
+    },
+    {
+      "unit_code": "CHEMO_01",
+      "position_name": "Уборщица туалетов",
+      "sort_order": 14
+    },
+    {
+      "unit_code": "CHEMO_01",
+      "position_name": "Заведующий отделением химиотерапии 1",
+      "sort_order": 20
+    },
+    {
+      "unit_code": "CHEMO_01",
+      "position_name": "Медсестра",
+      "sort_order": 30
+    },
+    {
+      "unit_code": "CHEMO_01",
+      "position_name": "Руков-ль службы химиотерапии",
+      "sort_order": 40
+    },
+    {
+      "unit_code": "CHEMO_01",
+      "position_name": "Санитар",
+      "sort_order": 50
+    },
+    {
+      "unit_code": "CHEMO_02",
+      "position_name": "Заведующий отделением",
+      "sort_order": 1
+    },
+    {
+      "unit_code": "CHEMO_02",
+      "position_name": "Старшая медсестра",
+      "sort_order": 2
+    },
+    {
+      "unit_code": "CHEMO_02",
+      "position_name": "сестра-хозяйка",
+      "sort_order": 3
+    },
+    {
+      "unit_code": "CHEMO_02",
+      "position_name": "Буфетчица",
+      "sort_order": 4
+    },
+    {
+      "unit_code": "CHEMO_02",
+      "position_name": "Врач-ординатор",
+      "sort_order": 5
+    },
+    {
+      "unit_code": "CHEMO_02",
+      "position_name": "Постовая медсестра",
+      "sort_order": 6
+    },
+    {
+      "unit_code": "CHEMO_02",
+      "position_name": "Процедурная медсестра",
+      "sort_order": 7
+    },
+    {
+      "unit_code": "CHEMO_02",
+      "position_name": "Перевязочная медсестра",
+      "sort_order": 8
+    },
+    {
+      "unit_code": "CHEMO_02",
+      "position_name": "Младшая медсестра",
+      "sort_order": 9
+    },
+    {
+      "unit_code": "CHEMO_02",
+      "position_name": "Врач",
+      "sort_order": 10
+    },
+    {
+      "unit_code": "CHEMO_02",
+      "position_name": "Санитарка палатная",
+      "sort_order": 10
+    },
+    {
+      "unit_code": "CHEMO_02",
+      "position_name": "Санитарка процедурной",
+      "sort_order": 11
+    },
+    {
+      "unit_code": "CHEMO_02",
+      "position_name": "Санитарка перевязочной",
+      "sort_order": 12
+    },
+    {
+      "unit_code": "CHEMO_02",
+      "position_name": "Ваннщица",
+      "sort_order": 13
+    },
+    {
+      "unit_code": "CHEMO_02",
+      "position_name": "Уборщица туалетов",
+      "sort_order": 14
+    },
+    {
+      "unit_code": "CHEMO_02",
+      "position_name": "Заведующий отделением химиотерапии 2",
+      "sort_order": 20
+    },
+    {
+      "unit_code": "CHEMO_02",
+      "position_name": "Медсестра",
+      "sort_order": 30
+    },
+    {
+      "unit_code": "CHEMO_02",
+      "position_name": "Санитар",
+      "sort_order": 40
+    },
+    {
+      "unit_code": "CSSD_2",
+      "position_name": "Заведующий отделением",
+      "sort_order": 1
+    },
+    {
+      "unit_code": "CSSD_2",
+      "position_name": "Старшая медсестра",
+      "sort_order": 2
+    },
+    {
+      "unit_code": "CSSD_2",
+      "position_name": "Старший лаборант",
+      "sort_order": 3
+    },
+    {
+      "unit_code": "CSSD_2",
+      "position_name": "Медсестра",
+      "sort_order": 4
+    },
+    {
+      "unit_code": "CSSD_2",
+      "position_name": "Санитарка",
+      "sort_order": 5
+    },
+    {
+      "unit_code": "CSSD_2",
+      "position_name": "Врач-ординатор",
+      "sort_order": 6
+    },
+    {
+      "unit_code": "CSSD_2",
+      "position_name": "Старший рентген-лаборант",
+      "sort_order": 7
+    },
+    {
+      "unit_code": "CSSD_2",
+      "position_name": "Фельдшер-лаборант",
+      "sort_order": 8
+    },
+    {
+      "unit_code": "CSSD_2",
+      "position_name": "Рентген-лаборант",
+      "sort_order": 9
+    },
+    {
+      "unit_code": "CSSD_2",
+      "position_name": "Водитель",
+      "sort_order": 10
+    },
+    {
+      "unit_code": "CSSD_2",
+      "position_name": "Врач",
+      "sort_order": 20
+    },
+    {
+      "unit_code": "CSSD_2",
+      "position_name": "Главная медсестра",
+      "sort_order": 30
+    },
+    {
+      "unit_code": "CSSD_2",
+      "position_name": "Дворник",
+      "sort_order": 40
+    },
+    {
+      "unit_code": "CSSD_2",
+      "position_name": "Дезинфектор",
+      "sort_order": 50
+    },
+    {
+      "unit_code": "CSSD_2",
+      "position_name": "Диетсестра",
+      "sort_order": 60
+    },
+    {
+      "unit_code": "CSSD_2",
+      "position_name": "Заведующий складом",
+      "sort_order": 70
+    },
+    {
+      "unit_code": "CSSD_2",
+      "position_name": "Комендант",
+      "sort_order": 80
+    },
+    {
+      "unit_code": "CSSD_2",
+      "position_name": "Кухрабочий",
+      "sort_order": 90
+    },
+    {
+      "unit_code": "CSSD_2",
+      "position_name": "медрегистратор",
+      "sort_order": 100
+    },
+    {
+      "unit_code": "CSSD_2",
+      "position_name": "Оператор",
+      "sort_order": 120
+    },
+    {
+      "unit_code": "CSSD_2",
+      "position_name": "Провизор",
+      "sort_order": 130
+    },
+    {
+      "unit_code": "CSSD_2",
+      "position_name": "Психолог",
+      "sort_order": 140
+    },
+    {
+      "unit_code": "CSSD_2",
+      "position_name": "Рабочий",
+      "sort_order": 150
+    },
+    {
+      "unit_code": "CSSD_2",
+      "position_name": "Санитар",
+      "sort_order": 160
+    },
+    {
+      "unit_code": "CSSD_2",
+      "position_name": "сестра-хозяйка",
+      "sort_order": 170
+    },
+    {
+      "unit_code": "CSSD_2",
+      "position_name": "Социальный работник",
+      "sort_order": 180
+    },
+    {
+      "unit_code": "CSSD_2",
+      "position_name": "Уборщик помещений",
+      "sort_order": 200
+    },
+    {
+      "unit_code": "CSSD_2",
+      "position_name": "Фармацевт",
+      "sort_order": 210
+    },
+    {
+      "unit_code": "CYTO",
+      "position_name": "Заведующий отделением",
+      "sort_order": 1
+    },
+    {
+      "unit_code": "CYTO",
+      "position_name": "Старшая медсестра",
+      "sort_order": 2
+    },
+    {
+      "unit_code": "CYTO",
+      "position_name": "Старший лаборант",
+      "sort_order": 3
+    },
+    {
+      "unit_code": "CYTO",
+      "position_name": "Медсестра",
+      "sort_order": 4
+    },
+    {
+      "unit_code": "CYTO",
+      "position_name": "Санитарка",
+      "sort_order": 5
+    },
+    {
+      "unit_code": "CYTO",
+      "position_name": "Врач-ординатор",
+      "sort_order": 6
+    },
+    {
+      "unit_code": "CYTO",
+      "position_name": "Старший рентген-лаборант",
+      "sort_order": 7
+    },
+    {
+      "unit_code": "CYTO",
+      "position_name": "Фельдшер-лаборант",
+      "sort_order": 8
+    },
+    {
+      "unit_code": "CYTO",
+      "position_name": "Рентген-лаборант",
+      "sort_order": 9
+    },
+    {
+      "unit_code": "CYTO",
+      "position_name": "Врач",
+      "sort_order": 10
+    },
+    {
+      "unit_code": "CYTO",
+      "position_name": "Лаборант",
+      "sort_order": 20
+    },
+    {
+      "unit_code": "CYTO",
+      "position_name": "Оператор",
+      "sort_order": 30
+    },
+    {
+      "unit_code": "CYTO",
+      "position_name": "Санитар",
+      "sort_order": 40
+    },
+    {
+      "unit_code": "CYTO",
+      "position_name": "сестра-хозяйка",
+      "sort_order": 50
+    },
+    {
+      "unit_code": "DIAG_IMG",
+      "position_name": "Заведующий отделением",
+      "sort_order": 1
+    },
+    {
+      "unit_code": "DIAG_IMG",
+      "position_name": "Старшая медсестра",
+      "sort_order": 2
+    },
+    {
+      "unit_code": "DIAG_IMG",
+      "position_name": "Старший лаборант",
+      "sort_order": 3
+    },
+    {
+      "unit_code": "DIAG_IMG",
+      "position_name": "Медсестра",
+      "sort_order": 4
+    },
+    {
+      "unit_code": "DIAG_IMG",
+      "position_name": "Санитарка",
+      "sort_order": 5
+    },
+    {
+      "unit_code": "DIAG_IMG",
+      "position_name": "Врач-ординатор",
+      "sort_order": 6
+    },
+    {
+      "unit_code": "DIAG_IMG",
+      "position_name": "Старший рентген-лаборант",
+      "sort_order": 7
+    },
+    {
+      "unit_code": "DIAG_IMG",
+      "position_name": "Фельдшер-лаборант",
+      "sort_order": 8
+    },
+    {
+      "unit_code": "DIAG_IMG",
+      "position_name": "Рентген-лаборант",
+      "sort_order": 9
+    },
+    {
+      "unit_code": "DIAG_IMG",
+      "position_name": "Врач",
+      "sort_order": 10
+    },
+    {
+      "unit_code": "DIAG_IMG",
+      "position_name": "инженер радиационной безопасности",
+      "sort_order": 20
+    },
+    {
+      "unit_code": "DIAG_IMG",
+      "position_name": "Лаборант",
+      "sort_order": 30
+    },
+    {
+      "unit_code": "DIAG_IMG",
+      "position_name": "медрегистратор",
+      "sort_order": 40
+    },
+    {
+      "unit_code": "DIAG_IMG",
+      "position_name": "медсестра УЗИ кабинета",
+      "sort_order": 60
+    },
+    {
+      "unit_code": "DIAG_IMG",
+      "position_name": "Санитар",
+      "sort_order": 70
+    },
+    {
+      "unit_code": "DISP",
+      "position_name": "Заведующий отделением",
+      "sort_order": 1
+    },
+    {
+      "unit_code": "DISP",
+      "position_name": "Старшая медсестра",
+      "sort_order": 2
+    },
+    {
+      "unit_code": "DISP",
+      "position_name": "сестра-хозяйка",
+      "sort_order": 3
+    },
+    {
+      "unit_code": "DISP",
+      "position_name": "Буфетчица",
+      "sort_order": 4
+    },
+    {
+      "unit_code": "DISP",
+      "position_name": "Врач-ординатор",
+      "sort_order": 5
+    },
+    {
+      "unit_code": "DISP",
+      "position_name": "Постовая медсестра",
+      "sort_order": 6
+    },
+    {
+      "unit_code": "DISP",
+      "position_name": "Процедурная медсестра",
+      "sort_order": 7
+    },
+    {
+      "unit_code": "DISP",
+      "position_name": "Перевязочная медсестра",
+      "sort_order": 8
+    },
+    {
+      "unit_code": "DISP",
+      "position_name": "Младшая медсестра",
+      "sort_order": 9
+    },
+    {
+      "unit_code": "DISP",
+      "position_name": "Заведующий диспансерным отделением",
+      "sort_order": 10
+    },
+    {
+      "unit_code": "DISP",
+      "position_name": "Санитарка палатная",
+      "sort_order": 10
+    },
+    {
+      "unit_code": "DISP",
+      "position_name": "Санитарка процедурной",
+      "sort_order": 11
+    },
+    {
+      "unit_code": "DISP",
+      "position_name": "Санитарка перевязочной",
+      "sort_order": 12
+    },
+    {
+      "unit_code": "DISP",
+      "position_name": "Ваннщица",
+      "sort_order": 13
+    },
+    {
+      "unit_code": "DISP",
+      "position_name": "Уборщица туалетов",
+      "sort_order": 14
+    },
+    {
+      "unit_code": "DISP",
+      "position_name": "Врач",
+      "sort_order": 20
+    },
+    {
+      "unit_code": "DISP",
+      "position_name": "Медсестра",
+      "sort_order": 30
+    },
+    {
+      "unit_code": "DISP",
+      "position_name": "медрегистратор",
+      "sort_order": 50
+    },
+    {
+      "unit_code": "DISP",
+      "position_name": "Психолог",
+      "sort_order": 60
+    },
+    {
+      "unit_code": "DISP",
+      "position_name": "Санитар",
+      "sort_order": 70
+    },
+    {
+      "unit_code": "ECON",
+      "position_name": "Руководитель",
+      "sort_order": 10
+    },
+    {
+      "unit_code": "ECON",
+      "position_name": "экономист1",
+      "sort_order": 20
+    },
+    {
+      "unit_code": "ECON",
+      "position_name": "экономист2",
+      "sort_order": 30
+    },
+    {
+      "unit_code": "ECON",
+      "position_name": "экономист3",
+      "sort_order": 40
+    },
+    {
+      "unit_code": "ENDO",
+      "position_name": "Заведующий отделением",
+      "sort_order": 1
+    },
+    {
+      "unit_code": "ENDO",
+      "position_name": "Старшая медсестра",
+      "sort_order": 2
+    },
+    {
+      "unit_code": "ENDO",
+      "position_name": "Старший лаборант",
+      "sort_order": 3
+    },
+    {
+      "unit_code": "ENDO",
+      "position_name": "Медсестра",
+      "sort_order": 4
+    },
+    {
+      "unit_code": "ENDO",
+      "position_name": "Санитарка",
+      "sort_order": 5
+    },
+    {
+      "unit_code": "ENDO",
+      "position_name": "Врач-ординатор",
+      "sort_order": 6
+    },
+    {
+      "unit_code": "ENDO",
+      "position_name": "Старший рентген-лаборант",
+      "sort_order": 7
+    },
+    {
+      "unit_code": "ENDO",
+      "position_name": "Фельдшер-лаборант",
+      "sort_order": 8
+    },
+    {
+      "unit_code": "ENDO",
+      "position_name": "Рентген-лаборант",
+      "sort_order": 9
+    },
+    {
+      "unit_code": "ENDO",
+      "position_name": "Врач",
+      "sort_order": 10
+    },
+    {
+      "unit_code": "ENDO",
+      "position_name": "Санитар",
+      "sort_order": 30
+    },
+    {
+      "unit_code": "ENDO",
+      "position_name": "сестра-хозяйка",
+      "sort_order": 40
+    },
+    {
+      "unit_code": "FACILITY",
+      "position_name": "гардеробщица",
+      "sort_order": 10
+    },
+    {
+      "unit_code": "GENERAL",
+      "position_name": "Санитар",
+      "sort_order": 10
+    },
+    {
+      "unit_code": "GYNE",
+      "position_name": "Заведующий отделением",
+      "sort_order": 1
+    },
+    {
+      "unit_code": "GYNE",
+      "position_name": "Старшая медсестра",
+      "sort_order": 2
+    },
+    {
+      "unit_code": "GYNE",
+      "position_name": "сестра-хозяйка",
+      "sort_order": 3
+    },
+    {
+      "unit_code": "GYNE",
+      "position_name": "Буфетчица",
+      "sort_order": 4
+    },
+    {
+      "unit_code": "GYNE",
+      "position_name": "Врач-ординатор",
+      "sort_order": 5
+    },
+    {
+      "unit_code": "GYNE",
+      "position_name": "Постовая медсестра",
+      "sort_order": 6
+    },
+    {
+      "unit_code": "GYNE",
+      "position_name": "Процедурная медсестра",
+      "sort_order": 7
+    },
+    {
+      "unit_code": "GYNE",
+      "position_name": "Перевязочная медсестра",
+      "sort_order": 8
+    },
+    {
+      "unit_code": "GYNE",
+      "position_name": "Младшая медсестра",
+      "sort_order": 9
+    },
+    {
+      "unit_code": "GYNE",
+      "position_name": "Врач",
+      "sort_order": 10
+    },
+    {
+      "unit_code": "GYNE",
+      "position_name": "Санитарка палатная",
+      "sort_order": 10
+    },
+    {
+      "unit_code": "GYNE",
+      "position_name": "Санитарка процедурной",
+      "sort_order": 11
+    },
+    {
+      "unit_code": "GYNE",
+      "position_name": "Санитарка перевязочной",
+      "sort_order": 12
+    },
+    {
+      "unit_code": "GYNE",
+      "position_name": "Ваннщица",
+      "sort_order": 13
+    },
+    {
+      "unit_code": "GYNE",
+      "position_name": "Уборщица туалетов",
+      "sort_order": 14
+    },
+    {
+      "unit_code": "GYNE",
+      "position_name": "Заведующий гинекологическим отделением",
+      "sort_order": 20
+    },
+    {
+      "unit_code": "GYNE",
+      "position_name": "Медсестра",
+      "sort_order": 30
+    },
+    {
+      "unit_code": "GYNE",
+      "position_name": "Санитар",
+      "sort_order": 40
+    },
+    {
+      "unit_code": "HNT",
+      "position_name": "Заведующий отделением",
+      "sort_order": 1
+    },
+    {
+      "unit_code": "HNT",
+      "position_name": "Старшая медсестра",
+      "sort_order": 2
+    },
+    {
+      "unit_code": "HNT",
+      "position_name": "сестра-хозяйка",
+      "sort_order": 3
+    },
+    {
+      "unit_code": "HNT",
+      "position_name": "Буфетчица",
+      "sort_order": 4
+    },
+    {
+      "unit_code": "HNT",
+      "position_name": "Врач-ординатор",
+      "sort_order": 5
+    },
+    {
+      "unit_code": "HNT",
+      "position_name": "Постовая медсестра",
+      "sort_order": 6
+    },
+    {
+      "unit_code": "HNT",
+      "position_name": "Процедурная медсестра",
+      "sort_order": 7
+    },
+    {
+      "unit_code": "HNT",
+      "position_name": "Перевязочная медсестра",
+      "sort_order": 8
+    },
+    {
+      "unit_code": "HNT",
+      "position_name": "Младшая медсестра",
+      "sort_order": 9
+    },
+    {
+      "unit_code": "HNT",
+      "position_name": "Врач",
+      "sort_order": 10
+    },
+    {
+      "unit_code": "HNT",
+      "position_name": "Санитарка палатная",
+      "sort_order": 10
+    },
+    {
+      "unit_code": "HNT",
+      "position_name": "Санитарка процедурной",
+      "sort_order": 11
+    },
+    {
+      "unit_code": "HNT",
+      "position_name": "Санитарка перевязочной",
+      "sort_order": 12
+    },
+    {
+      "unit_code": "HNT",
+      "position_name": "Ваннщица",
+      "sort_order": 13
+    },
+    {
+      "unit_code": "HNT",
+      "position_name": "Уборщица туалетов",
+      "sort_order": 14
+    },
+    {
+      "unit_code": "HNT",
+      "position_name": "Заведующий отделением опухолей головы и шеи",
+      "sort_order": 20
+    },
+    {
+      "unit_code": "HNT",
+      "position_name": "Медсестра",
+      "sort_order": 30
+    },
+    {
+      "unit_code": "HOSPISE",
+      "position_name": "Заведующий отделением",
+      "sort_order": 1
+    },
+    {
+      "unit_code": "HOSPISE",
+      "position_name": "Старшая медсестра",
+      "sort_order": 2
+    },
+    {
+      "unit_code": "HOSPISE",
+      "position_name": "сестра-хозяйка",
+      "sort_order": 3
+    },
+    {
+      "unit_code": "HOSPISE",
+      "position_name": "Буфетчица",
+      "sort_order": 4
+    },
+    {
+      "unit_code": "HOSPISE",
+      "position_name": "Врач-ординатор",
+      "sort_order": 5
+    },
+    {
+      "unit_code": "HOSPISE",
+      "position_name": "Постовая медсестра",
+      "sort_order": 6
+    },
+    {
+      "unit_code": "HOSPISE",
+      "position_name": "Процедурная медсестра",
+      "sort_order": 7
+    },
+    {
+      "unit_code": "HOSPISE",
+      "position_name": "Перевязочная медсестра",
+      "sort_order": 8
+    },
+    {
+      "unit_code": "HOSPISE",
+      "position_name": "Младшая медсестра",
+      "sort_order": 9
+    },
+    {
+      "unit_code": "HOSPISE",
+      "position_name": "Санитарка палатная",
+      "sort_order": 10
+    },
+    {
+      "unit_code": "HOSPISE",
+      "position_name": "Санитарка процедурной",
+      "sort_order": 11
+    },
+    {
+      "unit_code": "HOSPISE",
+      "position_name": "Санитарка перевязочной",
+      "sort_order": 12
+    },
+    {
+      "unit_code": "HOSPISE",
+      "position_name": "Ваннщица",
+      "sort_order": 13
+    },
+    {
+      "unit_code": "HOSPISE",
+      "position_name": "Уборщица туалетов",
+      "sort_order": 14
+    },
+    {
+      "unit_code": "HR",
+      "position_name": "Архивариус",
+      "sort_order": 10
+    },
+    {
+      "unit_code": "HR",
+      "position_name": "Менеджер",
+      "sort_order": 20
+    },
+    {
+      "unit_code": "HR",
+      "position_name": "Переводчик казахского языка",
+      "sort_order": 30
+    },
+    {
+      "unit_code": "HR",
+      "position_name": "Руководитель отдела кадров",
+      "sort_order": 40
+    },
+    {
+      "unit_code": "HR",
+      "position_name": "секретарь-референт",
+      "sort_order": 50
+    },
+    {
+      "unit_code": "ICU",
+      "position_name": "Заведующий отделением",
+      "sort_order": 1
+    },
+    {
+      "unit_code": "ICU",
+      "position_name": "Старшая медсестра",
+      "sort_order": 2
+    },
+    {
+      "unit_code": "ICU",
+      "position_name": "Старший лаборант",
+      "sort_order": 3
+    },
+    {
+      "unit_code": "ICU",
+      "position_name": "Медсестра",
+      "sort_order": 4
+    },
+    {
+      "unit_code": "ICU",
+      "position_name": "Санитарка",
+      "sort_order": 5
+    },
+    {
+      "unit_code": "ICU",
+      "position_name": "Врач-ординатор",
+      "sort_order": 6
+    },
+    {
+      "unit_code": "ICU",
+      "position_name": "Старший рентген-лаборант",
+      "sort_order": 7
+    },
+    {
+      "unit_code": "ICU",
+      "position_name": "Фельдшер-лаборант",
+      "sort_order": 8
+    },
+    {
+      "unit_code": "ICU",
+      "position_name": "Рентген-лаборант",
+      "sort_order": 9
+    },
+    {
+      "unit_code": "ICU",
+      "position_name": "Врач",
+      "sort_order": 10
+    },
+    {
+      "unit_code": "ICU",
+      "position_name": "Санитар",
+      "sort_order": 30
+    },
+    {
+      "unit_code": "LAUNDRY",
+      "position_name": "Заведующая прачечной",
+      "sort_order": 10
+    },
+    {
+      "unit_code": "LAUNDRY",
+      "position_name": "Машинист по стирке белья",
+      "sort_order": 20
+    },
+    {
+      "unit_code": "LEGAL",
+      "position_name": "Юрист",
+      "sort_order": 10
+    },
+    {
+      "unit_code": "OR_BLOCK",
+      "position_name": "Заведующий отделением",
+      "sort_order": 1
+    },
+    {
+      "unit_code": "OR_BLOCK",
+      "position_name": "Старшая медсестра",
+      "sort_order": 2
+    },
+    {
+      "unit_code": "OR_BLOCK",
+      "position_name": "Старший лаборант",
+      "sort_order": 3
+    },
+    {
+      "unit_code": "OR_BLOCK",
+      "position_name": "Медсестра",
+      "sort_order": 4
+    },
+    {
+      "unit_code": "OR_BLOCK",
+      "position_name": "Санитарка",
+      "sort_order": 5
+    },
+    {
+      "unit_code": "OR_BLOCK",
+      "position_name": "Врач-ординатор",
+      "sort_order": 6
+    },
+    {
+      "unit_code": "OR_BLOCK",
+      "position_name": "Старший рентген-лаборант",
+      "sort_order": 7
+    },
+    {
+      "unit_code": "OR_BLOCK",
+      "position_name": "Фельдшер-лаборант",
+      "sort_order": 8
+    },
+    {
+      "unit_code": "OR_BLOCK",
+      "position_name": "Рентген-лаборант",
+      "sort_order": 9
+    },
+    {
+      "unit_code": "OR_BLOCK",
+      "position_name": "сестра-хозяйка",
+      "sort_order": 20
+    },
+    {
+      "unit_code": "PALL",
+      "position_name": "Заведующий отделением",
+      "sort_order": 1
+    },
+    {
+      "unit_code": "PALL",
+      "position_name": "Старшая медсестра",
+      "sort_order": 2
+    },
+    {
+      "unit_code": "PALL",
+      "position_name": "сестра-хозяйка",
+      "sort_order": 3
+    },
+    {
+      "unit_code": "PALL",
+      "position_name": "Буфетчица",
+      "sort_order": 4
+    },
+    {
+      "unit_code": "PALL",
+      "position_name": "Врач-ординатор",
+      "sort_order": 5
+    },
+    {
+      "unit_code": "PALL",
+      "position_name": "Постовая медсестра",
+      "sort_order": 6
+    },
+    {
+      "unit_code": "PALL",
+      "position_name": "Процедурная медсестра",
+      "sort_order": 7
+    },
+    {
+      "unit_code": "PALL",
+      "position_name": "Перевязочная медсестра",
+      "sort_order": 8
+    },
+    {
+      "unit_code": "PALL",
+      "position_name": "Младшая медсестра",
+      "sort_order": 9
+    },
+    {
+      "unit_code": "PALL",
+      "position_name": "Заведующий паллиативным отделением",
+      "sort_order": 10
+    },
+    {
+      "unit_code": "PALL",
+      "position_name": "Санитарка палатная",
+      "sort_order": 10
+    },
+    {
+      "unit_code": "PALL",
+      "position_name": "Санитарка процедурной",
+      "sort_order": 11
+    },
+    {
+      "unit_code": "PALL",
+      "position_name": "Санитарка перевязочной",
+      "sort_order": 12
+    },
+    {
+      "unit_code": "PALL",
+      "position_name": "Ваннщица",
+      "sort_order": 13
+    },
+    {
+      "unit_code": "PALL",
+      "position_name": "Уборщица туалетов",
+      "sort_order": 14
+    },
+    {
+      "unit_code": "PALL",
+      "position_name": "Санитарка",
+      "sort_order": 20
+    },
+    {
+      "unit_code": "PATH",
+      "position_name": "Заведующий отделением",
+      "sort_order": 1
+    },
+    {
+      "unit_code": "PATH",
+      "position_name": "Старшая медсестра",
+      "sort_order": 2
+    },
+    {
+      "unit_code": "PATH",
+      "position_name": "Старший лаборант",
+      "sort_order": 3
+    },
+    {
+      "unit_code": "PATH",
+      "position_name": "Медсестра",
+      "sort_order": 4
+    },
+    {
+      "unit_code": "PATH",
+      "position_name": "Санитарка",
+      "sort_order": 5
+    },
+    {
+      "unit_code": "PATH",
+      "position_name": "Врач-ординатор",
+      "sort_order": 6
+    },
+    {
+      "unit_code": "PATH",
+      "position_name": "Старший рентген-лаборант",
+      "sort_order": 7
+    },
+    {
+      "unit_code": "PATH",
+      "position_name": "Фельдшер-лаборант",
+      "sort_order": 8
+    },
+    {
+      "unit_code": "PATH",
+      "position_name": "Рентген-лаборант",
+      "sort_order": 9
+    },
+    {
+      "unit_code": "PATH",
+      "position_name": "Врач",
+      "sort_order": 10
+    },
+    {
+      "unit_code": "PATH",
+      "position_name": "Лаборант",
+      "sort_order": 20
+    },
+    {
+      "unit_code": "PATH",
+      "position_name": "Санитар",
+      "sort_order": 30
+    },
+    {
+      "unit_code": "PHARM",
+      "position_name": "Заведующий отделением",
+      "sort_order": 1
+    },
+    {
+      "unit_code": "PHARM",
+      "position_name": "Старшая медсестра",
+      "sort_order": 2
+    },
+    {
+      "unit_code": "PHARM",
+      "position_name": "Старший лаборант",
+      "sort_order": 3
+    },
+    {
+      "unit_code": "PHARM",
+      "position_name": "Медсестра",
+      "sort_order": 4
+    },
+    {
+      "unit_code": "PHARM",
+      "position_name": "Санитарка",
+      "sort_order": 5
+    },
+    {
+      "unit_code": "PHARM",
+      "position_name": "Врач-ординатор",
+      "sort_order": 6
+    },
+    {
+      "unit_code": "PHARM",
+      "position_name": "Старший рентген-лаборант",
+      "sort_order": 7
+    },
+    {
+      "unit_code": "PHARM",
+      "position_name": "Фельдшер-лаборант",
+      "sort_order": 8
+    },
+    {
+      "unit_code": "PHARM",
+      "position_name": "Рентген-лаборант",
+      "sort_order": 9
+    },
+    {
+      "unit_code": "PHARM",
+      "position_name": "Заведующий аптекой",
+      "sort_order": 10
+    },
+    {
+      "unit_code": "PROC",
+      "position_name": "Менеджер",
+      "sort_order": 10
+    },
+    {
+      "unit_code": "PROC",
+      "position_name": "Руководитель",
+      "sort_order": 20
+    },
+    {
+      "unit_code": "RAD",
+      "position_name": "Заведующий отделением",
+      "sort_order": 1
+    },
+    {
+      "unit_code": "RAD",
+      "position_name": "Старшая медсестра",
+      "sort_order": 2
+    },
+    {
+      "unit_code": "RAD",
+      "position_name": "сестра-хозяйка",
+      "sort_order": 3
+    },
+    {
+      "unit_code": "RAD",
+      "position_name": "Буфетчица",
+      "sort_order": 4
+    },
+    {
+      "unit_code": "RAD",
+      "position_name": "Врач-ординатор",
+      "sort_order": 5
+    },
+    {
+      "unit_code": "RAD",
+      "position_name": "Постовая медсестра",
+      "sort_order": 6
+    },
+    {
+      "unit_code": "RAD",
+      "position_name": "Процедурная медсестра",
+      "sort_order": 7
+    },
+    {
+      "unit_code": "RAD",
+      "position_name": "Перевязочная медсестра",
+      "sort_order": 8
+    },
+    {
+      "unit_code": "RAD",
+      "position_name": "Младшая медсестра",
+      "sort_order": 9
+    },
+    {
+      "unit_code": "RAD",
+      "position_name": "Врач",
+      "sort_order": 10
+    },
+    {
+      "unit_code": "RAD",
+      "position_name": "Санитарка палатная",
+      "sort_order": 10
+    },
+    {
+      "unit_code": "RAD",
+      "position_name": "Санитарка процедурной",
+      "sort_order": 11
+    },
+    {
+      "unit_code": "RAD",
+      "position_name": "Санитарка перевязочной",
+      "sort_order": 12
+    },
+    {
+      "unit_code": "RAD",
+      "position_name": "Ваннщица",
+      "sort_order": 13
+    },
+    {
+      "unit_code": "RAD",
+      "position_name": "Уборщица туалетов",
+      "sort_order": 14
+    },
+    {
+      "unit_code": "RAD",
+      "position_name": "Заведующий отделением радиологии",
+      "sort_order": 20
+    },
+    {
+      "unit_code": "RAD",
+      "position_name": "Инженер-мед.физик",
+      "sort_order": 30
+    },
+    {
+      "unit_code": "RAD",
+      "position_name": "инженер радиационной безопасности",
+      "sort_order": 40
+    },
+    {
+      "unit_code": "RAD",
+      "position_name": "Медсестра",
+      "sort_order": 50
+    },
+    {
+      "unit_code": "RAD",
+      "position_name": "Санитар",
+      "sort_order": 60
+    },
+    {
+      "unit_code": "REHAB",
+      "position_name": "Заведующий отделением",
+      "sort_order": 1
+    },
+    {
+      "unit_code": "REHAB",
+      "position_name": "Старшая медсестра",
+      "sort_order": 2
+    },
+    {
+      "unit_code": "REHAB",
+      "position_name": "сестра-хозяйка",
+      "sort_order": 3
+    },
+    {
+      "unit_code": "REHAB",
+      "position_name": "Буфетчица",
+      "sort_order": 4
+    },
+    {
+      "unit_code": "REHAB",
+      "position_name": "Врач-ординатор",
+      "sort_order": 5
+    },
+    {
+      "unit_code": "REHAB",
+      "position_name": "Постовая медсестра",
+      "sort_order": 6
+    },
+    {
+      "unit_code": "REHAB",
+      "position_name": "Процедурная медсестра",
+      "sort_order": 7
+    },
+    {
+      "unit_code": "REHAB",
+      "position_name": "Перевязочная медсестра",
+      "sort_order": 8
+    },
+    {
+      "unit_code": "REHAB",
+      "position_name": "Младшая медсестра",
+      "sort_order": 9
+    },
+    {
+      "unit_code": "REHAB",
+      "position_name": "Врач",
+      "sort_order": 10
+    },
+    {
+      "unit_code": "REHAB",
+      "position_name": "Санитарка палатная",
+      "sort_order": 10
+    },
+    {
+      "unit_code": "REHAB",
+      "position_name": "Санитарка процедурной",
+      "sort_order": 11
+    },
+    {
+      "unit_code": "REHAB",
+      "position_name": "Санитарка перевязочной",
+      "sort_order": 12
+    },
+    {
+      "unit_code": "REHAB",
+      "position_name": "Ваннщица",
+      "sort_order": 13
+    },
+    {
+      "unit_code": "REHAB",
+      "position_name": "Уборщица туалетов",
+      "sort_order": 14
+    },
+    {
+      "unit_code": "REHAB",
+      "position_name": "Заведующий отделением реабилитации",
+      "sort_order": 20
+    },
+    {
+      "unit_code": "REHAB",
+      "position_name": "Медсестра",
+      "sort_order": 30
+    },
+    {
+      "unit_code": "REHAB",
+      "position_name": "Санитар",
+      "sort_order": 40
+    },
+    {
+      "unit_code": "REHAB",
+      "position_name": "Санитарка",
+      "sort_order": 50
+    },
+    {
+      "unit_code": "SCREENING CENTER",
+      "position_name": "Заведующий отделением",
+      "sort_order": 1
+    },
+    {
+      "unit_code": "SCREENING CENTER",
+      "position_name": "Старшая медсестра",
+      "sort_order": 2
+    },
+    {
+      "unit_code": "SCREENING CENTER",
+      "position_name": "сестра-хозяйка",
+      "sort_order": 3
+    },
+    {
+      "unit_code": "SCREENING CENTER",
+      "position_name": "Буфетчица",
+      "sort_order": 4
+    },
+    {
+      "unit_code": "SCREENING CENTER",
+      "position_name": "Врач-ординатор",
+      "sort_order": 5
+    },
+    {
+      "unit_code": "SCREENING CENTER",
+      "position_name": "Постовая медсестра",
+      "sort_order": 6
+    },
+    {
+      "unit_code": "SCREENING CENTER",
+      "position_name": "Процедурная медсестра",
+      "sort_order": 7
+    },
+    {
+      "unit_code": "SCREENING CENTER",
+      "position_name": "Перевязочная медсестра",
+      "sort_order": 8
+    },
+    {
+      "unit_code": "SCREENING CENTER",
+      "position_name": "Младшая медсестра",
+      "sort_order": 9
+    },
+    {
+      "unit_code": "SCREENING CENTER",
+      "position_name": "Санитарка палатная",
+      "sort_order": 10
+    },
+    {
+      "unit_code": "SCREENING CENTER",
+      "position_name": "Санитарка процедурной",
+      "sort_order": 11
+    },
+    {
+      "unit_code": "SCREENING CENTER",
+      "position_name": "Санитарка перевязочной",
+      "sort_order": 12
+    },
+    {
+      "unit_code": "SCREENING CENTER",
+      "position_name": "Ваннщица",
+      "sort_order": 13
+    },
+    {
+      "unit_code": "SCREENING CENTER",
+      "position_name": "Уборщица туалетов",
+      "sort_order": 14
+    },
+    {
+      "unit_code": "STAT",
+      "position_name": "Аналитик ЭРОБ",
+      "sort_order": 10
+    },
+    {
+      "unit_code": "STAT",
+      "position_name": "Архивариус",
+      "sort_order": 20
+    },
+    {
+      "unit_code": "STAT",
+      "position_name": "Руководитель отдела статистики",
+      "sort_order": 30
+    },
+    {
+      "unit_code": "STROKE",
+      "position_name": "Заведующий отделением",
+      "sort_order": 1
+    },
+    {
+      "unit_code": "STROKE",
+      "position_name": "Старшая медсестра",
+      "sort_order": 2
+    },
+    {
+      "unit_code": "STROKE",
+      "position_name": "сестра-хозяйка",
+      "sort_order": 3
+    },
+    {
+      "unit_code": "STROKE",
+      "position_name": "Буфетчица",
+      "sort_order": 4
+    },
+    {
+      "unit_code": "STROKE",
+      "position_name": "Врач-ординатор",
+      "sort_order": 5
+    },
+    {
+      "unit_code": "STROKE",
+      "position_name": "Постовая медсестра",
+      "sort_order": 6
+    },
+    {
+      "unit_code": "STROKE",
+      "position_name": "Процедурная медсестра",
+      "sort_order": 7
+    },
+    {
+      "unit_code": "STROKE",
+      "position_name": "Перевязочная медсестра",
+      "sort_order": 8
+    },
+    {
+      "unit_code": "STROKE",
+      "position_name": "Младшая медсестра",
+      "sort_order": 9
+    },
+    {
+      "unit_code": "STROKE",
+      "position_name": "Врач",
+      "sort_order": 10
+    },
+    {
+      "unit_code": "STROKE",
+      "position_name": "Санитарка палатная",
+      "sort_order": 10
+    },
+    {
+      "unit_code": "STROKE",
+      "position_name": "Санитарка процедурной",
+      "sort_order": 11
+    },
+    {
+      "unit_code": "STROKE",
+      "position_name": "Санитарка перевязочной",
+      "sort_order": 12
+    },
+    {
+      "unit_code": "STROKE",
+      "position_name": "Ваннщица",
+      "sort_order": 13
+    },
+    {
+      "unit_code": "STROKE",
+      "position_name": "Уборщица туалетов",
+      "sort_order": 14
+    },
+    {
+      "unit_code": "STROKE",
+      "position_name": "Заведующий инсультным отделением",
+      "sort_order": 20
+    },
+    {
+      "unit_code": "STROKE",
+      "position_name": "Медсестра",
+      "sort_order": 30
+    },
+    {
+      "unit_code": "STROKE",
+      "position_name": "Санитар",
+      "sort_order": 40
+    },
+    {
+      "unit_code": "SURG_01",
+      "position_name": "Заведующий отделением",
+      "sort_order": 1
+    },
+    {
+      "unit_code": "SURG_01",
+      "position_name": "Старшая медсестра",
+      "sort_order": 2
+    },
+    {
+      "unit_code": "SURG_01",
+      "position_name": "сестра-хозяйка",
+      "sort_order": 3
+    },
+    {
+      "unit_code": "SURG_01",
+      "position_name": "Буфетчица",
+      "sort_order": 4
+    },
+    {
+      "unit_code": "SURG_01",
+      "position_name": "Врач-ординатор",
+      "sort_order": 5
+    },
+    {
+      "unit_code": "SURG_01",
+      "position_name": "Постовая медсестра",
+      "sort_order": 6
+    },
+    {
+      "unit_code": "SURG_01",
+      "position_name": "Процедурная медсестра",
+      "sort_order": 7
+    },
+    {
+      "unit_code": "SURG_01",
+      "position_name": "Перевязочная медсестра",
+      "sort_order": 8
+    },
+    {
+      "unit_code": "SURG_01",
+      "position_name": "Младшая медсестра",
+      "sort_order": 9
+    },
+    {
+      "unit_code": "SURG_01",
+      "position_name": "Врач",
+      "sort_order": 10
+    },
+    {
+      "unit_code": "SURG_01",
+      "position_name": "Санитарка палатная",
+      "sort_order": 10
+    },
+    {
+      "unit_code": "SURG_01",
+      "position_name": "Санитарка процедурной",
+      "sort_order": 11
+    },
+    {
+      "unit_code": "SURG_01",
+      "position_name": "Санитарка перевязочной",
+      "sort_order": 12
+    },
+    {
+      "unit_code": "SURG_01",
+      "position_name": "Ваннщица",
+      "sort_order": 13
+    },
+    {
+      "unit_code": "SURG_01",
+      "position_name": "Уборщица туалетов",
+      "sort_order": 14
+    },
+    {
+      "unit_code": "SURG_01",
+      "position_name": "Заведующий хирургическим отделением 1",
+      "sort_order": 20
+    },
+    {
+      "unit_code": "SURG_01",
+      "position_name": "Медбрат",
+      "sort_order": 30
+    },
+    {
+      "unit_code": "SURG_01",
+      "position_name": "Медсестра",
+      "sort_order": 40
+    },
+    {
+      "unit_code": "SURG_01",
+      "position_name": "Санитар",
+      "sort_order": 50
+    },
+    {
+      "unit_code": "SURG_02",
+      "position_name": "Заведующий отделением",
+      "sort_order": 1
+    },
+    {
+      "unit_code": "SURG_02",
+      "position_name": "Старшая медсестра",
+      "sort_order": 2
+    },
+    {
+      "unit_code": "SURG_02",
+      "position_name": "сестра-хозяйка",
+      "sort_order": 3
+    },
+    {
+      "unit_code": "SURG_02",
+      "position_name": "Буфетчица",
+      "sort_order": 4
+    },
+    {
+      "unit_code": "SURG_02",
+      "position_name": "Врач-ординатор",
+      "sort_order": 5
+    },
+    {
+      "unit_code": "SURG_02",
+      "position_name": "Постовая медсестра",
+      "sort_order": 6
+    },
+    {
+      "unit_code": "SURG_02",
+      "position_name": "Процедурная медсестра",
+      "sort_order": 7
+    },
+    {
+      "unit_code": "SURG_02",
+      "position_name": "Перевязочная медсестра",
+      "sort_order": 8
+    },
+    {
+      "unit_code": "SURG_02",
+      "position_name": "Младшая медсестра",
+      "sort_order": 9
+    },
+    {
+      "unit_code": "SURG_02",
+      "position_name": "Заведующий хирургическим отделением 2",
+      "sort_order": 10
+    },
+    {
+      "unit_code": "SURG_02",
+      "position_name": "Санитарка палатная",
+      "sort_order": 10
+    },
+    {
+      "unit_code": "SURG_02",
+      "position_name": "Санитарка процедурной",
+      "sort_order": 11
+    },
+    {
+      "unit_code": "SURG_02",
+      "position_name": "Санитарка перевязочной",
+      "sort_order": 12
+    },
+    {
+      "unit_code": "SURG_02",
+      "position_name": "Ваннщица",
+      "sort_order": 13
+    },
+    {
+      "unit_code": "SURG_02",
+      "position_name": "Уборщица туалетов",
+      "sort_order": 14
+    },
+    {
+      "unit_code": "SURG_02",
+      "position_name": "Врач",
+      "sort_order": 20
+    },
+    {
+      "unit_code": "SURG_02",
+      "position_name": "Медсестра",
+      "sort_order": 30
+    },
+    {
+      "unit_code": "SURG_02",
+      "position_name": "Санитар",
+      "sort_order": 50
+    },
+    {
+      "unit_code": "THER",
+      "position_name": "Заведующий отделением",
+      "sort_order": 1
+    },
+    {
+      "unit_code": "THER",
+      "position_name": "Старшая медсестра",
+      "sort_order": 2
+    },
+    {
+      "unit_code": "THER",
+      "position_name": "сестра-хозяйка",
+      "sort_order": 3
+    },
+    {
+      "unit_code": "THER",
+      "position_name": "Буфетчица",
+      "sort_order": 4
+    },
+    {
+      "unit_code": "THER",
+      "position_name": "Врач-ординатор",
+      "sort_order": 5
+    },
+    {
+      "unit_code": "THER",
+      "position_name": "Постовая медсестра",
+      "sort_order": 6
+    },
+    {
+      "unit_code": "THER",
+      "position_name": "Процедурная медсестра",
+      "sort_order": 7
+    },
+    {
+      "unit_code": "THER",
+      "position_name": "Перевязочная медсестра",
+      "sort_order": 8
+    },
+    {
+      "unit_code": "THER",
+      "position_name": "Младшая медсестра",
+      "sort_order": 9
+    },
+    {
+      "unit_code": "THER",
+      "position_name": "Врач",
+      "sort_order": 10
+    },
+    {
+      "unit_code": "THER",
+      "position_name": "Санитарка палатная",
+      "sort_order": 10
+    },
+    {
+      "unit_code": "THER",
+      "position_name": "Санитарка процедурной",
+      "sort_order": 11
+    },
+    {
+      "unit_code": "THER",
+      "position_name": "Санитарка перевязочной",
+      "sort_order": 12
+    },
+    {
+      "unit_code": "THER",
+      "position_name": "Ваннщица",
+      "sort_order": 13
+    },
+    {
+      "unit_code": "THER",
+      "position_name": "Уборщица туалетов",
+      "sort_order": 14
+    },
+    {
+      "unit_code": "THER",
+      "position_name": "Медсестра",
+      "sort_order": 20
+    },
+    {
+      "unit_code": "THER",
+      "position_name": "Санитар",
+      "sort_order": 30
+    },
+    {
+      "unit_code": "THER",
+      "position_name": "Медбрат",
+      "sort_order": 40
+    },
+    {
+      "unit_code": "TRANSFUSE",
+      "position_name": "Заведующий отделением",
+      "sort_order": 1
+    },
+    {
+      "unit_code": "TRANSFUSE",
+      "position_name": "Старшая медсестра",
+      "sort_order": 2
+    },
+    {
+      "unit_code": "TRANSFUSE",
+      "position_name": "Старший лаборант",
+      "sort_order": 3
+    },
+    {
+      "unit_code": "TRANSFUSE",
+      "position_name": "Медсестра",
+      "sort_order": 4
+    },
+    {
+      "unit_code": "TRANSFUSE",
+      "position_name": "Санитарка",
+      "sort_order": 5
+    },
+    {
+      "unit_code": "TRANSFUSE",
+      "position_name": "Врач-ординатор",
+      "sort_order": 6
+    },
+    {
+      "unit_code": "TRANSFUSE",
+      "position_name": "Старший рентген-лаборант",
+      "sort_order": 7
+    },
+    {
+      "unit_code": "TRANSFUSE",
+      "position_name": "Фельдшер-лаборант",
+      "sort_order": 8
+    },
+    {
+      "unit_code": "TRANSFUSE",
+      "position_name": "Рентген-лаборант",
+      "sort_order": 9
+    },
+    {
+      "unit_code": "TRANSFUSE",
+      "position_name": "Врач",
+      "sort_order": null
+    },
+    {
+      "unit_code": "TRANSFUSE",
+      "position_name": "Инженер",
+      "sort_order": null
+    },
+    {
+      "unit_code": "TRANSFUSE",
+      "position_name": "Сестра-хозяйка",
+      "sort_order": null
+    },
+    {
+      "unit_code": "qm_ovipd",
+      "position_name": "Врач-эксперт",
+      "sort_order": 10
+    },
+    {
+      "unit_code": "qm_ovipd",
+      "position_name": "Руководитель ОВЭиПД",
+      "sort_order": 20
+    },
+    {
+      "unit_code": "qm_ovipd",
+      "position_name": "эксперт ОВЭиПД амбулаторный",
+      "sort_order": 30
+    },
+    {
+      "unit_code": "qm_ovipd",
+      "position_name": "эксперт ОВЭиПД госпитальный",
+      "sort_order": 40
+    },
+    {
+      "unit_code": "qm_ovipd",
+      "position_name": "эксперт ОВЭиПД по регистрации жалоб",
+      "sort_order": 50
+    },
+    {
+      "unit_code": "qm_ovipd",
+      "position_name": "эксперт ОВЭиПД по улаживанию жалоб",
+      "sort_order": 60
+    },
+    {
+      "unit_code": "qm_ovipd",
+      "position_name": "Эксперт по внутреннему обучению и аттестации",
+      "sort_order": 70
+    }
+  ]
+}

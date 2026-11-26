@@ -57,6 +57,16 @@ def parse_date_value(raw: Any) -> date | None:
     return None
 
 
+def parse_education_date_value(raw: Any, *, end: bool = False) -> date | None:
+    text = str(raw or "").strip()
+    if len(text) == 4 and text.isdigit():
+        try:
+            return date(int(text), 12, 31) if end else date(int(text), 1, 1)
+        except ValueError:
+            return None
+    return parse_date_value(raw)
+
+
 def map_relationship_type(raw: Any) -> str:
     key = str(raw or "").strip().lower()
     return _RELATIONSHIP_MAP.get(key, RELATIONSHIP_TYPE_OTHER_CLOSE)
@@ -76,12 +86,16 @@ def map_education_records(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 "institution_name": str(item.get("institution_normalized") or item.get("institution_original") or item.get("institution") or "").strip() or None,
                 "specialty": str(item.get("specialty_normalized") or item.get("specialty_original") or item.get("specialty") or "").strip() or None,
                 "qualification": str(item.get("qualification_normalized") or item.get("qualification_original") or item.get("qualification") or "").strip() or None,
-                "started_at": parse_date_value(item.get("start_date") or item.get("year_from")),
-                "completed_at": parse_date_value(item.get("end_date") or item.get("year_to")),
+                "started_at": parse_education_date_value(item.get("start_date") or item.get("year_from")),
+                "completed_at": parse_education_date_value(item.get("end_date") or item.get("year_to"), end=True),
                 "diploma_number": str(item.get("document_number") or item.get("diploma_number") or "").strip() or None,
                 "metadata": {
                     "source": "personnel_intake",
                     "document_type": document_type,
+                    "education_level_code": item.get("education_level_code"),
+                    "education_level_name": item.get("education_level_name"),
+                    "started_at_precision": "year" if str(item.get("start_date") or item.get("year_from") or "").isdigit() and len(str(item.get("start_date") or item.get("year_from") or "")) == 4 else "day",
+                    "completed_at_precision": "year" if str(item.get("end_date") or item.get("year_to") or "").isdigit() and len(str(item.get("end_date") or item.get("year_to") or "")) == 4 else "day",
                 },
             }
         )

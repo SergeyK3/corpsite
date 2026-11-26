@@ -115,6 +115,7 @@ export function canonicalizeIntakePayloadForCompare(
   return {
     personal: normalizeDict(
       {
+        iin: "",
         last_name: "",
         first_name: "",
         middle_name: "",

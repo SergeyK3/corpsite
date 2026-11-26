@@ -41,6 +41,7 @@ _LINK_COLUMNS = (
     PersonnelIntakeLink.revoked_by_user_id,
     PersonnelIntakeLink.superseded_by_link_id,
     PersonnelIntakeLink.token_ciphertext,
+    PersonnelIntakeLink.token_hash,
     PersonnelIntakeLink.created_at,
     PersonnelIntakeLink.updated_at,
 )
@@ -83,6 +84,7 @@ def _link_from_row(row: RowMapping | dict[str, Any]) -> IntakeLinkSnapshot:
             if row.get("token_ciphertext") is not None
             else None
         ),
+        token_hash=str(row["token_hash"]) if row.get("token_hash") is not None else None,
         created_at=row["created_at"],
         updated_at=row["updated_at"],
     )

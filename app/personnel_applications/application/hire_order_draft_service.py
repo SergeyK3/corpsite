@@ -20,9 +20,9 @@ from app.personnel_applications.domain.status import (
     APPLICATION_STATUS_ORDER_DRAFT_CREATED,
 )
 from app.personnel_applications.infrastructure.repository import SqlAlchemyPersonnelApplicationRepository
+from app.personnel_applications.application.electronic_hire_service import load_electronic_hire, order_draft_readiness, queue_approval_notification
 from app.services.personnel_order_hire_from_person_service import validate_hire_person_candidate
 from app.services.personnel_order_evidence_scope_service import (
-    advance_personnel_order_evidence_scopes_tx,
     create_personnel_order_evidence_scope_tx,
 )
 
@@ -51,7 +51,10 @@ def _table_exists(conn: Connection, table_name: str) -> bool:
 
 
 def _build_hire_payload(app: PersonnelApplicationSnapshot) -> dict:
-    payload: dict = {"person_id": app.person_id}
+    payload: dict = {
+        "person_id": app.person_id,
+        "hire_basis": {"ru": "Личное заявление", "kk": "жеке өтініш"},
+    }
     if app.intended_org_unit_id is not None:
         payload["org_unit_id"] = int(app.intended_org_unit_id)
     if app.intended_position_id is not None:
@@ -70,6 +73,7 @@ def _create_draft_hire_order(
     person_id: int,
     payload: dict,
     created_by_user_id: int,
+    effective_date: date | None = None,
 ) -> int:
     if not _table_exists(conn, "personnel_orders") or not _table_exists(conn, "personnel_order_items"):
         raise PersonnelApplicationHireOrderError(
@@ -78,6 +82,28 @@ def _create_draft_hire_order(
         )
 
     validate_hire_person_candidate(conn, person_id)
+    confirmed_name = conn.execute(
+        text("SELECT full_name FROM public.persons WHERE person_id=:id"),
+        {"id": person_id},
+    ).scalar_one()
+    payload.setdefault("source_employee_name", str(confirmed_name).strip())
+
+    template_version_id = conn.execute(
+        text("""
+            SELECT v.template_version_id
+            FROM public.personnel_order_template_versions v
+            JOIN public.personnel_order_templates t USING (template_id)
+            WHERE v.item_type_code = 'HIRE' AND v.status = 'PUBLISHED'
+              AND t.is_default = TRUE
+            ORDER BY v.version_number DESC
+            LIMIT 1 FOR SHARE OF v
+        """),
+    ).scalar_one_or_none()
+    if template_version_id is None:
+        raise PersonnelApplicationHireOrderError(
+            "Опубликованная версия шаблона «О приёме на работу» не найдена.",
+            code="HIRE_TEMPLATE_UNAVAILABLE",
+        )
 
     order_id = conn.execute(
         text(
@@ -89,7 +115,8 @@ def _create_draft_hire_order(
                 status,
                 source_mode,
                 comment,
-                created_by
+                created_by,
+                selected_template_version_id
             )
             VALUES (
                 NULL,
@@ -98,7 +125,8 @@ def _create_draft_hire_order(
                 :status,
                 :source_mode,
                 :comment,
-                :created_by
+                :created_by,
+                :template_version_id
             )
             RETURNING order_id
             """
@@ -110,9 +138,10 @@ def _create_draft_hire_order(
             "source_mode": SOURCE_MODE_DIGITAL,
             "comment": f"Draft HIRE order for personnel application #{application_id}",
             "created_by": int(created_by_user_id),
+            "template_version_id": int(template_version_id),
         },
     ).scalar_one()
-    scope_token = create_personnel_order_evidence_scope_tx(conn, order_id=int(order_id))
+    create_personnel_order_evidence_scope_tx(conn, order_id=int(order_id))
 
     conn.execute(
         text(
@@ -140,12 +169,14 @@ def _create_draft_hire_order(
         {
             "order_id": int(order_id),
             "item_type_code": ORDER_TYPE_HIRE,
-            "effective_date": _today(),
+            "effective_date": effective_date or _today(),
             "payload": json.dumps(payload),
             "item_status": ITEM_STATUS_ACTIVE,
         },
     )
-    advance_personnel_order_evidence_scopes_tx(conn, tokens=[scope_token])
+    from app.services.personnel_orders_editorial.generation_service import generate_editorial
+
+    generate_editorial(int(order_id), user_id=int(created_by_user_id), conn=conn)
     return int(order_id)
 
 
@@ -154,12 +185,17 @@ def create_hire_order_draft_for_application(
     *,
     application_id: int,
     created_by_user_id: int,
+    employee_full_name_accusative_ru: str | None = None,
 ) -> HireOrderDraftResult:
     app_repo = SqlAlchemyPersonnelApplicationRepository(conn)
     app = app_repo.require_by_id(application_id)
 
+    electronic = None
+    if app.application_source == "electronic":
+        electronic = load_electronic_hire(conn, application_id, lock=True)
+
     if app.personnel_order_id is not None:
-        if app.status not in {APPLICATION_STATUS_APPROVED, APPLICATION_STATUS_ORDER_DRAFT_CREATED}:
+        if app.status not in {APPLICATION_STATUS_APPROVED, APPLICATION_STATUS_ORDER_DRAFT_CREATED} and electronic is None:
             raise PersonnelApplicationHireOrderError(
                 "Application already has a linked personnel order.",
                 code="ORDER_ALREADY_LINKED",
@@ -171,25 +207,79 @@ def create_hire_order_draft_for_application(
             application_status=app.status,
         )
 
-    if app.status != APPLICATION_STATUS_APPROVED:
+    if electronic is not None:
+        readiness = order_draft_readiness(conn, application_id)
+        if not readiness["identity_confirmed"]:
+            raise PersonnelApplicationHireOrderError(
+                "Сначала проверьте ФИО, ИИН и дату рождения по документу и подтвердите личность претендента.",
+                code="IDENTITY_NOT_CONFIRMED",
+            )
+        if not readiness["intake_transferred"]:
+            raise PersonnelApplicationHireOrderError(
+                "Сначала завершите проверку анкеты и перенесите принятые данные в личную карточку.",
+                code="INTAKE_TRANSFER_REQUIRED",
+            )
+
+    if electronic is None and app.status != APPLICATION_STATUS_APPROVED:
         raise PersonnelApplicationHireOrderError(
             f"HIRE draft can only be created after approval (status={app.status}).",
             code="HIRE_DRAFT_NOT_ALLOWED",
         )
 
-    if app.intended_org_unit_id is None or app.intended_position_id is None:
+    if app.intended_org_unit_id is None or (app.intended_position_id is None and
+        not (electronic is not None and app.intended_vacancy_text and app.intended_vacancy_text.strip())):
         raise PersonnelApplicationHireOrderError(
             "Intended org unit and position are required to create HIRE draft.",
             code="HIRE_DRAFT_PLACEMENT_REQUIRED",
         )
 
+    if electronic is not None:
+        if app.status in {"completed", "cancelled", "withdrawn", "rejected"}:
+            raise PersonnelApplicationHireOrderError("Заявление закрыто.", code="APPLICATION_CLOSED")
+        missing = readiness["missing_card_fields"]
+        if missing:
+            raise PersonnelApplicationHireOrderError(
+                "Заполните обязательные поля ЛК: " + ", ".join(missing), code="PERSONAL_CARD_INCOMPLETE"
+            )
+
     payload = _build_hire_payload(app)
+    if employee_full_name_accusative_ru is not None:
+        confirmed_accusative = employee_full_name_accusative_ru.strip()
+        if not confirmed_accusative or len(confirmed_accusative) > 300:
+            raise PersonnelApplicationHireOrderError("Укажите ФИО в винительном падеже RU (до 300 символов).", code="HIRE_ACCUSATIVE_REQUIRED")
+        payload["document_forms_ru"] = {"employee_full_name_accusative_ru": confirmed_accusative}
+    if electronic is not None:
+        payload.update({
+            "source_employee_name": electronic["full_name"],
+            "source_org_unit_name": electronic["org_unit_ru"],
+            "source_position_name": electronic["position_ru"],
+            "org_unit_title_kk": electronic["org_unit_kk"],
+            "position_title_kk": electronic["position_kk"],
+            "position_document_nominative_ru": electronic["position_document_ru"],
+            "position_document_possessive_kk": electronic["position_document_kk"],
+            "position_resolution": electronic["position_resolution"],
+        })
+        if electronic["position_document_kk"]:
+            payload["document_forms_kk"] = {
+                "position_document_possessive_kk": electronic["position_document_kk"],
+            }
+        if electronic["position_resolution"] == "unmatched_manual":
+            payload.update({
+                "manual_position_name": electronic["manual_position_name"],
+                "manual_position_document_ru": electronic["manual_position_document_ru"],
+                "document_forms_ru": {
+                    **payload.get("document_forms_ru", {}),
+                    "position_document_nominative_ru": electronic["manual_position_document_ru"],
+                },
+                "hire_position_manual_forms": {"ru": True},
+            })
     order_id = _create_draft_hire_order(
         conn,
         application_id=application_id,
         person_id=app.person_id,
         payload=payload,
         created_by_user_id=created_by_user_id,
+        effective_date=electronic["planned_start_date"] if electronic is not None else None,
     )
 
     now = _now_utc()
@@ -199,6 +289,8 @@ def create_hire_order_draft_for_application(
         personnel_order_id=order_id,
         now=now,
     )
+    if electronic is not None:
+        queue_approval_notification(conn, application_id)
     return HireOrderDraftResult(
         application_id=application_id,
         personnel_order_id=order_id,

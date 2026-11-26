@@ -13,6 +13,7 @@ import {
 } from "../_lib/intakePhotoApi.client";
 import type { IntakePhotoFaceAnalysis } from "../_lib/intakePhotoTypes";
 import type { IntakeDraftPayload } from "../_lib/intakeApi.client";
+import type { IntakePhotoMutationResponse } from "../_lib/intakePhotoApi.client";
 
 type Props = {
   mode: "public" | "hr-on-behalf";
@@ -22,6 +23,7 @@ type Props = {
   readOnly?: boolean;
   compact?: boolean;
   onPayloadChange: (payload: IntakeDraftPayload) => void;
+  onPhotoMutation?: (result: IntakePhotoMutationResponse) => Promise<void>;
 };
 
 export default function IntakePhotoUpload({
@@ -32,6 +34,7 @@ export default function IntakePhotoUpload({
   readOnly,
   compact = false,
   onPayloadChange,
+  onPhotoMutation,
 }: Props) {
   const photoFileId = String(payload.personal.photo_file_id ?? "").trim();
   const [draftSrc, setDraftSrc] = React.useState<string | null>(null);
@@ -109,7 +112,9 @@ export default function IntakePhotoUpload({
         mode === "public"
           ? await uploadIntakePhotoPublic(String(intakeToken), blob)
           : await uploadIntakePhotoOnBehalf(Number(applicationId), blob);
-      applyMutationPayload(result.payload);
+      if (onPhotoMutation) await onPhotoMutation(result);
+      else applyMutationPayload(result.payload);
+      setCacheBust(String(Date.now()));
       if (draftSrc?.startsWith("blob:")) URL.revokeObjectURL(draftSrc);
       setDraftSrc(null);
       setFaceAnalysis(null);
@@ -129,7 +134,9 @@ export default function IntakePhotoUpload({
         mode === "public"
           ? await deleteIntakePhotoPublic(String(intakeToken))
           : await deleteIntakePhotoOnBehalf(Number(applicationId));
-      applyMutationPayload(result.payload);
+      if (onPhotoMutation) await onPhotoMutation(result);
+      else applyMutationPayload(result.payload);
+      setCacheBust(String(Date.now()));
       if (draftSrc?.startsWith("blob:")) URL.revokeObjectURL(draftSrc);
       setDraftSrc(null);
       setFaceAnalysis(null);
@@ -142,16 +149,14 @@ export default function IntakePhotoUpload({
 
   return (
     <div
-      className={compact ? "shrink-0 space-y-2" : "space-y-3 sm:col-span-2"}
+      className={compact ? "shrink-0 space-y-2 sm:w-[220px]" : "space-y-3 sm:col-span-2"}
       data-testid="intake-photo-upload"
     >
       <div>
         <div className="text-sm font-medium text-zinc-900 dark:text-zinc-50">Фотография 3×4</div>
-        {compact ? null : (
-          <p className="mt-1 text-xs text-zinc-500">
-            JPEG, PNG или HEIC до 10 МБ. После сохранения фото будет сжато до 600×800 px.
-          </p>
-        )}
+        <p className="mt-1 text-xs text-zinc-500">
+          Загрузите портретное фото анфас в формате JPEG, PNG или HEIC, до 10 МБ. Обрезать фото до формата 3×4 можно прямо в анкете
+        </p>
       </div>
 
       <input
@@ -176,6 +181,7 @@ export default function IntakePhotoUpload({
           }}
           onSave={handleSave}
           onReplace={openFilePicker}
+          selectionError={error}
         />
       ) : savedPhotoUrl ? (
         <div className="space-y-3">
@@ -186,7 +192,7 @@ export default function IntakePhotoUpload({
           >
             <img src={savedPhotoUrl} alt="Фото сотрудника" className="h-full w-full object-cover" />
           </div>
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             {!readOnly ? (
               <>
                 <button
@@ -209,6 +215,7 @@ export default function IntakePhotoUpload({
                 </button>
               </>
             ) : null}
+            {error ? <p role="alert" className="text-xs text-red-600">{error}</p> : null}
           </div>
         </div>
       ) : (
@@ -221,6 +228,7 @@ export default function IntakePhotoUpload({
             Место для фотографии 3×4
           </div>
           {!readOnly ? (
+            <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
               disabled={busy}
@@ -230,11 +238,12 @@ export default function IntakePhotoUpload({
             >
               Загрузить фото
             </button>
+            {error ? <p role="alert" className="text-xs text-red-600">{error}</p> : null}
+            </div>
           ) : null}
         </div>
       )}
 
-      {error ? <p className="text-xs text-red-600">{error}</p> : null}
     </div>
   );
 }

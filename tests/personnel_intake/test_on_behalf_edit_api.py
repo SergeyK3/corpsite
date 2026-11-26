@@ -112,6 +112,26 @@ def _submit_intake(client, headers) -> tuple[int, dict]:
     return app_id, payload
 
 
+def test_on_behalf_open_creates_one_draft_without_public_link(
+    client, privileged_headers, intake_on_behalf_schema_ready,
+) -> None:
+    app_id = _register_application(client, privileged_headers)["application_id"]
+    path = f"/directory/personnel-applications/{app_id}/intake/draft/on-behalf-open"
+    first = client.post(path, headers=privileged_headers)
+    assert first.status_code == 200, first.text
+    second = client.post(path, headers=privileged_headers)
+    assert second.status_code == 200, second.text
+    assert first.json()["draft"]["draft_id"] == second.json()["draft"]["draft_id"]
+    assert first.json()["editable"] is True
+    link = client.get(
+        f"/directory/personnel-applications/{app_id}/intake-link/active",
+        headers=privileged_headers,
+    )
+    assert link.status_code == 200, link.text
+    assert link.json()["display_state"] == "not_issued"
+    assert link.json()["intake_url_path"] is None
+
+
 def _start_editable_intake(client, headers) -> tuple[int, str, dict]:
     reg = _register_application(client, headers, iin=_unique_iin())
     app_id = reg["application_id"]

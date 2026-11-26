@@ -11,6 +11,7 @@ def empty_intake_draft_payload() -> dict[str, Any]:
     return {
         "schema_version": 2,
         "personal": {
+            "iin": None,
             "last_name": None,
             "first_name": None,
             "middle_name": None,
@@ -73,6 +74,7 @@ class IntakeLinkSnapshot:
     created_at: datetime
     updated_at: datetime
     token_ciphertext: str | None = None
+    token_hash: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

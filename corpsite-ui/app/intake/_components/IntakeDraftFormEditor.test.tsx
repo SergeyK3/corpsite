@@ -162,7 +162,7 @@ describe("IntakeDraftFormEditor date fields", () => {
     expect(nextPayload.personal.birth_date).toBe("2018-09-15");
   });
 
-  it("renders period date fields with full-day period editor on education step", () => {
+  it("renders period date fields accepting a year or full date on education step", () => {
     const payload = emptyIntakeDraftPayload();
     payload.education = [
       intakeEducationFixture({
@@ -185,12 +185,10 @@ describe("IntakeDraftFormEditor date fields", () => {
     const fromInput = within(desktop).getByTestId("intake-education-year-from-0");
     const toInput = within(desktop).getByTestId("intake-education-year-to-0");
 
-    expect(fromInput).toHaveAttribute("placeholder", "ДД.ММ.ГГГГ");
+    expect(fromInput).toHaveAttribute("placeholder", "ГГГГ или ДД.ММ.ГГГГ");
     expect(fromInput).toHaveValue("01.09.2014");
-    expect(toInput).toHaveValue("2018 (уточните дату)");
-    expect(within(desktop).getByTestId("intake-education-year-to-0-hint")).toHaveTextContent(
-      "Укажите полную дату в формате ДД.ММ.ГГГГ",
-    );
+    expect(toInput).toHaveValue("2018");
+    expect(within(desktop).queryByTestId("intake-education-year-to-0-hint")).not.toBeInTheDocument();
   });
 
   it("stores edited period date as canonical ISO", () => {
@@ -478,7 +476,7 @@ describe("IntakeDraftFormEditor review and submit actions", () => {
       intakeEducationFixture({
         education_type: "basic",
         institution: "КазНМУ",
-        year_from: "2014",
+        year_from: "201",
         year_to: "2018-06-30",
         specialty: "",
         qualification: "",

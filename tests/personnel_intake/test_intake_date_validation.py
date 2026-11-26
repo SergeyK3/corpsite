@@ -64,11 +64,12 @@ def test_collect_intake_date_validation_errors() -> None:
         }
     ]
 
-    assert collect_intake_date_validation_errors(payload) == ["education[0].year_from"]
+    assert collect_intake_date_validation_errors(payload) == []
 
 
 def test_validate_submit_payload_rejects_incomplete_dates() -> None:
     payload = empty_intake_draft_payload()
+    payload["personal"]["birth_date"] = "1990"
     payload["personal"]["last_name"] = "Петров"
     payload["personal"]["first_name"] = "Пётр"
     payload["contacts"]["mobile_phone"] = "+77005554433"
@@ -84,7 +85,7 @@ def test_validate_submit_payload_rejects_incomplete_dates() -> None:
         }
     ]
 
-    with pytest.raises(PersonnelIntakeValidationError, match="education\\[0\\]\\.year_from"):
+    with pytest.raises(PersonnelIntakeValidationError, match="personal\\.birth_date"):
         _validate_submit_payload(payload)
 
 

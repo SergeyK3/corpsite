@@ -206,6 +206,7 @@ function splitLegacyCombinedAcademicEntry(
   const migrated = migrateLegacyCombinedAcademicFields(item);
   const hasDegree = Boolean(migrated.degree || migrated.degreeOther);
   const hasTitle = Boolean(migrated.academicTitle || migrated.academicTitleOther);
+  const hasSharedDetails = Boolean(migrated.fieldOfScience || migrated.completedAt || migrated.documentNumber || migrated.degreeType);
   const shared = {
     field_of_science: migrated.fieldOfScience,
     completed_at: migrated.completedAt,
@@ -213,7 +214,7 @@ function splitLegacyCombinedAcademicEntry(
     ...(migrated.label ? { label: migrated.label } : {}),
     ...(migrated.degreeType ? { degree_type: migrated.degreeType } : {}),
   };
-  const degrees = hasDegree
+  const degrees = hasDegree || (!hasTitle && hasSharedDetails)
     ? [
         normalizeIntakeAcademicDegreeEntry({
           degree: migrated.degree,

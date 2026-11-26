@@ -63,6 +63,15 @@ def is_incomplete_intake_period_date(value: Any) -> bool:
     return not is_valid_intake_full_date_iso(text)
 
 
+def is_incomplete_intake_education_date(value: Any) -> bool:
+    text = _normalize_text(value)
+    if not text:
+        return False
+    if YEAR_ONLY_RE.match(text):
+        return int(text) < 1000
+    return not is_valid_intake_full_date_iso(text)
+
+
 def is_incomplete_intake_birth_date(value: Any) -> bool:
     text = _normalize_text(value)
     if not text:
@@ -124,10 +133,17 @@ def collect_intake_date_validation_errors(payload: dict[str, Any]) -> list[str]:
         for index, item in enumerate(education):
             if not isinstance(item, dict):
                 continue
-            if is_incomplete_intake_period_date(item.get("year_from")):
+            start = item.get("start_date") or item.get("year_from")
+            end = item.get("end_date") or item.get("year_to")
+            if is_incomplete_intake_education_date(start):
                 errors.append(f"education[{index}].year_from")
-            if is_incomplete_intake_period_date(item.get("year_to")):
+            if is_incomplete_intake_education_date(end):
                 errors.append(f"education[{index}].year_to")
+            if not is_incomplete_intake_education_date(start) and not is_incomplete_intake_education_date(end):
+                start_key = f"{start}-01-01" if YEAR_ONLY_RE.match(_normalize_text(start)) else _parse_to_iso(start)
+                end_key = f"{end}-12-31" if YEAR_ONLY_RE.match(_normalize_text(end)) else _parse_to_iso(end)
+                if start_key and end_key and start_key > end_key:
+                    errors.append(f"education[{index}].year_to")
 
     training = payload.get("training") or []
     if isinstance(training, list):

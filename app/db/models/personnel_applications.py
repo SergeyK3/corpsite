@@ -26,10 +26,10 @@ class PersonnelApplication(Base):
         primary_key=True,
         autoincrement=True,
     )
-    person_id: Mapped[int] = mapped_column(
+    person_id: Mapped[int | None] = mapped_column(
         BigInteger,
         ForeignKey("persons.person_id", ondelete="RESTRICT"),
-        nullable=False,
+        nullable=True,
     )
     status: Mapped[str] = mapped_column(
         Text,
@@ -72,6 +72,10 @@ class PersonnelApplication(Base):
         BigInteger,
         ForeignKey("personnel_orders.order_id", ondelete="RESTRICT"),
         nullable=True,
+    )
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    archived_by_user_id: Mapped[int | None] = mapped_column(
+        BigInteger, ForeignKey("users.user_id", ondelete="RESTRICT"), nullable=True,
     )
     registered_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

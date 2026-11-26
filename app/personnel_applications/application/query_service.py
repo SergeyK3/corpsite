@@ -88,9 +88,9 @@ def list_personnel_applications(
     }
 
     if journal_view == JOURNAL_VIEW_ARCHIVE:
-        where.append(f"pa.status IN ({_TERMINAL_SQL})")
+        where.append(f"(pa.status IN ({_TERMINAL_SQL}) OR pa.archived_at IS NOT NULL)")
     else:
-        where.append(f"pa.status NOT IN ({_TERMINAL_SQL})")
+        where.append(f"pa.status NOT IN ({_TERMINAL_SQL}) AND pa.archived_at IS NULL")
 
     if q and str(q).strip():
         params["q"] = f"%{str(q).strip().lower()}%"
@@ -154,7 +154,7 @@ def list_personnel_applications(
                 ee.employee_id,
                 e.full_name AS employee_full_name,
                 CASE
-                    WHEN pa.status IN ({_TERMINAL_SQL}) THEN FALSE
+                    WHEN pa.status IN ({_TERMINAL_SQL}) OR pa.archived_at IS NOT NULL THEN FALSE
                     ELSE TRUE
                 END AS is_active
             FROM public.personnel_applications pa

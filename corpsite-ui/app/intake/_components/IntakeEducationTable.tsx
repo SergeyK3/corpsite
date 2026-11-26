@@ -2,8 +2,11 @@
 
 import * as React from "react";
 
+import { isIntakeListRowEmpty } from "../_lib/intakeEmptyRows";
+import { focusIntakeListEditor } from "../_lib/intakeListFocus";
+
 import {
-  IntakeDateField,
+  IntakeEducationDateField,
   IntakeSelectField,
   IntakeTextField,
 } from "./IntakeFormFields";
@@ -22,15 +25,19 @@ import {
 import {
   INTAKE_EDUCATION_DOCUMENT_TYPE_OPTIONS,
   INTAKE_EDUCATION_TYPE_OPTIONS,
+  fetchIntakeEducationLevels,
   type IntakeEducation,
+  type IntakeEducationLevel,
 } from "../_lib/intakeApi.client";
-import { resolveIntakePeriodRangeError } from "../_lib/intakePeriodRange";
+import { resolveIntakeEducationPeriodError } from "../_lib/intakeEducationDate";
 
 type Props = {
   items: IntakeEducation[];
   onChange: (items: IntakeEducation[]) => void;
   readOnly?: boolean;
   focusTestId?: string | null;
+  mode?: "public" | "hr-on-behalf";
+  intakeToken?: string;
 };
 
 
@@ -39,19 +46,36 @@ function EducationRowEditor({
   index,
   readOnly,
   onPatch,
+  levels,
 }: {
   item: IntakeEducation;
   index: number;
   readOnly?: boolean;
   onPatch: (patch: Partial<IntakeEducation>) => void;
+  levels: IntakeEducationLevel[];
 }) {
-  const periodError = resolveIntakePeriodRangeError(item.year_from, item.year_to);
+  const periodError = resolveIntakeEducationPeriodError(item.year_from, item.year_to);
+  const levelOptions = [
+    { value: "", label: "Выберите уровень" },
+    ...levels.map((level) => ({ value: level.code, label: level.name_ru })),
+  ];
+  if (item.education_level_code && !levelOptions.some((level) => level.value === item.education_level_code)) {
+    levelOptions.push({ value: item.education_level_code, label: item.education_level_name || item.education_level_code });
+  }
 
   return (
     <div
       className="grid gap-3 border-t border-zinc-200 bg-zinc-50 p-4 dark:border-zinc-800 dark:bg-zinc-900/40 sm:grid-cols-2"
       data-testid={`intake-education-editor-${index}`}
     >
+      <IntakeSelectField
+        label="Уровень образования"
+        value={item.education_level_code ?? ""}
+        readOnly={readOnly}
+        options={levelOptions}
+        testId={`intake-education-level-${index}`}
+        onChange={(code) => onPatch({ education_level_code: code, education_level_name: levels.find((level) => level.code === code)?.name_ru ?? "" })}
+      />
       <IntakeSelectField
         label="Вид образования"
         value={item.education_type}
@@ -68,19 +92,17 @@ function EducationRowEditor({
         testId={`intake-education-institution-${index}`}
         onChange={(value) => onPatch({ institution: value })}
       />
-      <IntakeDateField
+      <IntakeEducationDateField
         label="Дата поступления"
         value={item.year_from}
         readOnly={readOnly}
-        kind="period"
         testId={`intake-education-year-from-${index}`}
         onChange={(value) => onPatch({ year_from: value })}
       />
-      <IntakeDateField
+      <IntakeEducationDateField
         label="Дата окончания"
         value={item.year_to}
         readOnly={readOnly}
-        kind="period"
         testId={`intake-education-year-to-${index}`}
         onChange={(value) => onPatch({ year_to: value })}
       />
@@ -129,6 +151,7 @@ function EducationRowEditor({
 function EducationSummaryCells({ item }: { item: IntakeEducation }) {
   return (
     <>
+      <td className="px-3 py-2 align-top text-sm">{intakeEducationCellValue(item.education_level_name)}</td>
       <td className="px-3 py-2 align-top text-sm">{intakeEducationCellValue(item.institution)}</td>
       <td className="whitespace-nowrap px-3 py-2 align-top text-sm">
         {formatIntakeEducationPeriodCell(item.year_from, item.year_to)}
@@ -151,6 +174,7 @@ function EducationMobileCard({
   onEdit,
   onDelete,
   onPatch,
+  levels,
 }: {
   row: IntakeEducationRow;
   readOnly?: boolean;
@@ -158,6 +182,7 @@ function EducationMobileCard({
   onEdit: () => void;
   onDelete: () => void;
   onPatch: (patch: Partial<IntakeEducation>) => void;
+  levels: IntakeEducationLevel[];
 }) {
   const { item, index } = row;
   return (
@@ -169,6 +194,7 @@ function EducationMobileCard({
         <div className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
           {intakeEducationCellValue(item.institution)}
         </div>
+        <div className="text-sm text-zinc-600 dark:text-zinc-400">{intakeEducationCellValue(item.education_level_name)}</div>
         <div className="text-sm text-zinc-600 dark:text-zinc-400">
           {formatIntakeEducationPeriodCell(item.year_from, item.year_to)}
         </div>
@@ -192,7 +218,7 @@ function EducationMobileCard({
         </div>
       </div>
       {expanded ? (
-        <EducationRowEditor item={item} index={index} readOnly={readOnly} onPatch={onPatch} />
+        <EducationRowEditor item={item} index={index} readOnly={readOnly} onPatch={onPatch} levels={levels} />
       ) : null}
     </div>
   );
@@ -203,8 +229,20 @@ export default function IntakeEducationTable({
   onChange,
   readOnly = false,
   focusTestId = null,
+  mode = "public",
+  intakeToken,
 }: Props) {
   const [expandedIndex, setExpandedIndex] = React.useState<number | null>(null);
+  const [levels, setLevels] = React.useState<IntakeEducationLevel[]>([]);
+  const [levelsError, setLevelsError] = React.useState(false);
+  React.useEffect(() => {
+    if (mode === "public" && !intakeToken) return;
+    let active = true;
+    void fetchIntakeEducationLevels(mode, intakeToken)
+      .then((items) => { if (active) { setLevels(items); setLevelsError(false); } })
+      .catch(() => { if (active) setLevelsError(true); });
+    return () => { active = false; };
+  }, [mode, intakeToken]);
   const normalizedItems = React.useMemo(
     () => items.map((item) => normalizeIntakeEducationEntry(item)),
     [items],
@@ -231,9 +269,16 @@ export default function IntakeEducationTable({
   }
 
   function handleAdd() {
+    const emptyIndex = items.findIndex((item) => isIntakeListRowEmpty("education", item));
+    if (emptyIndex >= 0) {
+      setExpandedIndex(emptyIndex);
+      focusIntakeListEditor(`intake-education-editor-${emptyIndex}`);
+      return;
+    }
     const nextItems = [...items, emptyIntakeEducationEntry()];
     onChange(nextItems);
     setExpandedIndex(nextItems.length - 1);
+    focusIntakeListEditor(`intake-education-editor-${nextItems.length - 1}`);
   }
 
   function toggleExpand(index: number) {
@@ -242,6 +287,7 @@ export default function IntakeEducationTable({
 
   return (
     <div className="space-y-4" data-testid="intake-education-table">
+      {levelsError ? <p role="alert" className="text-sm text-red-600">Не удалось загрузить уровни образования. Обновите страницу и попробуйте снова.</p> : null}
       {items.length === 0 ? (
         <p className="text-sm text-zinc-500" data-testid="intake-education-empty">
           Записей пока нет.
@@ -253,6 +299,7 @@ export default function IntakeEducationTable({
               <table className="min-w-full divide-y divide-zinc-200 dark:divide-zinc-800">
                 <thead className="bg-zinc-50 dark:bg-zinc-900/60">
                   <tr>
+                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500">Уровень</th>
                     <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-zinc-500">
                       Учебное заведение
                     </th>
@@ -293,12 +340,13 @@ export default function IntakeEducationTable({
                       </tr>
                       {visibleExpandedIndex === index ? (
                         <tr data-testid={`intake-education-expanded-${index}`}>
-                          <td colSpan={6} className="p-0">
+                          <td colSpan={7} className="p-0">
                             <EducationRowEditor
                               item={item}
                               index={index}
                               readOnly={readOnly}
                               onPatch={(patch) => patchRow(index, patch)}
+                              levels={levels}
                             />
                           </td>
                         </tr>
@@ -320,6 +368,7 @@ export default function IntakeEducationTable({
                 onEdit={() => toggleExpand(row.index)}
                 onDelete={() => handleDelete(row.index)}
                 onPatch={(patch) => patchRow(row.index, patch)}
+                levels={levels}
               />
             ))}
           </div>

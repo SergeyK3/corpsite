@@ -310,6 +310,9 @@ describe("intakePdfHtmlDocument", () => {
     expect(html).toContain(`class="intake-pdf-section ${INTAKE_PDF_SECTION_FLOW_CLASS}"`);
     expect(html).toContain('data-testid="intake-pdf-section-additional"');
     expect(html.indexOf('data-testid="intake-pdf-section-military"')).toBeLessThan(
+      html.indexOf('data-testid="intake-pdf-section-relatives"'),
+    );
+    expect(html.indexOf('data-testid="intake-pdf-section-military"')).toBeLessThan(
       html.indexOf('data-testid="intake-pdf-section-additional"'),
     );
     expect(INTAKE_PDF_DOCUMENT_CSS).toMatch(

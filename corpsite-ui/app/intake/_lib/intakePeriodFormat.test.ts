@@ -64,13 +64,13 @@ describe("intakePeriodFormat", () => {
     ).toBe("ООО Альфа — Инженер: 15.01.2020 — 01.08.2024");
   });
 
-  it("shows incomplete legacy periods on review step", () => {
+  it("shows year-only education periods on review step", () => {
     expect(
       formatIntakeEducationReviewLine({
         institution: "КазНУ",
         year_from: "2014",
         year_to: "2018",
       }),
-    ).toBe("КазНУ: 2014 (уточните дату) — 2018 (уточните дату)");
+    ).toBe("КазНУ: 2014–2018");
   });
 });

@@ -2,6 +2,7 @@
 import PersonnelOrderDateFilter from "./PersonnelOrderDateFilter";
 
 import * as React from "react";
+import { apiFetchJson } from "@/lib/api";
 import ExportExcelButton from "@/components/ExportExcelButton";
 import { allExportPages, type ExcelTable } from "@/lib/tableExport";
 import { formatPersonnelOrderDate, formatPersonnelOrderNumber } from "../_lib/personnelOrdersApi.client";
@@ -15,6 +16,7 @@ import { getEmployee, getEmployees } from "@/app/directory/employees/_lib/api.cl
 import { mapEmployeesResponseToSearchOptions, type EmployeeSearchOption } from "../_lib/personnelOrderEmployeeSearch";
 
 import PersonnelOrderCreateDialog from "./PersonnelOrderCreateDialog";
+import ElectronicHireApplicationDrawer from "./ElectronicHireApplicationDrawer";
 import PersonnelOrderDetailDrawer from "./PersonnelOrderDetailDrawer";
 import { PersonnelOrdersTable } from "./PersonnelOrdersTable";
 import {
@@ -70,6 +72,10 @@ export default function PersonnelOrdersPageClient() {
     const numeric = Number(raw);
     return Number.isFinite(numeric) && numeric > 0 ? numeric : null;
   }, [searchParams]);
+  const requestedApplicationId = React.useMemo(() => {
+    const value = Number(searchParams.get("application_id"));
+    return Number.isInteger(value) && value > 0 ? value : null;
+  }, [searchParams]);
   // `items` is the previous deep-link value for the document correction tab.
   // The drawer resolves it to Corrections for REGISTERED/SIGNED and to Data
   // for all other states after loading the order.
@@ -85,6 +91,12 @@ export default function PersonnelOrdersPageClient() {
   const [selectedOrderId, setSelectedOrderId] = React.useState<number | null>(null);
   const [drawerOpen, setDrawerOpen] = React.useState(false);
   const [createOpen, setCreateOpen] = React.useState(false);
+  const [applicationOpen, setApplicationOpen] = React.useState(false);
+  React.useEffect(() => {
+    if (requestedApplicationId != null) setApplicationOpen(true);
+  }, [requestedApplicationId]);
+  const [canResolvePositions, setCanResolvePositions] = React.useState(false);
+  React.useEffect(() => { void apiFetchJson<{can_resolve: boolean}>("/directory/electronic-hire/position-reconciliation/capabilities").then(result => setCanResolvePositions(result.can_resolve)).catch(() => {}); }, []);
   const [toast, setToast] = React.useState<string | null>(null);
   const [employeeQuery, setEmployeeQuery] = React.useState("");
   const [filterResetKey, setFilterResetKey] = React.useState(0);
@@ -284,14 +296,16 @@ export default function PersonnelOrdersPageClient() {
             Журнал приказов: создание черновиков, регистрация и применение кадровых изменений
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setCreateOpen(true)}
-          className="rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
-          data-testid="personnel-order-create-button"
-        >
-          Создать приказ
-        </button>
+        <div className="flex flex-wrap gap-2">
+          {canResolvePositions && <a href="/directory/personnel/position-reconciliation" className="rounded-lg border border-amber-500 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-950">Должности требуют сопоставления</a>}
+          <a href="/directory/personnel/hire-approvals" className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium dark:border-zinc-700">Визы руководителя</a>
+          <button type="button" onClick={() => setCreateOpen(true)}
+            className="rounded-lg border border-zinc-300 px-3 py-2 text-sm font-medium dark:border-zinc-700"
+            data-testid="personnel-order-create-button">Создать приказ</button>
+          <button type="button" onClick={() => setApplicationOpen(true)}
+            className="rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white dark:bg-zinc-100 dark:text-zinc-900"
+            data-testid="electronic-hire-open-button">Сформировать заявление</button>
+        </div>
       </div>
 
       {toast ? (
@@ -461,6 +475,7 @@ export default function PersonnelOrdersPageClient() {
         onClose={closeDrawer}
         onChanged={handleChanged}
         hirePersonId={hirePersonId}
+        autoOpenHireItem={searchParams.get("edit_hire_item") === "1"}
         initialTab={drawerInitialTab}
         allowDeletedTombstone={Boolean(returnTo?.startsWith("/admin/system"))}
       />
@@ -473,6 +488,7 @@ export default function PersonnelOrdersPageClient() {
         initialEmployeeQuery={filters.q}
         initialOrgUnitId={filters.org_unit_id}
       />
+      <ElectronicHireApplicationDrawer open={applicationOpen} initialApplicationId={requestedApplicationId} onClose={() => setApplicationOpen(false)} />
 
     </div>
   );

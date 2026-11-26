@@ -837,6 +837,8 @@ def apply_personnel_order_in_conn(
     items = _fetch_active_items(conn, order_id)
     if not items:
         raise PersonnelOrderValidationError("At least one active order item is required to apply.")
+    from app.services.personnel_orders_command_service import _require_hire_approval_for_order
+    _require_hire_approval_for_order(conn, order_id)
     evidence_changed = any(
         str(item.get("item_type_code") or "").strip().upper() == ORDER_TYPE_HIRE
         and item.get("employee_id") is None
@@ -944,6 +946,8 @@ def precheck_order_hire_apply(order_id: int) -> OrderHireApplyPrecheck:
             not already_applied
             and order_type_code == ORDER_TYPE_HIRE
         ):
+            from app.services.personnel_orders_command_service import _require_hire_approval_for_order
+            _require_hire_approval_for_order(conn, order_id)
             if linked_application_id is not None:
                 from app.personnel_applications.application.application_apply_service import (
                     validate_linked_application_for_order_hire_precheck,

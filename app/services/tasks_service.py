@@ -603,8 +603,12 @@ def load_task_full(conn, *, task_id: int) -> Optional[Dict[str, Any]]:
                 er.code AS executor_role_code,
                 er.name AS executor_role_name,
                 er.name AS executor_role_name_ru,
-                ex.executor_user_id,
-                ex.executor_name,
+                COALESCE(h.head_user_id, ex.executor_user_id) AS executor_user_id,
+                COALESCE(hu.full_name, ex.executor_name) AS executor_name,
+                h.application_id AS electronic_hire_application_id,
+                h.head_user_id AS electronic_hire_head_user_id,
+                h.decision AS electronic_hire_decision,
+                h.explanation AS electronic_hire_explanation,
                 t.assignment_scope,
                 t.status_id,
                 t.task_kind,
@@ -630,6 +634,8 @@ def load_task_full(conn, *, task_id: int) -> Optional[Dict[str, Any]]:
 
                 tr.current_comment AS report_current_comment
             FROM public.tasks t
+            LEFT JOIN public.electronic_hire_approval_tasks h ON h.task_id=t.task_id
+            LEFT JOIN public.users hu ON hu.user_id=h.head_user_id
             LEFT JOIN public.task_statuses ts ON ts.status_id = t.status_id
             LEFT JOIN public.roles er ON er.role_id = t.executor_role_id
             LEFT JOIN public.regular_tasks rt ON rt.regular_task_id = t.regular_task_id
@@ -817,6 +823,9 @@ def _is_task_visible_to_user(
 ) -> bool:
     if is_system_admin_role_id(current_role_id):
         return True
+
+    if str(task_row.get("source_kind") or "") == "electronic_hire":
+        return int(task_row.get("electronic_hire_head_user_id") or 0) == int(current_user_id)
 
     if _is_initiator(current_user_id=current_user_id, task_row=task_row):
         return True
@@ -1110,6 +1119,9 @@ def attach_allowed_actions(
     current_role_id: int,
 ) -> Dict[str, Any]:
     t = dict(task)
+    if str(t.get("source_kind") or "") == "electronic_hire":
+        t["allowed_actions"] = []
+        return t
     t["allowed_actions"] = _allowed_actions_for_user(
         task_row=t,
         current_user_id=current_user_id,

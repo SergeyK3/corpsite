@@ -6,6 +6,7 @@ import {
   buildIntakePublicUrl,
   copyTextToClipboard,
 } from "../_lib/personnelApplicantWorkflow";
+import { INTAKE_CANDIDATE_MEMO_TEXT } from "./PersonnelApplicationIntakeMemo";
 
 type Props = {
   intakeUrlPath: string | null | undefined;
@@ -14,6 +15,8 @@ type Props = {
   openFormButtonTestId?: string;
   copyNoticeTestId?: string;
   actionsDisabled?: boolean;
+  publicUrl?: string | null;
+  copyButtonLabel?: string;
 };
 
 export default function PersonnelApplicationIntakeLinkPanel({
@@ -23,10 +26,12 @@ export default function PersonnelApplicationIntakeLinkPanel({
   openFormButtonTestId = "intake-open-form-button",
   copyNoticeTestId = "intake-copy-notice",
   actionsDisabled = false,
+  publicUrl,
+  copyButtonLabel = "Скопировать ссылку",
 }: Props) {
   const [copyNotice, setCopyNotice] = React.useState<string | null>(null);
   const path = String(intakeUrlPath || "").trim();
-  const activeLinkUrl = buildIntakePublicUrl(path || null);
+  const activeLinkUrl = publicUrl === undefined ? buildIntakePublicUrl(path || null) : publicUrl;
 
   React.useEffect(() => {
     if (!copyNotice) return;
@@ -42,6 +47,12 @@ export default function PersonnelApplicationIntakeLinkPanel({
     setCopyNotice(copied ? "Ссылка скопирована" : "Не удалось скопировать ссылку");
   }
 
+  async function handleCopyLinkWithMemo() {
+    if (!activeLinkUrl) return;
+    const copied = await copyTextToClipboard(`${INTAKE_CANDIDATE_MEMO_TEXT}\n\nОткрыть анкету: ${activeLinkUrl}`);
+    setCopyNotice(copied ? "Ссылка с памяткой скопирована" : "Не удалось скопировать ссылку с памяткой");
+  }
+
   function handleOpenForm() {
     if (!activeLinkUrl) return;
     window.open(activeLinkUrl, "_blank", "noopener,noreferrer");
@@ -52,7 +63,7 @@ export default function PersonnelApplicationIntakeLinkPanel({
       <div className="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2 text-sm dark:border-sky-900 dark:bg-sky-950/30">
         <p className="font-medium text-sky-900 dark:text-sky-200">Ссылка для претендента</p>
         <code className="mt-1 block break-all text-xs text-sky-800 dark:text-sky-300">
-          {activeLinkUrl || path}
+          {activeLinkUrl || "Публичный адрес этого стенда не настроен. Ссылку пока нельзя скопировать."}
         </code>
         {copyNotice ? (
           <p className="mt-1 text-xs text-emerald-700 dark:text-emerald-300" data-testid={copyNoticeTestId}>
@@ -64,12 +75,21 @@ export default function PersonnelApplicationIntakeLinkPanel({
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
-          disabled={actionsDisabled}
+          disabled={actionsDisabled || !activeLinkUrl}
           onClick={() => void handleCopyLink()}
           className="rounded-lg border border-sky-300 px-3 py-1.5 text-sm text-sky-900 hover:bg-sky-50 disabled:opacity-50 dark:border-sky-900 dark:text-sky-200 dark:hover:bg-sky-950/40"
           data-testid={copyButtonTestId}
         >
-          Скопировать ссылку
+          {copyButtonLabel}
+        </button>
+        <button
+          type="button"
+          disabled={actionsDisabled || !activeLinkUrl}
+          onClick={() => void handleCopyLinkWithMemo()}
+          className="rounded-lg border border-sky-300 px-3 py-1.5 text-sm text-sky-900 hover:bg-sky-50 disabled:opacity-50 dark:border-sky-900 dark:text-sky-200 dark:hover:bg-sky-950/40"
+          data-testid="intake-copy-link-with-memo-button"
+        >
+          Скопировать ссылку с памяткой
         </button>
         {showOpenFormButton ? (
           <button

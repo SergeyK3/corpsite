@@ -62,7 +62,7 @@ def _mapping_to_snapshot(row: RowMapping | dict[str, Any]) -> PersonnelApplicati
     rate = row.get("intended_employment_rate")
     return PersonnelApplicationSnapshot(
         application_id=int(row["application_id"]),
-        person_id=int(row["person_id"]),
+        person_id=int(row["person_id"]) if row["person_id"] is not None else None,
         status=str(row["status"]),
         application_received_at=row["application_received_at"],
         application_source=str(row["application_source"]),

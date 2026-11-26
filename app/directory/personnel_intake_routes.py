@@ -39,6 +39,7 @@ from app.directory.rbac import require_personnel_admin_or_403
 from app.personnel_applications.domain.errors import PersonnelApplicationNotFoundError
 from app.personnel_intake.application.hr_link_access_service import get_hr_intake_link_display
 from app.personnel_intake.application.intake_service import (
+    ensure_on_behalf_intake_draft,
     get_hr_intake_draft,
     get_intake_summary,
     issue_intake_link,
@@ -299,6 +300,38 @@ def get_intake_on_behalf_edit_session(
         raise HTTPException(status_code=404, detail=str(exc))
     except PersonnelIntakeNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise as_http500(exc)
+
+
+@router.post("/{application_id}/intake/draft/on-behalf-open", response_model=IntakeOnBehalfEditSessionOut)
+def post_intake_on_behalf_open(
+    application_id: int = Path(..., ge=1),
+    user: dict[str, Any] = Depends(get_current_user),
+) -> IntakeOnBehalfEditSessionOut:
+    require_personnel_admin_or_403(user)
+    try:
+        with engine.begin() as conn:
+            ensure_on_behalf_intake_draft(
+                conn, application_id=application_id, actor_user_id=_require_user_id(user)
+            )
+            session = load_on_behalf_edit_session(conn, application_id)
+        return IntakeOnBehalfEditSessionOut(
+            application_id=session.application_id,
+            application_status=session.application_status,
+            draft=draft_session_to_out(
+                draft=session.draft, link=session.link, read_only=not session.editable
+            ),
+            editable=session.editable,
+            blocked_reason=session.blocked_reason,
+            reason_code=session.reason_code,
+        )
+    except PersonnelApplicationNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except PersonnelIntakeConflictError as exc:
+        raise HTTPException(status_code=409, detail={"code": exc.code, "message": str(exc)})
     except HTTPException:
         raise
     except Exception as exc:

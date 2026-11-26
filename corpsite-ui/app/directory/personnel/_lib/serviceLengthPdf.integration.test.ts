@@ -30,7 +30,7 @@ it.skipIf(process.env.SERVICE_LENGTH_PDF_TEST !== "1").each(["DIRECTORY", "MANUA
   });
   try {
     for (const language of ["ru", "kk", "kk-ru"]) {
-      const response = await GET(new Request(`http://localhost/directory/personnel/orders/${browser.orderId}/pdf?language=${language}`, { headers: { authorization: `Bearer ${token}` } }), { params: { orderId: String(browser.orderId) } });
+      const response = await GET(new Request(`http://localhost/directory/personnel/orders/${browser.orderId}/pdf?language=${language}`, { headers: { authorization: `Bearer ${token}` } }), { params: Promise.resolve({ orderId: String(browser.orderId) }) });
       expect(response.status).toBe(200);
       expect(response.headers.get("Content-Type")).toBe("application/pdf");
       const pdf = Buffer.from(await response.arrayBuffer());

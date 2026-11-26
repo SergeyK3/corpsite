@@ -57,13 +57,14 @@ def build_initial_intake_draft_payload(conn: Connection, application_id: int) ->
             SELECT
                 pa.contact_mobile_phone,
                 pa.contact_email,
+                p.iin,
                 p.full_name,
                 p.last_name,
                 p.first_name,
                 p.middle_name,
                 p.birth_date
             FROM public.personnel_applications pa
-            JOIN public.persons p ON p.person_id = pa.person_id
+            LEFT JOIN public.persons p ON p.person_id = pa.person_id
             WHERE pa.application_id = :application_id
             LIMIT 1
             """
@@ -81,6 +82,7 @@ def build_initial_intake_draft_payload(conn: Connection, application_id: int) ->
     )
 
     payload["personal"]["last_name"] = last_name
+    payload["personal"]["iin"] = str(row.get("iin") or "").strip()
     payload["personal"]["first_name"] = first_name
     payload["personal"]["middle_name"] = middle_name
     payload["personal"]["birth_date"] = _format_birth_date(row.get("birth_date"))

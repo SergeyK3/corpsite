@@ -5,7 +5,7 @@ import {
   type IntakeEducationDocumentType,
 } from "./intakeApi.client";
 import { normalizeIntakeRecordId } from "./intakeRecordId";
-import { formatIntakePeriodForDisplay, formatIntakePeriodRange } from "./intakePeriodFormat";
+import { formatIntakeEducationPeriod } from "./intakeEducationDate";
 
 export type IntakeEducationRow = {
   item: IntakeEducation;
@@ -38,6 +38,8 @@ export function normalizeIntakeEducationEntry(
     qualification_original: String(item.qualification_original ?? item.qualification ?? ""),
     document_number: String(item.document_number ?? item.diploma_number ?? ""),
     education_type: (item.education_type as IntakeEducation["education_type"]) ?? "basic",
+    education_level_code: String(item.education_level_code ?? ""),
+    education_level_name: String(item.education_level_name ?? ""),
     institution: String(item.institution ?? ""),
     year_from: String(item.year_from ?? ""),
     year_to: String(item.year_to ?? ""),
@@ -61,10 +63,7 @@ export function formatIntakeEducationPeriodCell(
   yearFrom: string | null | undefined,
   yearTo: string | null | undefined,
 ): string {
-  const from = formatIntakePeriodForDisplay(yearFrom);
-  const to = formatIntakePeriodForDisplay(yearTo);
-  if (!from && !to) return "—";
-  return formatIntakePeriodRange(yearFrom, yearTo);
+  return formatIntakeEducationPeriod(yearFrom, yearTo);
 }
 
 export function formatIntakeEducationSpecialtyCell(

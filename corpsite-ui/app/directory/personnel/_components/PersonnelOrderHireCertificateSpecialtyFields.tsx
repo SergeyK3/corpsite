@@ -5,7 +5,7 @@ import {apiFetchJson} from "@/lib/api";
 import {matchesMedicalSpecialtyWords} from "../_lib/medicalSpecialtySearch";
 import {certificateSpecialtyName, type HireCertificate} from "../_lib/personnelOrderHireDetails";
 
-type Row = {medical_specialty_id: number; name: string; name_kk: string | null; is_active: boolean; search_aliases?: string[]};
+type Row = {medical_specialty_id: number; code?: string; name: string; name_kk: string | null; is_active: boolean; search_aliases?: string[]};
 type Locale = "ru" | "kk";
 
 export default function PersonnelOrderHireCertificateSpecialtyFields({value, onChange, disabled = false}: {
@@ -115,7 +115,7 @@ export default function PersonnelOrderHireCertificateSpecialtyFields({value, onC
             aria-selected={row.medical_specialty_id === value?.specialty?.medical_specialty_id} tabIndex={-1}
             onMouseDown={event => event.preventDefault()} onClick={() => select(row)}
             className={`block w-full px-3 py-2 text-left hover:bg-zinc-100 dark:hover:bg-zinc-800 ${rowIndex === index ? 'bg-zinc-100 dark:bg-zinc-800' : ''}`}>
-            {locale === "ru" ? row.name : row.name_kk || "нет названия KK"}
+            {locale === "ru" ? `${row.name}${row.name_kk ? "" : ` · ${row.code || `#${row.medical_specialty_id}`}`}` : row.name_kk || `${row.name} · нет названия KK · ${row.code || `#${row.medical_specialty_id}`}`}
           </button>)}
           {!loading && !error && !found.length && <p className="p-2">Совпадений нет. Можно сохранить введённое название</p>}
         </div>, document.body)}

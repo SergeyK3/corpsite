@@ -2,6 +2,9 @@
 
 import * as React from "react";
 
+import { isIntakeListRowEmpty } from "../_lib/intakeEmptyRows";
+import { focusIntakeListEditor } from "../_lib/intakeListFocus";
+
 import { IntakeDateField, IntakeSelectField, IntakeTextField } from "./IntakeFormFields";
 import IntakeListRowActionsMenu from "./IntakeListRowActionsMenu";
 import {
@@ -213,9 +216,16 @@ export default function IntakeRelativesTable({
   }
 
   function handleAdd() {
+    const emptyIndex = items.findIndex((item) => isIntakeListRowEmpty("relatives", item));
+    if (emptyIndex >= 0) {
+      setExpandedIndex(emptyIndex);
+      focusIntakeListEditor(`intake-relative-editor-${emptyIndex}`);
+      return;
+    }
     const nextItems = [...items, emptyIntakeRelativeEntry()];
     onChange(nextItems);
     setExpandedIndex(nextItems.length - 1);
+    focusIntakeListEditor(`intake-relative-editor-${nextItems.length - 1}`);
   }
 
   function toggleExpand(index: number) {

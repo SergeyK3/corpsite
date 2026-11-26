@@ -1,4 +1,5 @@
 import type { IntakeDraftPayload } from "./intakeApi.client";
+import { isIncompleteIntakeEducationDate, resolveIntakeEducationPeriodError } from "./intakeEducationDate";
 import { INTAKE_STEPS } from "./intakeApi.client";
 import { resolveIntakeAcademicDegreeDisplay, resolveIntakeAcademicTitleDisplay, resolveIntakeAwardNameDisplay, normalizeIntakeAcademicDegreeEntry, normalizeIntakeAcademicTitleEntry, normalizeIntakeAwardEntry } from "./intakeAdditional";
 import { formatIntakeFullName } from "./intakeContactHelpers";
@@ -96,7 +97,7 @@ export function collectIntakeDateValidationIssues(payload: IntakeDraftPayload): 
 
   payload.education?.forEach((item, index) => {
     const record = recordLabel(item.institution, `Запись ${index + 1}`);
-    if (isIncompletePersonnelDocumentDate(item.year_from)) {
+    if (isIncompleteIntakeEducationDate(item.year_from)) {
       pushIssue(issues, {
         field: `education[${index}].year_from`,
         stepId: "education",
@@ -104,7 +105,7 @@ export function collectIntakeDateValidationIssues(payload: IntakeDraftPayload): 
         message: formatIssueMessage("Образование", record, "дата поступления"),
       });
     }
-    if (isIncompletePersonnelDocumentDate(item.year_to)) {
+    if (isIncompleteIntakeEducationDate(item.year_to)) {
       pushIssue(issues, {
         field: `education[${index}].year_to`,
         stepId: "education",
@@ -112,7 +113,7 @@ export function collectIntakeDateValidationIssues(payload: IntakeDraftPayload): 
         message: formatIssueMessage("Образование", record, "дата окончания"),
       });
     }
-    if (resolveIntakePeriodRangeError(item.year_from, item.year_to)) {
+    if (resolveIntakeEducationPeriodError(item.year_from, item.year_to)) {
       pushIssue(issues, {
         field: `education[${index}].year_to`,
         stepId: "education",

@@ -714,7 +714,7 @@ describe("IntakePageClient", () => {
     expect(within(desktop).getByTestId("intake-education-year-to-0")).toHaveValue("30.06.2018");
   });
 
-  it("shows legacy year-only education values as needing clarification", async () => {
+  it("shows valid year-only education values without a warning", async () => {
     const payload = intakeApi.emptyIntakeDraftPayload();
     payload.current_step = "education";
     payload.education = [
@@ -745,8 +745,8 @@ describe("IntakePageClient", () => {
     expandEducationRow(0);
 
     const desktop = screen.getByTestId("intake-education-desktop-view");
-    expect(within(desktop).getByTestId("intake-education-year-from-0")).toHaveValue("2014 (уточните дату)");
-    expect(within(desktop).getByTestId("intake-education-year-from-0-hint")).toHaveTextContent("ДД.ММ.ГГГГ");
+    expect(within(desktop).getByTestId("intake-education-year-from-0")).toHaveValue("2014");
+    expect(within(desktop).queryByTestId("intake-education-year-from-0-hint")).not.toBeInTheDocument();
   });
 
   it("autosaves edited education date as canonical ISO without day shift", async () => {
@@ -869,7 +869,7 @@ describe("IntakePageClient", () => {
     expect(screen.getByTestId("intake-review-training-item-0")).toHaveTextContent("10.03.2021");
   });
 
-  it("blocks submit on review step when legacy year-only dates remain", async () => {
+  it("blocks submit on review step when a partial education year remains", async () => {
     const payload = intakeApi.emptyIntakeDraftPayload();
     payload.personal.last_name = "Петров";
     payload.personal.first_name = "Пётр";
@@ -880,7 +880,7 @@ describe("IntakePageClient", () => {
       intakeEducationFixture({
         education_type: "basic",
         institution: "КазНМУ",
-        year_from: "2014",
+        year_from: "201",
         year_to: "2018-06-30",
         specialty: "",
         qualification: "",
@@ -922,7 +922,7 @@ describe("IntakePageClient", () => {
       intakeEducationFixture({
         education_type: "basic",
         institution: "КазНМУ",
-        year_from: "2014",
+        year_from: "201",
         year_to: "2018-06-30",
         specialty: "",
         qualification: "",
@@ -964,7 +964,7 @@ describe("IntakePageClient", () => {
       intakeEducationFixture({
         education_type: "basic",
         institution: "КазНМУ",
-        year_from: "2014",
+        year_from: "201",
         year_to: "2018-06-30",
         specialty: "",
         qualification: "",
@@ -1049,6 +1049,7 @@ describe("IntakePageClient", () => {
 
   it("shows success screen after submit", async () => {
     const payload = intakeApi.emptyIntakeDraftPayload();
+    payload.personal.iin = "900520450019";
     payload.personal.last_name = "Сидоров";
     payload.personal.first_name = "Сидор";
     payload.personal.birth_date = "1990-05-20";

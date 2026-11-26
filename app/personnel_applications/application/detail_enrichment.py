@@ -17,8 +17,12 @@ def load_application_detail_enrichment(
         text(
             """
             SELECT
-                p.full_name,
-                p.iin,
+                COALESCE(CASE WHEN eh.candidate_checked_at IS NULL AND eh.preliminary_last_name IS NOT NULL THEN
+                             CONCAT_WS(' ', eh.preliminary_last_name, eh.preliminary_first_name,
+                                       NULLIF(eh.preliminary_middle_name, '')) END,
+                         p.full_name,
+                         eh.preliminary_full_name) AS full_name,
+                COALESCE(p.iin, eh.preliminary_iin) AS iin,
                 dg.group_name AS intended_org_group_name,
                 ou.name AS intended_org_unit_name,
                 pos.name AS intended_position_name,
@@ -28,7 +32,9 @@ def load_application_detail_enrichment(
                 ee.created_at AS hire_applied_at,
                 po.order_number AS personnel_order_number,
                 po.order_date AS personnel_order_date
-            FROM public.persons p
+            FROM public.personnel_applications pa
+            LEFT JOIN public.persons p ON p.person_id = pa.person_id
+            LEFT JOIN public.electronic_hire_applications eh ON eh.application_id = pa.application_id
             LEFT JOIN public.deps_group dg ON dg.group_id = :org_group_id
             LEFT JOIN public.org_units ou ON ou.unit_id = :org_unit_id
             LEFT JOIN public.positions pos ON pos.position_id = :position_id
@@ -43,12 +49,13 @@ def load_application_detail_enrichment(
                 LIMIT 1
             ) ee ON TRUE
             LEFT JOIN public.employees e ON e.employee_id = ee.employee_id
-            WHERE p.person_id = :person_id
+            WHERE pa.application_id = :application_id
             LIMIT 1
             """
         ),
         {
             "person_id": snapshot.person_id,
+            "application_id": snapshot.application_id,
             "org_group_id": snapshot.intended_org_group_id,
             "org_unit_id": snapshot.intended_org_unit_id,
             "position_id": snapshot.intended_position_id,

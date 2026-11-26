@@ -45,14 +45,14 @@ describe("intakeDateValidation", () => {
     expect(formatIntakeDateForDisplay("1990-05-20", "birth")).toBe("20.05.1990");
   });
 
-  it("blocks submit when any filled date field is incomplete", () => {
+  it("blocks submit when an education year is partial", () => {
     const payload = emptyIntakeDraftPayload();
     payload.personal.birth_date = "1990-05-20";
     payload.education = [
       intakeEducationFixture({
         education_type: "basic",
         institution: "КазНУ",
-        year_from: "2014",
+        year_from: "201",
         year_to: "2018-06-30",
         specialty: "",
         qualification: "",

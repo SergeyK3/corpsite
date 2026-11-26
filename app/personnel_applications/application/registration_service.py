@@ -22,6 +22,7 @@ from app.personnel_applications.domain.errors import (
 )
 from app.personnel_applications.domain.models import PersonnelApplicationCreatePayload
 from app.personnel_applications.domain.status import (
+    APPLICATION_SOURCE_ELECTRONIC,
     APPLICATION_SOURCE_PAPER,
     REGISTRATION_INITIAL_STATUS,
     VACANCY_CHECK_CONFIRMED_VISUALLY,
@@ -87,7 +88,7 @@ def _person_has_active_employee(conn: Connection, person_id: int) -> bool:
 
 
 def _find_person_by_iin(conn: Connection, iin: str) -> dict[str, Any] | None:
-    row = conn.execute(
+    rows = conn.execute(
         text(
             """
             SELECT person_id, full_name, person_status
@@ -95,12 +96,14 @@ def _find_person_by_iin(conn: Connection, iin: str) -> dict[str, Any] | None:
             WHERE iin = :iin
               AND person_status = 'active'
             ORDER BY person_id ASC
-            LIMIT 1
+            LIMIT 2
             """
         ),
         {"iin": iin},
-    ).mappings().first()
-    return dict(row) if row else None
+    ).mappings().all()
+    if len(rows) > 1:
+        raise PersonnelApplicationValidationError("Несколько карточек с этим ИИН. Требуется ручная проверка совпадений.")
+    return dict(rows[0]) if rows else None
 
 
 def _load_hr_relationship_context(conn: Connection, person_id: int) -> str | None:
@@ -282,13 +285,16 @@ def register_personnel_application(
     idempotency_key: str | None,
     registered_by_user_id: int,
     actor_id: str,
+    application_source: str = APPLICATION_SOURCE_PAPER,
 ) -> RegistrationResult:
     try:
         iin = normalize_and_validate_iin(iin_raw)
     except IinValidationError as exc:
         raise PersonnelApplicationValidationError(str(exc)) from exc
 
-    if vacancy_check_status != VACANCY_CHECK_CONFIRMED_VISUALLY:
+    if application_source not in {APPLICATION_SOURCE_PAPER, APPLICATION_SOURCE_ELECTRONIC}:
+        raise PersonnelApplicationValidationError("Unknown application source.")
+    if application_source == APPLICATION_SOURCE_PAPER and vacancy_check_status != VACANCY_CHECK_CONFIRMED_VISUALLY:
         raise VacancyCheckGateError()
 
     # Serialize all canonical Person-IIN decisions before the first conflict reread/write.
@@ -357,7 +363,7 @@ def register_personnel_application(
     payload = PersonnelApplicationCreatePayload(
         person_id=person_id,
         application_received_at=application_received_at,
-        application_source=APPLICATION_SOURCE_PAPER,
+        application_source=application_source,
         vacancy_check_status=vacancy_check_status,
         vacancy_checked_at=checked_at,
         vacancy_checked_by_user_id=vacancy_checked_by_user_id or registered_by_user_id,

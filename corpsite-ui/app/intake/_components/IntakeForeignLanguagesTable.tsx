@@ -2,6 +2,9 @@
 
 import * as React from "react";
 
+import { isIntakeListRowEmpty } from "../_lib/intakeEmptyRows";
+import { focusIntakeListEditor } from "../_lib/intakeListFocus";
+
 import { IntakeSelectField } from "./IntakeFormFields";
 import IntakeListRowActionsMenu from "./IntakeListRowActionsMenu";
 import IntakeOptionalListSection from "./IntakeOptionalListSection";
@@ -105,9 +108,16 @@ export default function IntakeForeignLanguagesTable({
 
   function handleAdd() {
     onDeclaredEmptyChange(false);
+    const emptyIndex = items.findIndex((item) => isIntakeListRowEmpty("foreign_languages", item));
+    if (emptyIndex >= 0) {
+      setExpandedIndex(emptyIndex);
+      focusIntakeListEditor(`intake-foreign-language-editor-${emptyIndex}`);
+      return;
+    }
     const nextItems = [...items, emptyIntakeForeignLanguageEntry()];
     onChange(nextItems);
     setExpandedIndex(nextItems.length - 1);
+    focusIntakeListEditor(`intake-foreign-language-editor-${nextItems.length - 1}`);
   }
 
   function handleDeclaredEmptyChange(nextDeclaredEmpty: boolean) {
@@ -188,6 +198,28 @@ export default function IntakeForeignLanguagesTable({
                   </tbody>
                 </table>
               </div>
+            </div>
+            <div className="space-y-3 md:hidden" data-testid="intake-foreign-languages-mobile-view">
+              {rows.map(({ item, index }) => (
+                <div key={`mobile-foreign-language-${index}`} className="rounded-xl border border-zinc-200 dark:border-zinc-800" data-testid={`intake-foreign-language-card-${index}`}>
+                  <div className="flex items-start justify-between gap-3 p-3">
+                    <div className="min-w-0 text-sm">
+                      <p className="font-medium text-zinc-900 dark:text-zinc-100">{resolveIntakeForeignLanguageDisplay(item.language)}</p>
+                      <p className="text-zinc-600 dark:text-zinc-400">{intakeAdditionalCellValue(item.proficiency)}</p>
+                    </div>
+                    <IntakeListRowActionsMenu
+                      index={index}
+                      readOnly={readOnly}
+                      testIdPrefix="intake-foreign-language-mobile"
+                      onEdit={() => setExpandedIndex((current) => (current === index ? null : index))}
+                      onDelete={() => handleDelete(index)}
+                    />
+                  </div>
+                  {visibleExpandedIndex === index ? (
+                    <ForeignLanguageRowEditor item={item} index={index} readOnly={readOnly} onPatch={(patch) => patchRow(index, patch)} />
+                  ) : null}
+                </div>
+              ))}
             </div>
           </>
         )}

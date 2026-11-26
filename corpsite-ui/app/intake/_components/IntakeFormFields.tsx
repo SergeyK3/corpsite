@@ -2,9 +2,22 @@
 
 import * as React from "react";
 
+const IntakeFieldErrorsContext = React.createContext<Record<string, string>>({});
+
+export function IntakeFieldErrorsProvider({ errors, children }: { errors: Record<string, string>; children: React.ReactNode }) {
+  return <IntakeFieldErrorsContext.Provider value={errors}>{children}</IntakeFieldErrorsContext.Provider>;
+}
+
+export function useIntakeFieldError(testId?: string): string | undefined {
+  const errors = React.useContext(IntakeFieldErrorsContext);
+  return testId ? errors[testId] : undefined;
+}
+
 import PersonnelDayDateField from "@/lib/PersonnelDayDateField";
+import { formatIntakeEducationDate, isIncompleteIntakeEducationDate, parseIntakeEducationDate } from "../_lib/intakeEducationDate";
 import {
   formatIntakePeriodForDisplay,
+  formatTypedIntakePeriodDate,
   parseIntakePeriodInput,
 } from "../_lib/intakePeriodFormat";
 import {
@@ -47,6 +60,7 @@ export function IntakeSelectField<V extends string>({
   testId?: string;
   compact?: boolean;
 }) {
+  const error = useIntakeFieldError(testId);
   return (
     <label className="block">
       <span className={intakeFieldLabelClass(compact)}>
@@ -58,11 +72,12 @@ export function IntakeSelectField<V extends string>({
         disabled={readOnly}
         required={required}
         data-testid={testId}
+        aria-invalid={Boolean(error) || undefined}
         onChange={(e) => {
           const selected = options.find((option) => option.value === e.target.value);
           if (selected) onChange(selected.value);
         }}
-        className={intakeFieldControlClass(compact, "read-only:bg-zinc-50 dark:read-only:bg-zinc-900")}
+        className={intakeFieldControlClass(compact, `read-only:bg-zinc-50 dark:read-only:bg-zinc-900 ${error ? "border-red-500" : ""}`)}
       >
         {options.map((option) => (
           <option key={option.value} value={option.value}>
@@ -70,6 +85,7 @@ export function IntakeSelectField<V extends string>({
           </option>
         ))}
       </select>
+      {error ? <span className="mt-1 block text-xs text-red-700" data-testid={testId ? `${testId}-error` : undefined}>{error}</span> : null}
     </label>
   );
 }
@@ -85,6 +101,8 @@ export function IntakeTextField({
   maxLength,
   inputMode,
   compact = false,
+  hint,
+  explicitError,
 }: {
   label: string;
   value: string;
@@ -96,7 +114,10 @@ export function IntakeTextField({
   maxLength?: number;
   inputMode?: React.HTMLAttributes<HTMLInputElement>["inputMode"];
   compact?: boolean;
+  hint?: string;
+  explicitError?: string;
 }) {
+  const error = useIntakeFieldError(testId) || explicitError;
   return (
     <label className="block">
       <span className={intakeFieldLabelClass(compact)}>
@@ -109,11 +130,49 @@ export function IntakeTextField({
         readOnly={readOnly}
         required={required}
         data-testid={testId}
+        aria-invalid={Boolean(error) || undefined}
         maxLength={maxLength}
         inputMode={inputMode}
         onChange={(e) => onChange(e.target.value)}
-        className={intakeFieldControlClass(compact, "read-only:bg-zinc-50 dark:read-only:bg-zinc-900")}
+        className={intakeFieldControlClass(compact, `read-only:bg-zinc-50 dark:read-only:bg-zinc-900 ${error ? "border-red-500" : ""}`)}
       />
+      {hint ? <span className="mt-1 block text-xs text-zinc-500" data-testid={testId ? `${testId}-hint` : undefined}>{hint}</span> : null}
+      {error ? <span className="mt-1 block text-xs text-red-700" data-testid={testId ? `${testId}-error` : undefined}>{error}</span> : null}
+    </label>
+  );
+}
+
+export function IntakePhoneField({ value, onChange, readOnly }: {
+  value: string;
+  onChange: (value: string) => void;
+  readOnly?: boolean;
+}) {
+  const [touched, setTouched] = React.useState(false);
+  const fieldError = useIntakeFieldError("intake-mobile-phone");
+  const digits = value.replace(/\D/g, "");
+  const valid = value.trim().startsWith("+7") && /^[+0-9\s()-]+$/.test(value) && digits.length === 11;
+  const error = fieldError || (touched && !valid
+    ? value.trim() ? "Неверный номер. Введите +7 и 10 цифр номера" : "Укажите номер. Введите +7 и 10 цифр номера"
+    : null);
+  return (
+    <label className="block">
+      <span className={intakeFieldLabelClass(false)}>Мобильный телефон *</span>
+      <input
+        type="tel"
+        inputMode="tel"
+        autoComplete="tel"
+        value={value}
+        readOnly={readOnly}
+        required
+        data-testid="intake-mobile-phone"
+        aria-invalid={Boolean(error) || undefined}
+        onBlur={() => setTouched(true)}
+        onChange={(event) => onChange(event.target.value)}
+        className={`${intakeFieldControlClass(false, "read-only:bg-zinc-50 dark:read-only:bg-zinc-900")} ${error ? "border-red-500" : ""}`}
+      />
+      <span className={`mt-1 block whitespace-nowrap text-xs ${error ? "text-red-600" : "text-zinc-500"}`} data-testid="intake-mobile-phone-hint">
+        {error || "Введите +7 и 10 цифр номера"}
+      </span>
     </label>
   );
 }
@@ -136,6 +195,7 @@ export function IntakePeriodDateField({
   compact?: boolean;
 }) {
   const [focused, setFocused] = React.useState(false);
+  const error = useIntakeFieldError(testId);
   const [draft, setDraft] = React.useState("");
   const display = formatIntakePeriodForDisplay(value);
   const incomplete = isIncompleteIntakePeriodDate(value);
@@ -156,7 +216,7 @@ export function IntakePeriodDateField({
         value={focused ? draft : display}
         readOnly={readOnly}
         data-testid={testId}
-        aria-invalid={incomplete || undefined}
+        aria-invalid={Boolean(error) || incomplete || undefined}
         placeholder={INTAKE_DATE_PLACEHOLDER}
         onFocus={() => {
           setDraft(display);
@@ -168,12 +228,14 @@ export function IntakePeriodDateField({
           onChange(parseIntakePeriodInput(draft));
         }}
         onChange={(e) => {
-          const nextDraft = e.target.value;
+          const nextDraft = formatTypedIntakePeriodDate(e.target.value);
           setDraft(nextDraft);
           onChange(parseIntakePeriodInput(nextDraft));
         }}
         className={`${intakeFieldControlClass(compact, "read-only:bg-zinc-50 dark:read-only:bg-zinc-900")} ${
-          incomplete
+          error
+            ? "border-red-500"
+            : incomplete
             ? "border-amber-400 text-amber-900 dark:border-amber-700 dark:text-amber-200"
             : ""
         }`.trim()}
@@ -186,6 +248,42 @@ export function IntakePeriodDateField({
           {INTAKE_INCOMPLETE_DATE_HINT}
         </span>
       ) : null}
+      {error ? <span className="mt-1 block text-xs text-red-700" data-testid={testId ? `${testId}-error` : undefined}>{error}</span> : null}
+    </label>
+  );
+}
+
+export function IntakeEducationDateField({ label, value, onChange, readOnly, testId }: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  readOnly?: boolean;
+  testId?: string;
+}) {
+  const [focused, setFocused] = React.useState(false);
+  const [draft, setDraft] = React.useState("");
+  const display = formatIntakeEducationDate(value);
+  const incomplete = isIncompleteIntakeEducationDate(value);
+  const fieldError = useIntakeFieldError(testId);
+  React.useEffect(() => { if (!focused) setDraft(display); }, [display, focused]);
+  return (
+    <label className="block">
+      <span className={intakeFieldLabelClass(false)}>{label}</span>
+      <input
+        type="text"
+        inputMode="numeric"
+        value={focused ? draft : display}
+        readOnly={readOnly}
+        data-testid={testId}
+        aria-invalid={Boolean(fieldError) || incomplete || undefined}
+        placeholder="ГГГГ или ДД.ММ.ГГГГ"
+        onFocus={() => { setDraft(display); setFocused(true); }}
+        onBlur={() => { setFocused(false); onChange(parseIntakeEducationDate(draft)); }}
+        onChange={(event) => { setDraft(event.target.value); onChange(parseIntakeEducationDate(event.target.value)); }}
+        className={`${intakeFieldControlClass(false)} ${fieldError ? "border-red-500" : incomplete ? "border-amber-400" : ""}`}
+      />
+      {incomplete ? <span className="mt-1 block text-xs text-amber-700" data-testid={testId ? `${testId}-hint` : undefined}>Укажите год или полную дату в формате ДД.ММ.ГГГГ</span> : null}
+      {fieldError ? <span className="mt-1 block text-xs text-red-700" data-testid={testId ? `${testId}-error` : undefined}>{fieldError}</span> : null}
     </label>
   );
 }

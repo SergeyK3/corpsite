@@ -22,7 +22,16 @@ export const TASK_SOURCE_LABELS: Readonly<Record<string, string>> = {
   regular_task: "Регулярный шаблон",
   bot: "Telegram-бот",
   import: "Импорт",
+  electronic_hire: "Электронный приём",
 };
+
+export const PERSONNEL_PROCESS_LABELS: Readonly<Record<string, string>> = {
+  electronic_hire: "Приём на работу",
+};
+
+export function personnelProcessLabel(sourceKind: string | null | undefined): string | null {
+  return PERSONNEL_PROCESS_LABELS[String(sourceKind ?? "").trim().toLowerCase()] ?? null;
+}
 
 export const SCHEDULE_TYPE_LABELS: Readonly<Record<string, string>> = {
   daily: "Ежедневно",

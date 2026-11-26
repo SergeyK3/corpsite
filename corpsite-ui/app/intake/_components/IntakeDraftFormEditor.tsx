@@ -6,9 +6,10 @@ import IntakeAdditionalStep from "./IntakeAdditionalStep";
 import IntakeDictionaryCombobox from "./IntakeDictionaryCombobox";
 import IntakeEducationTable from "./IntakeEducationTable";
 import IntakeEmploymentBiographyTable from "./IntakeEmploymentBiographyTable";
-import { IntakeDateField, IntakeSelectField, IntakeTextField } from "./IntakeFormFields";
+import { IntakeDateField, IntakePhoneField, IntakeSelectField, IntakeTextField, IntakeFieldErrorsProvider } from "./IntakeFormFields";
 import IntakeMilitaryCombobox from "./IntakeMilitaryCombobox";
 import IntakePhotoUpload from "./IntakePhotoUpload";
+import type { IntakePhotoMutationResponse } from "../_lib/intakePhotoApi.client";
 import IntakeRelativesTable from "./IntakeRelativesTable";
 import IntakeReviewStep from "./IntakeReviewStep";
 import IntakeTrainingTable from "./IntakeTrainingTable";
@@ -55,6 +56,7 @@ function StepPersonal({
   mode = "public",
   intakeToken,
   applicationId,
+  onPhotoMutation,
 }: {
   payload: IntakeDraftPayload;
   onChange: (p: IntakeDraftPayload) => void;
@@ -62,6 +64,7 @@ function StepPersonal({
   mode?: "public" | "hr-on-behalf";
   intakeToken?: string;
   applicationId?: number;
+  onPhotoMutation?: (result: IntakePhotoMutationResponse) => Promise<void>;
 }) {
   const p = payload.personal;
   const set = (key: keyof typeof p, value: string) =>
@@ -80,8 +83,10 @@ function StepPersonal({
           payload={payload}
           readOnly={readOnly}
           onPayloadChange={onChange}
+          onPhotoMutation={onPhotoMutation}
         />
         <div className="grid min-w-0 flex-1 gap-4 sm:grid-cols-2">
+          <IntakeTextField label="ИИН" value={p.iin} onChange={(v) => set("iin", v)} readOnly={readOnly} required testId="intake-iin" />
           <IntakeTextField label="Фамилия" value={p.last_name} onChange={(v) => set("last_name", v)} readOnly={readOnly} required />
           <IntakeTextField label="Имя" value={p.first_name} onChange={(v) => set("first_name", v)} readOnly={readOnly} required />
           <IntakeTextField label="Отчество" value={p.middle_name} onChange={(v) => set("middle_name", v)} readOnly={readOnly} />
@@ -161,7 +166,7 @@ function StepContacts({
 
   return (
     <div className="grid gap-4">
-      <IntakeTextField label="Мобильный телефон" value={c.mobile_phone} onChange={(v) => set("mobile_phone", v)} readOnly={readOnly} required />
+      <IntakePhoneField value={c.mobile_phone} onChange={(v) => set("mobile_phone", v)} readOnly={readOnly} />
       <IntakeTextField label="Email" value={c.email} onChange={(v) => set("email", v)} readOnly={readOnly} type="email" />
       <IntakeTextField
         label="Адрес регистрации"
@@ -216,7 +221,7 @@ function StepMilitary({
   readOnly?: boolean;
 }) {
   const m = payload.military;
-  const composition = normalizeIntakeMilitaryComposition(m.composition);
+  const composition = normalizeIntakeMilitaryComposition(m.composition ?? "");
   const rankOptions = React.useMemo(
     () => getIntakeMilitaryRankOptions(composition),
     [composition],
@@ -234,7 +239,7 @@ function StepMilitary({
             ...payload,
             military: {
               ...m,
-              ...applyIntakeMilitaryCompositionChange(nextComposition, m.rank),
+              ...applyIntakeMilitaryCompositionChange(nextComposition, m.rank ?? ""),
             },
           })
         }
@@ -244,7 +249,7 @@ function StepMilitary({
       />
       <IntakeMilitaryCombobox
         label="Воинское звание"
-        value={m.rank}
+        value={m.rank ?? ""}
         onChange={(v) => set("rank", v)}
         options={rankOptions}
         readOnly={readOnly}
@@ -252,21 +257,21 @@ function StepMilitary({
         allowFreeText={composition === "other"}
         testId="intake-military-rank"
       />
-      <IntakeTextField label="Статус" value={m.status} onChange={(v) => set("status", v)} readOnly={readOnly} />
-      <IntakeTextField label="Категория" value={m.category} onChange={(v) => set("category", v)} readOnly={readOnly} />
+      <IntakeTextField label="Статус" value={m.status ?? ""} onChange={(v) => set("status", v)} readOnly={readOnly} />
+      <IntakeTextField label="Категория" value={m.category ?? ""} onChange={(v) => set("category", v)} readOnly={readOnly} />
       <IntakeTextField
         label="Номер ВУС"
-        value={m.specialty_code}
+        value={m.specialty_code ?? ""}
         onChange={(v) => set("specialty_code", sanitizeMilitarySpecialtyCodeInput(v))}
         readOnly={readOnly}
         testId="intake-military-specialty-code"
         maxLength={7}
         inputMode="numeric"
       />
-      <IntakeTextField label="Категория годности" value={m.fitness_category} onChange={(v) => set("fitness_category", v)} readOnly={readOnly} />
-      <IntakeTextField label="Военкомат" value={m.commissariat} onChange={(v) => set("commissariat", v)} readOnly={readOnly} />
-      <IntakeTextField label="Группа учёта" value={m.registration_group} onChange={(v) => set("registration_group", v)} readOnly={readOnly} />
-      <IntakeTextField label="Категория учёта" value={m.registration_category} onChange={(v) => set("registration_category", v)} readOnly={readOnly} />
+      <IntakeTextField label="Категория годности" value={m.fitness_category ?? ""} onChange={(v) => set("fitness_category", v)} readOnly={readOnly} />
+      <IntakeTextField label="Военкомат" value={m.commissariat ?? ""} onChange={(v) => set("commissariat", v)} readOnly={readOnly} />
+      <IntakeTextField label="Группа учёта" value={m.registration_group ?? ""} onChange={(v) => set("registration_group", v)} readOnly={readOnly} />
+      <IntakeTextField label="Категория учёта" value={m.registration_category ?? ""} onChange={(v) => set("registration_category", v)} readOnly={readOnly} />
     </div>
   );
 }
@@ -300,6 +305,8 @@ export type IntakeDraftFormEditorProps = {
   initialFocusTestId?: string | null;
   intakeToken?: string;
   applicationId?: number;
+  onPhotoMutation?: (result: IntakePhotoMutationResponse) => Promise<void>;
+  fieldErrors?: Record<string, string>;
 };
 
 export default function IntakeDraftFormEditor({
@@ -331,6 +338,8 @@ export default function IntakeDraftFormEditor({
   initialFocusTestId = null,
   intakeToken,
   applicationId,
+  onPhotoMutation,
+  fieldErrors = {},
 }: IntakeDraftFormEditorProps) {
   const currentStep = INTAKE_STEPS[stepIndex];
   const blockStepNavigation = readOnly && allowStepNavigation !== true;
@@ -409,6 +418,8 @@ export default function IntakeDraftFormEditor({
         <main className="rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
           {error ? <p className="mb-4 text-sm text-red-600">{error}</p> : null}
 
+          <IntakeFieldErrorsProvider errors={fieldErrors}>
+
           {currentStep.id === "personal" ? (
             <StepPersonal
               payload={payload}
@@ -417,6 +428,7 @@ export default function IntakeDraftFormEditor({
               mode={mode}
               intakeToken={intakeToken}
               applicationId={applicationId}
+              onPhotoMutation={onPhotoMutation}
             />
           ) : null}
           {currentStep.id === "contacts" ? (
@@ -425,6 +437,8 @@ export default function IntakeDraftFormEditor({
           {currentStep.id === "education" ? (
             <IntakeEducationTable
               items={payload.education}
+              mode={mode}
+              intakeToken={intakeToken}
               readOnly={readOnly}
               focusTestId={pendingFocusTestId}
               onChange={(items) => onChange({ ...payload, education: items })}
@@ -475,6 +489,7 @@ export default function IntakeDraftFormEditor({
               onNavigateToDateIssue={navigateToDateIssue}
             />
           ) : null}
+          </IntakeFieldErrorsProvider>
 
           <div className="mt-8 flex flex-wrap items-center justify-between gap-2 sm:gap-3">
             <div className="flex flex-wrap items-center gap-2">

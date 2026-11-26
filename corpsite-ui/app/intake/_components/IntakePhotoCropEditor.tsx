@@ -20,6 +20,7 @@ type Props = {
   onCancel: () => void;
   onSave: (blob: Blob) => Promise<void>;
   onReplace: () => void;
+  selectionError?: string | null;
 };
 
 const VIEWPORT_WIDTH = 300;
@@ -33,6 +34,7 @@ export default function IntakePhotoCropEditor({
   onCancel,
   onSave,
   onReplace,
+  selectionError,
 }: Props) {
   const [crop, setCrop] = React.useState<IntakePhotoCropState>(createDefaultIntakePhotoCropState());
   const [dragStart, setDragStart] = React.useState<{ x: number; y: number; originX: number; originY: number } | null>(
@@ -165,6 +167,7 @@ export default function IntakePhotoCropEditor({
         <button type="button" disabled={readOnly} onClick={onReplace} data-testid="intake-photo-replace" className="rounded border px-2 py-1 text-xs">
           Заменить
         </button>
+        {selectionError ? <p role="alert" className="text-xs text-red-600">{selectionError}</p> : null}
       </div>
 
       {faceAnalysis?.level === "warning" && faceAnalysis.message ? (
@@ -197,7 +200,7 @@ export async function readIntakePhotoSourceFile(file: File): Promise<string> {
   if (validationError) throw new Error(validationError);
 
   const type = String(file.type || "").trim().toLowerCase();
-  if (type === "image/heic" || type === "image/heif") {
+  if (type === "image/heic" || type === "image/heif" || (type === "" && /\.(heic|heif)$/i.test(file.name))) {
     const heic2any = (await import("heic2any")).default;
     const converted = await heic2any({ blob: file, toType: "image/jpeg", quality: 0.92 });
     const blob = Array.isArray(converted) ? converted[0] : converted;

@@ -12,6 +12,7 @@ import {
 } from "./intakeAdditional";
 import { formatIntakeFullName } from "./intakeContactHelpers";
 import {
+  formatIntakeEducationPeriodCell,
   getIntakeEducationDocumentTypeLabel,
   getIntakeEducationTypeLabel,
   normalizeIntakeEducationEntry,
@@ -133,9 +134,10 @@ export function buildIntakeEducationReviewSection(payload: IntakeDraftPayload): 
     const item = normalizeIntakeEducationEntry(raw);
     const title = trimValue(item.institution) ?? `Запись ${index + 1}`;
     return buildRecordCard(title, [
+      ["Уровень образования", item.education_level_name || item.education_level_code || ""],
       ["Вид образования", getIntakeEducationTypeLabel(item.education_type)],
       ["Учебное заведение", item.institution],
-      ["Период", formatIntakePeriodRange(item.year_from, item.year_to)],
+      ["Период", formatIntakeEducationPeriodCell(item.year_from, item.year_to)],
       ["Специальность", item.specialty],
       ["Квалификация", item.qualification],
       ["Документ", getIntakeEducationDocumentTypeLabel(item.document_type)],

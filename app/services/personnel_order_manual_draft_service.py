@@ -276,6 +276,8 @@ def prepare_manual_item_payload(conn: Any, *, item_type_code: str, employee_id: 
 
 
 def create_manual_draft(*, created_by: int, template_version_id: int | None = None, order_number: str, order_date: date, source_title: str, source_title_locale: str, item_type_code: str, employee_id: Optional[int], effective_date: date, period_start: Optional[date] = None, period_end: Optional[date] = None, item_payload: Optional[Mapping[str, Any]] = None, unresolved_subject: Optional[Mapping[str, Any]] = None, document_subject_context: Optional[Mapping[str, Any]] = None) -> dict[str, Any]:
+    if item_type_code == "HIRE":
+        raise PersonnelOrderValidationError("Приём на работу начинается с электронного заявления.")
     number = str(order_number or "").strip()
     title = str(source_title or "").strip()
     if not number or not title:

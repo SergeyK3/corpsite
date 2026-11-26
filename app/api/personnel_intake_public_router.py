@@ -31,8 +31,27 @@ from app.personnel_intake.domain.errors import (
     PersonnelIntakeTokenError,
     PersonnelIntakeValidationError,
 )
+from app.services.education_document_references_service import list_values
 
 router = APIRouter(prefix="/intake", tags=["personnel-intake-public"])
+
+
+@router.get("/{token}/education-levels")
+def get_intake_education_levels(token: str = Path(..., min_length=8)) -> dict:
+    """Active education levels for a valid applicant link."""
+    try:
+        with engine.begin() as conn:
+            open_intake_session(conn, raw_token=token)
+        values = list_values("levels", state="active")
+        return {"items": [{"code": item["code"], "name_ru": item["name_ru"]} for item in values["items"]]}
+    except PersonnelIntakeTokenError as exc:
+        raise _token_http403(exc)
+    except PersonnelIntakeNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise as_http500(exc)
 
 
 def _token_http403(exc: PersonnelIntakeTokenError) -> HTTPException:

@@ -31,14 +31,14 @@ it.skipIf(process.env.EDUCATION_PDF_TEST !== "1").each(["DIRECTORY", "MANUAL"])(
   });
   try {
     for (const language of ["ru", "kk"]) {
-      const response = await GET(new Request(`http://localhost/directory/personnel/orders/${browser.orderId}/pdf?language=${language}`, { headers: { authorization: `Bearer ${token}` } }), { params: { orderId: String(browser.orderId) } });
+      const response = await GET(new Request(`http://localhost/directory/personnel/orders/${browser.orderId}/pdf?language=${language}`, { headers: { authorization: `Bearer ${token}` } }), { params: Promise.resolve({ orderId: String(browser.orderId) }) });
       expect(response.status).toBe(200);
       expect(response.headers.get("Content-Type")).toBe("application/pdf");
       const pdf = Buffer.from(await response.arrayBuffer());
       expect(pdf.subarray(0, 5).toString()).toBe("%PDF-");
       writeFileSync(path.join(output, `${prefix}official-${language}.pdf`), pdf);
     }
-    const bilingual = await GET(new Request(`http://localhost/directory/personnel/orders/${browser.orderId}/pdf?language=kk-ru`, { headers: { authorization: `Bearer ${token}` } }), { params: { orderId: String(browser.orderId) } });
+    const bilingual = await GET(new Request(`http://localhost/directory/personnel/orders/${browser.orderId}/pdf?language=kk-ru`, { headers: { authorization: `Bearer ${token}` } }), { params: Promise.resolve({ orderId: String(browser.orderId) }) });
     expect(bilingual.status).toBe(422);
     expect(await bilingual.json()).toMatchObject({error:{code:"EDUCATION_SINGLE_LANGUAGE_REQUIRED"}});
     expect(requests).toHaveLength(12);

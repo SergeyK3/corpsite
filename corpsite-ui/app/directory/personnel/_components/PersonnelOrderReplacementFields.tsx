@@ -1,5 +1,6 @@
 "use client";
 import * as React from "react";
+import type {ConcurrentDepartmentSource} from "../_lib/personnelOrderConcurrentDepartment";
 import {getEmployee, getEmployees} from "@/app/directory/employees/_lib/api.client";
 import type {EmployeeDTO} from "@/app/directory/employees/_lib/types";
 import type {OrgUnitSelectOption} from "@/lib/orgUnitsSelect";
@@ -60,7 +61,7 @@ export function replacementBlockers(value:ReplacementFields,mode:ReplacementMode
   return missing;
 }
 
-export default function PersonnelOrderReplacementFields({value,onChange,mode,start,orgUnits,fixedAllowance=false,serviceArea=false}:{value:ReplacementFields;onChange:React.Dispatch<React.SetStateAction<ReplacementFields>>;mode:ReplacementMode;start:string;orgUnits:OrgUnitSelectOption[];fixedAllowance?:boolean;serviceArea?:boolean}) {
+export default function PersonnelOrderReplacementFields({value,onChange,mode,start,orgUnits,fixedAllowance=false,serviceArea=false,departmentSource}:{value:ReplacementFields;onChange:React.Dispatch<React.SetStateAction<ReplacementFields>>;mode:ReplacementMode;start:string;orgUnits:OrgUnitSelectOption[];fixedAllowance?:boolean;serviceArea?:boolean;departmentSource?:ConcurrentDepartmentSource|null}) {
   const [selectedEmployee,setSelectedEmployee]=React.useState<EmployeeDTO|null>(null);
   const edited=React.useRef(new Set<keyof ReplacementFields>());
   const update=(key:keyof ReplacementFields,text:string)=>{edited.current.add(key);onChange(current=>({...current,[key]:text}));};
@@ -88,14 +89,14 @@ export default function PersonnelOrderReplacementFields({value,onChange,mode,sta
       const genitive=calculateKazakhPersonForm(employee,"genitive");
       setSelectedEmployee(employee);
       onChange(current=>({...current,employee_id:Number(employee.id)||undefined,employee_name_ru:employee.fio||"",...Object.fromEntries(Object.entries({employee_name_kk:kkName,employee_genitive_ru:russianEmployeeGenitiveForOrder(employee),employee_genitive_kk:savedKazakhEmployeeNameForm(employee,'genitive')||(genitive.needsReview?"":genitive.value)}).filter(([key])=>!serviceArea||!edited.current.has(key as keyof ReplacementFields))),...(!serviceArea?{
-        position_id:employee.position?.id||undefined,position_ru:employee.position?.job_nameru||employee.position?.name||"",position_kk:employee.position?.document_possessive_kk||employee.position?.job_namekk_doc||employee.position?.job_namekk||employee.position?.name_kk||"",org_unit_id:employee.org_unit?.unit_id||undefined,org_unit_ru:employee.org_unit?.name||"",org_unit_kk:employee.org_unit?.document_genitive_kk||employee.org_unit?.name_kk||"",position_genitive_ru:"",org_unit_genitive_ru:""}:{})}));
+        position_id:employee.position?.id||undefined,position_ru:employee.position?.job_nameru||employee.position?.name||"",position_kk:employee.position?.document_form_status==='needs_review'?'':employee.position?.document_possessive_kk||employee.position?.job_namekk_doc||employee.position?.job_namekk||employee.position?.name_kk||"",org_unit_id:employee.org_unit?.unit_id||undefined,org_unit_ru:employee.org_unit?.name||"",org_unit_kk:employee.org_unit?.document_genitive_kk||employee.org_unit?.name_kk||"",position_genitive_ru:"",org_unit_genitive_ru:""}:{})}));
       if(serviceArea)fillPlacement(employee,employee.assignments?.length===1?employee.assignments[0]:undefined,employee.assignments?.length!==1);
     }}/>
     {serviceArea&&(selectedEmployee?.assignments?.length||0)>1?<label className="block text-sm">Назначение замещаемого сотрудника<select aria-label="Назначение замещаемого сотрудника" className={inputClass} value={value.assignment_id||''} onChange={e=>{const assignment=selectedEmployee!.assignments!.find(a=>a.assignment_id===Number(e.target.value));fillPlacement(selectedEmployee!,assignment,!assignment);}}><option value="">Выберите назначение</option>{selectedEmployee!.assignments!.map(a=><option key={a.assignment_id} value={a.assignment_id}>{a.position?.job_nameru||a.position?.name} — {a.org_unit?.name} · #{a.assignment_id}</option>)}</select></label>:null}
     {serviceArea&&(value.employee_id||value.employee_name_ru||value.employee_name_kk)?<button type="button" className="rounded border px-3 py-1" onClick={()=>{setSelectedEmployee(null);edited.current.clear();onChange(current=>({...blankReplacement(),allowance_percent:current.allowance_percent,term_type:current.term_type,end_date:current.end_date}));}}>Убрать замещаемого сотрудника</button>:null}
     {([['employee_name_kk','Замещаемый сотрудник (KK)'],['employee_genitive_ru','ФИО замещаемого в родительном падеже (RU)'],['employee_genitive_kk','ФИО замещаемого в родительном падеже (KK)']] as const).map(([key,label])=><ReplacementInput key={key} label={label} value={value[key]} onChange={text=>update(key,text)}/>)}
     {serviceArea?<p className="text-xs">Должность и подразделение замещаемого сотрудника необязательны. При отсутствии этих данных в приказе останется только ФИО.</p>:null}
-    <PersonnelOrderTransferFields value={value} onManualEdit={key=>edited.current.add(key)} onChange={next=>onChange(current=>({...current,...(typeof next==="function"?next(current):next)}))} orgUnits={orgUnits} mode="concurrent" showRates={false} showBasis={false} placementLabel="Замещаемая" documentFormsKK autoCaseForms={serviceArea}/>
+    <PersonnelOrderTransferFields value={value} onManualEdit={key=>edited.current.add(key)} onChange={next=>onChange(current=>({...current,...(typeof next==="function"?next(current):next)}))} orgUnits={orgUnits} mode="concurrent" showRates={false} showBasis={false} placementLabel="Замещаемая" departmentSource={departmentSource} documentFormsKK autoCaseForms={serviceArea} autoGenitiveForms={!serviceArea}/>
     <label className="block text-sm font-medium">Срок замещения<select aria-label="Срок замещения" className={inputClass} value={value.term_type} onChange={e=>onChange(current=>({...current,term_type:e.target.value as ReplacementFields['term_type'],end_date:""}))}><option value="">Выберите срок</option>{serviceArea?<option value="NONE">Без указания срока</option>:null}<option value="DATE">До конкретной даты</option><option value="UNTIL_RETURN">До выхода замещаемого работника из отпуска</option></select></label>
     {value.term_type==="DATE"?<ReplacementInput label="Дата окончания замещения" value={value.end_date} type="date" onChange={text=>update('end_date',text)}/>:null}
     {mode==="PAY"?<>

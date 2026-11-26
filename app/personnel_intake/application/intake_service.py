@@ -6,9 +6,10 @@ import os
 import secrets
 import re
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
+from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
 from app.personnel_applications.domain.errors import PersonnelApplicationNotFoundError
@@ -167,10 +168,19 @@ def issue_intake_link(
     reissue: bool = False,
 ) -> IssueIntakeLinkResult:
     """Issue a new protected intake link for an application."""
-    _require_application(conn, application_id)
+    archive_state = conn.execute(text("""
+        SELECT archived_at FROM public.personnel_applications
+        WHERE application_id = :id FOR UPDATE
+    """), {"id": application_id}).scalar_one_or_none()
+    if archive_state is not None:
+        raise PersonnelIntakeConflictError(
+            "Archived application cannot receive a public link.",
+            code="APPLICATION_ARCHIVED",
+        )
+    application = _require_application(conn, application_id)
     repo = SqlAlchemyPersonnelIntakeRepository(conn)
     now = _now_utc()
-    expires_at = now + timedelta(days=_intake_link_ttl_days())
+    expires_at = now + (timedelta(hours=24) if application.application_source == "electronic" else timedelta(days=_intake_link_ttl_days()))
 
     active = repo.get_active_link_for_application(application_id)
     if active is not None and not reissue:
@@ -236,6 +246,50 @@ def issue_intake_link(
         expires_at=expires_at,
         status=link.status,
         reissued=old_active_link_id is not None,
+    )
+
+
+def ensure_on_behalf_intake_draft(
+    conn: Connection, *, application_id: int, actor_user_id: int
+) -> None:
+    """Create the HR draft without issuing a usable applicant link."""
+    conn.execute(
+        __import__("sqlalchemy").text(
+            "SELECT application_id FROM public.personnel_applications "
+            "WHERE application_id = :application_id FOR UPDATE"
+        ),
+        {"application_id": int(application_id)},
+    )
+    application = _require_application(conn, application_id)
+    repo = SqlAlchemyPersonnelIntakeRepository(conn)
+    if repo.get_draft_by_application_id(application_id) is not None:
+        return
+    if application.status not in {APPLICATION_STATUS_REGISTERED, APPLICATION_STATUS_INTAKE_PENDING}:
+        raise PersonnelIntakeConflictError(
+            "Intake draft cannot be created for the current application status.",
+            code="ON_BEHALF_DRAFT_NOT_ALLOWED",
+        )
+    now = _now_utc()
+    # The draft schema requires a link_id. This marker has no encrypted token,
+    # is revoked in the same transaction, and can never open the public intake.
+    link = repo.create_link(
+        application_id=application_id,
+        token_hash="hr-internal:" + secrets.token_hex(32),
+        token_ciphertext=None,
+        issued_by_user_id=actor_user_id,
+        expires_at=now,
+    )
+    repo.mark_link_revoked(
+        link.link_id, revoked_at=now, revoked_by_user_id=actor_user_id
+    )
+    repo.create_draft(
+        application_id=application_id,
+        link_id=link.link_id,
+        payload=build_initial_intake_draft_payload(conn, application_id),
+    )
+    _transition_application_status(
+        conn, application_id=application_id,
+        new_status=APPLICATION_STATUS_INTAKE_PENDING, now=now,
     )
 
 
@@ -584,7 +638,11 @@ def submit_intake_draft_for_application(
             code="ALREADY_SUBMITTED",
         )
 
-    _validate_submit_payload(draft.payload)
+    application = SqlAlchemyPersonnelApplicationRepository(conn).require_by_id(application_id)
+    _validate_submit_payload(
+        draft.payload,
+        require_identity=application.application_source == "electronic" and application.person_id is None,
+    )
 
     draft = repo.mark_draft_submitted(draft.draft_id, submitted_at=now)
     link = repo.mark_link_submitted(link.link_id, submitted_at=now)
@@ -609,7 +667,7 @@ def submit_intake_draft_for_application(
     )
 
 
-def _validate_submit_payload(payload: dict[str, Any]) -> None:
+def _validate_submit_payload(payload: dict[str, Any], *, require_identity: bool = False) -> None:
     payload = normalize_employment_biography_payload(payload)
     personal = payload.get("personal") or {}
     contacts = payload.get("contacts") or {}
@@ -618,6 +676,16 @@ def _validate_submit_payload(payload: dict[str, Any]) -> None:
         errors.append("personal.last_name")
     if not str(personal.get("first_name") or "").strip():
         errors.append("personal.first_name")
+    if require_identity:
+        from app.domain.iin import IinValidationError, normalize_and_validate_iin
+        from app.personnel_intake.application.intake_mapper import parse_date_value
+        try:
+            normalize_and_validate_iin(str(personal.get("iin") or ""))
+        except IinValidationError:
+            errors.append("personal.iin")
+        birth = parse_date_value(personal.get("birth_date"))
+        if birth is None or birth > date.today():
+            errors.append("personal.birth_date")
     if not str(contacts.get("mobile_phone") or "").strip():
         errors.append("contacts.mobile_phone")
     elif not re.fullmatch(r"\+7\d{10}", str(contacts.get("mobile_phone"))):
@@ -658,7 +726,7 @@ def _validate_submit_payload(payload: dict[str, Any]) -> None:
     if errors:
         if date_errors:
             raise PersonnelIntakeValidationError(
-                "Intake dates must be full day precision (ДД.ММ.ГГГГ): "
+                "Проверьте даты: для периода образования допустимы годы или полные даты; для даты рождения нужна полная дата: "
                 + ", ".join(date_errors)
             )
         raise PersonnelIntakeValidationError(

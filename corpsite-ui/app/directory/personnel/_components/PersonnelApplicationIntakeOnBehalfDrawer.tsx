@@ -8,6 +8,8 @@ import {
   INTAKE_STEPS,
   emptyIntakeDraftPayload,
   resolveIntakeOnBehalfInitialStepIndex,
+  toIntakeFormPayload,
+  toCanonicalIntakeV2,
   type IntakeDraftPayload,
 } from "@/app/intake/_lib/intakeApi.client";
 import { collectIntakeDateValidationIssues } from "@/app/intake/_lib/intakeDateValidation";
@@ -20,6 +22,7 @@ import {
   submitIntakeOnBehalfDraft,
 } from "../_lib/personnelApplicationsApi.client";
 import { openIntakePdfByApplicationId } from "@/app/intake/_lib/intakePdfOpen.client";
+import type { IntakePhotoMutationResponse } from "@/app/intake/_lib/intakePhotoApi.client";
 
 type Props = {
   applicationId: number | null;
@@ -105,9 +108,9 @@ export default function PersonnelApplicationIntakeOnBehalfDrawer({
           setError("Не удалось определить версию черновика для безопасного сохранения.");
           return;
         }
-        const reconciled = reconcileIntakeDraftPayload(
+        const reconciled = reconcileIntakeDraftPayload(toIntakeFormPayload(
           (session.draft.payload as IntakeDraftPayload | undefined) ?? emptyIntakeDraftPayload(),
-        );
+        ));
         expectedUpdatedAtRef.current = draftUpdatedAt;
         sessionHydratedRef.current = true;
         setBaselinePayload(reconciled);
@@ -144,10 +147,32 @@ export default function PersonnelApplicationIntakeOnBehalfDrawer({
 
   function handlePayloadChange(next: IntakeDraftPayload) {
     if (!editable) return;
+    payloadRef.current = next;
     setPayload(next);
     if (saveCommitted && !intakePayloadsEqual(baselinePayload, next)) {
       setSaveCommitted(false);
     }
+  }
+
+  async function handlePhotoMutation(result: IntakePhotoMutationResponse) {
+    const latest = payloadRef.current;
+    const merged = {
+      ...latest,
+      personal: { ...latest.personal, photo_file_id: result.photo_file_id },
+    };
+    payloadRef.current = merged;
+    setPayload(merged);
+    const serverPayload = reconcileIntakeDraftPayload(toIntakeFormPayload(result.payload));
+    setBaselinePayload(serverPayload);
+    setSaveCommitted(false);
+    expectedUpdatedAtRef.current = result.saved_at;
+    if (applicationId == null || intakePayloadsEqual(serverPayload, merged)) return;
+    const saved = await saveIntakeOnBehalfDraft(
+      applicationId, toCanonicalIntakeV2(merged), result.saved_at,
+    );
+    expectedUpdatedAtRef.current = saved.draft_updated_at;
+    setBaselinePayload(merged);
+    onSaved?.();
   }
 
   async function handleSave() {
@@ -161,7 +186,7 @@ export default function PersonnelApplicationIntakeOnBehalfDrawer({
     try {
       const result = await saveIntakeOnBehalfDraft(
         applicationId,
-        currentPayload as unknown as Record<string, unknown>,
+        toCanonicalIntakeV2(currentPayload),
         expectedUpdatedAt,
       );
       if (result.changed_fields.length === 0 && !intakePayloadsEqual(baselinePayload, currentPayload)) {
@@ -215,7 +240,7 @@ export default function PersonnelApplicationIntakeOnBehalfDrawer({
     try {
       const result = await submitIntakeOnBehalfDraft(
         applicationId,
-        currentPayload as unknown as Record<string, unknown>,
+        toCanonicalIntakeV2(currentPayload),
         expectedUpdatedAt,
       );
       expectedUpdatedAtRef.current = result.draft_updated_at;
@@ -334,6 +359,7 @@ export default function PersonnelApplicationIntakeOnBehalfDrawer({
               onStepIndexChange={setStepIndex}
               saving={saving}
               mode="hr-on-behalf"
+              onPhotoMutation={handlePhotoMutation}
               onPrimaryAction={editable ? () => void handleSave() : undefined}
               primaryActionBusy={saving}
               primaryActionLabel={primaryActionLabel}

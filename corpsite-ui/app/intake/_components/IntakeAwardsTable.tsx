@@ -2,6 +2,9 @@
 
 import * as React from "react";
 
+import { isIntakeListRowEmpty } from "../_lib/intakeEmptyRows";
+import { focusIntakeListEditor } from "../_lib/intakeListFocus";
+
 import IntakeDictionaryCombobox from "./IntakeDictionaryCombobox";
 import { INTAKE_COMPACT_TABLE_EDITOR_ROW_CLASS, IntakeCompactTableEditorCell } from "./IntakeCompactTableEditor";
 import { IntakeDateField, IntakeSelectField, IntakeTextField } from "./IntakeFormFields";
@@ -275,9 +278,16 @@ export default function IntakeAwardsTable({
 
   function handleAdd() {
     onDeclaredEmptyChange(false);
+    const emptyIndex = items.findIndex((item) => isIntakeListRowEmpty("awards", item));
+    if (emptyIndex >= 0) {
+      setExpandedIndex(emptyIndex);
+      focusIntakeListEditor(`intake-award-editor-${emptyIndex}`);
+      return;
+    }
     const nextItems = [...items, emptyIntakeAwardEntry()];
     onChange(nextItems);
     setExpandedIndex(nextItems.length - 1);
+    focusIntakeListEditor(`intake-award-editor-${nextItems.length - 1}`);
   }
 
   function handleDeclaredEmptyChange(nextDeclaredEmpty: boolean) {

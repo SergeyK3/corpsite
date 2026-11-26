@@ -173,7 +173,8 @@ export function buildIntakePdfDocumentHtml(model: IntakePdfViewModel): string {
     "intake-pdf-section-education",
     dataTable(
       [
-        "Тип",
+        "Уровень",
+        "Вид",
         "Учебное заведение",
         "Период",
         "Специальность / квалификация",
@@ -181,6 +182,7 @@ export function buildIntakePdfDocumentHtml(model: IntakePdfViewModel): string {
         "№ документа",
       ],
       payload.education.map((item) => [
+        intakeEducationCellValue(item.education_level_name || item.education_level_code),
         getIntakeEducationTypeLabel(item.education_type),
         intakeEducationCellValue(item.institution),
         formatIntakeEducationPeriodCell(item.year_from, item.year_to),

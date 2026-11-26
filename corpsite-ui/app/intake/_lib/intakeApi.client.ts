@@ -1,4 +1,4 @@
-import { readJsonSafe, toApiError } from "@/lib/api";
+import { buildHeaders, readJsonSafe, toApiError } from "@/lib/api";
 import { formatThrownError } from "@/lib/i18n";
 import { resolveApiUrl } from "@/lib/apiBase";
 import { normalizeIntakeRecordId } from "./intakeRecordId";
@@ -17,6 +17,8 @@ export type IntakeEducation = {
   qualification_original: string;
   document_number: string;
   education_type: IntakeEducationType;
+  education_level_code?: string;
+  education_level_name?: string;
   institution: string;
   year_from: string;
   year_to: string;
@@ -144,6 +146,7 @@ export const INTAKE_EDUCATION_TYPE_OPTIONS: ReadonlyArray<{
 
 export type IntakeDraftPayload = {
   personal: {
+    iin: string;
     last_name: string;
     first_name: string;
     middle_name: string;
@@ -281,6 +284,7 @@ export function resolveIntakeOnBehalfInitialStepIndex(): number {
 export function emptyIntakeDraftPayload(): IntakeDraftPayload {
   return {
     personal: {
+      iin: "",
       last_name: "",
       first_name: "",
       middle_name: "",
@@ -363,6 +367,22 @@ export async function openIntakeSession(token: string): Promise<IntakeSessionRes
   return normalizeIntakeResponsePayload(body as IntakeSessionResponse);
 }
 
+export type IntakeEducationLevel = { code: string; name_ru: string };
+
+export async function fetchIntakeEducationLevels(mode: "public" | "hr-on-behalf", token?: string): Promise<IntakeEducationLevel[]> {
+  const path = mode === "public"
+    ? `/intake/${encodeURIComponent(String(token ?? ""))}/education-levels`
+    : "/api/ppr/education-levels?state=active";
+  const res = await fetch(resolveApiUrl(path), {
+    method: "GET",
+    headers: mode === "public" ? publicHeaders() : buildHeaders(),
+    cache: "no-store",
+  });
+  const body = await readJsonSafe(res);
+  if (!res.ok) throw toApiError(res.status, body, { method: "GET", url: path });
+  return Array.isArray(body?.items) ? body.items.map((item: IntakeEducationLevel) => ({ code: String(item.code), name_ru: String(item.name_ru) })) : [];
+}
+
 export async function autosaveIntakeDraft(
   token: string,
   payload: IntakeDraftPayload,
@@ -437,7 +457,7 @@ function normalizeIntakeResponsePayload<T extends { payload: IntakeDraftPayload 
   }));
   const personal = {
     ...sourcePersonal,
-    ...formTextFields(sourcePersonal, ["last_name", "first_name", "middle_name", "birth_date", "birth_place", "gender", "citizenship", "nationality", "photo_file_id"]),
+    ...formTextFields(sourcePersonal, ["iin", "last_name", "first_name", "middle_name", "birth_date", "birth_place", "gender", "citizenship", "nationality", "photo_file_id"]),
   };
   const contacts = {
     ...sourceContacts,
@@ -488,7 +508,7 @@ export function toCanonicalIntakeV2(payload: IntakeDraftPayload): Record<string,
     ...payload, schema_version: 2,
     personal: { ...payload.personal, personnel_number: undefined, photo_file_id: nullable(payload.personal.photo_file_id) },
     contacts: { email: nullable(payload.contacts.email), mobile_phone: nullable(payload.contacts.mobile_phone), residence_address: nullable(payload.contacts.residence_address), registration_address: nullable(payload.contacts.registration_address) },
-    education: payload.education.map((item) => ({ record_id: item.record_id, start_date: nullable(item.start_date || item.year_from), end_date: nullable(item.end_date || item.year_to), institution_original: nullable(item.institution_original || item.institution), education_type: item.education_type, document_type: item.document_type, document_number: nullable(item.document_number || item.diploma_number), specialty_original: nullable(item.specialty_original || item.specialty), qualification_original: nullable(item.qualification_original || item.qualification) })),
+    education: payload.education.map((item) => ({ record_id: item.record_id, start_date: nullable(item.year_from || item.start_date), end_date: nullable(item.year_to || item.end_date), institution_original: nullable(item.institution_original || item.institution), education_type: item.education_type, education_level_code: nullable(item.education_level_code), education_level_name: nullable(item.education_level_name), document_type: item.document_type, document_number: nullable(item.document_number || item.diploma_number), specialty_original: nullable(item.specialty_original || item.specialty), qualification_original: nullable(item.qualification_original || item.qualification) })),
     training: payload.training.map((item) => ({ record_id: item.record_id, start_date: nullable(item.start_date || item.year_from), end_date: nullable(item.end_date || item.year_to || item.year), course_name_original: nullable(item.course_name_original || item.course_name), institution_original: nullable(item.institution_original || item.institution), document_type: item.document_type, document_number: nullable(item.document_number), hours: item.hours === "" ? null : Number(item.hours), hours_is_manual: item.hours_is_manual })),
     relatives: payload.relatives.map((item) => ({ record_id: item.record_id, relationship: item.relationship, relationship_other: nullable(item.relationship_other), full_name: nullable(item.full_name), birth_date: nullable(item.birth_date || item.birth_year), workplace: nullable(item.workplace || item.work_place) })),
   };

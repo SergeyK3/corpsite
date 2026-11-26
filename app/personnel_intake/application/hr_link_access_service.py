@@ -55,6 +55,8 @@ def _resolve_link_for_hr_display(repo: SqlAlchemyPersonnelIntakeRepository, appl
     latest = repo.get_latest_link_for_application(application_id)
     if latest is None:
         return None
+    if str(latest.token_hash or "").startswith("hr-internal:"):
+        return None
     if latest.status == INTAKE_LINK_STATUS_SUBMITTED:
         return latest
     if latest.status in {INTAKE_LINK_STATUS_REVOKED, INTAKE_LINK_STATUS_EXPIRED}:

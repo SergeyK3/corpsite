@@ -141,6 +141,18 @@ def _evaluate_can_transfer(
     return True, None
 
 
+def intake_target_identity_confirmed(conn: Connection, app) -> bool:
+    if app.person_id is None:
+        return False
+    if app.application_source != "electronic":
+        return True
+    checked_at = conn.execute(
+        text("SELECT candidate_checked_at FROM public.electronic_hire_applications WHERE application_id=:id"),
+        {"id": app.application_id},
+    ).scalar_one_or_none()
+    return checked_at is not None
+
+
 @dataclass(frozen=True, slots=True)
 class SectionReviewActionResult:
     section: IntakeSectionReviewSnapshot
@@ -163,6 +175,11 @@ def load_intake_review_state(conn: Connection, application_id: int) -> IntakeRev
         )
 
     can_transfer, blocked = _evaluate_can_transfer(sections, draft.payload)
+    # A submitted questionnaire can be reviewed before HR confirms identity,
+    # but there is no safe PPR target for its accepted sections yet.
+    if not intake_target_identity_confirmed(conn, app):
+        can_transfer = False
+        blocked = "Сначала подтвердите личность претендента по документу."
     if transfer is not None and transfer.status == INTAKE_TRANSFER_STATUS_COMPLETED:
         can_transfer = False
         blocked = "Transfer already completed."

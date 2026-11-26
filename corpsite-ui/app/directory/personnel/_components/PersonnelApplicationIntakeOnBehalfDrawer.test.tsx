@@ -27,6 +27,7 @@ const submitIntakeOnBehalfDraftMock = vi.mocked(api.submitIntakeOnBehalfDraft);
 function buildSessionPayload(): IntakeDraftPayload {
   return {
     personal: {
+      iin: "123456789012",
       last_name: "Иванов",
       first_name: "Иван",
       middle_name: "",
@@ -343,7 +344,7 @@ describe("PersonnelApplicationIntakeOnBehalfDrawer", () => {
     );
   });
 
-  it("blocks on-behalf save on review when legacy year-only dates remain", async () => {
+  it("allows on-behalf save on review when education has year-only dates", async () => {
     getIntakeOnBehalfEditSessionMock.mockResolvedValue({
       application_id: 42,
       application_status: "intake_pending",
@@ -383,8 +384,8 @@ describe("PersonnelApplicationIntakeOnBehalfDrawer", () => {
     await openReviewStep();
 
     const saveButton = screen.getByTestId("intake-on-behalf-save-button");
-    expect(saveButton).toBeDisabled();
-    expect(screen.getByTestId("intake-review-date-issues")).toBeInTheDocument();
+    expect(saveButton).toBeEnabled();
+    expect(screen.queryByTestId("intake-review-date-issues")).not.toBeInTheDocument();
   });
 
   it("shows PATCH error without saved button state", async () => {

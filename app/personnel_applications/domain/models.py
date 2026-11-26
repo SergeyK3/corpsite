@@ -9,7 +9,7 @@ from decimal import Decimal
 @dataclass(frozen=True, slots=True)
 class PersonnelApplicationSnapshot:
     application_id: int
-    person_id: int
+    person_id: int | None
     status: str
     application_received_at: date
     application_source: str

@@ -284,7 +284,7 @@ export default function PersonnelApplicationDetailDrawer({
                 </button>
               ) : null}
 
-              {canOpenApplicantPersonalCard(detail.status) ? (
+              {detail.person_id != null && canOpenApplicantPersonalCard(detail.status) ? (
                 <Link
                   href={buildPersonalCardHref(
                     { personId: detail.person_id },
