@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import PersonalCardSectionTabs from "@/components/PersonalCardSectionTabs";
 
 import { PERSONAL_CARD_TITLE } from "@/lib/personnelCardTerminology";
 import { useCurrentUser } from "@/lib/currentUser";
@@ -21,6 +22,7 @@ import {
 import {
   PPR_CARD_DEFAULT_SECTION,
   PPR_CARD_SECTIONS,
+  PERSONAL_CARD_SECTIONS,
   parsePprCardSection,
   type PprCardSectionId,
 } from "@/lib/pprCardSections";
@@ -43,7 +45,7 @@ import {
 } from "../_lib/pprQueryTypes";
 import { mapPprCardError, lifecycleStatusLabel, hrRelationshipLabel } from "../_lib/pprCardPresentation";
 import type { PprEmploymentBiographyRoute, PprMilitaryServiceRoute } from "../_lib/pprCommandApi.client";
-import { PprCardSection } from "./PprCardSection";
+import { PprCardSection, ReviewCardSectionContext } from "./PprCardSection";
 import { PprCardSectionNav } from "./PprCardSectionNav";
 import PprCardGeneralSection from "./PprCardGeneralSection";
 import PprCardContactsSection from "./PprCardContactsSection";
@@ -72,6 +74,13 @@ type Props = {
   personId?: string;
   /** When false, PPR section mutations stay hidden while records remain visible. */
   canEditPprSections?: boolean;
+  review?: {
+    pendingSections: PprCardSectionId[];
+    generalPanel?: React.ReactNode;
+    familyPanel?: React.ReactNode;
+    footer?: React.ReactNode;
+    onBack: () => void;
+  };
 };
 
 function isEducationRecord(record: PprSectionRecordResponse): record is PprEducationRecordResponse {
@@ -97,6 +106,7 @@ export default function PprPersonalCardPageClient({
   employeeId,
   personId,
   canEditPprSections = true,
+  review,
 }: Props) {
   const router = useRouter();
   const currentUser = useCurrentUser();
@@ -120,6 +130,7 @@ export default function PprPersonalCardPageClient({
   const [migrationCells, setMigrationCells] = React.useState<Partial<Record<MigrationSection, MigrationCell>>>({});
   const [migrationUniverses, setMigrationUniverses] = React.useState<MigrationUniverse[]>([]);
   const [correctionMode, setCorrectionMode] = React.useState(false);
+  const [reviewSection, setReviewSection] = React.useState<PprCardSectionId>("general");
   const scrolledSectionRef = React.useRef<PprCardSectionId | null>(null);
 
   const resolvedPersonId = ppr?.identity.resolved_person_id ?? (personId ? Number(personId) : null);
@@ -289,24 +300,25 @@ export default function PprPersonalCardPageClient({
     canCreateHireOrderFromApplicantCard(activeApplication.status);
   const visibleCardSections = React.useMemo(
     () =>
-      PPR_CARD_SECTIONS.filter((section) => {
+      (review ? PERSONAL_CARD_SECTIONS : PPR_CARD_SECTIONS).filter((section) => {
+        if (review) return true;
         if (section.id === "onboarding") return !isApplicant && resolvedEmployeeId != null;
         if (section.id === "intended_employment") return isApplicant;
-        if (section.id === "assignment" || section.id === "orders") {
+        if (section.id === "assignment" || section.id === "access" || section.id === "orders") {
           return !isApplicant && resolvedEmployeeId != null;
         }
         return true;
       }),
-    [isApplicant, resolvedEmployeeId],
+    [isApplicant, resolvedEmployeeId, review],
   );
   const notMaterialized =
     ppr != null &&
     (!ppr.materialization.materialized ||
       ppr.materialization.lifecycle_state === PPR_LIFECYCLE_NOT_MATERIALIZED);
-  const canCorrectCard = currentUser?.has_personnel_card_edit === true || (currentUser?.is_documentation_viewer === true || currentUser?.is_sysadmin_assistant === true);
+  const canCorrectCard = !review && (currentUser?.has_personnel_card_edit === true || (currentUser?.is_documentation_viewer === true || currentUser?.is_sysadmin_assistant === true));
   const employmentBiographyEditable = !notMaterialized && canEditPprSections && canCorrectCard && correctionMode;
   const militaryEditable = !notMaterialized && canEditPprSections && canCorrectCard && correctionMode;
-  const canManagePhoto = Boolean(canCorrectCard && correctionMode);
+  const canManagePhoto = Boolean(!review && canCorrectCard && correctionMode);
 
   React.useEffect(() => {
     if (editCategory && canCorrectCard) setCorrectionMode(true);
@@ -351,8 +363,8 @@ export default function PprPersonalCardPageClient({
                   Заявитель
                 </p>
               ) : null}
-              <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">{PERSONAL_CARD_TITLE}</h1>
-              <p className="mt-0.5 break-words text-sm text-zinc-700 dark:text-zinc-300">{displayName}</p>
+              <h1 className="text-xl font-semibold text-zinc-900 dark:text-zinc-50">{review ? displayName : PERSONAL_CARD_TITLE}</h1>
+              <p className="mt-0.5 break-words text-sm text-zinc-700 dark:text-zinc-300">{review ? "Личная карточка · проверка изменений" : displayName}</p>
               {ppr ? (
                 <p className="mt-1 text-xs text-zinc-500">
                   Статус: {hrRelationshipLabel(ppr.materialization.hr_relationship_context)}
@@ -364,13 +376,13 @@ export default function PprPersonalCardPageClient({
           </div>
           <button
             type="button"
-            onClick={() => router.push(returnToHref)}
+            onClick={() => review ? review.onBack() : router.push(returnToHref)}
             className="rounded border border-zinc-300 px-4 py-2 text-sm dark:border-zinc-700"
             data-testid="ppr-card-back-button"
           >
-            {backButtonLabel}
+            {review ? "К очереди сотрудников" : backButtonLabel}
           </button>
-          {canCorrectCard ? (
+          {canCorrectCard && !review ? (
             <button type="button" onClick={() => setCorrectionMode((value) => !value)}
               className="rounded border border-blue-500 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-800 dark:bg-blue-950/40 dark:text-blue-100"
               data-testid="ppr-card-edit-mode-button">
@@ -442,7 +454,9 @@ export default function PprPersonalCardPageClient({
               </div>
             ) : null}
 
-            <PprCardSectionNav sections={visibleCardSections} />
+            {review ? <PersonalCardSectionTabs sections={visibleCardSections} active={reviewSection}
+              onSelect={setReviewSection} pending={review.pendingSections} />
+              : <PprCardSectionNav sections={visibleCardSections} />}
 
             {canReadMigration && migrationUniverses.length > 1 ? (
               <label className="block text-sm" data-testid="ppr-migration-universe-selector">
@@ -454,6 +468,7 @@ export default function PprPersonalCardPageClient({
               </label>
             ) : null}
 
+            <ReviewCardSectionContext.Provider value={review ? reviewSection : null}>
             <div className="space-y-5">
               {ppr.additional.status_facts.length > 0 ? (
                 <section className="hidden print:block" data-testid="ppr-print-note-section">
@@ -468,6 +483,7 @@ export default function PprPersonalCardPageClient({
               >
                 <MigrationStatusBlock cell={migrationCells.general} />
                 <PprCardGeneralSection ppr={ppr} />
+                {review?.generalPanel}
               </PprCardSection>
 
               {resolvedPersonId != null ? <PprCardSection id="contacts" title="Контакты" description="Канонические контактные сведения сотрудника.">
@@ -522,6 +538,7 @@ export default function PprPersonalCardPageClient({
                   superseded={familySuperseded}
                   voided={familyVoided}
                 />
+                {review?.familyPanel}
                 {resolvedPersonId != null && correctionMode && canCorrectCard ? <PprCardVersionedSectionEditor personId={resolvedPersonId} section="relatives" active={familyActive} onSaved={() => void loadCard()} /> : null}
               </PprCardSection>
 
@@ -593,21 +610,21 @@ export default function PprPersonalCardPageClient({
                 </PprCardSection>
               ) : null}
 
-              {!isApplicant && resolvedEmployeeId ? (
+              {!isApplicant && (resolvedEmployeeId || review) ? (
                 <PprCardSection
                   id="assignment"
                   title="Работа в текущей организации"
                   description="Назначения и кадровые события внутри текущей организации."
                 >
-                  <EmployeeOperationalAssignmentSection
+                  {resolvedEmployeeId ? <EmployeeOperationalAssignmentSection
                     employeeId={resolvedEmployeeId}
                     batchId={null}
                     rowId={null}
-                  />
+                  /> : <p className="text-sm text-zinc-500">Кадровые данные о текущей работе пока недоступны.</p>}
                 </PprCardSection>
               ) : null}
 
-              {!isApplicant && resolvedEmployeeId ? (
+              {!isApplicant && (resolvedEmployeeId || review) ? (
                 <PprCardSection
                   id="access"
                   title="Доступ"
@@ -615,34 +632,36 @@ export default function PprPersonalCardPageClient({
                     ? "Учётная запись Corpsite и управление ролью."
                     : "Только чтение: состояние учётной записи Corpsite."}
                 >
-                  <EmployeeAccountSections
+                  {resolvedEmployeeId ? <EmployeeAccountSections
                     employeeId={resolvedEmployeeId}
                     initialUserCreateOpen={canReadEmployeeAccess && provisionAccount}
-                    readOnly={!canReadEmployeeAccess}
-                    allowRoleEdit={canReadEmployeeAccess}
+                    readOnly={!!review || !canReadEmployeeAccess}
+                    allowRoleEdit={!review && canReadEmployeeAccess}
                     embedded
                     showEvents={false}
-                  />
+                  /> : <p className="text-sm text-zinc-500">Сведения об учётной записи пока недоступны.</p>}
                 </PprCardSection>
               ) : null}
 
-              {!isApplicant && resolvedEmployeeId ? (
+              {!isApplicant && (resolvedEmployeeId || review) ? (
                 <PprCardSection
                   id="orders"
                   title="Кадровые приказы"
                   description="Юридически значимые кадровые действия."
                 >
-                  <EmployeeCardOrdersSection employeeId={resolvedEmployeeId} />
+                  {resolvedEmployeeId ? <EmployeeCardOrdersSection employeeId={resolvedEmployeeId} />
+                    : <p className="text-sm text-zinc-500">Сведения о приказах пока недоступны.</p>}
                 </PprCardSection>
               ) : null}
 
-              {!isApplicant && resolvedEmployeeId ? (
+              {!isApplicant && (resolvedEmployeeId || review) ? (
                 <PprCardSection
                   id="onboarding"
                   title="Адаптация"
                   description="Чек-лист адаптации нового сотрудника."
                 >
-                  <EmployeeOnboardingSection employeeId={resolvedEmployeeId} />
+                  {resolvedEmployeeId ? <EmployeeOnboardingSection employeeId={resolvedEmployeeId} />
+                    : <p className="text-sm text-zinc-500">Сведения об адаптации пока недоступны.</p>}
                 </PprCardSection>
               ) : null}
 
@@ -685,6 +704,8 @@ export default function PprPersonalCardPageClient({
                 </button>
               </p>
             </div>
+            </ReviewCardSectionContext.Provider>
+            {review?.footer}
           </>
         ) : null}
       </div>

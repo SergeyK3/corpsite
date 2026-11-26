@@ -82,7 +82,7 @@ describe("PersonalCardPageClient", () => {
     expect(getMyOperationalAssignmentMock).toHaveBeenCalledWith({ signal: expect.any(AbortSignal) });
     expect(screen.getByText("Иванов Иван Иванович")).toBeInTheDocument();
     expect(screen.getByTestId("self-personal-card-download-pdf")).toBeInTheDocument();
-    expect(screen.getAllByRole("tab")).toHaveLength(7);
+    expect(screen.getAllByRole("tab")).toHaveLength(11);
     expect(screen.getByRole("tab", { name: "Родственники" })).toBeInTheDocument();
     expect(screen.queryByTestId("self-contacts-editor")).not.toBeInTheDocument();
     expect(screen.queryByTestId("self-education-editor")).not.toBeInTheDocument();
@@ -227,7 +227,7 @@ describe("PersonalCardPageClient", () => {
     render(<PersonalCardPageClient />);
 
     await screen.findByTestId("self-personal-card-ready");
-    fireEvent.click(screen.getByRole("tab", { name: "Иностранные языки" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Знание иностранных языков" }));
     fireEvent.click(await screen.findByRole("button", { name: "Редактировать" }));
     expect(await screen.findByLabelText("Уровень владения")).toHaveValue("Владеет свободно");
     fireEvent.change(screen.getByLabelText("Уровень владения"), { target: { value: "Читает и может объясняться" } });
@@ -267,7 +267,7 @@ describe("PersonalCardPageClient", () => {
       .mockResolvedValueOnce({ foreign_languages: [turkish, arabicFluent], updated_at: "2026-09-20T10:02:00Z" });
 
     render(<PersonalCardPageClient />);
-    fireEvent.click(await screen.findByRole("tab", { name: "Иностранные языки" }));
+    fireEvent.click(await screen.findByRole("tab", { name: "Знание иностранных языков" }));
 
     fireEvent.click(await screen.findByRole("button", { name: "Добавить язык" }));
     fireEvent.change(await screen.findByLabelText("Язык"), { target: { value: "Арабский" } });
@@ -299,7 +299,7 @@ describe("PersonalCardPageClient", () => {
     render(<PersonalCardPageClient />);
 
     await screen.findByTestId("self-personal-card-ready");
-    fireEvent.click(screen.getByRole("tab", { name: "Иностранные языки" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Знание иностранных языков" }));
     fireEvent.click(await screen.findByRole("button", { name: "Редактировать" }));
     await screen.findByLabelText("Уровень владения");
     fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));

@@ -5,19 +5,22 @@ import { useSearchParams } from "next/navigation";
 
 import PersonnelLkPageClient from "./PersonnelLkPageClient";
 import PersonnelSummaryPageClient from "./PersonnelSummaryPageClient";
+import SelfChangeReviewClient from "../self-change-review/SelfChangeReviewClient";
 
 const BASE = "/directory/personnel/lk";
 
 export default function PersonnelLkSectionPageClient() {
   const searchParams = useSearchParams();
   const reportsOpen = searchParams.get("view") === "reports";
+  const requestsOpen = searchParams.get("view") === "requests";
   const tabClass = (active: boolean) => `rounded-lg px-3 py-2 text-sm font-medium ${active ? "bg-blue-600 text-white" : "bg-zinc-100 text-zinc-800 dark:bg-zinc-800 dark:text-zinc-100"}`;
 
   return <div className="space-y-3">
     <nav aria-label="Личные карточки" className="flex flex-wrap gap-2 px-4 pt-4">
-      <Link href={BASE} aria-current={!reportsOpen ? "page" : undefined} className={tabClass(!reportsOpen)}>Список карточек</Link>
+      <Link href={BASE} aria-current={!reportsOpen && !requestsOpen ? "page" : undefined} className={tabClass(!reportsOpen && !requestsOpen)}>Список карточек</Link>
       <Link href={`${BASE}?view=reports&report=cards`} aria-current={reportsOpen ? "page" : undefined} className={tabClass(reportsOpen)}>Отчёты</Link>
+      <Link href={`${BASE}?view=requests`} aria-current={requestsOpen ? "page" : undefined} className={tabClass(requestsOpen)}>Заявки сотрудников</Link>
     </nav>
-    {reportsOpen ? <PersonnelSummaryPageClient /> : <PersonnelLkPageClient />}
+    {requestsOpen ? <SelfChangeReviewClient /> : reportsOpen ? <PersonnelSummaryPageClient /> : <PersonnelLkPageClient />}
   </div>;
 }

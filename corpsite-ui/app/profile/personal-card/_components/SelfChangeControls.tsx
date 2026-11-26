@@ -52,6 +52,7 @@ export function SelfPhotoChanges() {
   const [source, setSource] = React.useState<File | null>(null);
   const [sourceKey, setSourceKey] = React.useState(0);
   const [latest, setLatest] = React.useState<PhotoVersion | null>(null);
+  const [latestLoaded, setLatestLoaded] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const busyRef = React.useRef(false);
   const [error, setError] = React.useState("");
@@ -59,9 +60,11 @@ export function SelfPhotoChanges() {
   const [retryNeedsConfirmation, setRetryNeedsConfirmation] = React.useState(false);
   const [retryConfirmed, setRetryConfirmed] = React.useState(false);
   const loadLatest = React.useCallback(async () => {
+    setLatestLoaded(false);
     const files = await api<{ items: PhotoVersion[] }>("/api/personnel-files/me");
     const newest = files.items.filter((item) => item.kind === "photo").sort((a, b) => b.created_at.localeCompare(a.created_at))[0] ?? null;
     setLatest(newest);
+    setLatestLoaded(true);
     return newest;
   }, []);
   React.useEffect(() => {
@@ -82,7 +85,7 @@ export function SelfPhotoChanges() {
   const cropError = React.useCallback((message: string) => { setFile(null); setPreview(null); setError(message); }, []);
 
   async function send() {
-    if (!file || busyRef.current || latest?.state === "pending" || (retryNeedsConfirmation && !retryConfirmed)) return;
+    if (!file || !latestLoaded || busyRef.current || latest?.state === "pending" || (retryNeedsConfirmation && !retryConfirmed)) return;
     busyRef.current = true;
     setBusy(true); setError("");
     try {
@@ -107,7 +110,9 @@ export function SelfPhotoChanges() {
     } finally { busyRef.current = false; setBusy(false); }
   }
   return <div className="space-y-2" data-testid="self-photo-changes">
-    <div className="flex items-center gap-3">{current ? <img src={current} alt="Текущее фото" className="h-24 w-24 rounded-lg object-cover" /> : <div className="flex h-24 w-24 items-center justify-center rounded-lg bg-zinc-100 text-xs text-zinc-500">Фото отсутствует</div>}<ChangeButton onClick={() => setOpen(true)} /></div>
+    <div className="flex items-center gap-3">{current ? <img src={current} alt="Текущее фото" className="h-24 w-24 rounded-lg object-cover" /> : <div className="flex h-24 w-24 items-center justify-center rounded-lg bg-zinc-100 text-xs text-zinc-500">Фото отсутствует</div>}<ChangeButton disabled={!latestLoaded} onClick={() => setOpen(true)} /></div>
+    {!latestLoaded && !error && <p className="text-sm text-zinc-500">Загружаем состояние фото…</p>}
+    {error && !open && <p role="alert" className="text-sm text-red-700">{error} <button type="button" className="underline" onClick={() => { setError(""); void loadLatest().catch(() => setError("Не удалось загрузить состояние фото.")); }}>Обновить статус фото</button></p>}
     {confirmation && <p role="status" className="text-sm text-emerald-700">{confirmation}</p>}
     {latest && statusLabel[latest.state] && <p className="text-sm">Заявка на фото: <ChangeStatus state={latest.state} reason={latest.reason} /></p>}
     {open && <ChangeModal title="Замена фото" onClose={() => { if (!busyRef.current) setOpen(false); }}>
@@ -121,7 +126,7 @@ export function SelfPhotoChanges() {
       {(retryNeedsConfirmation || latest?.state === "pending") && <button type="button" className={`${buttonClass} mt-3`} disabled={busy} onClick={() => { void loadLatest().catch(() => setError("Не удалось обновить статус заявки.")); }}>Обновить статус заявки</button>}
       {retryNeedsConfirmation && latest?.state !== "pending" && !retryConfirmed && <button type="button" className={`${buttonClass} mt-3 block`} onClick={() => setRetryConfirmed(true)}>Подтвердить повторную отправку</button>}
       {retryConfirmed && <p className="mt-3 text-sm text-amber-700">Повторная отправка подтверждена. Проверьте кадр перед отправкой.</p>}
-      <button type="button" disabled={!file || busy || latest?.state === "pending" || (retryNeedsConfirmation && !retryConfirmed)} onClick={() => void send()} className="mt-4 rounded-md bg-blue-600 px-4 py-2 text-sm text-white disabled:opacity-50">{busy ? "Отправляем фото…" : retryNeedsConfirmation ? "Отправить повторно на проверку" : "Отправить на проверку"}</button>
+      <button type="button" disabled={!file || !latestLoaded || busy || latest?.state === "pending" || (retryNeedsConfirmation && !retryConfirmed)} onClick={() => void send()} className="mt-4 rounded-md bg-blue-600 px-4 py-2 text-sm text-white disabled:opacity-50">{busy ? "Отправляем фото…" : retryNeedsConfirmation ? "Отправить повторно на проверку" : "Отправить на проверку"}</button>
     </ChangeModal>}
   </div>;
 }

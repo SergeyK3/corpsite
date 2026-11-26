@@ -1,3 +1,3 @@
-import SelfChangeReviewClient from "./SelfChangeReviewClient";
+import { redirect } from "next/navigation";
 
-export default function SelfChangeReviewPage() { return <SelfChangeReviewClient />; }
+export default function SelfChangeReviewPage() { redirect("/directory/personnel/lk?view=requests"); }

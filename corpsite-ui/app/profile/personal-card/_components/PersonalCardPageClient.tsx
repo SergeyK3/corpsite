@@ -4,6 +4,8 @@ import {educationKindLabel} from "@/app/directory/personnel/_lib/pprCardPresenta
 import { useCallback, useEffect, useState } from "react";
 
 import PositionCabinetSectionShell from "@/components/PositionCabinetSectionShell";
+import PersonalCardSectionTabs from "@/components/PersonalCardSectionTabs";
+import { PERSONAL_CARD_SECTIONS, type PprCardSectionId } from "@/lib/pprCardSections";
 import { formatPersonnelDayDateForDisplay } from "@/lib/personnelDayDate";
 import { getMyOperationalAssignment, getMyPersonalCard, type SelfOperationalAssignment, type SelfPersonalCard } from "../_lib/selfPersonalCardApi.client";
 import { displayEmploymentRate, displayOperationalStatus } from "../_lib/operationalAssignmentDisplay";
@@ -13,18 +15,9 @@ import { ContactsEditor, EducationEditor, EmploymentEditor, LanguagesEditor, typ
 import { SelfPhotoChanges } from "./SelfChangeControls";
 import SelfRelativeChanges from "./SelfRelativeChanges";
 
-type TabId = "overview" | "contacts" | "education" | "employment" | "languages" | "relatives" | "other";
 type LoadState = { kind: "loading" } | { kind: "ready"; card: SelfPersonalCard; operationalAssignment: SelfOperationalAssignment } | { kind: "person-not-linked" } | { kind: "unavailable" };
 
-const TABS: { id: TabId; label: string }[] = [
-  { id: "overview", label: "Обзор" }, { id: "contacts", label: "Контакты" }, { id: "education", label: "Образование" }, { id: "employment", label: "Трудовая биография" }, { id: "languages", label: "Иностранные языки" }, { id: "relatives", label: "Родственники" }, { id: "other", label: "Другие сведения" },
-];
-const SECTION_TITLES: Record<string, string> = {
-  "PPR-TRAINING": "Обучение и повышение квалификации",
-  "PPR-FAMILY": "Родственники",
-  "PPR-EMPLOYMENT-BIOGRAPHY": "Трудовая биография",
-  "PPR-MILITARY": "Воинский учёт",
-};
+const TABS = PERSONAL_CARD_SECTIONS;
 const emptyText = "Сведения пока не заполнены.";
 
 function recordText(record: Record<string, unknown>): string {
@@ -99,14 +92,37 @@ function Records({ sectionCode, card }: { sectionCode: string; card: SelfPersona
 function Overview({ card, operationalAssignment }: { card: SelfPersonalCard; operationalAssignment: SelfOperationalAssignment }) {
   const [pdfError, setPdfError] = useState<string | null>(null);
   async function downloadPdf() { setPdfError(null); const result = await downloadMyPersonalCardPdf(); if (!result.ok) setPdfError(result.error); }
-  return <div className="space-y-4"><Card title="Фото"><SelfPhotoChanges /></Card><Card testId="self-overview"><div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div><h2 className="text-xl font-semibold">{card.general.full_name}</h2><dl className="mt-4 grid gap-3 sm:grid-cols-2"><div><dt className="text-sm text-zinc-500">ИИН</dt><dd className="mt-1">{operationalAssignment.iin ?? card.general.iin ?? "Не указан"}</dd></div><div><dt className="text-sm text-zinc-500">Дата рождения</dt><dd className="mt-1">{card.general.birth_date ?? "Не указана"}</dd></div></dl></div><button type="button" onClick={() => void downloadPdf()} className="w-full rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900 sm:w-auto" data-testid="self-personal-card-download-pdf">Скачать PDF</button></div>{pdfError && <p className="mt-4 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200" role="alert">{pdfError}</p>}</Card><Card title="Текущее место работы" testId="self-operational-assignment"><dl className="mt-3 grid gap-3 sm:grid-cols-2"><div><dt className="text-sm text-zinc-500">Подразделение</dt><dd className="mt-1">{operationalAssignment.org_unit_name ?? "Не указано"}</dd></div><div><dt className="text-sm text-zinc-500">Должность</dt><dd className="mt-1">{operationalAssignment.position_name ?? "Не указана"}</dd></div><div><dt className="text-sm text-zinc-500">Статус</dt><dd className="mt-1">{displayOperationalStatus(operationalAssignment.operational_status) ?? "Не указан"}</dd></div><div><dt className="text-sm text-zinc-500">Ставка</dt><dd className="mt-1">{displayEmploymentRate(operationalAssignment.employment_rate) ?? "Не указана"}</dd></div></dl></Card></div>;
+  return <div className="space-y-4"><Card title="Фото"><SelfPhotoChanges /></Card><Card testId="self-overview"><div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between"><div><dl className="grid gap-3 sm:grid-cols-2"><div><dt className="text-sm text-zinc-500">ИИН</dt><dd className="mt-1">{operationalAssignment.iin ?? card.general.iin ?? "Не указан"}</dd></div><div><dt className="text-sm text-zinc-500">Дата рождения</dt><dd className="mt-1">{card.general.birth_date ?? "Не указана"}</dd></div></dl></div><button type="button" onClick={() => void downloadPdf()} className="w-full rounded-md border border-zinc-300 px-4 py-2 text-sm font-medium hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-900 sm:w-auto" data-testid="self-personal-card-download-pdf">Скачать PDF</button></div>{pdfError && <p className="mt-4 rounded-md border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200" role="alert">{pdfError}</p>}</Card><Card title="Текущее место работы" testId="self-operational-assignment"><dl className="mt-3 grid gap-3 sm:grid-cols-2"><div><dt className="text-sm text-zinc-500">Подразделение</dt><dd className="mt-1">{operationalAssignment.org_unit_name ?? "Не указано"}</dd></div><div><dt className="text-sm text-zinc-500">Должность</dt><dd className="mt-1">{operationalAssignment.position_name ?? "Не указана"}</dd></div><div><dt className="text-sm text-zinc-500">Статус</dt><dd className="mt-1">{displayOperationalStatus(operationalAssignment.operational_status) ?? "Не указан"}</dd></div><div><dt className="text-sm text-zinc-500">Ставка</dt><dd className="mt-1">{displayEmploymentRate(operationalAssignment.employment_rate) ?? "Не указана"}</dd></div></dl></Card></div>;
 }
 
 function PersonalCardTabs({ card, operationalAssignment, onSaved }: { card: SelfPersonalCard; operationalAssignment: SelfOperationalAssignment; onSaved: () => Promise<void> }) {
-  const [activeTab, setActiveTab] = useState<TabId>("overview");
+  const [activeTab, setActiveTab] = useState<PprCardSectionId>("general");
   const [employmentToEdit, setEmploymentToEdit] = useState<EmploymentRecordForEdit | null>(null);
-  const otherSections = Object.keys(card.sections).filter((code) => code !== "PPR-EDUCATION" && code !== "PPR-EMPLOYMENT-BIOGRAPHY" && code !== "PPR-FAMILY");
-  return <div className="space-y-4" data-testid="self-personal-card-ready"><div role="tablist" aria-label="Разделы личной карточки" className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1">{TABS.map((tab) => <button key={tab.id} type="button" role="tab" aria-selected={activeTab === tab.id} aria-controls={`self-card-panel-${tab.id}`} onClick={() => setActiveTab(tab.id)} className={`shrink-0 rounded-md px-3 py-2 text-sm font-medium transition ${activeTab === tab.id ? "bg-blue-600 text-white" : "border border-zinc-300 bg-white text-zinc-800 hover:bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-950 dark:text-zinc-200 dark:hover:bg-zinc-900"}`}>{tab.label}</button>)}</div><div role="tabpanel" id={`self-card-panel-${activeTab}`} className="min-w-0">{activeTab === "overview" && <Overview card={card} operationalAssignment={operationalAssignment} />}{activeTab === "contacts" && <div className="space-y-4"><Card title="Контакты"><p className="mt-2 text-base text-zinc-600 dark:text-zinc-400">Укажите актуальные способы связи и адреса.</p></Card><ContactsEditor onSaved={onSaved} /></div>}{activeTab === "education" && <div className="space-y-4"><section className="rounded-xl border border-zinc-200 bg-white p-4 text-base shadow-sm dark:border-zinc-800 dark:bg-zinc-950 sm:p-5"><EducationRecords card={card} /></section><EducationEditor onSaved={onSaved} /></div>}{activeTab === "employment" && <div className="space-y-4"><Card title="Трудовая биография"><EmploymentRecords card={card} onEdit={setEmploymentToEdit} /></Card><EmploymentEditor editRecord={employmentToEdit} onEditClosed={() => setEmploymentToEdit(null)} onSaved={async () => { await onSaved(); setEmploymentToEdit(null); }} /></div>}{activeTab === "languages" && <div className="space-y-4"><Card title="Иностранные языки"><p className="mt-3 text-base text-zinc-700 dark:text-zinc-300">{card.additional.foreign_languages.length ? card.additional.foreign_languages.map((item) => `${item.language} — ${displayForeignLanguageLevel(item.proficiency)}`).join(", ") : emptyText}</p></Card><LanguagesEditor onSaved={onSaved} /></div>}{activeTab === "relatives" && <Card><SelfRelativeChanges records={(card.sections["PPR-FAMILY"]?.active ?? []) as React.ComponentProps<typeof SelfRelativeChanges>["records"]} /></Card>}{activeTab === "other" && <div className="grid gap-4">{otherSections.length ? otherSections.map((code) => <Card key={code} title={SECTION_TITLES[code] ?? code}><Records sectionCode={code} card={card} /></Card>) : <Card title="Другие сведения"><p className="text-base text-zinc-600 dark:text-zinc-400">{emptyText}</p></Card>}</div>}</div></div>;
+  const categories = card.additional.qualification_categories ?? [];
+  return <div className="space-y-4" data-testid="self-personal-card-ready">
+    <h2 className="text-xl font-semibold">{card.general.full_name}</h2>
+    <PersonalCardSectionTabs sections={TABS} active={activeTab} onSelect={setActiveTab} />
+    <div role="tabpanel" id={`personal-card-panel-${activeTab}`} className="min-w-0">
+      {activeTab === "general" && <Overview card={card} operationalAssignment={operationalAssignment} />}
+      {activeTab === "contacts" && <div className="space-y-4"><Card title="Контакты"><p className="mt-2 text-base text-zinc-600 dark:text-zinc-400">Укажите актуальные способы связи и адреса.</p></Card><ContactsEditor onSaved={onSaved} /></div>}
+      {activeTab === "education" && <div className="space-y-4"><Card><EducationRecords card={card} /></Card><EducationEditor onSaved={onSaved} /></div>}
+      {activeTab === "training" && <Card title="Обучение и повышение квалификации"><Records sectionCode="PPR-TRAINING" card={card} /></Card>}
+      {activeTab === "category" && <Card title="Категория">{categories.length
+        ? <ul className="mt-3 list-disc space-y-2 pl-5">{categories.map((item, index) => <li key={index}>{item.specialty} — {item.category}</li>)}</ul>
+        : <p className="mt-3">{emptyText}</p>}</Card>}
+      {activeTab === "employment_biography" && <div className="space-y-4"><Card title="Трудовая биография"><EmploymentRecords card={card} onEdit={setEmploymentToEdit} /></Card><EmploymentEditor editRecord={employmentToEdit} onEditClosed={() => setEmploymentToEdit(null)} onSaved={async () => { await onSaved(); setEmploymentToEdit(null); }} /></div>}
+      {activeTab === "assignment" && <Card title="Работа в текущей организации"><RecordFields fields={[
+        ["Подразделение", operationalAssignment.org_unit_name ?? "Не указано"],
+        ["Должность", operationalAssignment.position_name ?? "Не указана"],
+        ["Статус", displayOperationalStatus(operationalAssignment.operational_status) ?? "Не указан"],
+        ["Ставка", displayEmploymentRate(operationalAssignment.employment_rate) ?? "Не указана"],
+      ]} /></Card>}
+      {activeTab === "access" && <Card title="Доступ"><p className="mt-3">Сведения об учётной записи и смена пароля доступны в <a className="text-blue-700 underline" href="/profile">профиле</a>.</p></Card>}
+      {activeTab === "military" && <Card title="Воинский учёт"><Records sectionCode="PPR-MILITARY" card={card} /></Card>}
+      {activeTab === "family" && <Card><SelfRelativeChanges records={(card.sections["PPR-FAMILY"]?.active ?? []) as React.ComponentProps<typeof SelfRelativeChanges>["records"]} /></Card>}
+      {activeTab === "languages" && <div className="space-y-4"><Card title="Знание иностранных языков"><p className="mt-3 text-base text-zinc-700 dark:text-zinc-300">{card.additional.foreign_languages.length ? card.additional.foreign_languages.map((item) => `${item.language} — ${displayForeignLanguageLevel(item.proficiency)}`).join(", ") : emptyText}</p></Card><LanguagesEditor onSaved={onSaved} /></div>}
+    </div>
+  </div>;
 }
 
 export default function PersonalCardPageClient() {
