@@ -26,7 +26,7 @@ export function markTestOrgUnit(unitId: number, confirmedName: string, evidence:
 
 export function deleteTestOrgUnit(unitId: number, snapshotHash: string): Promise<{ audit_id: number; deleted_counts: Record<string, number> }> {
   return apiFetchJson(`/admin/org-units/${unitId}/test-cleanup/delete`, {
-    method: "POST", body: { snapshot_hash: snapshotHash },
+    method: "POST", body: { snapshot_hash: snapshotHash, confirmation: "УДАЛИТЬ" },
   });
 }
 

@@ -66,6 +66,7 @@ class TestOrgUnitMarkIn(BaseModel):
 
 class TestOrgUnitDeleteIn(BaseModel):
     snapshot_hash: str = Field(..., min_length=64, max_length=64)
+    confirmation: str
 
 
 def _canonical_sysadmin(admin: Dict[str, Any]) -> int:
@@ -101,6 +102,8 @@ def admin_mark_test_org_unit(unit_id: int = Path(..., ge=1), body: TestOrgUnitMa
 def admin_delete_test_org_unit(unit_id: int = Path(..., ge=1), body: TestOrgUnitDeleteIn = None,
     admin: Dict[str, Any] = Depends(require_sysadmin_api)) -> Dict[str, Any]:
     actor = _canonical_sysadmin(admin)
+    if body.confirmation != 'УДАЛИТЬ':
+        raise HTTPException(status_code=400, detail='Введите слово УДАЛИТЬ для подтверждения')
     try:
         return delete_test_org_unit(unit_id=unit_id, actor_user_id=actor,
             snapshot_hash=body.snapshot_hash)
