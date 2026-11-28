@@ -4,6 +4,32 @@
 import { apiFetchJson } from "../../../../lib/api";
 import type { OrgUnitNodeType, TreeNode as UiTreeNode } from "../_components/OrgUnitsTree";
 
+export type TestOrgUnitCleanupPreview = {
+  unit_id: number;
+  name: string;
+  is_test_marked: boolean;
+  counts: Record<string, number>;
+  blockers: string[];
+  can_delete: boolean;
+  snapshot_hash: string;
+};
+
+export function previewTestOrgUnitCleanup(unitId: number): Promise<TestOrgUnitCleanupPreview> {
+  return apiFetchJson<TestOrgUnitCleanupPreview>(`/admin/org-units/${unitId}/test-cleanup/preview`);
+}
+
+export function markTestOrgUnit(unitId: number, confirmedName: string, evidence: string): Promise<unknown> {
+  return apiFetchJson(`/admin/org-units/${unitId}/test-cleanup/mark`, {
+    method: "POST", body: { confirmed_name: confirmedName, evidence },
+  });
+}
+
+export function deleteTestOrgUnit(unitId: number, snapshotHash: string): Promise<{ audit_id: number; deleted_counts: Record<string, number> }> {
+  return apiFetchJson(`/admin/org-units/${unitId}/test-cleanup/delete`, {
+    method: "POST", body: { snapshot_hash: snapshotHash },
+  });
+}
+
 export type TreeNode = {
   id: string;
   unit_id?: number;

@@ -53,6 +53,13 @@ class TestIsTestDatabaseName:
 
 
 class TestValidateTestDatabaseUrl:
+    def test_public_test_stand_database_rejected(self):
+        with pytest.raises(PytestDatabaseGuardError, match="public test stand database"):
+            validate_test_database_url(
+                test_database_url="postgresql://postgres:secret@localhost:5432/corpsite_hire_accept_20261120_test",
+                app_database_url="postgresql://postgres:secret@localhost:5432/corpsite",
+            )
+
     def test_missing_test_url(self):
         with pytest.raises(PytestDatabaseGuardError, match="TEST_DATABASE_URL is required"):
             validate_test_database_url(test_database_url=None)

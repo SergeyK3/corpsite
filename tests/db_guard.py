@@ -72,6 +72,11 @@ def is_test_database_name(database: str) -> bool:
     return name.endswith("_test") or name.endswith("-test")
 
 
+# This database serves the public test.mmc.004.kz application. Its name has a
+# test suffix for historical reasons, but it must never be a pytest target.
+PUBLIC_TEST_STAND_DATABASES = frozenset({"corpsite_hire_accept_20261120_test"})
+
+
 def validate_test_database_url(
     *,
     test_database_url: Optional[str],
@@ -97,6 +102,12 @@ def validate_test_database_url(
             "TEST_DATABASE_URL must point to a database whose name ends with "
             "'_test' or '-test'. "
             f"Got database name {test_target.database!r}."
+        )
+
+    if test_target.database in PUBLIC_TEST_STAND_DATABASES:
+        raise PytestDatabaseGuardError(
+            "TEST_DATABASE_URL points to the public test stand database. "
+            "Use a disposable isolated database instead."
         )
 
     if app_database_url and str(app_database_url).strip():

@@ -8,6 +8,9 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from pydantic import BaseModel, Field
 
 from app.security.admin_guard import require_sysadmin_api
+from app.services.test_org_unit_cleanup_service import (
+    preview_test_org_unit_cleanup, mark_test_org_unit, delete_test_org_unit,
+)
 from app.services.org_units_admin_service import (
     OrgUnitDeleteRejected,
     activate_admin_org_unit,
@@ -54,6 +57,57 @@ class AdminOrgUnitUpdateIn(BaseModel):
 
 class AdminOrgUnitBulkDeleteIn(BaseModel):
     unit_ids: List[int] = Field(..., min_length=1, max_length=200)
+
+
+class TestOrgUnitMarkIn(BaseModel):
+    confirmed_name: str = Field(..., min_length=1)
+    evidence: str = Field(..., min_length=20)
+
+
+class TestOrgUnitDeleteIn(BaseModel):
+    snapshot_hash: str = Field(..., min_length=64, max_length=64)
+
+
+def _canonical_sysadmin(admin: Dict[str, Any]) -> int:
+    if int(admin.get('role_id') or 0) != 2 or admin.get('is_sysadmin_assistant'):
+        raise HTTPException(status_code=403, detail='Только SYSADMIN может удалять тестовые подразделения')
+    return int(admin['user_id'])
+
+
+@router.get('/{unit_id}/test-cleanup/preview')
+def admin_preview_test_org_unit_cleanup(unit_id: int = Path(..., ge=1),
+    admin: Dict[str, Any] = Depends(require_sysadmin_api)) -> Dict[str, Any]:
+    _canonical_sysadmin(admin)
+    try:
+        return preview_test_org_unit_cleanup(unit_id)
+    except LookupError as exc:
+        raise _lookup_to_404(exc) from exc
+
+
+@router.post('/{unit_id}/test-cleanup/mark')
+def admin_mark_test_org_unit(unit_id: int = Path(..., ge=1), body: TestOrgUnitMarkIn = None,
+    admin: Dict[str, Any] = Depends(require_sysadmin_api)) -> Dict[str, Any]:
+    actor = _canonical_sysadmin(admin)
+    try:
+        return mark_test_org_unit(unit_id=unit_id, actor_user_id=actor,
+            confirmed_name=body.confirmed_name, evidence=body.evidence)
+    except LookupError as exc:
+        raise _lookup_to_404(exc) from exc
+    except ValueError as exc:
+        raise _value_to_400(exc) from exc
+
+
+@router.post('/{unit_id}/test-cleanup/delete')
+def admin_delete_test_org_unit(unit_id: int = Path(..., ge=1), body: TestOrgUnitDeleteIn = None,
+    admin: Dict[str, Any] = Depends(require_sysadmin_api)) -> Dict[str, Any]:
+    actor = _canonical_sysadmin(admin)
+    try:
+        return delete_test_org_unit(unit_id=unit_id, actor_user_id=actor,
+            snapshot_hash=body.snapshot_hash)
+    except LookupError as exc:
+        raise _lookup_to_404(exc) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 @router.get("")

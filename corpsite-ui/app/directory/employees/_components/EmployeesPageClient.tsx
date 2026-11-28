@@ -16,6 +16,8 @@ import ControlListEntryDialog from "./ControlListEntryDialog";
 import EmployeeStatusCorrectionDrawer, {
   type EmployeeStatusCorrectionFormValues,
 } from "../../personnel/_components/EmployeeStatusCorrectionDrawer";
+import TestEmployeeCleanupDialog from "../../personnel/_components/TestEmployeeCleanupDialog";
+import { previewTestEmployeeCleanup, type TestEmployeeCleanupResult } from "../../personnel/_lib/personnelLkApi.client";
 import type { EmployeeCreateFormValues } from "./EmployeeCreateForm";
 
 import {
@@ -27,10 +29,8 @@ import {
   mapApiErrorToMessage,
   createEmployee,
   correctEmployeeStatus,
-  deleteEmployee,
 } from "../_lib/api.client";
 import { useCurrentUser } from "@/lib/currentUser";
-import { canHardDeleteEmployee } from "@/lib/employeeHardDelete";
 import { getOrgUnitsTree, type TreeNode } from "../../org-units/_lib/api.client";
 import type {
   EmployeeDTO,
@@ -214,11 +214,15 @@ export default function EmployeesPageClient(props: Props) {
   const [employeeRefreshToken, setEmployeeRefreshToken] = React.useState(0);
   const me = useCurrentUser();
   const [deletingEmployeeId, setDeletingEmployeeId] = React.useState<string | null>(null);
+  const [testCleanupDialog, setTestCleanupDialog] = React.useState<{
+    employeeId: number; fullName: string; mode: "mark" | "delete";
+  } | null>(null);
+  const [cleanupMessage, setCleanupMessage] = React.useState<string | null>(null);
   const [statusCorrectionEmployee, setStatusCorrectionEmployee] = React.useState<EmployeeListItem | null>(null);
   const [statusCorrectionSaving, setStatusCorrectionSaving] = React.useState(false);
   const [statusCorrectionError, setStatusCorrectionError] = React.useState<string | null>(null);
 
-  const showStaffAdminDelete = isStaffRoute && canHardDeleteEmployee(me);
+  const showStaffAdminDelete = isStaffRoute && Number(me?.role_id) === 2 && me?.is_sysadmin_assistant !== true;
   const roleCode = String(me?.role_code ?? "").trim().toUpperCase();
   const canCorrectStaffStatus = isStaffRoute && (
     me?.has_hr_enrollment_manager === true || roleCode === "ADMIN" || roleCode === "HR_HEAD"
@@ -486,31 +490,26 @@ export default function EmployeesPageClient(props: Props) {
 
   async function handleDeleteEmployee(item: EmployeeDTO | EmployeeListItem) {
     const row = item as any;
-    const employeeId = String(row?.employee_id ?? row?.employeeId ?? row?.id ?? "").trim();
+    const employeeId = Number(row?.employee_id ?? row?.employeeId ?? row?.id);
     const fio = String(row?.fio ?? row?.full_name ?? row?.fullName ?? row?.name ?? "сотрудника").trim();
-    if (!employeeId) return;
-
-    const confirmed = window.confirm(
-      `Удалить сотрудника «${fio}»?\n\nСотрудник и все связанные данные будут удалены без возможности восстановления.`,
-    );
-    if (!confirmed) return;
-
-    setDeletingEmployeeId(employeeId);
+    if (!Number.isInteger(employeeId) || employeeId <= 0) return;
+    setDeletingEmployeeId(String(employeeId));
     setError(null);
     try {
-      await deleteEmployee(employeeId);
-      setData((prev) => ({
-        items: prev.items.filter((row) => {
-          const rowId = String((row as any)?.employee_id ?? (row as any)?.employeeId ?? (row as any)?.id ?? "");
-          return rowId !== employeeId;
-        }),
-        total: Math.max(0, prev.total - 1),
-      }));
+      const preview = await previewTestEmployeeCleanup(employeeId);
+      setTestCleanupDialog({ employeeId, fullName: fio, mode: preview.is_test_marked ? "delete" : "mark" });
     } catch (e) {
       setError(mapApiErrorToMessage(e, "Не удалось удалить сотрудника."));
     } finally {
       setDeletingEmployeeId(null);
     }
+  }
+
+  function handleTestEmployeeDeleted(result: TestEmployeeCleanupResult) {
+    setTestCleanupDialog(null);
+    const count = Object.values(result.deleted_counts).reduce((sum, value) => sum + value, 0);
+    setCleanupMessage(`Тестовый сотрудник и связанные с ним данные удалены · ${count} записей`);
+    void loadItems();
   }
 
   function handleOpenStatusCorrection(item: EmployeeListItem) {
@@ -738,6 +737,7 @@ export default function EmployeesPageClient(props: Props) {
               ) : null}
             </div>
             {exportMessage ? <p role="status" className="mb-3 text-sm">{exportMessage}</p> : null}
+            {cleanupMessage ? <p role="status" className="mb-3 text-sm text-emerald-700">{cleanupMessage}</p> : null}
 
             <EmployeesTable
               items={data.items}
@@ -786,6 +786,19 @@ export default function EmployeesPageClient(props: Props) {
           refreshToken={employeeRefreshToken}
         />
       )}
+
+      {testCleanupDialog ? <TestEmployeeCleanupDialog
+        key={`${testCleanupDialog.mode}-${testCleanupDialog.employeeId}`}
+        employeeId={testCleanupDialog.employeeId}
+        fullName={testCleanupDialog.fullName}
+        mode={testCleanupDialog.mode}
+        onClose={() => setTestCleanupDialog(null)}
+        onMarked={() => {
+          setTestCleanupDialog(null);
+          setCleanupMessage("Тестовое происхождение сотрудника подтверждено. Нажмите «Удалить» для предварительного просмотра.");
+        }}
+        onDeleted={handleTestEmployeeDeleted}
+      /> : null}
 
       {!readOnly ? (
         <EmployeeCreateDrawer

@@ -10,6 +10,7 @@ import { useCurrentUser } from "@/lib/currentUser";
 import { readOrgScopeFromSearchParams } from "@/lib/orgScope";
 
 import { nodeSearchText, type TreeNode } from "./_components/OrgUnitsTree";
+import TestOrgUnitCleanupDialog from "./_components/TestOrgUnitCleanupDialog";
 import {
   activateOrgUnit,
   createOrgUnit,
@@ -75,7 +76,9 @@ function flattenListRows(nodes: TreeNode[]): OrgUnitListRow[] {
 }
 
 export default function OrgUnitsPage() {
-  const canManage = useCurrentUser()?.is_sysadmin_assistant !== true;
+  const me = useCurrentUser();
+  const canManage = me?.is_sysadmin_assistant !== true;
+  const canDeleteTestUnit = Number(me?.role_id) === 2 && me?.is_sysadmin_assistant !== true;
   const router = useRouter();
   const sp = useSearchParams();
   const orgScope = useMemo(() => readOrgScopeFromSearchParams(sp), [sp]);
@@ -92,6 +95,8 @@ export default function OrgUnitsPage() {
 
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errorText, setErrorText] = useState<string>("");
+  const [deleteTarget, setDeleteTarget] = useState<{ id: number; name: string } | null>(null);
+  const [deleteMessage, setDeleteMessage] = useState("");
 
   // Rename modal
   const [renameOpen, setRenameOpen] = useState(false);
@@ -420,6 +425,7 @@ export default function OrgUnitsPage() {
 
           {errorText ? <div role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700 dark:border-red-900/55 dark:bg-red-950/35 dark:text-red-300">Ошибка: {errorText}</div> : null}
 
+          {deleteMessage ? <p role="status" className="text-sm text-emerald-700">{deleteMessage}</p> : null}
           <div className="flex min-w-0 flex-col gap-4 lg:flex-row">
             <div className="min-w-0 flex-1 overflow-x-auto rounded-xl border border-zinc-200 dark:border-zinc-800">
               <table className="w-full text-sm" data-testid="org-units-list">
@@ -429,6 +435,7 @@ export default function OrgUnitsPage() {
                   <th className="px-3 py-2 font-semibold">Код</th>
                   <th className="px-3 py-2 font-semibold">Родитель</th>
                   <th className="px-3 py-2 font-semibold">Статус</th>
+                  {canDeleteTestUnit ? <th className="px-3 py-2 font-semibold">Действия</th> : null}
                 </tr></thead>
                 <tbody>
                   {filteredRows.map(({ node, parentTitle }) => <tr key={node.id} data-testid="org-unit-row"
@@ -441,9 +448,14 @@ export default function OrgUnitsPage() {
                     <td className="px-3 py-2">{node.code || "—"}</td>
                     <td className="px-3 py-2">{parentTitle || "—"}</td>
                     <td className="px-3 py-2">{inactiveSet.has(String(node.id)) ? "Неактивно" : "Активно"}</td>
+                    {canDeleteTestUnit ? <td className="px-3 py-2"><button type="button"
+                      className="rounded-md bg-red-700 px-2 py-1 text-white"
+                      onClick={(event) => { event.stopPropagation(); setDeleteMessage(""); setDeleteTarget({ id: Number(node.id), name: node.title }); }}>
+                      Удалить
+                    </button></td> : null}
                   </tr>)}
-                  {!isLoading && filteredRows.length === 0 ? <tr><td colSpan={5} className="px-3 py-5 text-center text-zinc-500">Отделения не найдены.</td></tr> : null}
-                  {isLoading ? <tr><td colSpan={5} className="px-3 py-5 text-center text-zinc-500">Загрузка…</td></tr> : null}
+                  {!isLoading && filteredRows.length === 0 ? <tr><td colSpan={canDeleteTestUnit ? 6 : 5} className="px-3 py-5 text-center text-zinc-500">Отделения не найдены.</td></tr> : null}
+                  {isLoading ? <tr><td colSpan={canDeleteTestUnit ? 6 : 5} className="px-3 py-5 text-center text-zinc-500">Загрузка…</td></tr> : null}
                 </tbody>
               </table>
             </div>
@@ -769,6 +781,15 @@ export default function OrgUnitsPage() {
           </div>
         </div>
       ) : null}
+      {deleteTarget ? <TestOrgUnitCleanupDialog key={deleteTarget.id}
+        unitId={deleteTarget.id} name={deleteTarget.name}
+        onClose={() => setDeleteTarget(null)}
+        onDeleted={() => {
+          setDeleteTarget(null);
+          setSelectedId(null);
+          setDeleteMessage("Тестовое подразделение удалено · 1 запись");
+          void loadTree();
+        }} /> : null}
     </div>
   );
 }
