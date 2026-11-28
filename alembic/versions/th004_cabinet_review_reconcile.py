@@ -58,6 +58,59 @@ def upgrade() -> None:
             RAISE EXCEPTION 'Relative change events are append only';
         END $function$;
     """)
+    op.execute("""
+        CREATE OR REPLACE FUNCTION public.guard_test_card_change_event_cleanup()
+        RETURNS trigger LANGUAGE plpgsql AS $function$
+        BEGIN
+            IF TG_OP = 'DELETE'
+                AND current_setting('corpsite.test_employee_cleanup', true) = 'on'
+                AND EXISTS (
+                    SELECT 1 FROM public.person_card_change_requests r
+                    JOIN public.test_employee_marks m ON m.person_id = r.person_id
+                    WHERE r.request_id = OLD.request_id
+                ) THEN
+                RETURN OLD;
+            END IF;
+            IF TG_OP = 'UPDATE'
+                AND current_setting('corpsite.test_employee_cleanup', true) = 'on'
+                AND NEW.actor_id IS NULL AND OLD.actor_id IS NOT NULL
+                AND to_jsonb(NEW) - 'actor_id' = to_jsonb(OLD) - 'actor_id'
+                AND EXISTS (
+                    SELECT 1 FROM public.test_employee_history_snapshots s
+                    JOIN public.users u ON u.user_id = OLD.actor_id
+                    JOIN public.test_employee_marks m ON m.employee_id = u.employee_id
+                    WHERE s.deletion_id::text = current_setting(
+                        'corpsite.test_employee_cleanup_deletion_id', true)
+                      AND s.source_table = 'person_card_change_events'
+                      AND s.source_key = OLD.event_id::text
+                      AND s.disposition = 'RETAINED'
+                      AND s.row_snapshot->>'actor_id' = OLD.actor_id::text
+                ) THEN
+                RETURN NEW;
+            END IF;
+            RAISE EXCEPTION 'Card change events are append only';
+        END $function$;
+        DO $block$
+        BEGIN
+            IF NOT EXISTS (
+                SELECT 1 FROM pg_trigger
+                WHERE tgrelid = 'public.person_card_change_events'::regclass
+                  AND tgname = 'person_card_change_events_immutable'
+            ) THEN
+                CREATE TRIGGER person_card_change_events_immutable
+                    BEFORE UPDATE OR DELETE ON public.person_card_change_events
+                    FOR EACH ROW EXECUTE FUNCTION public.guard_test_card_change_event_cleanup();
+            ELSIF NOT EXISTS (
+                SELECT 1 FROM pg_trigger
+                WHERE tgrelid = 'public.person_card_change_events'::regclass
+                  AND tgname = 'person_card_change_events_immutable'
+                  AND tgfoid = 'public.guard_test_card_change_event_cleanup()'::regprocedure
+                  AND tgenabled = 'O'
+            ) THEN
+                RAISE EXCEPTION 'Unexpected card review history guard';
+            END IF;
+        END $block$;
+    """)
 
 
 def downgrade() -> None:
@@ -65,6 +118,8 @@ def downgrade() -> None:
     for table in ("person_card_change_events", "person_relative_change_events"):
         if conn.execute(text(f"SELECT EXISTS(SELECT 1 FROM public.{table} WHERE actor_id IS NULL)")).scalar_one():
             raise RuntimeError(f"Refusing to discard archived reviewer attribution in {table}")
+    op.execute("DROP TRIGGER person_card_change_events_immutable ON public.person_card_change_events")
+    op.execute("DROP FUNCTION public.guard_test_card_change_event_cleanup()")
     op.execute("ALTER TABLE public.person_relative_change_events ALTER COLUMN actor_id SET NOT NULL")
     op.execute("ALTER TABLE public.person_card_change_events ALTER COLUMN actor_id SET NOT NULL")
     op.execute("""
