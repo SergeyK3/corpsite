@@ -21,6 +21,8 @@ type Props = {
   onDeleted: (result: TestEmployeeCleanupResult) => void;
 };
 
+type CleanupOrder = NonNullable<TestEmployeeCleanupPreview["personnel_orders"]>[number];
+
 const tableLabels: Record<string, string> = {
   persons: "Физическое лицо",
   employees: "Сотрудник",
@@ -89,9 +91,8 @@ export default function TestEmployeeCleanupDialog({
   const [evidence, setEvidence] = React.useState("");
   const [confirmedName, setConfirmedName] = React.useState("");
   const [stage, setStage] = React.useState<"mark" | "delete" | "blocked">(mode);
-  const [selectedOrderId, setSelectedOrderId] = React.useState<number | null>(null);
-  const [orderEvidence, setOrderEvidence] = React.useState("");
-  const [confirmedOrderNumber, setConfirmedOrderNumber] = React.useState("");
+  const [orderEvidence, setOrderEvidence] = React.useState<Record<number, string>>({});
+  const [orderConfirmations, setOrderConfirmations] = React.useState<Record<number, boolean>>({});
 
   React.useEffect(() => {
     let alive = true;
@@ -107,6 +108,10 @@ export default function TestEmployeeCleanupDialog({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose, submitting]);
+
+  React.useEffect(() => {
+    setOrderConfirmations({});
+  }, [preview?.snapshot_hash]);
 
   async function submit() {
     if (!preview || submitting || (stage === "delete" && (!confirmed || !preview.can_delete))) return;
@@ -133,18 +138,20 @@ export default function TestEmployeeCleanupDialog({
     }
   }
 
-  async function confirmOrder(orderId: number) {
-    if (submitting || orderEvidence.trim().length < 20) return;
+  async function confirmOrder(order: CleanupOrder) {
+    const orderId = order.order_id;
+    const documentedEvidence = (orderEvidence[orderId] ?? "").trim();
+    if (submitting || !orderConfirmations[orderId] || documentedEvidence.length < 20) return;
     setSubmitting(true);
     setError(null);
     try {
-      await markTestPersonnelOrder(employeeId, orderId, orderEvidence, confirmedOrderNumber);
+      await markTestPersonnelOrder(employeeId, orderId, documentedEvidence,
+        order.order_number ?? "", order.snapshot_hash);
       const refreshed = await previewTestEmployeeCleanup(employeeId);
       setPreview(refreshed);
       setStage(refreshed.can_delete ? "delete" : "blocked");
-      setSelectedOrderId(null);
-      setOrderEvidence("");
-      setConfirmedOrderNumber("");
+      setOrderEvidence({});
+      setOrderConfirmations({});
     } catch (cause) {
       setError(mapPersonnelLkApiError(cause, "Не удалось подтвердить происхождение приказа."));
     } finally {
@@ -226,22 +233,23 @@ export default function TestEmployeeCleanupDialog({
                   <p>Подписанных копий: {order.signed_copy_count} · Вложений: {order.attachment_count} · Событий ознакомления: {order.acknowledgement_count}</p>
                   <p className="mt-1">{order.is_test_marked ? "Тестовое происхождение приказа подтверждено" : "Тестовое происхождение приказа не подтверждено"}</p>
                   {preview.is_test_marked && !order.is_test_marked ? <div className="mt-2 space-y-2">
-                    {selectedOrderId === order.order_id ? <>
-                      <label className="block">Документированное основание тестового происхождения приказа
-                        <textarea value={orderEvidence} onChange={(event) => setOrderEvidence(event.target.value)} rows={3} maxLength={2000}
-                          className="mt-1 w-full rounded border p-2 dark:bg-zinc-950" />
-                      </label>
-                      <p>Минимум 20 символов; одного номера или ФИО недостаточно.</p>
-                      <label className="block">Введите точный номер приказа
-                        <input value={confirmedOrderNumber} onChange={(event) => setConfirmedOrderNumber(event.target.value)}
-                          className="mt-1 w-full rounded border p-2 dark:bg-zinc-950" />
-                      </label>
-                      <button type="button" disabled={submitting || orderEvidence.trim().length < 20 || confirmedOrderNumber !== (order.order_number ?? "")}
-                        onClick={() => void confirmOrder(order.order_id)} className="rounded bg-amber-700 px-3 py-2 text-white disabled:opacity-50">
-                        Подтвердить тестовый приказ
-                      </button>
-                    </> : <button type="button" onClick={() => { setSelectedOrderId(order.order_id); setOrderEvidence(""); setConfirmedOrderNumber(""); }}
-                      className="rounded border px-3 py-2">Подтвердить тестовый приказ</button>}
+                    {order.marker_id ? <p className="text-amber-700 dark:text-amber-300">Приказ изменился после прежнего подтверждения. Укажите актуальное основание.</p> : null}
+                    <label className="block">Документированное основание тестового происхождения приказа
+                      <textarea value={orderEvidence[order.order_id] ?? ""}
+                        onChange={(event) => setOrderEvidence((current) => ({ ...current, [order.order_id]: event.target.value }))}
+                        rows={3} maxLength={2000} className="mt-1 w-full rounded border p-2 dark:bg-zinc-950" />
+                    </label>
+                    <p>Минимум 20 символов; одного номера или ФИО недостаточно.</p>
+                    <label className="flex items-center gap-2">
+                      <input type="checkbox" checked={Boolean(orderConfirmations[order.order_id])}
+                        onChange={(event) => setOrderConfirmations((current) => ({ ...current, [order.order_id]: event.target.checked }))} />
+                      Подтверждаю тестовое происхождение приказа
+                    </label>
+                    <button type="button"
+                      disabled={submitting || !orderConfirmations[order.order_id] || (orderEvidence[order.order_id] ?? "").trim().length < 20}
+                      onClick={() => void confirmOrder(order)} className="rounded bg-amber-700 px-3 py-2 text-white disabled:opacity-50">
+                      Подтвердить тестовый приказ
+                    </button>
                   </div> : null}
                 </li>)}
               </ul>

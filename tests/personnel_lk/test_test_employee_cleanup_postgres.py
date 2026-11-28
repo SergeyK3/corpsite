@@ -142,7 +142,10 @@ def test_route_rejects_other_role(sample):
             path = f"/directory/personnel/lk/test-employees/{sample['employee_id']}"
             assert client.get(f"{path}/preview").status_code == 403
             assert client.post(f"{path}/mark", json={"evidence": "A sufficiently long explanation", "confirmed_name": sample["name"]}).status_code == 403
-            assert client.post(f"{path}/orders/1/mark", json={"evidence": "A sufficiently long explanation", "confirmed_number": "X"}).status_code == 403
+            assert client.post(f"{path}/orders/1/mark", json={
+                "evidence": "A sufficiently long explanation", "confirmed_number": "X",
+                "expected_snapshot_hash": "a"*64, "confirmed_test_origin": True,
+            }).status_code == 403
             assert client.post(f"{path}/delete", json={"confirmation": "УДАЛИТЬ", "expected_snapshot_hash": "a"*64}).status_code == 403
         finally:
             app.dependency_overrides.pop(get_current_user, None)
@@ -278,11 +281,23 @@ def test_user_and_single_test_order_are_physically_removed(sample):
             {"person": sample["person_id"], "actor": actor}).scalar_one()
     cleanup.mark_employee(employee_id=eid, actor_user_id=actor,
                           confirmed_name=sample["name"], evidence="Isolated synthetic employee from a test fixture")
-    with engine.connect() as conn:
-        order_number = conn.scalar(text("SELECT order_number FROM personnel_orders WHERE order_id=:id"),
-                                   {"id": order_id})
-    cleanup.mark_personnel_order(employee_id=eid, order_id=order_id, actor_user_id=actor,
-        confirmed_number=order_number, evidence="Isolated fixture order created only for the cleanup contract")
+    order_preview = cleanup.preview(employee_id=eid, actor_user_id=actor)["personnel_orders"][0]
+    mark_args = dict(employee_id=eid, order_id=order_id, actor_user_id=actor,
+                     confirmed_number=order_preview["order_number"],
+                     expected_snapshot_hash=order_preview["snapshot_hash"])
+    with pytest.raises(cleanup.TestEmployeeCleanupError) as error:
+        cleanup.mark_personnel_order(**mark_args, confirmed_test_origin=False,
+            evidence="Isolated fixture order created only for the cleanup contract")
+    assert error.value.code == "ORDER_CONFIRMATION_REQUIRED"
+    with pytest.raises(cleanup.TestEmployeeCleanupError) as error:
+        cleanup.mark_personnel_order(**{**mark_args, "expected_snapshot_hash": "a"*64},
+            confirmed_test_origin=True,
+            evidence="Isolated fixture order created only for the cleanup contract")
+    assert error.value.code == "ORDER_SNAPSHOT_CHANGED"
+    marked = cleanup.mark_personnel_order(**mark_args, confirmed_test_origin=True,
+        evidence="Isolated fixture order created only for the cleanup contract")
+    assert cleanup.mark_personnel_order(**mark_args, confirmed_test_origin=True,
+        evidence=None) == marked
     plan = cleanup.preview(employee_id=eid, actor_user_id=actor)
     assert plan["can_delete"], plan["blockers"]
     assert plan["counts"]["person_assignments"] == 1

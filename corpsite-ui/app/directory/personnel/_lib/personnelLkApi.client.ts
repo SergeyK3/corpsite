@@ -44,7 +44,9 @@ export type TestEmployeeCleanupPreview = {
     signed_copy_count: number;
     attachment_count: number;
     acknowledgement_count: number;
+    snapshot_hash: string;
     is_test_marked: boolean;
+    marker_id?: number | null;
   }>;
   history_actions?: Array<{ code: string; count: number }>;
 };
@@ -78,12 +80,14 @@ export function markTestEmployee(employeeId: number, evidence: string, confirmed
   return testEmployeeCommand(employeeId, "mark", "POST", { evidence, confirmed_name: confirmedName });
 }
 
-export function markTestPersonnelOrder(employeeId: number, orderId: number, evidence: string, confirmedNumber: string): Promise<{ marker_id: number }> {
+export function markTestPersonnelOrder(employeeId: number, orderId: number, evidence: string | null,
+  confirmedNumber: string, snapshotHash: string): Promise<{ marker_id: number }> {
   const url = resolveApiUrl(`${PERSONNEL_LK_API_PATH}/test-employees/${employeeId}/orders/${orderId}/mark`);
   return fetch(url, {
     method: "POST",
     headers: buildHeaders({ Accept: "application/json", "Content-Type": "application/json" }),
-    body: JSON.stringify({ evidence, confirmed_number: confirmedNumber }),
+    body: JSON.stringify({ evidence, confirmed_number: confirmedNumber,
+      expected_snapshot_hash: snapshotHash, confirmed_test_origin: true }),
     cache: "no-store",
   }).then(async (response) => {
     if (!response.ok) throw toApiError(response.status, await readJsonSafe(response), { method: "POST", url });

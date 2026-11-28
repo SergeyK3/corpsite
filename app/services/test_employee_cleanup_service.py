@@ -355,11 +355,11 @@ def _order_digest(order: dict[str, Any], items: list[dict[str, Any]]) -> str:
 
 
 def mark_personnel_order(*, employee_id: int, order_id: int, actor_user_id: int,
-                         evidence: str, confirmed_number: str) -> dict[str, Any]:
-    evidence = evidence.strip()
-    if not 20 <= len(evidence) <= 2000:
-        raise TestEmployeeCleanupError("ORDER_EVIDENCE_REQUIRED",
-            "Укажите документированное основание тестового происхождения приказа (20–2000 символов).", 422)
+                         evidence: str | None, confirmed_number: str,
+                         expected_snapshot_hash: str, confirmed_test_origin: bool) -> dict[str, Any]:
+    if not confirmed_test_origin:
+        raise TestEmployeeCleanupError("ORDER_CONFIRMATION_REQUIRED",
+            "Подтвердите тестовое происхождение приказа.", 422)
     with engine.begin() as conn:
         _assert_sysadmin(conn, actor_user_id, lock=True)
         employee = _employee(conn, employee_id, lock=True)
@@ -374,19 +374,28 @@ def mark_personnel_order(*, employee_id: int, order_id: int, actor_user_id: int,
             raise TestEmployeeCleanupError("ORDER_NOT_RELATED", "Приказ не относится к этому сотруднику.", 404)
         if str(order.get("order_number") or "") != confirmed_number:
             raise TestEmployeeCleanupError("ORDER_NUMBER_MISMATCH", "Номер приказа изменился. Обновите предварительный просмотр.")
+        digest = _order_digest(order, items)
+        if digest != expected_snapshot_hash:
+            raise TestEmployeeCleanupError("ORDER_SNAPSHOT_CHANGED",
+                "Приказ изменился. Обновите предварительный просмотр.", 409)
+        existing = conn.execute(text("""SELECT marker_id,order_snapshot_hash
+            FROM public.test_personnel_order_marks
+            WHERE order_id=:id ORDER BY marker_id DESC LIMIT 1"""),
+            {"id": order_id}).mappings().one_or_none()
+        if existing and existing["order_snapshot_hash"] == digest:
+            return {"order_id": order_id, "marker_id": int(existing["marker_id"])}
+        evidence = (evidence or "").strip()
+        if not 20 <= len(evidence) <= 2000:
+            raise TestEmployeeCleanupError("ORDER_EVIDENCE_REQUIRED",
+                "Укажите документированное основание тестового происхождения приказа (20–2000 символов).", 422)
         if evidence.casefold() in {employee["full_name"].casefold(),
                                    str(order.get("order_number") or "").casefold()}:
             raise TestEmployeeCleanupError("ORDER_EVIDENCE_REQUIRED", "Одного ФИО или номера приказа недостаточно.", 422)
-        existing = conn.execute(text("""SELECT order_snapshot_hash FROM public.test_personnel_order_marks
-            WHERE order_id=:id ORDER BY marker_id DESC LIMIT 1"""),
-            {"id": order_id}).scalar_one_or_none()
-        if existing == _order_digest(order, items):
-            raise TestEmployeeCleanupError("ORDER_ALREADY_MARKED", "Происхождение приказа уже подтверждено.")
         marker_id = conn.execute(text("""INSERT INTO public.test_personnel_order_marks
             (order_id,order_number,order_snapshot_hash,evidence,marked_by_user_id)
             VALUES (:order_id,:number,:digest,:evidence,:actor) RETURNING marker_id"""), {
                 "order_id": order_id, "number": order.get("order_number"),
-                "digest": _order_digest(order, items), "evidence": evidence,
+                "digest": digest, "evidence": evidence,
                 "actor": actor_user_id,
             }).scalar_one()
     return {"order_id": order_id, "marker_id": int(marker_id)}
@@ -419,6 +428,7 @@ def _order_blockers(conn: Connection, order_ids: list[int], employee_id: int) ->
                         "item_count": len(items), "employees": people,
                         "signed_copy_count": signed, "attachment_count": attachments,
                         "acknowledgement_count": acknowledged,
+                        "snapshot_hash": _order_digest(order, items),
                         "is_test_marked": mark is not None and
                             mark["order_snapshot_hash"] == _order_digest(order, items),
                         "marker_id": int(mark["marker_id"]) if mark else None})

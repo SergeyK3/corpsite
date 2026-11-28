@@ -89,8 +89,10 @@ class TestEmployeeDeleteIn(BaseModel):
 
 
 class TestPersonnelOrderMarkIn(BaseModel):
-    evidence: str
+    evidence: str | None = None
     confirmed_number: str
+    expected_snapshot_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    confirmed_test_origin: Literal[True]
 
 
 def _require_sysadmin(user: dict[str, Any]) -> int:
@@ -143,6 +145,8 @@ def mark_test_personnel_order_route(
         return employee_cleanup.mark_personnel_order(
             employee_id=employee_id, order_id=order_id, actor_user_id=actor,
             evidence=body.evidence, confirmed_number=body.confirmed_number,
+            expected_snapshot_hash=body.expected_snapshot_hash,
+            confirmed_test_origin=body.confirmed_test_origin,
         )
     except employee_cleanup.TestEmployeeCleanupError as exc:
         raise _cleanup_error(exc) from None
