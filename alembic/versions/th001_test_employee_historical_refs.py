@@ -97,6 +97,26 @@ def upgrade() -> None:
                     AND retired_deletion_id IS NOT NULL)
             );
     """)
+    # Isolated TEST databases can be migrated by postgres while the application
+    # connects as the database owner. Keep the new append-only tables writable
+    # by that owner without granting UPDATE or DELETE.
+    op.execute("""
+        DO $$
+        DECLARE app_owner TEXT;
+        BEGIN
+            SELECT pg_get_userbyid(datdba) INTO app_owner
+            FROM pg_database WHERE datname = current_database();
+            EXECUTE format(
+                'GRANT SELECT, INSERT ON TABLE public.test_employee_history_snapshots, '
+                || 'public.test_personnel_order_marks, '
+                || 'public.test_personnel_order_deletion_audit TO %I', app_owner
+            );
+            EXECUTE format(
+                'GRANT USAGE, SELECT ON SEQUENCE '
+                || 'public.test_personnel_order_marks_marker_id_seq TO %I', app_owner
+            );
+        END $$;
+    """)
 
 
 def downgrade() -> None:
