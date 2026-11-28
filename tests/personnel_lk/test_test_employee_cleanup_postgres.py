@@ -316,10 +316,13 @@ def test_reviewer_history_of_another_employee_is_preserved(sample):
     with engine.begin() as conn:
         if conn.scalar(text("SELECT to_regclass('public.person_relative_change_events')")) is None:
             pytest.skip("Self-card review schema is not present in this isolated database")
+        employee_role_id = conn.scalar(text("SELECT role_id FROM roles WHERE code='EMPLOYEE'"))
+        assert employee_role_id is not None
         target = sample["employee_id"]
         reviewer = conn.scalar(text("""INSERT INTO users(full_name,role_id,is_active,login,employee_id)
-            VALUES (:name,1,true,:login,:employee) RETURNING user_id"""),
-            {"name": sample["name"], "login": f"reviewer_{uuid4().hex[:12]}", "employee": target})
+            VALUES (:name,:role,true,:login,:employee) RETURNING user_id"""),
+            {"name": sample["name"], "role": employee_role_id,
+             "login": f"reviewer_{uuid4().hex[:12]}", "employee": target})
         other_person = conn.scalar(text("""INSERT INTO persons(full_name,match_key,person_status,source)
             VALUES (:name,:key,'active','manual') RETURNING person_id"""),
             {"name": f"Other owner {uuid4().hex[:8]}", "key": f"review-owner:{uuid4().hex}"})
@@ -327,8 +330,9 @@ def test_reviewer_history_of_another_employee_is_preserved(sample):
             VALUES (:name,:person,true,'active') RETURNING employee_id"""),
             {"name": f"Other owner {uuid4().hex[:8]}", "person": other_person})
         owner = conn.scalar(text("""INSERT INTO users(full_name,role_id,is_active,login,employee_id)
-            VALUES (:name,1,true,:login,:employee) RETURNING user_id"""),
-            {"name": "Other owner", "login": f"owner_{uuid4().hex[:12]}", "employee": other_employee})
+            VALUES (:name,:role,true,:login,:employee) RETURNING user_id"""),
+            {"name": "Other owner", "role": employee_role_id,
+             "login": f"owner_{uuid4().hex[:12]}", "employee": other_employee})
         conn.execute(text("""INSERT INTO person_contacts
             (person_id,source_kind,created_by_user_id,updated_by_user_id)
             VALUES (:person,'HR_MANUAL',:reviewer,:reviewer)"""),
