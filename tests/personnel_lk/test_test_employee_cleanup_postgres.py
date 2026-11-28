@@ -304,9 +304,14 @@ def test_personnel_files_and_historical_attribution(sample, tmp_path, monkeypatc
                 {"version": version, "set": set_id, "key": key, "digest": "a"*64,
                  "user": user_id, "document": linked_document})
         for owner, version in ((person, own_version), (other_person, outside_version)):
-            conn.execute(text("""INSERT INTO personnel_file_events(person_id,version_id,actor_id,action,request_id)
-                VALUES (:person,CAST(:version AS uuid),:actor,'uploaded',CAST(:request AS uuid))"""),
+            event_id = conn.scalar(text("""INSERT INTO personnel_file_events(person_id,version_id,actor_id,action,request_id)
+                VALUES (:person,CAST(:version AS uuid),:actor,'uploaded',CAST(:request AS uuid))
+                RETURNING event_id"""),
                 {"person": owner, "version": version, "actor": user_id, "request": str(uuid4())})
+            if owner == person:
+                conn.execute(text("CREATE TABLE cleanup_unrelated_event_stream (event_id bigint PRIMARY KEY)"))
+                conn.execute(text("INSERT INTO cleanup_unrelated_event_stream(event_id) VALUES (:id)"),
+                             {"id": event_id})
         security_id = conn.execute(text("""INSERT INTO security_audit_log
             (event_type,actor_user_id,target_user_id,success)
             VALUES ('LOGIN_SUCCESS',:user,:user,true) RETURNING audit_id"""),
@@ -333,6 +338,7 @@ def test_personnel_files_and_historical_attribution(sample, tmp_path, monkeypatc
         assert conn.scalar(text("SELECT count(*) FROM personnel_file_sets WHERE person_id=:id"), {"id": person}) == 0
         assert conn.scalar(text("SELECT count(*) FROM employee_documents WHERE document_id=:id"), {"id": document_id}) == 0
         assert conn.scalar(text("SELECT count(*) FROM personnel_file_events WHERE person_id=:id"), {"id": person}) == 0
+        assert conn.scalar(text("SELECT count(*) FROM cleanup_unrelated_event_stream")) == 1
         assert conn.scalar(text("SELECT actor_id FROM personnel_file_events WHERE person_id=:id"), {"id": other_person}) is None
         assert conn.scalar(text("SELECT uploaded_by FROM personnel_file_versions WHERE version_id=CAST(:id AS uuid)"), {"id": outside_version}) is None
         audit = conn.execute(text("SELECT actor_user_id,target_user_id FROM security_audit_log WHERE audit_id=:id"),

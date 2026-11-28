@@ -390,6 +390,11 @@ def _logical_blockers(conn: Connection, plan: dict[str, dict[str, dict[str, Any]
         table, column = str(key["table_name"]), str(key["column_name"])
         if table not in plan or not column.endswith("_id"):
             continue
+        # event_id is a local sequence in many independent append-only event
+        # streams. Matching its bare numeric value cannot establish a link.
+        # Actual FK references to personnel_file_events are checked above.
+        if table == "personnel_file_events" and column == "event_id":
+            continue
         values = [state.get(column) for state in plan[table].values()]
         identities.setdefault(column, []).extend(value for value in values
                                                if isinstance(value, int) or
