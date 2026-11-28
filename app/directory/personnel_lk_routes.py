@@ -8,6 +8,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.exceptions import RequestValidationError
 from fastapi.routing import APIRoute
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
+from sqlalchemy.exc import SQLAlchemyError
 from starlette.requests import Request
 from starlette.responses import Response
 
@@ -39,6 +41,7 @@ from app.personnel_lk.application.personnel_order_evidence_fingerprint import (
     resolve_evidence_key_snapshot,
 )
 from app.personnel_lk.application.registry_query_service import list_personnel_lk_registry
+from app.services import test_employee_cleanup_service as employee_cleanup
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +76,90 @@ router = APIRouter(
     tags=["personnel-lk"],
     route_class=_ControlListRepairSafeValidationRoute,
 )
+
+
+class TestEmployeeMarkIn(BaseModel):
+    evidence: str = Field(min_length=20, max_length=1000)
+    confirmed_name: str
+
+
+class TestEmployeeDeleteIn(BaseModel):
+    confirmation: str
+    expected_snapshot_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+def _require_sysadmin(user: dict[str, Any]) -> int:
+    if (int(user.get("role_id") or 0) != employee_cleanup.SYSTEM_ADMIN_ROLE_ID
+            or user.get("is_sysadmin_assistant")):
+        raise HTTPException(status_code=403, detail={
+            "code": "SYSADMIN_REQUIRED", "message": "Операция доступна только системному администратору.",
+        })
+    return int(user["user_id"])
+
+
+def _cleanup_error(exc: employee_cleanup.TestEmployeeCleanupError) -> HTTPException:
+    return HTTPException(status_code=exc.status_code,
+                         detail={"code": exc.code, "message": exc.message})
+
+
+@router.get("/test-employees/{employee_id}/preview")
+def test_employee_delete_preview_route(
+    employee_id: int, user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+    actor = _require_sysadmin(user)
+    try:
+        return employee_cleanup.preview(employee_id=employee_id, actor_user_id=actor)
+    except employee_cleanup.TestEmployeeCleanupError as exc:
+        raise _cleanup_error(exc) from None
+
+
+@router.post("/test-employees/{employee_id}/mark")
+def mark_test_employee_route(
+    employee_id: int, body: TestEmployeeMarkIn,
+    user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+    actor = _require_sysadmin(user)
+    try:
+        return employee_cleanup.mark_employee(
+            employee_id=employee_id, actor_user_id=actor,
+            evidence=body.evidence, confirmed_name=body.confirmed_name,
+        )
+    except employee_cleanup.TestEmployeeCleanupError as exc:
+        raise _cleanup_error(exc) from None
+
+
+@router.post("/test-employees/{employee_id}/delete")
+def delete_test_employee_route(
+    employee_id: int, body: TestEmployeeDeleteIn,
+    user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+    actor = _require_sysadmin(user)
+    try:
+        return employee_cleanup.execute(
+            employee_id=employee_id, actor_user_id=actor,
+            confirmation=body.confirmation,
+            expected_snapshot_hash=body.expected_snapshot_hash,
+        )
+    except employee_cleanup.TestEmployeeCleanupError as exc:
+        raise _cleanup_error(exc) from None
+    except SQLAlchemyError as exc:
+        logger.error("test employee cleanup rolled back: %s", type(exc).__name__)
+        raise HTTPException(status_code=409, detail={
+            "code": "DELETE_ROLLED_BACK",
+            "message": "Удаление не выполнено: база откатила операцию из-за связанной записи или блокировки.",
+        }) from None
+
+
+@router.post("/test-employees/file-cleanup/{deletion_id}/retry")
+def retry_test_employee_files_route(
+    deletion_id: str, user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, int]:
+    actor = _require_sysadmin(user)
+    try:
+        return employee_cleanup.retry_file_cleanup(deletion_id=deletion_id, actor_user_id=actor)
+    except employee_cleanup.TestEmployeeCleanupError as exc:
+        raise _cleanup_error(exc) from None
+
 
 
 @router.post(

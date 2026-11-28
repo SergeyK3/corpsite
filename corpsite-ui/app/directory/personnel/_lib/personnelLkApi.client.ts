@@ -17,7 +17,54 @@ export type PersonnelLkRegistryItem = {
   rate: number | string | null;
   status: string;
   application_status: string | null;
+  is_test_marked?: boolean;
 };
+
+export type TestEmployeeCleanupPreview = {
+  employee_id: number;
+  person_id: number | null;
+  full_name: string;
+  login: string | null;
+  is_test_marked: boolean;
+  counts: Record<string, number>;
+  blockers: string[];
+  can_delete: boolean;
+  snapshot_hash: string;
+  file_count: number;
+};
+
+export type TestEmployeeCleanupResult = {
+  deletion_id: string;
+  employee_id: number;
+  deleted_counts: Record<string, number>;
+  file_cleanup: { completed: number; pending: number };
+};
+
+async function testEmployeeCommand<T>(employeeId: number, suffix: string, method: "GET" | "POST", body?: object): Promise<T> {
+  const url = resolveApiUrl(`${PERSONNEL_LK_API_PATH}/test-employees/${employeeId}/${suffix}`);
+  const response = await fetch(url, {
+    method,
+    headers: buildHeaders({ Accept: "application/json", ...(body ? { "Content-Type": "application/json" } : {}) }),
+    body: body ? JSON.stringify(body) : undefined,
+    cache: "no-store",
+  });
+  if (!response.ok) throw toApiError(response.status, await readJsonSafe(response), { method, url });
+  return await response.json() as T;
+}
+
+export function previewTestEmployeeCleanup(employeeId: number): Promise<TestEmployeeCleanupPreview> {
+  return testEmployeeCommand(employeeId, "preview", "GET");
+}
+
+export function markTestEmployee(employeeId: number, evidence: string, confirmedName: string): Promise<{ marker_id: number }> {
+  return testEmployeeCommand(employeeId, "mark", "POST", { evidence, confirmed_name: confirmedName });
+}
+
+export function deleteTestEmployee(employeeId: number, snapshotHash: string): Promise<TestEmployeeCleanupResult> {
+  return testEmployeeCommand(employeeId, "delete", "POST", {
+    confirmation: "УДАЛИТЬ", expected_snapshot_hash: snapshotHash,
+  });
+}
 
 export type PersonnelLkRegistryResponse = {
   items: PersonnelLkRegistryItem[];

@@ -43,11 +43,14 @@ import type { PersonnelApplicationRegisterResponse } from "../_lib/personnelAppl
 import PersonnelApplicationDetailDrawer from "./PersonnelApplicationDetailDrawer";
 import PersonnelApplicationRegisterDrawer from "./PersonnelApplicationRegisterDrawer";
 import PersonnelLkTable from "./PersonnelLkTable";
+import TestEmployeeCleanupDialog from "./TestEmployeeCleanupDialog";
+import type { TestEmployeeCleanupResult } from "../_lib/personnelLkApi.client";
 
 export default function PersonnelLkPageClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const me = useCurrentUser();
+  const canManageTestEmployees = me?.is_system_admin === true && me?.role_id === 2;
   const showBulkSelect = canHardDeleteEmployee(me);
   const canReadMigrationStatus = canReadPprMigrationStatus(me);
   const filters = React.useMemo(() => parsePersonnelLkRegistryState(searchParams), [searchParams]);
@@ -82,6 +85,9 @@ export default function PersonnelLkPageClient() {
   const [toast, setToast] = React.useState<{ message: string; kind: "success" | "error" } | null>(
     null,
   );
+  const [testEmployeeDialog, setTestEmployeeDialog] = React.useState<{
+    employeeId: number; fullName: string; mode: "mark" | "delete";
+  } | null>(null);
 
   const inFlightLoadKeyRef = React.useRef<string | null>(null);
   const selectedApplicationId = filters.application_id;
@@ -197,6 +203,25 @@ export default function PersonnelLkPageClient() {
 
   function handleRegistered(result: PersonnelApplicationRegisterResponse) {
     replaceRegistryState({ application_id: result.application_id });
+    inFlightLoadKeyRef.current = null;
+    void loadList();
+  }
+
+  function handleTestEmployeeMarked() {
+    setTestEmployeeDialog(null);
+    setToast({ message: "Тестовая запись подтверждена", kind: "success" });
+    inFlightLoadKeyRef.current = null;
+    void loadList();
+  }
+
+  function handleTestEmployeeDeleted(result: TestEmployeeCleanupResult) {
+    setTestEmployeeDialog(null);
+    const count = Object.values(result.deleted_counts).reduce((sum, value) => sum + value, 0);
+    const pending = result.file_cleanup.pending;
+    setToast({
+      message: `Тестовый сотрудник и связанные с ним данные удалены · ${count} записей${pending ? ` · файлов ожидают очистки: ${pending}` : ""}`,
+      kind: "success",
+    });
     inFlightLoadKeyRef.current = null;
     void loadList();
   }
@@ -453,7 +478,20 @@ export default function PersonnelLkPageClient() {
         onToggleSelectAllPage={toggleSelectAllPageEmployees}
         allPageEmployeesSelected={allPageEmployeesSelected}
         somePageEmployeesSelected={somePageEmployeesSelected}
+        canManageTestEmployees={canManageTestEmployees}
+        onDeleteTestEmployee={(employeeId, fullName) => setTestEmployeeDialog({ employeeId, fullName, mode: "delete" })}
+        onMarkTestEmployee={(employeeId, fullName) => setTestEmployeeDialog({ employeeId, fullName, mode: "mark" })}
       />
+
+      {testEmployeeDialog ? <TestEmployeeCleanupDialog
+        key={`${testEmployeeDialog.mode}-${testEmployeeDialog.employeeId}`}
+        employeeId={testEmployeeDialog.employeeId}
+        fullName={testEmployeeDialog.fullName}
+        mode={testEmployeeDialog.mode}
+        onClose={() => setTestEmployeeDialog(null)}
+        onMarked={handleTestEmployeeMarked}
+        onDeleted={handleTestEmployeeDeleted}
+      /> : null}
 
       {!loading && !error ? (
         <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-zinc-600 dark:text-zinc-400">

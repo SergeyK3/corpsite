@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import PersonnelLkPageClient from "./PersonnelLkPageClient";
@@ -83,9 +83,15 @@ vi.mock("./PersonnelApplicationDetailDrawer", () => ({
 
 const listPersonnelLkRegistryMock = vi.fn();
 const bulkDeleteEmployeesMock = vi.fn();
+const previewTestEmployeeCleanupMock = vi.fn();
+const markTestEmployeeMock = vi.fn();
+const deleteTestEmployeeMock = vi.fn();
 
 vi.mock("../_lib/personnelLkApi.client", () => ({
   listPersonnelLkRegistry: (...args: unknown[]) => listPersonnelLkRegistryMock(...args),
+  previewTestEmployeeCleanup: (...args: unknown[]) => previewTestEmployeeCleanupMock(...args),
+  markTestEmployee: (...args: unknown[]) => markTestEmployeeMock(...args),
+  deleteTestEmployee: (...args: unknown[]) => deleteTestEmployeeMock(...args),
   mapPersonnelLkApiError: (e: unknown, fallback: string) =>
     e instanceof Error ? e.message : fallback,
 }));
@@ -138,6 +144,9 @@ beforeEach(() => {
   replaceMock.mockClear();
   listPersonnelLkRegistryMock.mockReset();
   bulkDeleteEmployeesMock.mockReset();
+  previewTestEmployeeCleanupMock.mockReset();
+  markTestEmployeeMock.mockReset();
+  deleteTestEmployeeMock.mockReset();
   listPersonnelLkRegistryMock.mockResolvedValue({
     items: [employeeRow, applicantRow],
     total: 2,
@@ -160,6 +169,35 @@ function renderWithMe(me: MeInfo | null) {
 }
 
 describe("PersonnelLkPageClient", () => {
+  it("shows delete only for marked employees and exact SYSADMIN, then confirms and refreshes", async () => {
+    const marked = { ...employeeRow, is_test_marked: true };
+    listPersonnelLkRegistryMock.mockResolvedValue({ items: [marked, employeeRowTwo], total: 2, limit: 50, offset: 0 });
+    previewTestEmployeeCleanupMock.mockResolvedValue({
+      employee_id: 100, person_id: 7, full_name: marked.fio, login: "fixture_user",
+      is_test_marked: true, counts: { employees: 1, users: 1, personnel_orders: 2 },
+      blockers: [], can_delete: true, snapshot_hash: "a".repeat(64), file_count: 1,
+    });
+    deleteTestEmployeeMock.mockResolvedValue({
+      deletion_id: "fixture", employee_id: 100,
+      deleted_counts: { employees: 1, users: 1, personnel_orders: 2 },
+      file_cleanup: { completed: 1, pending: 0 },
+    });
+    const { unmount } = renderWithMe({ user_id: 20, role_id: 4, role_code: "ADMIN", is_system_admin: false });
+    expect(await screen.findByTestId("personnel-lk-row-employee-7")).toBeInTheDocument();
+    expect(screen.queryByTestId("personnel-lk-delete-test-employee-100")).not.toBeInTheDocument();
+    unmount();
+    renderWithMe({ user_id: 21, role_id: 2, role_code: "ADMIN", is_system_admin: true });
+    fireEvent.click(await screen.findByTestId("personnel-lk-delete-test-employee-100"));
+    const dialog = await screen.findByRole("dialog", { name: "Полное удаление тестового сотрудника" });
+    expect(screen.getByText("Кадровые приказы")).toBeInTheDocument();
+    const confirm = within(dialog).getByRole("textbox");
+    fireEvent.change(confirm, { target: { value: "УДАЛИТЬ" } });
+    fireEvent.click(screen.getByRole("button", { name: "Удалить окончательно" }));
+    await waitFor(() => expect(deleteTestEmployeeMock).toHaveBeenCalledWith(100, "a".repeat(64)));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(screen.getByTestId("personnel-lk-toast")).toHaveTextContent("4 записей");
+    expect(listPersonnelLkRegistryMock.mock.calls.length).toBeGreaterThan(1);
+  });
   it("renders both record kinds and calls registry API with default filters", async () => {
     render(<PersonnelLkPageClient />);
 

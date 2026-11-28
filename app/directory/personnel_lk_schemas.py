@@ -348,6 +348,7 @@ class PersonnelLkRegistryItemOut(BaseModel):
     rate: Decimal | float | None = None
     status: str
     application_status: str | None = None
+    is_test_marked: bool = False
 
 
 class PersonnelLkRegistryListOut(BaseModel):
@@ -369,4 +370,5 @@ def registry_row_to_out(row: PersonnelLkRegistryRow) -> PersonnelLkRegistryItemO
         rate=row.rate,
         status=row.status,
         application_status=row.application_status,
+        is_test_marked=row.is_test_marked,
     )

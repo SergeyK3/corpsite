@@ -1,0 +1,713 @@
+"""Fail-closed physical cleanup of explicitly marked test employees.
+
+The plan is built from the live PostgreSQL FK catalog.  A row is removed only
+when an exact, reviewed ownership edge reaches it.  Every other incoming FK
+is a blocker, including SET NULL and CASCADE edges.  This prevents a future
+schema change from silently widening the deletion contour.
+"""
+from __future__ import annotations
+
+import hashlib
+import json
+import logging
+import re
+from collections import defaultdict, deque
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+from uuid import UUID, uuid4
+
+from sqlalchemy import text
+from sqlalchemy.engine import Connection
+from sqlalchemy.exc import SQLAlchemyError
+
+from app.db.engine import engine
+from app.person_photos.infrastructure.photo_storage import (
+    canonical_photo_absolute_path, delete_canonical_photo_file,
+)
+from app.personnel_intake.infrastructure.photo_storage import (
+    delete_intake_photo, intake_photo_storage_root, normalize_intake_photo_file_id,
+    resolve_path_within_root,
+)
+from app.services.technical_personnel_order_cleanup_service import classification, CONFIRMED_TECHNICAL
+
+logger = logging.getLogger(__name__)
+
+
+class TestEmployeeCleanupError(RuntimeError):
+    def __init__(self, code: str, message: str, status_code: int = 409):
+        super().__init__(message)
+        self.code, self.message, self.status_code = code, message, status_code
+
+
+# The existing authentication projection defines the system administrator by
+# primary role_id=2.  A matching role code or delegated grant alone is not enough.
+SYSTEM_ADMIN_ROLE_ID = 2
+SAFE_NAME = re.compile(r"^[a-z][a-z0-9_]*$")
+
+# Exact owner edges.  Shared reports, authorship, signatories, journal numbers,
+# and references from other employees are deliberately absent.
+OWNED: dict[str, dict[str, set[str]]] = {
+    "persons": {
+        "person_assignments": {"person_id"},
+        "person_contacts": {"person_id"},
+        "person_education": {"person_id"},
+        "person_external_employment": {"person_id"},
+        "person_military_service": {"person_id"},
+        "person_photos": {"person_id"},
+        "person_photo_sources": {"person_id"},
+        "person_relatives": {"person_id"},
+        "person_status_facts": {"person_id"},
+        "person_telegram_bindings": {"person_id"},
+        "person_telegram_bot_activations": {"person_id"},
+        "person_training": {"person_id"},
+        "personnel_applications": {"person_id"},
+        "personnel_intake_reconciliation_decisions": {"person_id"},
+        "personnel_migration_runs": {"person_id"},
+        "personnel_record_events": {"person_id"},
+        "personnel_record_metadata": {"person_id"},
+        "verification_tasks": {"person_id"},
+        "verification_attestations": {"person_id"},
+        "ppr_command_executions": {"person_id"},
+        "ppr_migration_projection_outbox": {"person_id"},
+        "ppr_migration_section_status_projection": {"person_id"},
+        "ppr_section_manual_correction_events": {"person_id"},
+    },
+    "employees": {
+        "employee_assignment_links": {"employee_id"},
+        "employee_documents": {"employee_id"},
+        "employee_events": {"employee_id"},
+        "employee_identities": {"employee_id"},
+        "employee_import_profile_overrides": {"employee_id"},
+        "employee_onboardings": {"employee_id"},
+        "employee_termination_records": {"employee_id"},
+        "enrollment_history": {"employee_id"},
+        "hr_change_events": {"employee_id"},
+        "hr_import_document_candidates": {"employee_id"},
+        "hr_import_normalized_records": {"employee_id"},
+        "hr_import_rows": {"employee_id"},
+        "identity_reconciliation_items": {"employee_id"},
+        "personnel_migration_runs": {"employee_context_id"},
+        "personnel_record_events": {"employee_context_id"},
+        "person_education": {"employee_context_id"},
+        "person_training": {"employee_context_id"},
+        "person_status_facts": {"employee_context_id"},
+        "users": {"employee_id"},
+    },
+    "users": {
+        "notifications": {"recipient_user_id"},
+        "telegram_bind_codes": {"user_id"},
+        "telegram_password_recovery_requests": {"user_id"},
+        "tg_bindings": {"user_id"},
+        "user_org_units": {"user_id"},
+        "org_unit_managers": {"user_id"},
+        "personnel_visibility_assignments": {"target_user_id"},
+        "personnel_event_visibility_assignments": {"target_user_id"},
+    },
+    "person_assignments": {
+        "employee_assignment_links": {"assignment_id"},
+        "enrollment_history": {"assignment_id"},
+        "enrollment_queue": {"assignment_id"},
+    },
+    "personnel_applications": {
+        "electronic_hire_applications": {"application_id"},
+        "employee_onboardings": {"application_id"},
+        "personnel_application_blockers": {"application_id"},
+        "personnel_application_lifecycle_audit": {"application_id"},
+        "personnel_application_resolution_audit": {"application_id"},
+        "personnel_intake_drafts": {"application_id"},
+        "personnel_intake_links": {"application_id"},
+        "personnel_intake_reconciliation_decisions": {"application_id"},
+        "personnel_intake_section_reviews": {"application_id"},
+        "personnel_intake_transfers": {"application_id"},
+    },
+    "personnel_orders": {
+        "personnel_order_items": {"order_id"},
+        "personnel_order_attachments": {"order_id"},
+        "personnel_order_editorial_blocks": {"order_id"},
+        "personnel_order_evidence_scopes": {"order_id"},
+        "personnel_order_localized_texts": {"order_id"},
+        "personnel_order_prints": {"order_id"},
+        "personnel_order_lifecycle_audit": {"order_id"},
+        "personnel_order_template_applications": {"order_id"},
+        "employee_events": {"order_id"},
+    },
+    "personnel_order_items": {
+        "personnel_order_item_bases": {"order_item_id"},
+        "personnel_order_item_editorial_blocks": {"order_item_id"},
+        "personnel_order_template_applications": {"order_item_id"},
+        "employee_events": {"order_item_id"},
+    },
+    "personnel_intake_links": {
+        "electronic_hire_link_deliveries": {"link_id"},
+        "personnel_intake_drafts": {"link_id"},
+    },
+    "person_photos": {"person_photo_sources": {"person_photo_id"}},
+    "employee_documents": {
+        "hr_import_document_candidates": {"document_id"},
+        "hr_import_normalized_records": {"document_id"},
+    },
+    "employee_onboardings": {
+        "employee_onboarding_checklist_items": {"onboarding_id"},
+        "employee_onboarding_notifications": {"onboarding_id"},
+        "employee_onboarding_task_audit": {"onboarding_id"},
+    },
+    "employee_onboarding_checklist_items": {
+        "employee_onboarding_checklist_attachments": {"item_id"},
+        "employee_onboarding_notifications": {"item_id"},
+        "employee_onboarding_task_audit": {"item_id"},
+    },
+    "electronic_hire_applications": {
+        "electronic_hire_attachments": {"application_id"},
+        "electronic_hire_link_deliveries": {"application_id"},
+        "electronic_hire_notifications": {"application_id"},
+        "electronic_hire_position_requests": {"application_id"},
+        "electronic_hire_visas": {"application_id"},
+    },
+    "employee_termination_records": {"employee_termination_record_audit": {"termination_record_id"}},
+}
+
+
+@dataclass(frozen=True)
+class Edge:
+    parent: str
+    parent_column: str
+    child: str
+    child_column: str
+    constraint: str
+
+
+@dataclass(frozen=True)
+class CompositeEdge:
+    parent: str
+    parent_columns: tuple[str, ...]
+    child: str
+    child_columns: tuple[str, ...]
+    constraint: str
+
+
+def _hash(value: Any) -> str:
+    return hashlib.sha256(json.dumps(value, sort_keys=True, default=str, ensure_ascii=False).encode()).hexdigest()
+
+
+def _identity_hash(employee: dict[str, Any]) -> str:
+    return _hash({key: employee.get(key) for key in ("employee_id", "person_id", "full_name")})
+
+
+def _assert_sysadmin(conn: Connection, actor_user_id: int, *, lock: bool = False) -> None:
+    suffix = " FOR SHARE OF u" if lock else ""
+    row = conn.execute(text(f"""SELECT u.role_id, u.is_active, r.code
+        FROM public.users u JOIN public.roles r ON r.role_id=u.role_id
+        WHERE u.user_id=:uid{suffix}"""), {"uid": actor_user_id}).mappings().one_or_none()
+    if not row or not row["is_active"] or row["role_id"] != SYSTEM_ADMIN_ROLE_ID:
+        raise TestEmployeeCleanupError("SYSADMIN_REQUIRED", "Операция доступна только системному администратору.", 403)
+
+
+def _employee(conn: Connection, employee_id: int, *, lock: bool = False) -> dict[str, Any]:
+    suffix = " FOR UPDATE" if lock else ""
+    row = conn.execute(text(f"SELECT * FROM public.employees WHERE employee_id=:id{suffix}"), {"id": employee_id}).mappings().one_or_none()
+    if row is None:
+        raise TestEmployeeCleanupError("EMPLOYEE_NOT_FOUND", "Сотрудник не найден.", 404)
+    return dict(row)
+
+
+def mark_employee(*, employee_id: int, actor_user_id: int, evidence: str, confirmed_name: str) -> dict[str, Any]:
+    evidence = evidence.strip()
+    if len(evidence) < 20 or len(evidence) > 1000:
+        raise TestEmployeeCleanupError("EVIDENCE_REQUIRED", "Укажите основание подтверждения тестовой записи (20–1000 символов).", 422)
+    with engine.begin() as conn:
+        _assert_sysadmin(conn, actor_user_id)
+        employee = _employee(conn, employee_id, lock=True)
+        if confirmed_name != employee["full_name"]:
+            raise TestEmployeeCleanupError("NAME_CONFIRMATION_MISMATCH", "ФИО изменилось. Повторно проверьте запись.", 409)
+        if conn.execute(text("SELECT 1 FROM public.users WHERE employee_id=:id AND user_id=:actor"), {"id": employee_id, "actor": actor_user_id}).first():
+            raise TestEmployeeCleanupError("OWN_ACCOUNT", "Свою учётную запись отмечать для удаления нельзя.", 403)
+        existing = conn.execute(text("SELECT marker_id FROM public.test_employee_marks WHERE employee_id=:id"), {"id": employee_id}).scalar_one_or_none()
+        if existing:
+            raise TestEmployeeCleanupError("ALREADY_MARKED", "Тестовая запись уже отмечена.", 409)
+        marker_id = conn.execute(text("""INSERT INTO public.test_employee_marks
+            (employee_id,person_id,full_name,snapshot_hash,evidence,marked_by_user_id)
+            VALUES (:id,:person_id,:name,:digest,:evidence,:actor) RETURNING marker_id"""), {
+                "id": employee_id, "person_id": employee.get("person_id"),
+                "name": employee["full_name"], "digest": _identity_hash(employee),
+                "evidence": evidence, "actor": actor_user_id,
+            }).scalar_one()
+    return {"marker_id": int(marker_id), "employee_id": employee_id}
+
+
+def _fk_edges(conn: Connection) -> list[Edge]:
+    rows = conn.execute(text("""SELECT p.relname parent, c.relname child, pa.attname parent_column,
+        ca.attname child_column, con.conname constraint_name
+        FROM pg_constraint con
+        JOIN pg_class p ON p.oid=con.confrelid JOIN pg_class c ON c.oid=con.conrelid
+        JOIN pg_namespace pn ON pn.oid=p.relnamespace
+        JOIN pg_namespace cn ON cn.oid=c.relnamespace
+        JOIN pg_attribute pa ON pa.attrelid=p.oid AND pa.attnum=con.confkey[1]
+        JOIN pg_attribute ca ON ca.attrelid=c.oid AND ca.attnum=con.conkey[1]
+        WHERE con.contype='f' AND cardinality(con.conkey)=1
+          AND pn.nspname='public' AND cn.nspname='public'
+        ORDER BY p.relname,c.relname,con.conname""")).mappings()
+    return [Edge(str(r["parent"]), str(r["parent_column"]), str(r["child"]),
+                 str(r["child_column"]), str(r["constraint_name"])) for r in rows]
+
+
+def _composite_fk_edges(conn: Connection) -> list[CompositeEdge]:
+    rows = conn.execute(text("""SELECT p.relname parent,c.relname child,con.conname constraint_name,
+        ARRAY(SELECT a.attname FROM unnest(con.confkey) WITH ORDINALITY AS x(attnum,ord)
+              JOIN pg_attribute a ON a.attrelid=p.oid AND a.attnum=x.attnum ORDER BY x.ord) parent_columns,
+        ARRAY(SELECT a.attname FROM unnest(con.conkey) WITH ORDINALITY AS x(attnum,ord)
+              JOIN pg_attribute a ON a.attrelid=c.oid AND a.attnum=x.attnum ORDER BY x.ord) child_columns
+        FROM pg_constraint con
+        JOIN pg_class p ON p.oid=con.confrelid JOIN pg_class c ON c.oid=con.conrelid
+        JOIN pg_namespace pn ON pn.oid=p.relnamespace JOIN pg_namespace cn ON cn.oid=c.relnamespace
+        WHERE con.contype='f' AND cardinality(con.conkey)>1
+          AND pn.nspname='public' AND cn.nspname='public'""")).mappings()
+    return [CompositeEdge(str(r["parent"]), tuple(r["parent_columns"]), str(r["child"]),
+                          tuple(r["child_columns"]), str(r["constraint_name"])) for r in rows]
+
+
+def _composite_child_rows(conn: Connection, edge: CompositeEdge,
+                          parents: dict[str, dict[str, Any]]) -> list[tuple[str, dict[str, Any]]]:
+    if not SAFE_NAME.fullmatch(edge.child) or any(not SAFE_NAME.fullmatch(c) for c in edge.child_columns):
+        raise TestEmployeeCleanupError("UNSAFE_CATALOG", "Недопустимое имя столбца внешнего ключа.")
+    result: dict[str, dict[str, Any]] = {}
+    for parent in parents.values():
+        values = [parent.get(column) for column in edge.parent_columns]
+        if any(value is None for value in values):
+            continue
+        where = " AND ".join(f't."{column}"=:v{i}' for i, column in enumerate(edge.child_columns))
+        for tid, state in _rows(conn, edge.child, where, {f"v{i}": value for i, value in enumerate(values)}):
+            result[tid] = state
+    return list(result.items())
+
+
+def _rows(conn: Connection, table: str, where: str, params: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
+    if not SAFE_NAME.fullmatch(table):
+        raise AssertionError("Unsafe catalog identifier")
+    return [(str(row["tid"]), dict(row["state"])) for row in conn.execute(
+        text(f'SELECT t.ctid::text tid,to_jsonb(t) state FROM public."{table}" t WHERE {where}'), params
+    ).mappings()]
+
+
+def _order_ids(conn: Connection, employee_id: int) -> list[int]:
+    return [int(value) for value in conn.execute(text("""SELECT DISTINCT order_id
+        FROM public.personnel_order_items WHERE employee_id=:id ORDER BY order_id"""), {"id": employee_id}).scalars()]
+
+
+def _order_blockers(conn: Connection, order_ids: list[int], employee_id: int) -> list[str]:
+    blockers: list[str] = []
+    for order_id in order_ids:
+        order = conn.execute(text("SELECT * FROM public.personnel_orders WHERE order_id=:id"), {"id": order_id}).mappings().one()
+        others = conn.execute(text("""SELECT count(*) FROM public.personnel_order_items
+            WHERE order_id=:id AND employee_id IS DISTINCT FROM :employee"""), {"id": order_id, "employee": employee_id}).scalar_one()
+        if others:
+            blockers.append(f"Приказ №{order_id} содержит пункты других сотрудников")
+        if classification(order.get("storage_json"), order.get("order_number")) != CONFIRMED_TECHNICAL:
+            blockers.append(f"Приказ №{order_id} не имеет подтверждённого тестового происхождения")
+        if order.get("signed_by_employee_id") is not None:
+            blockers.append(f"Приказ №{order_id} подписан")
+        signed = conn.execute(text("""SELECT count(*) FROM public.personnel_order_prints
+            WHERE order_id=:id AND is_signed_copy=true"""), {"id": order_id}).scalar_one()
+        if signed:
+            blockers.append(f"Приказ №{order_id} содержит подписанную копию")
+    return blockers
+
+
+def _add(plan: dict[str, dict[str, dict[str, Any]]], table: str,
+         rows: list[tuple[str, dict[str, Any]]]) -> bool:
+    bucket = plan.setdefault(table, {})
+    changed = False
+    for tid, state in rows:
+        if tid not in bucket:
+            bucket[tid] = state
+            changed = True
+    return changed
+
+
+def _owned(edge: Edge) -> bool:
+    return edge.child_column in OWNED.get(edge.parent, {}).get(edge.child, set())
+
+
+def _edge_rows(conn: Connection, edge: Edge,
+               parents: dict[str, dict[str, Any]]) -> list[tuple[str, dict[str, Any]]]:
+    values = sorted({state[edge.parent_column] for state in parents.values()
+                     if state.get(edge.parent_column) is not None})
+    if not values:
+        return []
+    return _rows(conn, edge.child, f't."{edge.child_column}" = ANY(:values)', {"values": values})
+
+
+def _logical_blockers(conn: Connection, plan: dict[str, dict[str, dict[str, Any]]],
+                      employee_id: int, person_id: int | None, user_ids: list[int],
+                      edges: list[Edge]) -> list[str]:
+    # Exact, unkeyed identity columns are checked as well as foreign keys.
+    # This is intentionally conservative: new logical relations block execution.
+    physical = {(edge.child, edge.child_column) for edge in edges}
+    identities: dict[str, list[int]] = {"employee_id": [employee_id],
+                                       "employee_context_id": [employee_id],
+                                       "user_id": user_ids}
+    if person_id is not None:
+        identities["person_id"] = [person_id]
+    # Also inspect unkeyed references to the primary keys of every selected
+    # child (orders, applications, assignments, photos, and so on).
+    primary_keys = conn.execute(text("""SELECT c.relname table_name,a.attname column_name
+        FROM pg_constraint con JOIN pg_class c ON c.oid=con.conrelid
+        JOIN pg_namespace n ON n.oid=c.relnamespace
+        JOIN pg_attribute a ON a.attrelid=c.oid AND a.attnum=con.conkey[1]
+        WHERE con.contype='p' AND cardinality(con.conkey)=1 AND n.nspname='public'""")).mappings()
+    for key in primary_keys:
+        table, column = str(key["table_name"]), str(key["column_name"])
+        if table not in plan or not column.endswith("_id"):
+            continue
+        values = [state.get(column) for state in plan[table].values()]
+        identities.setdefault(column, []).extend(value for value in values if isinstance(value, int))
+    rows = conn.execute(text("""SELECT columns.table_name,columns.column_name
+        FROM information_schema.columns columns
+        JOIN information_schema.tables tables
+          ON tables.table_schema=columns.table_schema AND tables.table_name=columns.table_name
+        WHERE columns.table_schema='public' AND tables.table_type='BASE TABLE'
+          AND columns.column_name=ANY(:column_names)
+        ORDER BY columns.table_name,columns.column_name"""),
+        {"column_names": sorted(identities)}).mappings()
+    blockers: list[str] = []
+    if user_ids:
+        linked_training_users = conn.execute(text("""SELECT count(*)
+            FROM public.training_identity_links
+            WHERE source_kind='local' AND source_user_id=ANY(:ids)"""),
+            {"ids": user_ids}).scalar_one()
+        if linked_training_users:
+            blockers.append(f"Учётная запись служит источником для учебных пользователей: {linked_training_users}")
+    for row in rows:
+        table, column = str(row["table_name"]), str(row["column_name"])
+        if (table, column) in physical or table in {
+            "test_employee_marks", "test_employee_deletion_audit", "test_employee_file_cleanup",
+        }:
+            continue
+        values = identities.get(column, [])
+        if not values or not SAFE_NAME.fullmatch(table):
+            continue
+        found = _rows(conn, table, f't."{column}" = ANY(:values)', {"values": values})
+        unknown = sum(tid not in plan.get(table, {}) for tid, _ in found)
+        if unknown:
+            blockers.append(f"Неописанная связь {table}.{column}: {unknown}")
+    return blockers
+
+
+def _file_plan(plan: dict[str, dict[str, dict[str, Any]]]) -> tuple[list[tuple[str, str]], list[str]]:
+    files: list[tuple[str, str]] = []
+    blockers: list[str] = []
+    for table, rows in plan.items():
+        for state in rows.values():
+            for column in ("storage_rel_path", "storage_path", "file_path", "file_url"):
+                value = state.get(column)
+                if not value:
+                    continue
+                if table == "person_photos" and column == "storage_rel_path":
+                    try:
+                        canonical_photo_absolute_path(str(value))
+                    except (ValueError, RuntimeError):
+                        blockers.append("Недопустимый путь фотографии")
+                    else:
+                        files.append(("CANONICAL_PHOTO", str(value)))
+                elif table == "electronic_hire_attachments" and column == "storage_path":
+                    application_id = state.get("application_id")
+                    try:
+                        root = resolve_path_within_root(intake_photo_storage_root(),
+                                                        "signed-applications", str(int(application_id)))
+                        path = Path(str(value)).resolve()
+                        if not path.is_relative_to(root):
+                            raise ValueError("Unexpected signed-copy path")
+                    except (ValueError, TypeError, RuntimeError):
+                        blockers.append("Недопустимый путь подписанной копии заявления")
+                    else:
+                        files.append(("SIGNED_HIRE_COPY", str(path)))
+                else:
+                    blockers.append(f"Файл {table}.{column} требует отдельного безопасного обработчика")
+            # Intake photos are referenced inside the draft JSON rather than a FK.
+            if table == "personnel_intake_drafts":
+                payload = state.get("payload") or {}
+                personal = payload.get("personal") if isinstance(payload, dict) else {}
+                file_id = (personal or {}).get("photo_file_id") if isinstance(personal, dict) else None
+                if file_id:
+                    try:
+                        files.append(("INTAKE_PHOTO", f"{int(state['application_id'])}/{normalize_intake_photo_file_id(file_id)}"))
+                    except (ValueError, TypeError):
+                        blockers.append("Недопустимый идентификатор фото в анкете")
+            if table == "person_photo_sources" and state.get("source_application_id") and state.get("source_intake_photo_file_id"):
+                try:
+                    files.append(("INTAKE_PHOTO", f"{int(state['source_application_id'])}/{normalize_intake_photo_file_id(state['source_intake_photo_file_id'])}"))
+                except (ValueError, TypeError):
+                    blockers.append("Недопустимый идентификатор исходного фото")
+    return sorted(set(files)), sorted(set(blockers))
+
+
+def _build_plan(conn: Connection, employee_id: int) -> dict[str, Any]:
+    employee = _employee(conn, employee_id)
+    person_id = int(employee["person_id"]) if employee.get("person_id") is not None else None
+    users = conn.execute(text("SELECT user_id,login FROM public.users WHERE employee_id=:id"),
+                         {"id": employee_id}).mappings().all()
+    user_ids = [int(row["user_id"]) for row in users]
+    marker = conn.execute(text("SELECT * FROM public.test_employee_marks WHERE employee_id=:id"),
+                          {"id": employee_id}).mappings().one_or_none()
+    blockers: list[str] = []
+    if marker is None:
+        blockers.append("Сотрудник не подтверждён как тестовый системным администратором")
+    elif marker["snapshot_hash"] != _identity_hash(employee):
+        blockers.append("Данные сотрудника изменились после подтверждения тестового происхождения")
+    if person_id is not None:
+        other_employees = conn.execute(text("""SELECT count(*) FROM public.employees
+            WHERE person_id=:pid AND employee_id<>:eid"""), {"pid": person_id, "eid": employee_id}).scalar_one()
+        if other_employees:
+            blockers.append("Физическое лицо связано с другим сотрудником")
+        if conn.execute(text("SELECT 1 FROM public.persons WHERE merged_into_person_id=:pid LIMIT 1"),
+                        {"pid": person_id}).first():
+            blockers.append("На физическое лицо ссылается объединённая запись")
+    order_ids = _order_ids(conn, employee_id)
+    blockers.extend(_order_blockers(conn, order_ids, employee_id))
+    edges = _fk_edges(conn)
+    composite_edges = _composite_fk_edges(conn)
+    by_parent: dict[str, list[Edge]] = defaultdict(list)
+    for edge in edges:
+        by_parent[edge.parent].append(edge)
+    plan: dict[str, dict[str, dict[str, Any]]] = {}
+    _add(plan, "employees", _rows(conn, "employees", "t.employee_id=:id", {"id": employee_id}))
+    if person_id is not None:
+        _add(plan, "persons", _rows(conn, "persons", "t.person_id=:id", {"id": person_id}))
+        # ADR-061 provenance intentionally has no FK to persons/photos.
+        _add(plan, "person_photo_sources", _rows(conn, "person_photo_sources",
+                                                  "t.person_id=:id", {"id": person_id}))
+    if order_ids:
+        _add(plan, "personnel_orders", _rows(conn, "personnel_orders",
+                                               "t.order_id=ANY(:ids)", {"ids": order_ids}))
+    # Access grants have a polymorphic target rather than a target FK.
+    for kind, ids in (("EMPLOYEE", [employee_id]), ("PERSON", [person_id] if person_id else []),
+                      ("USER", user_ids)):
+        if ids:
+            _add(plan, "access_grants", _rows(conn, "access_grants",
+                "t.target_type=:kind AND t.target_id=ANY(:ids)", {"kind": kind, "ids": ids}))
+    queue = deque(plan)
+    while queue:
+        parent = queue.popleft()
+        for edge in by_parent.get(parent, []):
+            if _owned(edge) and _add(plan, edge.child, _edge_rows(conn, edge, plan[parent])):
+                queue.append(edge.child)
+    # Assignment grants use a polymorphic target ID and have no target FK.
+    assignment_ids = [int(state["assignment_id"])
+                      for state in plan.get("person_assignments", {}).values()]
+    if assignment_ids:
+        _add(plan, "access_grants", _rows(conn, "access_grants",
+            "t.target_type='ASSIGNMENT' AND t.target_id=ANY(:ids)",
+            {"ids": assignment_ids}))
+    # A child reached through another owner edge is safe. Every remaining
+    # reference, even ON DELETE CASCADE/SET NULL, must be resolved explicitly.
+    for parent, parents in list(plan.items()):
+        for edge in by_parent.get(parent, []):
+            unknown = sum(tid not in plan.get(edge.child, {})
+                          for tid, _ in _edge_rows(conn, edge, parents))
+            if unknown:
+                blockers.append(f"Внешняя зависимость {edge.child}.{edge.child_column}: {unknown}")
+        for edge in composite_edges:
+            if edge.parent != parent:
+                continue
+            unknown = sum(tid not in plan.get(edge.child, {})
+                          for tid, _ in _composite_child_rows(conn, edge, parents))
+            if unknown:
+                blockers.append(f"Составная внешняя зависимость {edge.child}.{edge.constraint}: {unknown}")
+    blockers.extend(_logical_blockers(conn, plan, employee_id, person_id, user_ids, edges))
+    files, file_blockers = _file_plan(plan)
+    blockers.extend(file_blockers)
+    for kind, path in files:
+        if kind == "CANONICAL_PHOTO":
+            matching = _rows(conn, "person_photos", "t.storage_rel_path=:path", {"path": path})
+            if any(tid not in plan.get("person_photos", {}) for tid, _ in matching):
+                blockers.append("Файл фотографии используется другой записью")
+        elif kind == "SIGNED_HIRE_COPY":
+            matching = _rows(conn, "electronic_hire_attachments", "t.storage_path=:path", {"path": path})
+            if any(tid not in plan.get("electronic_hire_attachments", {}) for tid, _ in matching):
+                blockers.append("Подписанная копия используется другой записью")
+    # The exact state digest is checked again under SERIALIZABLE locks at commit.
+    state_hash = _hash({table: sorted(rows.values(), key=lambda row: _hash(row))
+                        for table, rows in sorted(plan.items())})
+    counts = {table: len(rows) for table, rows in sorted(plan.items()) if rows}
+    return {
+        "employee_id": employee_id, "person_id": person_id,
+        "full_name": employee["full_name"],
+        "login": users[0]["login"] if len(users) == 1 else None,
+        "user_ids": user_ids, "marker_id": int(marker["marker_id"]) if marker else None,
+        "is_test_marked": marker is not None, "counts": counts,
+        "files": files, "blockers": sorted(set(blockers)),
+        "can_delete": marker is not None and not blockers,
+        "snapshot_hash": state_hash, "_plan": plan, "_edges": edges,
+        "_composite_edges": composite_edges,
+    }
+
+
+def _public(plan: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in plan.items() if not key.startswith("_") and key != "files"} | {
+        "file_count": len(plan["files"]),
+    }
+
+
+def preview(*, employee_id: int, actor_user_id: int) -> dict[str, Any]:
+    with engine.connect() as conn:
+        transaction = conn.begin()
+        try:
+            conn.exec_driver_sql("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY")
+            _assert_sysadmin(conn, actor_user_id)
+            result = _public(_build_plan(conn, employee_id))
+        finally:
+            transaction.rollback()
+    return result
+
+
+def _delete_order(plan: dict[str, dict[str, dict[str, Any]]], edges: list[Edge],
+                  composite_edges: list[CompositeEdge]) -> list[str]:
+    tables = {table for table, rows in plan.items() if rows}
+    requires: dict[str, set[str]] = {table: set() for table in tables}
+    for edge in edges:
+        if edge.parent == edge.child or edge.parent not in tables or edge.child not in tables:
+            continue
+        parent_values = {state.get(edge.parent_column) for state in plan[edge.parent].values()}
+        if any(state.get(edge.child_column) in parent_values for state in plan[edge.child].values()):
+            requires[edge.parent].add(edge.child)
+    for edge in composite_edges:
+        if edge.parent == edge.child or edge.parent not in tables or edge.child not in tables:
+            continue
+        parent_keys = {tuple(state.get(column) for column in edge.parent_columns)
+                       for state in plan[edge.parent].values()}
+        if any(tuple(state.get(column) for column in edge.child_columns) in parent_keys
+               for state in plan[edge.child].values()):
+            requires[edge.parent].add(edge.child)
+    result: list[str] = []
+    while requires:
+        ready = sorted(table for table, children in requires.items() if not children)
+        if not ready:
+            raise TestEmployeeCleanupError("DEPENDENCY_CYCLE", "Циклическая зависимость препятствует удалению.")
+        result.extend(ready)
+        for table in ready:
+            del requires[table]
+        for children in requires.values():
+            children.difference_update(ready)
+    return result
+
+
+def _lock_catalog(conn: Connection) -> None:
+    # Logical references have no FK.  Block concurrent writers while the
+    # authoritative plan is recomputed and the physical DELETE is performed.
+    conn.execute(text("SET LOCAL lock_timeout = '3s'"))
+    tables = [str(name) for name in conn.execute(text("""SELECT c.relname FROM pg_class c
+        JOIN pg_namespace n ON n.oid=c.relnamespace
+        WHERE n.nspname='public' AND c.relkind='r' ORDER BY c.relname""")).scalars()]
+    for table in tables:
+        if not SAFE_NAME.fullmatch(table):
+            raise TestEmployeeCleanupError("UNSAFE_CATALOG", "Обнаружено неожиданное имя таблицы.")
+        conn.execute(text(f'LOCK TABLE public."{table}" IN SHARE ROW EXCLUSIVE MODE'))
+
+
+def _run_file_cleanup(deletion_id: str) -> dict[str, int]:
+    completed = pending = 0
+    with engine.connect() as conn:
+        rows = conn.execute(text("""SELECT cleanup_id,storage_kind,storage_path
+            FROM public.test_employee_file_cleanup
+            WHERE deletion_id=CAST(:id AS uuid) AND completed_at IS NULL
+            ORDER BY cleanup_id"""), {"id": deletion_id}).mappings().all()
+    for row in rows:
+        error = None
+        try:
+            if row["storage_kind"] == "CANONICAL_PHOTO":
+                delete_canonical_photo_file(str(row["storage_path"]))
+            elif row["storage_kind"] == "INTAKE_PHOTO":
+                app_id, file_id = str(row["storage_path"]).split("/", 1)
+                delete_intake_photo(int(app_id), file_id)
+            elif row["storage_kind"] == "SIGNED_HIRE_COPY":
+                path = Path(str(row["storage_path"])).resolve()
+                root = resolve_path_within_root(intake_photo_storage_root(), "signed-applications")
+                if not path.is_relative_to(root):
+                    raise ValueError("Signed-copy path escapes the configured storage root")
+                path.unlink(missing_ok=True)
+            else:
+                raise ValueError("Unsupported storage kind")
+        except Exception as exc:
+            error = f"{type(exc).__name__}: {exc}"[:500]
+        with engine.begin() as conn:
+            if error is None:
+                conn.execute(text("""UPDATE public.test_employee_file_cleanup
+                    SET completed_at=now(),last_error=NULL WHERE cleanup_id=:id"""),
+                    {"id": int(row["cleanup_id"])})
+                completed += 1
+            else:
+                conn.execute(text("""UPDATE public.test_employee_file_cleanup
+                    SET last_error=:error WHERE cleanup_id=:id"""),
+                    {"id": int(row["cleanup_id"]), "error": error})
+                pending += 1
+    return {"completed": completed, "pending": pending}
+
+
+def retry_file_cleanup(*, deletion_id: str, actor_user_id: int) -> dict[str, int]:
+    try:
+        deletion_id = str(UUID(deletion_id))
+    except (ValueError, AttributeError):
+        raise TestEmployeeCleanupError("INVALID_DELETION_ID", "Неверный идентификатор операции удаления.", 422) from None
+    with engine.connect() as conn:
+        _assert_sysadmin(conn, actor_user_id)
+        if not conn.execute(text("SELECT 1 FROM public.test_employee_deletion_audit WHERE deletion_id=CAST(:id AS uuid)"),
+                            {"id": deletion_id}).first():
+            raise TestEmployeeCleanupError("DELETION_NOT_FOUND", "Операция удаления не найдена.", 404)
+    return _run_file_cleanup(deletion_id)
+
+
+def execute(*, employee_id: int, actor_user_id: int, confirmation: str,
+            expected_snapshot_hash: str) -> dict[str, Any]:
+    if confirmation != "УДАЛИТЬ":
+        raise TestEmployeeCleanupError("CONFIRMATION_REQUIRED", "Для подтверждения введите слово «УДАЛИТЬ».", 422)
+    deletion_id = str(uuid4())
+    with engine.connect().execution_options(isolation_level="SERIALIZABLE") as conn:
+        with conn.begin():
+            _assert_sysadmin(conn, actor_user_id, lock=True)
+            _lock_catalog(conn)
+            _assert_sysadmin(conn, actor_user_id)
+            employee = _employee(conn, employee_id, lock=True)
+            if conn.execute(text("SELECT 1 FROM public.users WHERE employee_id=:id AND user_id=:actor"),
+                            {"id": employee_id, "actor": actor_user_id}).first():
+                raise TestEmployeeCleanupError("OWN_ACCOUNT", "Нельзя удалить собственную учётную запись.", 403)
+            plan = _build_plan(conn, employee_id)
+            if not plan["can_delete"]:
+                raise TestEmployeeCleanupError("DEPENDENCIES_BLOCKED",
+                    "; ".join(plan["blockers"][:5]), 409)
+            if plan["snapshot_hash"] != expected_snapshot_hash:
+                raise TestEmployeeCleanupError("SNAPSHOT_CHANGED", "Связанные данные изменились. Повторно откройте предварительный просмотр.", 409)
+            conn.execute(text("SELECT set_config('corpsite.allow_personnel_order_physical_delete','on',true)"))
+            conn.execute(text("SELECT set_config('corpsite.test_employee_cleanup','on',true)"))
+            deleted_counts: dict[str, int] = {}
+            for table in _delete_order(plan["_plan"], plan["_edges"], plan["_composite_edges"]):
+                tids = sorted(plan["_plan"][table])
+                deleted = conn.execute(text(f'DELETE FROM public."{table}" WHERE ctid::text=ANY(:tids)'),
+                                       {"tids": tids})
+                if deleted.rowcount != len(tids):
+                    raise TestEmployeeCleanupError("DELETE_COUNT_CHANGED", "Количество записей изменилось во время удаления.")
+                deleted_counts[table] = len(tids)
+            # The marker is retained as non-FK administrative provenance.
+            conn.execute(text("""INSERT INTO public.test_employee_deletion_audit
+                (deletion_id,employee_id,person_id,full_name,login,marker_id,
+                 deleted_by_user_id,deleted_counts,snapshot_hash)
+                VALUES (CAST(:id AS uuid),:employee,:person,:name,:login,:marker,
+                        :actor,CAST(:counts AS jsonb),:digest)"""), {
+                "id": deletion_id, "employee": employee_id, "person": plan["person_id"],
+                "name": plan["full_name"], "login": plan["login"],
+                "marker": plan["marker_id"], "actor": actor_user_id,
+                "counts": json.dumps(deleted_counts), "digest": plan["snapshot_hash"],
+            })
+            for kind, path in plan["files"]:
+                conn.execute(text("""INSERT INTO public.test_employee_file_cleanup
+                    (deletion_id,storage_kind,storage_path)
+                    VALUES (CAST(:id AS uuid),:kind,:path)"""),
+                    {"id": deletion_id, "kind": kind, "path": path})
+    try:
+        cleanup = _run_file_cleanup(deletion_id)
+    except SQLAlchemyError:
+        # PostgreSQL deletion has already committed.  The durable queue keeps
+        # every file eligible for the SYSADMIN retry endpoint.
+        logger.exception("post-commit test employee file cleanup unavailable deletion_id=%s", deletion_id)
+        cleanup = {"completed": 0, "pending": len(plan["files"])}
+    return {"deletion_id": deletion_id, "employee_id": employee_id,
+            "deleted_counts": deleted_counts, "file_cleanup": cleanup}

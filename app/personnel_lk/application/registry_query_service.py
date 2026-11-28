@@ -27,6 +27,7 @@ class PersonnelLkRegistryRow:
     rate: Decimal | float | None
     status: str
     application_status: str | None
+    is_test_marked: bool = False
 
 
 def _table_exists(conn: Connection, table_name: str) -> bool:
@@ -260,6 +261,9 @@ def list_personnel_lk_registry(
     """
     total = int(conn.execute(text(count_sql), params).scalar_one())
 
+    mark_sql = ("EXISTS (SELECT 1 FROM public.test_employee_marks m "
+                "WHERE m.employee_id=r.employee_id)" if _table_exists(conn, "test_employee_marks")
+                else "FALSE")
     list_sql = f"""
         {registry_cte}
         SELECT
@@ -271,7 +275,8 @@ def list_personnel_lk_registry(
             r.iin,
             r.rate,
             r.status,
-            r.application_status
+            r.application_status,
+            {mark_sql} AS is_test_marked
         FROM registry r
         WHERE {where_sql}
         ORDER BY LOWER(COALESCE(r.fio, '')) ASC, r.person_id ASC
@@ -296,6 +301,7 @@ def list_personnel_lk_registry(
             application_status=(
                 str(row["application_status"]) if row.get("application_status") is not None else None
             ),
+            is_test_marked=bool(row["is_test_marked"]),
         )
         for row in rows
     ]

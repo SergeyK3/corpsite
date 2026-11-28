@@ -24,6 +24,9 @@ type Props = {
   onToggleSelectAllPage?: () => void;
   allPageEmployeesSelected?: boolean;
   somePageEmployeesSelected?: boolean;
+  canManageTestEmployees?: boolean;
+  onDeleteTestEmployee?: (employeeId: number, fullName: string) => void;
+  onMarkTestEmployee?: (employeeId: number, fullName: string) => void;
 };
 
 const actionClass =
@@ -40,6 +43,9 @@ export default function PersonnelLkTable({
   onToggleSelectAllPage,
   allPageEmployeesSelected = false,
   somePageEmployeesSelected = false,
+  canManageTestEmployees = false,
+  onDeleteTestEmployee,
+  onMarkTestEmployee,
 }: Props) {
   const [pdfLoadingId, setPdfLoadingId] = React.useState<number | null>(null);
   const [pdfError, setPdfError] = React.useState<{ applicationId: number; message: string } | null>(null);
@@ -176,6 +182,19 @@ export default function PersonnelLkTable({
                         >
                           Открыть
                         </Link>
+                        {canManageTestEmployees && employeeId != null ? (
+                          item.is_test_marked ? <button
+                            type="button"
+                            onClick={() => onDeleteTestEmployee?.(employeeId, item.fio || "")}
+                            className="rounded-md bg-red-700 px-2.5 py-1 text-[12px] leading-4 text-white hover:bg-red-800"
+                            data-testid={`personnel-lk-delete-test-employee-${employeeId}`}
+                          >Удалить</button> : <button
+                            type="button"
+                            onClick={() => onMarkTestEmployee?.(employeeId, item.fio || "")}
+                            className={actionClass}
+                            data-testid={`personnel-lk-mark-test-employee-${employeeId}`}
+                          >Отметить тестовым</button>
+                        ) : null}
                         {personPdfError?.personId === item.person_id ? <p className="basis-full text-xs text-red-600" role="alert" data-testid={`personnel-lk-pdf-person-error-${item.person_id}`}>{personPdfError.message}</p> : null}
                         </div>
                       ) : item.record_kind === "applicant" && item.active_application_id != null ? (
