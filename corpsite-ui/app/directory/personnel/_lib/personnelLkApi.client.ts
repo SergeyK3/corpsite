@@ -29,6 +29,7 @@ export type TestEmployeeCleanupPreview = {
   counts: Record<string, number>;
   retained_counts: Record<string, number>;
   blockers: string[];
+  blocker_groups?: Array<{ table: string; count: number; columns: string[] }>;
   can_delete: boolean;
   snapshot_hash: string;
   file_count: number;

@@ -43,6 +43,20 @@ const tableLabels: Record<string, string> = {
   person_telegram_bindings: "Telegram-привязки",
   notifications: "Уведомления",
   verification_tasks: "Индивидуальные задачи",
+  person_card_change_requests: "Заявки на изменение личной карточки",
+  person_card_change_documents: "Документы заявок на карточку",
+  person_card_change_events: "История рассмотрения заявок на карточку",
+  person_card_record_documents: "Связи документов с разделами карточки",
+  person_relative_change_requests: "Заявки на изменение родственников",
+  person_relative_change_events: "История рассмотрения заявок на родственников",
+  ppr_stage0_cohort_participants: "Участники кадровой когорты",
+  task_event_deliveries: "Журнал доставки событий задач",
+  task_event_recipients: "Получатели событий задач",
+  tasks: "Задачи",
+  user_linkage_execute_items: "Журнал привязки учётных записей",
+  electronic_hire_approval_tasks: "Задачи согласования приёма",
+  employee_onboarding_notification_recipients: "Получатели уведомлений адаптации",
+  employee_onboarding_notification_deliveries: "Доставка уведомлений адаптации",
 };
 
 function blockerLabel(detail: string): string {
@@ -108,6 +122,12 @@ export default function TestEmployeeCleanupDialog({
   const retainedRows = Object.entries(preview?.retained_counts ?? {}).filter(([, count]) => count > 0);
   const groupedRows = groupedCleanupCounts(preview?.counts, tableLabels, "Другие персональные данные");
   const groupedRetainedRows = groupedCleanupCounts(preview?.retained_counts, tableLabels, "Исторические записи");
+  const blockerGroups = preview?.blocker_groups ?? [];
+  const groupedTables = new Set(blockerGroups.map((group) => group.table));
+  const ungroupedBlockers = (preview?.blockers ?? []).filter((detail) => {
+    const match = detail.match(/^(?:Внешняя зависимость|Составная внешняя зависимость) ([a-z_]+)\./);
+    return !match || !groupedTables.has(match[1]);
+  });
   const evidenceLength = evidence.trim().length;
   const nameMatches = confirmedName === preview?.full_name;
   return (
@@ -146,7 +166,12 @@ export default function TestEmployeeCleanupDialog({
             </div>
             {preview.blockers.length ? <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
               <p className="font-medium">Препятствуют удалению</p>
-              <ul className="mt-1 list-disc pl-5">{preview.blockers.map((blocker) => <li key={blocker}>{blockerLabel(blocker)}</li>)}</ul>
+              <ul className="mt-1 list-disc pl-5">
+                {blockerGroups.map((group) => <li key={group.table}>
+                  {tableLabels[group.table] ?? "Связанные данные нового типа"}: {group.count} — требуется отдельное решение
+                </li>)}
+                {ungroupedBlockers.map((blocker) => <li key={blocker}>{blockerLabel(blocker)}</li>)}
+              </ul>
               <details className="mt-2"><summary className="cursor-pointer">Подробности</summary>
                 <ul className="mt-1 list-disc pl-5">{preview.blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}</ul>
               </details>

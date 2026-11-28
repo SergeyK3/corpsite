@@ -78,6 +78,10 @@ OWNED: dict[str, dict[str, set[str]]] = {
         "person_telegram_bindings": {"person_id"},
         "person_telegram_bot_activations": {"person_id"},
         "person_training": {"person_id"},
+        "person_card_change_requests": {"person_id"},
+        "person_card_change_documents": {"person_id"},
+        "person_card_record_documents": {"person_id"},
+        "person_relative_change_requests": {"person_id"},
         "personnel_file_sets": {"person_id"},
         "personnel_file_events": {"person_id"},
         "personnel_applications": {"person_id"},
@@ -186,6 +190,17 @@ OWNED: dict[str, dict[str, set[str]]] = {
         "electronic_hire_visas": {"application_id"},
     },
     "employee_termination_records": {"employee_termination_record_audit": {"termination_record_id"}},
+    "person_card_change_requests": {
+        "person_card_change_events": {"request_id"},
+        "person_card_change_documents": {"request_id"},
+        "person_card_record_documents": {"request_id"},
+    },
+    "person_card_change_documents": {
+        "person_card_record_documents": {"document_id"},
+    },
+    "person_relative_change_requests": {
+        "person_relative_change_events": {"request_id"},
+    },
 }
 
 
@@ -393,13 +408,15 @@ def _logical_blockers(conn: Connection, plan: dict[str, dict[str, dict[str, Any]
         # event_id is a local sequence in many independent append-only event
         # streams. Matching its bare numeric value cannot establish a link.
         # Actual FK references to personnel_file_events are checked above.
-        if table == "personnel_file_events" and column == "event_id":
+        if table in {"personnel_file_events", "person_card_change_events",
+                     "person_relative_change_events"} and column == "event_id":
             continue
         values = [state.get(column) for state in plan[table].values()]
         identities.setdefault(column, []).extend(value for value in values
                                                if isinstance(value, int) or
                                                (isinstance(value, str) and PERSONNEL_STORAGE_KEY.fullmatch(value)))
-    rows = conn.execute(text("""SELECT columns.table_name,columns.column_name,columns.data_type
+    rows = conn.execute(text("""SELECT columns.table_name,columns.column_name,columns.data_type,
+               columns.is_identity,columns.column_default
         FROM information_schema.columns columns
         JOIN information_schema.tables tables
           ON tables.table_schema=columns.table_schema AND tables.table_name=columns.table_name
@@ -417,10 +434,16 @@ def _logical_blockers(conn: Connection, plan: dict[str, dict[str, dict[str, Any]
             blockers.append(f"Учётная запись служит источником для учебных пользователей: {linked_training_users}")
     for row in rows:
         table, column = str(row["table_name"]), str(row["column_name"])
+        # Generated journal IDs are local sequences. A numeric collision is
+        # not a relationship; actual FK references are checked above.
+        if column == "audit_id" and (row["is_identity"] == "YES"
+                                     or str(row["column_default"] or "").startswith("nextval(")):
+            continue
         # These three event streams allocate event_id independently. A numeric
         # collision is not a reference; genuine FKs are checked above.
         if column == "event_id" and table in {
             "personnel_record_events", "person_card_change_events", "personnel_file_events",
+            "person_relative_change_events",
         }:
             continue
         if row["data_type"] not in {"smallint", "integer", "bigint", "numeric", "uuid"}:
@@ -443,6 +466,48 @@ def _logical_blockers(conn: Connection, plan: dict[str, dict[str, dict[str, Any]
     return blockers
 
 
+def _reviewed_card_blockers(plan: dict[str, dict[str, dict[str, Any]]],
+                            employee_id: int, person_id: int | None) -> list[str]:
+    """Validate both sides of every reviewed-card ownership path before deletion."""
+    blockers: list[str] = []
+    requests = {str(row["request_id"]): row for row in
+                plan.get("person_card_change_requests", {}).values()}
+    documents = {str(row["document_id"]): row for row in
+                 plan.get("person_card_change_documents", {}).values()}
+    relatives = {int(row["relative_id"]): row for row in
+                 plan.get("person_relatives", {}).values()}
+    known_sections = {"contacts", "education", "training", "category",
+                      "employment_biography", "languages", "awards"}
+    for row in requests.values():
+        if (row.get("person_id") != person_id
+                or row.get("employee_context_id") not in (None, employee_id)
+                or row.get("section") not in known_sections):
+            blockers.append("Заявка на изменение карточки содержит неоднозначного владельца или раздел")
+    for row in documents.values():
+        request = requests.get(str(row["request_id"]))
+        if (row.get("person_id") != person_id or request is None
+                or request.get("person_id") != person_id
+                or row.get("section") != request.get("section")):
+            blockers.append("Документ заявки на карточку связан с другой записью")
+    for row in plan.get("person_card_record_documents", {}).values():
+        document = documents.get(str(row["document_id"]))
+        request = requests.get(str(row["request_id"]))
+        if (row.get("person_id") != person_id or document is None or request is None
+                or document.get("person_id") != person_id
+                or request.get("person_id") != person_id
+                or row.get("section") != document.get("section")
+                or row.get("section") != request.get("section")):
+            blockers.append("Связь документа с разделом карточки принадлежит другой записи")
+    for row in plan.get("person_relative_change_requests", {}).values():
+        if row.get("person_id") != person_id:
+            blockers.append("Заявка на родственника принадлежит другому физическому лицу")
+        for column in ("relative_id", "approved_relative_id"):
+            relative_id = row.get(column)
+            if relative_id is not None and relatives.get(int(relative_id), {}).get("person_id") != person_id:
+                blockers.append("Заявка на родственника ссылается на чужую запись")
+    return sorted(set(blockers))
+
+
 def _personnel_bundle(key: str) -> Path:
     if not PERSONNEL_STORAGE_KEY.fullmatch(key):
         raise ValueError("Invalid personnel file storage key")
@@ -462,22 +527,37 @@ def _personnel_bundle(key: str) -> Path:
     return bundle
 
 
+def _bundle_has_external_references(conn: Connection,
+                                    plan: dict[str, dict[str, dict[str, Any]]],
+                                    key: str) -> bool:
+    # Reviewed card attachments and personnel-file versions share the same
+    # private storage. A new owner must be reviewed before physical cleanup.
+    for table in ("personnel_file_versions", "person_card_change_documents"):
+        if not conn.scalar(text("SELECT to_regclass(:name) IS NOT NULL"),
+                           {"name": f"public.{table}"}):
+            continue
+        matching = _rows(conn, table, "t.storage_key::text=:key", {"key": key})
+        if any(tid not in plan.get(table, {}) for tid, _ in matching):
+            return True
+    matching_documents = _rows(conn, "employee_documents", "t.file_url LIKE :needle",
+                               {"needle": f"%{key}%"})
+    return any(tid not in plan.get("employee_documents", {})
+               for tid, _ in matching_documents)
+
+
 def _file_plan(conn: Connection, plan: dict[str, dict[str, dict[str, Any]]]) -> tuple[list[tuple[str, str]], list[str]]:
     files: list[tuple[str, str]] = []
     blockers: list[str] = []
     for table, rows in plan.items():
         for state in rows.values():
-            if table == "personnel_file_versions":
+            if table in {"personnel_file_versions", "person_card_change_documents"}:
                 key = str(state["storage_key"])
                 try:
                     _personnel_bundle(key)
                 except (ValueError, OSError) as exc:
                     blockers.append(f"Недопустимое хранилище файла личного дела: {exc}")
                 else:
-                    shared_versions = _rows(conn, "personnel_file_versions", "t.storage_key=:key", {"key": key})
-                    shared_documents = _rows(conn, "employee_documents", "t.file_url LIKE :needle", {"needle": f"%{key}%"})
-                    if (any(tid not in plan.get("personnel_file_versions", {}) for tid, _ in shared_versions)
-                            or any(tid not in plan.get("employee_documents", {}) for tid, _ in shared_documents)):
+                    if _bundle_has_external_references(conn, plan, key):
                         blockers.append("Файл личного дела используется другой записью")
                     else:
                         files.append(("PERSONNEL_FILE_BUNDLE", key))
@@ -581,7 +661,10 @@ def _build_plan(conn: Connection, employee_id: int) -> dict[str, Any]:
         _add(plan, "access_grants", _rows(conn, "access_grants",
             "t.target_type='ASSIGNMENT' AND t.target_id=ANY(:ids)",
             {"ids": assignment_ids}))
+    blockers.extend(_reviewed_card_blockers(plan, employee_id, person_id))
     retained: list[dict[str, Any]] = []
+    blocked_rows: dict[str, set[str]] = defaultdict(set)
+    blocked_columns: dict[str, set[str]] = defaultdict(set)
     # A child reached through another owner edge is safe. Every remaining
     # reference, even ON DELETE CASCADE/SET NULL, must be resolved explicitly.
     for parent, parents in list(plan.items()):
@@ -596,13 +679,18 @@ def _build_plan(conn: Connection, employee_id: int) -> dict[str, Any]:
                                      "id": int(state[edge.child_column]), "state": state})
             elif external:
                 blockers.append(f"Внешняя зависимость {edge.child}.{edge.child_column}: {len(external)}")
+                blocked_rows[edge.child].update(tid for tid, _ in external)
+                blocked_columns[edge.child].add(edge.child_column)
         for edge in composite_edges:
             if edge.parent != parent:
                 continue
-            unknown = sum(tid not in plan.get(edge.child, {})
-                          for tid, _ in _composite_child_rows(conn, edge, parents))
+            external_composite = [tid for tid, _ in _composite_child_rows(conn, edge, parents)
+                                  if tid not in plan.get(edge.child, {})]
+            unknown = len(external_composite)
             if unknown:
                 blockers.append(f"Составная внешняя зависимость {edge.child}.{edge.constraint}: {unknown}")
+                blocked_rows[edge.child].update(external_composite)
+                blocked_columns[edge.child].update(edge.child_columns)
     blockers.extend(_logical_blockers(conn, plan, employee_id, person_id, user_ids, edges))
     files, file_blockers = _file_plan(conn, plan)
     blockers.extend(file_blockers)
@@ -630,6 +718,9 @@ def _build_plan(conn: Connection, employee_id: int) -> dict[str, Any]:
         "is_test_marked": marker is not None, "counts": counts,
         "retained_counts": retained_counts,
         "files": files, "blockers": sorted(set(blockers)),
+        "blocker_groups": [{"table": table, "count": len(rows),
+                            "columns": sorted(blocked_columns[table])}
+                           for table, rows in sorted(blocked_rows.items())],
         "can_delete": marker is not None and not blockers,
         "snapshot_hash": state_hash, "_plan": plan, "_edges": edges,
         "_composite_edges": composite_edges, "_retained": retained,
@@ -728,10 +819,7 @@ def _run_file_cleanup(deletion_id: str) -> dict[str, int]:
             elif row["storage_kind"] == "PERSONNEL_FILE_BUNDLE":
                 key = str(row["storage_path"])
                 with engine.connect() as conn:
-                    if conn.execute(text("""SELECT EXISTS(
-                        SELECT 1 FROM public.personnel_file_versions WHERE storage_key=:key
-                        UNION ALL SELECT 1 FROM public.employee_documents WHERE file_url LIKE :needle
-                    )"""), {"key": key, "needle": f"%{key}%"}).scalar_one():
+                    if _bundle_has_external_references(conn, {}, key):
                         raise ValueError("Personnel file has another database reference")
                 bundle = _personnel_bundle(key)
                 if bundle.exists():
