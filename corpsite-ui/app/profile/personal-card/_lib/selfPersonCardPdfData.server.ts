@@ -93,8 +93,12 @@ export async function loadSelfPersonCardPdfDocument(
       rate: displayEmploymentRate(operational.employment_rate) ?? "",
     },
   });
+  const [surname = "", givenName = "", patronymic = ""] = selfCard.card.general.full_name.trim().split(/\s+/);
+  const name = `${surname}${Array.from(givenName)[0] ?? ""}${Array.from(patronymic)[0] ?? ""}`
+    .replace(/[^\p{L}\p{M}\p{N}'’-]/gu, "_");
+  const date = new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Qyzylorda" }).format(new Date());
   return {
     html: buildPersonCardPdfHtmlDocument(model),
-    filename: "personal-card.pdf",
+    filename: name ? `${name}_${date}.pdf` : "personal-card.pdf",
   };
 }

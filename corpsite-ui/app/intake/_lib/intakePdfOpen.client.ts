@@ -1,5 +1,7 @@
 "use client";
 
+import { filenameFromContentDisposition } from "./intakePdfFilename";
+
 import { buildHeaders } from "@/lib/api";
 
 import {
@@ -40,25 +42,6 @@ async function readPdfError(res: Response): Promise<{ code?: string; message: st
   } catch {
     return { message: fallback };
   }
-}
-
-function filenameFromContentDisposition(value: string | null, fallback: string): string {
-  if (!value) return fallback;
-  const utf8 = value.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
-  const quoted = value.match(/filename="([^"\\]*(?:\\.[^"\\]*)*)"/i)?.[1];
-  const plain = value.match(/filename=([^;]+)/i)?.[1];
-  let decoded = "";
-  if (utf8) {
-    try {
-      decoded = decodeURIComponent(utf8);
-    } catch {
-      decoded = "";
-    }
-  }
-  const candidate = decoded || (quoted ?? plain ?? "").trim();
-  // A response header must not be able to choose a path or an empty browser filename.
-  const safe = candidate.replace(/[\\/:*?"<>|\x00-\x1F]/g, "_").trim();
-  return safe || fallback;
 }
 
 async function openPdfFromHref(href: string, withAuth: boolean): Promise<OpenIntakePdfResult> {

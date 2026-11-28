@@ -1,5 +1,6 @@
 "use client";
 
+import { filenameFromContentDisposition } from "@/app/intake/_lib/intakePdfFilename";
 import { buildHeaders } from "@/lib/api";
 
 /** Download the protected self PDF; the URL intentionally has no subject ID. */
@@ -19,7 +20,7 @@ export async function downloadMyPersonalCardPdf(): Promise<{ ok: true } | { ok: 
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
-    anchor.download = "personal-card.pdf";
+    anchor.download = filenameFromContentDisposition(response.headers.get("Content-Disposition"), "personal-card.pdf");
     anchor.click();
     window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
     return { ok: true };

@@ -49,7 +49,11 @@ export function buildIntakePdfFilename(applicationId: number, fullName: string):
 
 export function buildIntakePdfContentDisposition(filename: string): string {
   const safe = filename.replace(/["\r\n]/g, "_");
-  return `inline; filename="${safe}"`;
+  if (/^[ -~]+$/.test(safe)) return `inline; filename="${safe}"`;
+  const encoded = encodeURIComponent(safe).replace(/['()*]/g, (character) =>
+    `%${character.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+  return `inline; filename="personal-card.pdf"; filename*=UTF-8''${encoded}`;
 }
 
 export function buildIntakePdfHrefByToken(token: string): string {
@@ -58,4 +62,23 @@ export function buildIntakePdfHrefByToken(token: string): string {
 
 export function buildIntakePdfHrefByApplicationId(applicationId: number): string {
   return `/directory/personnel-applications/${applicationId}/intake/pdf`;
+}
+
+export function filenameFromContentDisposition(value: string | null, fallback: string): string {
+  if (!value) return fallback;
+  const utf8 = value.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+  const quoted = value.match(/filename="([^"\\]*(?:\\.[^"\\]*)*)"/i)?.[1];
+  const plain = value.match(/filename=([^;]+)/i)?.[1];
+  let decoded = "";
+  if (utf8) {
+    try {
+      decoded = decodeURIComponent(utf8);
+    } catch {
+      decoded = "";
+    }
+  }
+  const candidate = decoded || (quoted ?? plain ?? "").trim();
+  // A response header must not be able to choose a path or an empty browser filename.
+  const safe = candidate.replace(/[\\/:*?"<>|\x00-\x1F]/g, "_").trim();
+  return safe || fallback;
 }

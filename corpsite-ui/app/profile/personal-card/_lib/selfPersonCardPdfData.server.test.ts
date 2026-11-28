@@ -39,7 +39,7 @@ describe("loadSelfPersonCardPdfDocument", () => {
       expect.stringContaining("/api/ppr/me/operational-assignment"),
     ]);
     expect(paths.join(" ")).not.toMatch(/persons|employees|intake|application|person_id|employee_id/);
-    expect(document.filename).toBe("personal-card.pdf");
+    expect(document.filename).toMatch(/^ИвановИ_\d{4}-\d{2}-\d{2}\.pdf$/);
     expect(document.html).toContain("990101123456");
     expect(document.html).toContain("Human resources");
     expect(document.html).toContain("Работает");
