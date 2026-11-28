@@ -211,12 +211,14 @@ describe("PersonnelLkPageClient", () => {
     fireEvent.click(await screen.findByTestId("personnel-lk-delete-test-employee-100"));
     const dialog = await screen.findByRole("dialog", { name: "Полное удаление тестового сотрудника" });
     expect(screen.getByText("Кадровые приказы")).toBeInTheDocument();
-    const confirm = within(dialog).getByRole("textbox");
-    fireEvent.change(confirm, { target: { value: "УДАЛИТЬ" } });
+    const confirm = within(dialog).getByRole("checkbox", { name: "Подтверждаю окончательное удаление" });
+    expect(confirm).not.toBeChecked();
+    expect(within(dialog).getByRole("button", { name: "Удалить окончательно" })).toBeDisabled();
+    fireEvent.click(confirm);
     fireEvent.click(screen.getByRole("button", { name: "Удалить окончательно" }));
     await waitFor(() => expect(deleteTestEmployeeMock).toHaveBeenCalledWith(100, "a".repeat(64)));
     const resultDialog = await screen.findByRole("dialog", { name: "Результат удаления тестового сотрудника" });
-    expect(within(resultDialog).getByText(marked.fio)).toBeInTheDocument();
+    expect(within(resultDialog).getByText(marked.fio ?? "")).toBeInTheDocument();
     expect(within(resultDialog).getByText("Сотрудник ID 100")).toBeInTheDocument();
     fireEvent.click(within(resultDialog).getByRole("button", { name: "Закрыть" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();

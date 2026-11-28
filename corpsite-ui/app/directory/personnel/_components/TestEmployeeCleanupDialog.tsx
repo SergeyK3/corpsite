@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { groupedCleanupCounts, TestCleanupConfirmationCheckbox, useTestCleanupConfirmation } from "../../_components/TestCleanupConfirmation";
 import {
   deleteTestEmployee,
   markTestEmployee,
@@ -57,7 +58,7 @@ export default function TestEmployeeCleanupDialog({
   const [loading, setLoading] = React.useState(true);
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [confirmation, setConfirmation] = React.useState("");
+  const { confirmed, setConfirmed } = useTestCleanupConfirmation(preview);
   const [evidence, setEvidence] = React.useState("");
   const [confirmedName, setConfirmedName] = React.useState("");
   const [stage, setStage] = React.useState<"mark" | "delete" | "blocked">(mode);
@@ -78,7 +79,7 @@ export default function TestEmployeeCleanupDialog({
   }, [onClose, submitting]);
 
   async function submit() {
-    if (!preview || submitting) return;
+    if (!preview || submitting || (stage === "delete" && (!confirmed || !preview.can_delete))) return;
     setSubmitting(true);
     setError(null);
     try {
@@ -94,6 +95,9 @@ export default function TestEmployeeCleanupDialog({
       }
     } catch (cause) {
       setError(mapPersonnelLkApiError(cause, "Операция не выполнена."));
+      if (stage === "delete") {
+        try { setPreview(await previewTestEmployeeCleanup(employeeId)); } catch { /* Keep the original error. */ }
+      }
     } finally {
       setSubmitting(false);
     }
@@ -102,6 +106,8 @@ export default function TestEmployeeCleanupDialog({
   const title = stage === "mark" ? "Подтверждение тестового сотрудника" : "Полное удаление тестового сотрудника";
   const rows = Object.entries(preview?.counts ?? {}).filter(([, count]) => count > 0);
   const retainedRows = Object.entries(preview?.retained_counts ?? {}).filter(([, count]) => count > 0);
+  const groupedRows = groupedCleanupCounts(preview?.counts, tableLabels, "Другие персональные данные");
+  const groupedRetainedRows = groupedCleanupCounts(preview?.retained_counts, tableLabels, "Исторические записи");
   const evidenceLength = evidence.trim().length;
   const nameMatches = confirmedName === preview?.full_name;
   return (
@@ -116,9 +122,9 @@ export default function TestEmployeeCleanupDialog({
           <div className="mt-4 space-y-3">
             <div className="rounded-lg border border-zinc-200 p-3 text-sm dark:border-zinc-700">
               <p className="mb-2 font-medium">Будут удалены</p>
-              {rows.length ? <dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1">
-                {rows.map(([table, count]) => <React.Fragment key={table}>
-                  <dt>{tableLabels[table] ?? "Другие персональные данные"}</dt><dd className="text-right font-medium">{count}</dd>
+              {groupedRows.length ? <dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1">
+                {groupedRows.map(([label, count]) => <React.Fragment key={label}>
+                  <dt>{label}</dt><dd className="text-right font-medium">{count}</dd>
                 </React.Fragment>)}
               </dl> : <p>Связанных записей нет.</p>}
               <p className="mt-2">Файловых объектов для очистки: {preview.file_count}</p>
@@ -128,9 +134,9 @@ export default function TestEmployeeCleanupDialog({
             </div>
             <div className="rounded-lg border border-zinc-200 p-3 text-sm dark:border-zinc-700">
               <p className="mb-2 font-medium">Будут сохранены в истории</p>
-              {retainedRows.length ? <dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1">
-                {retainedRows.map(([table, count]) => <React.Fragment key={table}>
-                  <dt>{tableLabels[table] ?? "Исторические записи"}</dt><dd className="text-right font-medium">{count}</dd>
+              {groupedRetainedRows.length ? <dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1">
+                {groupedRetainedRows.map(([label, count]) => <React.Fragment key={label}>
+                  <dt>{label}</dt><dd className="text-right font-medium">{count}</dd>
                 </React.Fragment>)}
               </dl> : <p>Связанных исторических записей нет.</p>}
               {retainedRows.length ? <p className="mt-2 text-zinc-600 dark:text-zinc-400">Исходная учётная запись будет указана в неизменяемой записи об удалении.</p> : null}
@@ -165,16 +171,13 @@ export default function TestEmployeeCleanupDialog({
         </div> : <div className="mt-4 space-y-3 text-sm">
           {stage === "blocked" ? <p role="status" className="text-amber-700 dark:text-amber-300">Тестовое происхождение подтверждено. Удаление пока заблокировано указанными зависимостями.</p> : null}
           <p className="font-medium text-red-700 dark:text-red-400">Сотрудник и связанные с ним тестовые данные будут удалены без возможности восстановления через интерфейс системы.</p>
-          <label className="block">Для подтверждения введите слово «УДАЛИТЬ»
-            <input value={confirmation} onChange={(event) => setConfirmation(event.target.value)}
-              className="mt-1 w-full rounded-md border border-zinc-300 p-2 dark:border-zinc-700 dark:bg-zinc-950" />
-          </label>
+          <TestCleanupConfirmationCheckbox checked={confirmed} onChange={setConfirmed} />
         </div>}
         {error ? <p role="alert" className="mt-3 text-sm text-red-700 dark:text-red-400">{error}</p> : null}
         <div className="mt-5 flex justify-end gap-2">
           <button type="button" onClick={onClose} disabled={submitting} className="rounded-md border px-3 py-2 text-sm">Отмена</button>
           {stage !== "blocked" ? <button type="button" onClick={() => void submit()}
-            disabled={submitting || !preview || (stage === "mark" ? evidenceLength < 12 || !nameMatches : !preview.can_delete || confirmation !== "УДАЛИТЬ")}
+            disabled={submitting || !preview || (stage === "mark" ? evidenceLength < 12 || !nameMatches : !preview.can_delete || !confirmed)}
             className="rounded-md bg-red-700 px-3 py-2 text-sm font-medium text-white disabled:opacity-50">
             {submitting ? "Выполнение…" : stage === "mark" ? "Подтвердить тестовую запись" : "Удалить окончательно"}
           </button> : null}
