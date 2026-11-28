@@ -218,7 +218,7 @@ def compute_preview_stage2(conn: Connection, *, stage0_cohort_run_id: int) -> di
     The caller owns a REPEATABLE READ, READ ONLY transaction.  This function
     deliberately does not touch envelope or PMF tables.
     """
-    cohort = [dict(x) for x in conn.execute(text("SELECT * FROM public.ppr_stage0_cohort_participants WHERE stage0_cohort_run_id=:id ORDER BY position"), {"id":stage0_cohort_run_id}).mappings()]
+    cohort = [dict(x) for x in conn.execute(text("SELECT * FROM public.ppr_stage0_cohort_participants WHERE stage0_cohort_run_id=:id AND retired_at IS NULL ORDER BY position"), {"id":stage0_cohort_run_id}).mappings()]
     if not cohort:
         raise Stage2ValidationError("STAGE2_COHORT_EMPTY_OR_NOT_FOUND")
     provisional = [{"stage0_participant_id":p["stage0_participant_id"],"employee_id":p["employee_id"],"person_id":p["person_id"],"participant_snapshot_version":1} for p in cohort]
@@ -240,7 +240,7 @@ def persist_preview_stage2(conn: Connection, *, stage0_cohort_run_id: int, actor
     fingerprint = computed["preview_fingerprint"]
     if fingerprint != expected_preview_fingerprint:
         raise Stage2ConflictError("STAGE2_PREVIEW_STALE")
-    cohort = [dict(x) for x in conn.execute(text("SELECT * FROM public.ppr_stage0_cohort_participants WHERE stage0_cohort_run_id=:id ORDER BY position FOR UPDATE"), {"id":stage0_cohort_run_id}).mappings()]
+    cohort = [dict(x) for x in conn.execute(text("SELECT * FROM public.ppr_stage0_cohort_participants WHERE stage0_cohort_run_id=:id AND retired_at IS NULL ORDER BY position FOR UPDATE"), {"id":stage0_cohort_run_id}).mappings()]
     existing = conn.execute(text("SELECT stage_run_id FROM public.ppr_stage_runs WHERE stage_code='education' AND stage0_cohort_run_id=:cohort AND preview_fingerprint=:f"), {"cohort":stage0_cohort_run_id,"f":fingerprint}).scalar_one_or_none()
     if existing:
         return _view_run(conn, int(existing))

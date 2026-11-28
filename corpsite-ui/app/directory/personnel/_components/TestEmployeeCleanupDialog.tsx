@@ -5,6 +5,7 @@ import { groupedCleanupCounts, TestCleanupConfirmationCheckbox, useTestCleanupCo
 import {
   deleteTestEmployee,
   markTestEmployee,
+  markTestPersonnelOrder,
   mapPersonnelLkApiError,
   previewTestEmployeeCleanup,
   type TestEmployeeCleanupPreview,
@@ -43,6 +44,32 @@ const tableLabels: Record<string, string> = {
   person_telegram_bindings: "Telegram-привязки",
   notifications: "Уведомления",
   verification_tasks: "Индивидуальные задачи",
+  person_card_change_requests: "Заявки на изменение личной карточки",
+  person_card_change_documents: "Документы заявок на карточку",
+  person_card_change_events: "История рассмотрения заявок на карточку",
+  person_card_record_documents: "Связи документов с разделами карточки",
+  person_relative_change_requests: "Заявки на изменение родственников",
+  person_relative_change_events: "История рассмотрения заявок на родственников",
+  ppr_stage0_cohort_participants: "Участники кадровой когорты",
+  task_event_deliveries: "Журнал доставки событий задач",
+  task_event_recipients: "Получатели событий задач",
+  tasks: "Задачи",
+  user_linkage_execute_items: "Журнал привязки учётных записей",
+  electronic_hire_approval_tasks: "Задачи согласования приёма",
+  employee_onboarding_notifications: "История уведомлений адаптации",
+  ppr_migration_section_status_projection: "Исторические срезы кадровой миграции",
+  employee_onboarding_notification_recipients: "Получатели уведомлений адаптации",
+  employee_onboarding_notification_deliveries: "Доставка уведомлений адаптации",
+};
+
+const historyActionLabels: Record<string, string> = {
+  CANCEL_PENDING_DELIVERIES: "Ожидающие доставки будут отменены с сохранением снимка",
+  ARCHIVE_COMPLETED_DELIVERIES: "Выполненные доставки тестовой учётной записи останутся в архиве",
+  KEEP_COMPLETED_DELIVERIES: "Выполненные доставки другим пользователям останутся в журнале",
+  KEEP_APPROVAL_DECISIONS: "Результаты согласования останутся в истории",
+  KEEP_PPR_COHORT: "Участники замороженных когорт PPR останутся в снимке",
+  KEEP_USER_LINKAGE: "Операции привязки учётной записи останутся в истории",
+  KEEP_TASK_ATTRIBUTION: "Исходное авторство общих задач останется в архиве",
 };
 
 function blockerLabel(detail: string): string {
@@ -62,6 +89,9 @@ export default function TestEmployeeCleanupDialog({
   const [evidence, setEvidence] = React.useState("");
   const [confirmedName, setConfirmedName] = React.useState("");
   const [stage, setStage] = React.useState<"mark" | "delete" | "blocked">(mode);
+  const [selectedOrderId, setSelectedOrderId] = React.useState<number | null>(null);
+  const [orderEvidence, setOrderEvidence] = React.useState("");
+  const [confirmedOrderNumber, setConfirmedOrderNumber] = React.useState("");
 
   React.useEffect(() => {
     let alive = true;
@@ -103,11 +133,36 @@ export default function TestEmployeeCleanupDialog({
     }
   }
 
+  async function confirmOrder(orderId: number) {
+    if (submitting || orderEvidence.trim().length < 20) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      await markTestPersonnelOrder(employeeId, orderId, orderEvidence, confirmedOrderNumber);
+      const refreshed = await previewTestEmployeeCleanup(employeeId);
+      setPreview(refreshed);
+      setStage(refreshed.can_delete ? "delete" : "blocked");
+      setSelectedOrderId(null);
+      setOrderEvidence("");
+      setConfirmedOrderNumber("");
+    } catch (cause) {
+      setError(mapPersonnelLkApiError(cause, "Не удалось подтвердить происхождение приказа."));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   const title = stage === "mark" ? "Подтверждение тестового сотрудника" : "Полное удаление тестового сотрудника";
   const rows = Object.entries(preview?.counts ?? {}).filter(([, count]) => count > 0);
   const retainedRows = Object.entries(preview?.retained_counts ?? {}).filter(([, count]) => count > 0);
   const groupedRows = groupedCleanupCounts(preview?.counts, tableLabels, "Другие персональные данные");
   const groupedRetainedRows = groupedCleanupCounts(preview?.retained_counts, tableLabels, "Исторические записи");
+  const blockerGroups = preview?.blocker_groups ?? [];
+  const groupedTables = new Set(blockerGroups.map((group) => group.table));
+  const ungroupedBlockers = (preview?.blockers ?? []).filter((detail) => {
+    const match = detail.match(/^(?:Внешняя зависимость|Составная внешняя зависимость) ([a-z_]+)\./);
+    return !match || !groupedTables.has(match[1]);
+  });
   const evidenceLength = evidence.trim().length;
   const nameMatches = confirmedName === preview?.full_name;
   return (
@@ -140,16 +195,56 @@ export default function TestEmployeeCleanupDialog({
                 </React.Fragment>)}
               </dl> : <p>Связанных исторических записей нет.</p>}
               {retainedRows.length ? <p className="mt-2 text-zinc-600 dark:text-zinc-400">Исходная учётная запись будет указана в неизменяемой записи об удалении.</p> : null}
+              {preview.history_actions?.length ? <ul className="mt-2 list-disc space-y-1 pl-5">
+                {preview.history_actions.map((action) => <li key={action.code}>
+                  {historyActionLabels[action.code] ?? action.code}: {action.count}
+                </li>)}
+              </ul> : null}
               {retainedRows.length ? <details className="mt-2"><summary className="cursor-pointer">Подробности</summary>
                 <ul className="mt-1 list-disc pl-5">{retainedRows.map(([table, count]) => <li key={table}>{table}: {count}</li>)}</ul>
               </details> : null}
             </div>
             {preview.blockers.length ? <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
               <p className="font-medium">Препятствуют удалению</p>
-              <ul className="mt-1 list-disc pl-5">{preview.blockers.map((blocker) => <li key={blocker}>{blockerLabel(blocker)}</li>)}</ul>
+              <ul className="mt-1 list-disc pl-5">
+                {blockerGroups.map((group) => <li key={group.table}>
+                  {tableLabels[group.table] ?? "Связанные данные нового типа"}: {group.count} — требуется отдельное решение
+                </li>)}
+                {ungroupedBlockers.map((blocker) => <li key={blocker}>{blockerLabel(blocker)}</li>)}
+              </ul>
               <details className="mt-2"><summary className="cursor-pointer">Подробности</summary>
                 <ul className="mt-1 list-disc pl-5">{preview.blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}</ul>
               </details>
+            </div> : null}
+            {preview.personnel_orders?.length ? <div className="rounded-lg border border-zinc-200 p-3 text-sm dark:border-zinc-700">
+              <p className="mb-2 font-medium">Кадровые приказы</p>
+              <ul className="space-y-3">
+                {preview.personnel_orders.map((order) => <li key={order.order_id} className="rounded border border-zinc-200 p-2 dark:border-zinc-700">
+                  <p className="font-medium">№ {order.order_number ?? "без номера"} · ID {order.order_id}</p>
+                  <p>Дата: {order.order_date ?? "—"} · Тип: {order.order_type_code} · Статус: {order.status} · Пунктов: {order.item_count}</p>
+                  <p>Сотрудники: {order.employees.map((person) => `${person.full_name ?? "—"} (ID ${person.employee_id ?? "—"})`).join(", ")}</p>
+                  <p>Подписанных копий: {order.signed_copy_count} · Вложений: {order.attachment_count} · Событий ознакомления: {order.acknowledgement_count}</p>
+                  <p className="mt-1">{order.is_test_marked ? "Тестовое происхождение приказа подтверждено" : "Тестовое происхождение приказа не подтверждено"}</p>
+                  {preview.is_test_marked && !order.is_test_marked ? <div className="mt-2 space-y-2">
+                    {selectedOrderId === order.order_id ? <>
+                      <label className="block">Документированное основание тестового происхождения приказа
+                        <textarea value={orderEvidence} onChange={(event) => setOrderEvidence(event.target.value)} rows={3} maxLength={2000}
+                          className="mt-1 w-full rounded border p-2 dark:bg-zinc-950" />
+                      </label>
+                      <p>Минимум 20 символов; одного номера или ФИО недостаточно.</p>
+                      <label className="block">Введите точный номер приказа
+                        <input value={confirmedOrderNumber} onChange={(event) => setConfirmedOrderNumber(event.target.value)}
+                          className="mt-1 w-full rounded border p-2 dark:bg-zinc-950" />
+                      </label>
+                      <button type="button" disabled={submitting || orderEvidence.trim().length < 20 || confirmedOrderNumber !== (order.order_number ?? "")}
+                        onClick={() => void confirmOrder(order.order_id)} className="rounded bg-amber-700 px-3 py-2 text-white disabled:opacity-50">
+                        Подтвердить тестовый приказ
+                      </button>
+                    </> : <button type="button" onClick={() => { setSelectedOrderId(order.order_id); setOrderEvidence(""); setConfirmedOrderNumber(""); }}
+                      className="rounded border px-3 py-2">Подтвердить тестовый приказ</button>}
+                  </div> : null}
+                </li>)}
+              </ul>
             </div> : null}
           </div>
         ) : null}

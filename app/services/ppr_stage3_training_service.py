@@ -527,7 +527,7 @@ def _preview_material_stage3(conn: Connection, *, stage0_cohort_run_id: int) -> 
     """
     if not ppr_stage3_training_preview_enabled():
         raise Stage3ValidationError("STAGE3_PREVIEW_DISABLED")
-    cohort = [dict(x) for x in conn.execute(text("SELECT * FROM public.ppr_stage0_cohort_participants WHERE stage0_cohort_run_id=:id ORDER BY position"), {"id":stage0_cohort_run_id}).mappings()]
+    cohort = [dict(x) for x in conn.execute(text("SELECT * FROM public.ppr_stage0_cohort_participants WHERE stage0_cohort_run_id=:id AND retired_at IS NULL ORDER BY position"), {"id":stage0_cohort_run_id}).mappings()]
     if not cohort:
         raise Stage3ValidationError("STAGE3_COHORT_EMPTY_OR_NOT_FOUND")
     provisional = [{"stage0_participant_id":p["stage0_participant_id"],"employee_id":p["employee_id"],"person_id":p["person_id"],"participant_snapshot_version":1} for p in cohort]
@@ -568,7 +568,7 @@ def persist_preview_stage3(conn: Connection, *, stage0_cohort_run_id: int, actor
     fingerprint = computed["preview_fingerprint"]
     if fingerprint != expected_preview_fingerprint:
         raise Stage3ConflictError("STAGE3_PREVIEW_STALE")
-    cohort = [dict(x) for x in conn.execute(text("SELECT * FROM public.ppr_stage0_cohort_participants WHERE stage0_cohort_run_id=:id ORDER BY position FOR UPDATE"), {"id":stage0_cohort_run_id}).mappings()]
+    cohort = [dict(x) for x in conn.execute(text("SELECT * FROM public.ppr_stage0_cohort_participants WHERE stage0_cohort_run_id=:id AND retired_at IS NULL ORDER BY position FOR UPDATE"), {"id":stage0_cohort_run_id}).mappings()]
     existing = conn.execute(text("SELECT stage_run_id FROM public.ppr_stage_runs WHERE stage_code='training' AND stage0_cohort_run_id=:cohort AND preview_fingerprint=:f"), {"cohort":stage0_cohort_run_id,"f":fingerprint}).scalar_one_or_none()
     if existing:
         return _view_run(conn, int(existing))

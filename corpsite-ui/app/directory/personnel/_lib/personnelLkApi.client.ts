@@ -29,9 +29,24 @@ export type TestEmployeeCleanupPreview = {
   counts: Record<string, number>;
   retained_counts: Record<string, number>;
   blockers: string[];
+  blocker_groups?: Array<{ table: string; count: number; columns: string[] }>;
   can_delete: boolean;
   snapshot_hash: string;
   file_count: number;
+  personnel_orders?: Array<{
+    order_id: number;
+    order_number: string | null;
+    order_date: string | null;
+    order_type_code: string;
+    status: string;
+    item_count: number;
+    employees: Array<{ employee_id: number | null; full_name: string | null }>;
+    signed_copy_count: number;
+    attachment_count: number;
+    acknowledgement_count: number;
+    is_test_marked: boolean;
+  }>;
+  history_actions?: Array<{ code: string; count: number }>;
 };
 
 export type TestEmployeeCleanupResult = {
@@ -61,6 +76,19 @@ export function previewTestEmployeeCleanup(employeeId: number): Promise<TestEmpl
 
 export function markTestEmployee(employeeId: number, evidence: string, confirmedName: string): Promise<{ marker_id: number }> {
   return testEmployeeCommand(employeeId, "mark", "POST", { evidence, confirmed_name: confirmedName });
+}
+
+export function markTestPersonnelOrder(employeeId: number, orderId: number, evidence: string, confirmedNumber: string): Promise<{ marker_id: number }> {
+  const url = resolveApiUrl(`${PERSONNEL_LK_API_PATH}/test-employees/${employeeId}/orders/${orderId}/mark`);
+  return fetch(url, {
+    method: "POST",
+    headers: buildHeaders({ Accept: "application/json", "Content-Type": "application/json" }),
+    body: JSON.stringify({ evidence, confirmed_number: confirmedNumber }),
+    cache: "no-store",
+  }).then(async (response) => {
+    if (!response.ok) throw toApiError(response.status, await readJsonSafe(response), { method: "POST", url });
+    return await response.json() as { marker_id: number };
+  });
 }
 
 export function deleteTestEmployee(employeeId: number, snapshotHash: string): Promise<TestEmployeeCleanupResult> {

@@ -142,6 +142,7 @@ def test_route_rejects_other_role(sample):
             path = f"/directory/personnel/lk/test-employees/{sample['employee_id']}"
             assert client.get(f"{path}/preview").status_code == 403
             assert client.post(f"{path}/mark", json={"evidence": "A sufficiently long explanation", "confirmed_name": sample["name"]}).status_code == 403
+            assert client.post(f"{path}/orders/1/mark", json={"evidence": "A sufficiently long explanation", "confirmed_number": "X"}).status_code == 403
             assert client.post(f"{path}/delete", json={"confirmation": "УДАЛИТЬ", "expected_snapshot_hash": "a"*64}).status_code == 403
         finally:
             app.dependency_overrides.pop(get_current_user, None)
@@ -277,6 +278,11 @@ def test_user_and_single_test_order_are_physically_removed(sample):
             {"person": sample["person_id"], "actor": actor}).scalar_one()
     cleanup.mark_employee(employee_id=eid, actor_user_id=actor,
                           confirmed_name=sample["name"], evidence="Isolated synthetic employee from a test fixture")
+    with engine.connect() as conn:
+        order_number = conn.scalar(text("SELECT order_number FROM personnel_orders WHERE order_id=:id"),
+                                   {"id": order_id})
+    cleanup.mark_personnel_order(employee_id=eid, order_id=order_id, actor_user_id=actor,
+        confirmed_number=order_number, evidence="Isolated fixture order created only for the cleanup contract")
     plan = cleanup.preview(employee_id=eid, actor_user_id=actor)
     assert plan["can_delete"], plan["blockers"]
     assert plan["counts"]["person_assignments"] == 1
@@ -364,7 +370,8 @@ def test_personnel_files_and_historical_attribution(sample, tmp_path, monkeypatc
                 RETURNING event_id"""),
                 {"person": owner, "version": version, "actor": user_id, "request": str(uuid4())})
             if owner == person:
-                conn.execute(text("CREATE TABLE cleanup_unrelated_event_stream (event_id bigint PRIMARY KEY)"))
+                own_event_id = event_id
+                conn.execute(text("CREATE TABLE IF NOT EXISTS cleanup_unrelated_event_stream (event_id bigint PRIMARY KEY)"))
                 conn.execute(text("INSERT INTO cleanup_unrelated_event_stream(event_id) VALUES (:id)"),
                              {"id": event_id})
         security_id = conn.execute(text("""INSERT INTO security_audit_log
@@ -393,7 +400,8 @@ def test_personnel_files_and_historical_attribution(sample, tmp_path, monkeypatc
         assert conn.scalar(text("SELECT count(*) FROM personnel_file_sets WHERE person_id=:id"), {"id": person}) == 0
         assert conn.scalar(text("SELECT count(*) FROM employee_documents WHERE document_id=:id"), {"id": document_id}) == 0
         assert conn.scalar(text("SELECT count(*) FROM personnel_file_events WHERE person_id=:id"), {"id": person}) == 0
-        assert conn.scalar(text("SELECT count(*) FROM cleanup_unrelated_event_stream")) == 1
+        assert conn.scalar(text("SELECT count(*) FROM cleanup_unrelated_event_stream WHERE event_id=:id"),
+                           {"id": own_event_id}) == 1
         assert conn.scalar(text("SELECT actor_id FROM personnel_file_events WHERE person_id=:id"), {"id": other_person}) is None
         assert conn.scalar(text("SELECT uploaded_by FROM personnel_file_versions WHERE version_id=CAST(:id AS uuid)"), {"id": outside_version}) is None
         audit = conn.execute(text("SELECT actor_user_id,target_user_id FROM security_audit_log WHERE audit_id=:id"),
@@ -404,6 +412,8 @@ def test_personnel_files_and_historical_attribution(sample, tmp_path, monkeypatc
             {"id": result["deletion_id"]}).all()
         assert len(refs) == 4
         assert all(row.deleted_entity_id == user_id for row in refs)
+    with engine.begin() as conn:
+        conn.execute(text("DROP TABLE cleanup_unrelated_event_stream"))
 
 
 def test_failed_file_removal_is_queued_for_retry(sample, tmp_path, monkeypatch):
