@@ -79,7 +79,7 @@ router = APIRouter(
 
 
 class TestEmployeeMarkIn(BaseModel):
-    evidence: str = Field(min_length=20, max_length=1000)
+    evidence: str = Field(min_length=12, max_length=1000)
     confirmed_name: str
 
 

@@ -197,7 +197,7 @@ export default function EmployeesTable({
 }: Props) {
   const page = Math.floor(offset / limit) + 1;
   const pages = Math.max(1, Math.ceil(Math.max(total, 1) / limit));
-  const colSpan = managementView ? 7 : 9;
+  const colSpan = managementView ? (showAdminDelete ? 8 : 7) : 9;
   const canSort = sortable && !!onSortColumn;
 
   const thClass =
@@ -230,6 +230,7 @@ export default function EmployeesTable({
                   Таб. №
                 </th>
               ) : null}
+              {managementView && showAdminDelete ? <th className={`w-[110px] ${thClass}`}>ID сотрудника</th> : null}
               {headerCell("ФИО", "fio", `min-w-[300px] ${thClass}`)}
               {!managementView ? null : headerCell("Должность", "position", `min-w-[220px] ${thClass}`)}
               {managementView ? <th className={`min-w-[170px] ${thClass}`}>Тип</th> : null}
@@ -280,9 +281,15 @@ export default function EmployeesTable({
                         {employeeId || "—"}
                       </td>
                     ) : null}
+                    {managementView && showAdminDelete ? (
+                      <td className="px-3 py-1.5 text-[13px] tabular-nums">{employeeId || "—"}</td>
+                    ) : null}
 
                     <td className="px-3 py-1.5 text-[13px] leading-4 text-zinc-900 dark:text-zinc-50">
                       {fio}
+                      {showAdminDelete && it.is_test_marked === true ? (
+                        <span className="ml-2 inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-medium text-amber-900 dark:bg-amber-950/60 dark:text-amber-200">Тестовая запись</span>
+                      ) : null}
                     </td>
 
                     {managementView ? (

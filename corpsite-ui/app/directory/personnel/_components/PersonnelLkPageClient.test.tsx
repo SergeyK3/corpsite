@@ -169,6 +169,27 @@ function renderWithMe(me: MeInfo | null) {
 }
 
 describe("PersonnelLkPageClient", () => {
+  it("keeps the dialog open and refreshes its preview after a concise test mark", async () => {
+    previewTestEmployeeCleanupMock
+      .mockResolvedValueOnce({ employee_id: 100, person_id: 7, full_name: employeeRow.fio,
+        login: null, is_test_marked: false, counts: { employees: 1 }, retained_counts: {},
+        blockers: [], can_delete: false, snapshot_hash: "a".repeat(64), file_count: 0 })
+      .mockResolvedValueOnce({ employee_id: 100, person_id: 7, full_name: employeeRow.fio,
+        login: null, is_test_marked: true, counts: { employees: 1 }, retained_counts: {},
+        blockers: [], can_delete: true, snapshot_hash: "b".repeat(64), file_count: 0 });
+    markTestEmployeeMock.mockResolvedValue({ marker_id: 1 });
+    renderWithMe({ user_id: 21, role_id: 2, is_system_admin: true });
+    fireEvent.click(await screen.findByTestId("personnel-lk-mark-test-employee-100"));
+    const dialog = await screen.findByRole("dialog", { name: "Подтверждение тестового сотрудника" });
+    const fields = within(dialog).getAllByRole("textbox");
+    fireEvent.change(fields[0], { target: { value: "тестовая запись" } });
+    fireEvent.change(fields[1], { target: { value: employeeRow.fio } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Подтвердить тестовую запись" }));
+    await waitFor(() => expect(markTestEmployeeMock).toHaveBeenCalledWith(100, "тестовая запись", employeeRow.fio));
+    expect(await screen.findByRole("dialog", { name: "Полное удаление тестового сотрудника" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Удалить окончательно" })).toBeDisabled();
+    expect(previewTestEmployeeCleanupMock).toHaveBeenCalledTimes(2);
+  });
   it("shows delete only for marked employees and exact SYSADMIN, then confirms and refreshes", async () => {
     const marked = { ...employeeRow, is_test_marked: true };
     listPersonnelLkRegistryMock.mockResolvedValue({ items: [marked, employeeRowTwo], total: 2, limit: 50, offset: 0 });
@@ -178,9 +199,9 @@ describe("PersonnelLkPageClient", () => {
       blockers: [], can_delete: true, snapshot_hash: "a".repeat(64), file_count: 1,
     });
     deleteTestEmployeeMock.mockResolvedValue({
-      deletion_id: "fixture", employee_id: 100,
+      deletion_id: "fixture", employee_id: 100, full_name: marked.fio,
       deleted_counts: { employees: 1, users: 1, personnel_orders: 2 },
-      file_cleanup: { completed: 1, pending: 0 },
+      retained_counts: {}, file_cleanup: { completed: 1, pending: 0, deleted_files: 1 },
     });
     const { unmount } = renderWithMe({ user_id: 20, role_id: 4, role_code: "ADMIN", is_system_admin: false });
     expect(await screen.findByTestId("personnel-lk-row-employee-7")).toBeInTheDocument();
@@ -194,7 +215,11 @@ describe("PersonnelLkPageClient", () => {
     fireEvent.change(confirm, { target: { value: "УДАЛИТЬ" } });
     fireEvent.click(screen.getByRole("button", { name: "Удалить окончательно" }));
     await waitFor(() => expect(deleteTestEmployeeMock).toHaveBeenCalledWith(100, "a".repeat(64)));
-    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    const resultDialog = await screen.findByRole("dialog", { name: "Результат удаления тестового сотрудника" });
+    expect(within(resultDialog).getByText(marked.fio)).toBeInTheDocument();
+    expect(within(resultDialog).getByText("Сотрудник ID 100")).toBeInTheDocument();
+    fireEvent.click(within(resultDialog).getByRole("button", { name: "Закрыть" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.getByTestId("personnel-lk-toast")).toHaveTextContent("4 записей");
     expect(listPersonnelLkRegistryMock.mock.calls.length).toBeGreaterThan(1);
   });

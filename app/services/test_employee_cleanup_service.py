@@ -27,7 +27,7 @@ from app.person_photos.infrastructure.photo_storage import (
     canonical_photo_absolute_path, delete_canonical_photo_file,
 )
 from app.personnel_intake.infrastructure.photo_storage import (
-    delete_intake_photo, intake_photo_storage_root, normalize_intake_photo_file_id,
+    delete_intake_photo, intake_photo_path, intake_photo_storage_root, normalize_intake_photo_file_id,
     resolve_path_within_root,
 )
 from app.services.technical_personnel_order_cleanup_service import classification, CONFIRMED_TECHNICAL
@@ -234,8 +234,8 @@ def _employee(conn: Connection, employee_id: int, *, lock: bool = False) -> dict
 
 def mark_employee(*, employee_id: int, actor_user_id: int, evidence: str, confirmed_name: str) -> dict[str, Any]:
     evidence = evidence.strip()
-    if len(evidence) < 20 or len(evidence) > 1000:
-        raise TestEmployeeCleanupError("EVIDENCE_REQUIRED", "Укажите основание подтверждения тестовой записи (20–1000 символов).", 422)
+    if len(evidence) < 12 or len(evidence) > 1000:
+        raise TestEmployeeCleanupError("EVIDENCE_REQUIRED", "Укажите основание подтверждения тестовой записи (12–1000 символов).", 422)
     with engine.begin() as conn:
         _assert_sysadmin(conn, actor_user_id)
         employee = _employee(conn, employee_id, lock=True)
@@ -417,6 +417,12 @@ def _logical_blockers(conn: Connection, plan: dict[str, dict[str, dict[str, Any]
             blockers.append(f"Учётная запись служит источником для учебных пользователей: {linked_training_users}")
     for row in rows:
         table, column = str(row["table_name"]), str(row["column_name"])
+        # These three event streams allocate event_id independently. A numeric
+        # collision is not a reference; genuine FKs are checked above.
+        if column == "event_id" and table in {
+            "personnel_record_events", "person_card_change_events", "personnel_file_events",
+        }:
+            continue
         if row["data_type"] not in {"smallint", "integer", "bigint", "numeric", "uuid"}:
             continue
         if (table, column) in physical or table in {
@@ -693,7 +699,7 @@ def _lock_catalog(conn: Connection) -> None:
 
 
 def _run_file_cleanup(deletion_id: str) -> dict[str, int]:
-    completed = pending = 0
+    completed = pending = deleted_files = 0
     with engine.connect() as conn:
         rows = conn.execute(text("""SELECT cleanup_id,storage_kind,storage_path
             FROM public.test_employee_file_cleanup
@@ -703,16 +709,22 @@ def _run_file_cleanup(deletion_id: str) -> dict[str, int]:
         error = None
         try:
             if row["storage_kind"] == "CANONICAL_PHOTO":
+                existed = canonical_photo_absolute_path(str(row["storage_path"])).is_file()
                 delete_canonical_photo_file(str(row["storage_path"]))
+                deleted_files += int(existed)
             elif row["storage_kind"] == "INTAKE_PHOTO":
                 app_id, file_id = str(row["storage_path"]).split("/", 1)
+                existed = intake_photo_path(int(app_id), file_id).is_file()
                 delete_intake_photo(int(app_id), file_id)
+                deleted_files += int(existed)
             elif row["storage_kind"] == "SIGNED_HIRE_COPY":
                 path = Path(str(row["storage_path"])).resolve()
                 root = resolve_path_within_root(intake_photo_storage_root(), "signed-applications")
                 if not path.is_relative_to(root):
                     raise ValueError("Signed-copy path escapes the configured storage root")
+                existed = path.is_file()
                 path.unlink(missing_ok=True)
+                deleted_files += int(existed)
             elif row["storage_kind"] == "PERSONNEL_FILE_BUNDLE":
                 key = str(row["storage_path"])
                 with engine.connect() as conn:
@@ -725,6 +737,7 @@ def _run_file_cleanup(deletion_id: str) -> dict[str, int]:
                 if bundle.exists():
                     for entry in bundle.iterdir():
                         entry.unlink()
+                        deleted_files += 1
                     bundle.rmdir()
             else:
                 raise ValueError("Unsupported storage kind")
@@ -741,7 +754,7 @@ def _run_file_cleanup(deletion_id: str) -> dict[str, int]:
                     SET last_error=:error WHERE cleanup_id=:id"""),
                     {"id": int(row["cleanup_id"]), "error": error})
                 pending += 1
-    return {"completed": completed, "pending": pending}
+    return {"completed": completed, "pending": pending, "deleted_files": deleted_files}
 
 
 def retry_file_cleanup(*, deletion_id: str, actor_user_id: int) -> dict[str, int]:
@@ -826,6 +839,7 @@ def execute(*, employee_id: int, actor_user_id: int, confirmation: str,
         # PostgreSQL deletion has already committed.  The durable queue keeps
         # every file eligible for the SYSADMIN retry endpoint.
         logger.exception("post-commit test employee file cleanup unavailable deletion_id=%s", deletion_id)
-        cleanup = {"completed": 0, "pending": len(plan["files"])}
+        cleanup = {"completed": 0, "pending": len(plan["files"]), "deleted_files": 0}
     return {"deletion_id": deletion_id, "employee_id": employee_id,
-            "deleted_counts": deleted_counts, "file_cleanup": cleanup}
+            "full_name": plan["full_name"], "deleted_counts": deleted_counts,
+            "retained_counts": plan["retained_counts"], "file_cleanup": cleanup}

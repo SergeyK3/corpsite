@@ -883,6 +883,7 @@ def list_employees(
     sort: Optional[str],
     order: Optional[str],
     include_applicants: bool = False,
+    include_test_marks: bool = False,
 ) -> Dict[str, Any]:
     emp_rel, emp_cols = _employees_relation()
     emp_id_col = _employees_id_col(emp_cols)
@@ -923,7 +924,12 @@ def list_employees(
     if q:
         qq = q.strip().lower()
         params["q"] = f"%{qq}%"
-        parts: List[str] = [f"LOWER(CAST(e.{emp_id_col} AS TEXT)) LIKE :q"]
+        parts: List[str] = []
+        if qq.isdecimal():
+            params["searched_employee_id"] = int(qq)
+            parts.append(f"e.{emp_id_col} = :searched_employee_id")
+        else:
+            parts.append(f"LOWER(CAST(e.{emp_id_col} AS TEXT)) LIKE :q")
         if fio_col:
             parts.append(f"LOWER(CAST(e.{fio_col} AS TEXT)) LIKE :q")
         if last_col:
@@ -1056,6 +1062,13 @@ def list_employees(
         rows = conn.execute(q_list, params).mappings().all()
 
     items = [_normalize_employee_joined(dict(r), emp_rel) for r in rows]
+    if include_test_marks and items:
+        employee_ids = [int(item["id"]) for item in items if item.get("id") is not None]
+        with engine.connect() as conn:
+            marked_ids = set(conn.execute(text("""SELECT employee_id FROM public.test_employee_marks
+                WHERE employee_id = ANY(:ids)"""), {"ids": employee_ids}).scalars())
+        for item in items:
+            item["is_test_marked"] = int(item["id"]) in marked_ids
     if include_applicants:
         from app.services.ppr_candidate_service import list_ppr_applicants
 

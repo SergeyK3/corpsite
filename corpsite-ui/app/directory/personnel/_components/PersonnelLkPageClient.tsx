@@ -44,6 +44,7 @@ import PersonnelApplicationDetailDrawer from "./PersonnelApplicationDetailDrawer
 import PersonnelApplicationRegisterDrawer from "./PersonnelApplicationRegisterDrawer";
 import PersonnelLkTable from "./PersonnelLkTable";
 import TestEmployeeCleanupDialog from "./TestEmployeeCleanupDialog";
+import TestEmployeeCleanupResultDialog from "./TestEmployeeCleanupResultDialog";
 import type { TestEmployeeCleanupResult } from "../_lib/personnelLkApi.client";
 
 export default function PersonnelLkPageClient() {
@@ -88,6 +89,7 @@ export default function PersonnelLkPageClient() {
   const [testEmployeeDialog, setTestEmployeeDialog] = React.useState<{
     employeeId: number; fullName: string; mode: "mark" | "delete";
   } | null>(null);
+  const [testEmployeeResult, setTestEmployeeResult] = React.useState<TestEmployeeCleanupResult | null>(null);
 
   const inFlightLoadKeyRef = React.useRef<string | null>(null);
   const selectedApplicationId = filters.application_id;
@@ -208,7 +210,6 @@ export default function PersonnelLkPageClient() {
   }
 
   function handleTestEmployeeMarked() {
-    setTestEmployeeDialog(null);
     setToast({ message: "Тестовая запись подтверждена", kind: "success" });
     inFlightLoadKeyRef.current = null;
     void loadList();
@@ -216,6 +217,7 @@ export default function PersonnelLkPageClient() {
 
   function handleTestEmployeeDeleted(result: TestEmployeeCleanupResult) {
     setTestEmployeeDialog(null);
+    setTestEmployeeResult(result);
     const count = Object.values(result.deleted_counts).reduce((sum, value) => sum + value, 0);
     const pending = result.file_cleanup.pending;
     setToast({
@@ -492,6 +494,7 @@ export default function PersonnelLkPageClient() {
         onMarked={handleTestEmployeeMarked}
         onDeleted={handleTestEmployeeDeleted}
       /> : null}
+      {testEmployeeResult ? <TestEmployeeCleanupResultDialog result={testEmployeeResult} onClose={() => setTestEmployeeResult(null)} /> : null}
 
       {!loading && !error ? (
         <div className="flex flex-wrap items-center justify-between gap-2 text-sm text-zinc-600 dark:text-zinc-400">

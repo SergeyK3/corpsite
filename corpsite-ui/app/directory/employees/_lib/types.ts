@@ -37,6 +37,7 @@ export type OrgUnitRef = {
  * То, что реально приходит с backend (/directory/employees и /directory/employees/{id})
  */
 export type EmployeeDTO = {
+  is_test_marked?: boolean;
   current_assignment_id?: number | null;
   manual_type_code?: number | null;
   position_type_code?: number | null;

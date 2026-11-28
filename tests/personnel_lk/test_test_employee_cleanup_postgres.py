@@ -77,6 +77,61 @@ def test_mark_preview_delete_and_audit(sample):
         assert audit["deleted_counts"]["employees"] == 1
 
 
+def test_same_name_employee_remains_after_target_id_is_deleted(sample):
+    with engine.begin() as conn:
+        other_person = conn.scalar(text("""INSERT INTO persons(full_name,match_key,person_status,source)
+            VALUES (:name,:key,'active','manual') RETURNING person_id"""),
+            {"name": sample["name"], "key": f"cleanup:{uuid4().hex}"})
+        other_employee = conn.scalar(text("""INSERT INTO employees(full_name,person_id,is_active,operational_status)
+            VALUES (:name,:person,true,'active') RETURNING employee_id"""),
+            {"name": sample["name"], "person": other_person})
+    actor = sample["admin"]["user_id"]
+    cleanup.mark_employee(employee_id=sample["employee_id"], actor_user_id=actor,
+                          confirmed_name=sample["name"], evidence="тестовая запись")
+    plan = cleanup.preview(employee_id=sample["employee_id"], actor_user_id=actor)
+    assert plan["can_delete"], plan["blockers"]
+    result = cleanup.execute(employee_id=sample["employee_id"], actor_user_id=actor,
+                             confirmation="УДАЛИТЬ", expected_snapshot_hash=plan["snapshot_hash"])
+    assert result["employee_id"] == sample["employee_id"]
+    assert result["full_name"] == sample["name"]
+    with engine.connect() as conn:
+        assert conn.scalar(text("SELECT count(*) FROM employees WHERE employee_id=:id"), {"id": other_employee}) == 1
+        assert conn.scalar(text("SELECT count(*) FROM persons WHERE person_id=:id"), {"id": other_person}) == 1
+        assert conn.scalar(text("SELECT count(*) FROM employees WHERE employee_id=:id"), {"id": sample["employee_id"]}) == 0
+
+
+def test_independent_event_ids_do_not_block_or_delete_other_person_history(sample):
+    event_id = 9_000_000 + sample["employee_id"]
+    actor = sample["admin"]["user_id"]
+    with engine.begin() as conn:
+        other_person = conn.scalar(text("""INSERT INTO persons(full_name,match_key,person_status,source)
+            VALUES ('Unrelated event owner',:key,'active','manual') RETURNING person_id"""),
+            {"key": f"cleanup:{uuid4().hex}"})
+        domain = conn.scalar(text("SELECT domain_code FROM personnel_migration_domains ORDER BY domain_code LIMIT 1"))
+        conn.execute(text("""INSERT INTO personnel_record_events
+            (event_id,person_id,employee_context_id,domain_code,record_table_name,record_id,event_type)
+            OVERRIDING SYSTEM VALUE VALUES
+            (:event,:person,:employee,:domain,'employees',:employee,'test')"""),
+            {"event": event_id, "person": sample["person_id"],
+             "employee": sample["employee_id"], "domain": domain})
+        conn.execute(text("""INSERT INTO personnel_file_events
+            (event_id,person_id,actor_id,action,request_id)
+            OVERRIDING SYSTEM VALUE VALUES (:event,:person,:actor,'test',CAST(:request AS uuid))"""),
+            {"event": event_id, "person": other_person, "actor": actor,
+             "request": str(uuid4())})
+    cleanup.mark_employee(employee_id=sample["employee_id"], actor_user_id=actor,
+                          confirmed_name=sample["name"], evidence="тестовая запись")
+    plan = cleanup.preview(employee_id=sample["employee_id"], actor_user_id=actor)
+    assert plan["can_delete"], plan["blockers"]
+    assert plan["counts"]["personnel_record_events"] == 1
+    result = cleanup.execute(employee_id=sample["employee_id"], actor_user_id=actor,
+                             confirmation="УДАЛИТЬ", expected_snapshot_hash=plan["snapshot_hash"])
+    assert result["deleted_counts"]["personnel_record_events"] == 1
+    with engine.connect() as conn:
+        assert conn.scalar(text("SELECT count(*) FROM personnel_file_events WHERE event_id=:event AND person_id=:person"),
+                           {"event": event_id, "person": other_person}) == 1
+
+
 def test_route_rejects_other_role(sample):
     for role_id, role_code in ((1, "HR_HEAD"), (4, "ADMIN"), (99, "SYSADMIN_ASSISTANT")):
         actor = {"user_id": sample["other"]["user_id"], "role_id": role_id,
@@ -261,7 +316,7 @@ def test_photo_file_is_removed_after_commit(sample, tmp_path, monkeypatch):
     assert plan["file_count"] == 1
     result = cleanup.execute(employee_id=eid, actor_user_id=actor,
                              confirmation="УДАЛИТЬ", expected_snapshot_hash=plan["snapshot_hash"])
-    assert result["file_cleanup"] == {"completed": 1, "pending": 0}
+    assert result["file_cleanup"] == {"completed": 1, "pending": 0, "deleted_files": 1}
     assert not path.exists()
 
 
@@ -332,7 +387,7 @@ def test_personnel_files_and_historical_attribution(sample, tmp_path, monkeypatc
     assert plan["file_count"] == 1
     result = cleanup.execute(employee_id=eid, actor_user_id=actor, confirmation="УДАЛИТЬ",
                              expected_snapshot_hash=plan["snapshot_hash"])
-    assert result["file_cleanup"] == {"completed": 1, "pending": 0}
+    assert result["file_cleanup"] == {"completed": 1, "pending": 0, "deleted_files": 2}
     assert not own_bundle.exists()
     with engine.connect() as conn:
         assert conn.scalar(text("SELECT count(*) FROM personnel_file_sets WHERE person_id=:id"), {"id": person}) == 0
@@ -373,11 +428,11 @@ def test_failed_file_removal_is_queued_for_retry(sample, tmp_path, monkeypatch):
     monkeypatch.setattr(cleanup, "delete_canonical_photo_file", fail_once)
     result = cleanup.execute(employee_id=eid, actor_user_id=actor,
                              confirmation="УДАЛИТЬ", expected_snapshot_hash=plan["snapshot_hash"])
-    assert result["file_cleanup"] == {"completed": 0, "pending": 1}
+    assert result["file_cleanup"] == {"completed": 0, "pending": 1, "deleted_files": 0}
     assert path.exists()
     monkeypatch.setattr(cleanup, "delete_canonical_photo_file", real_delete)
     retried = cleanup.retry_file_cleanup(deletion_id=result["deletion_id"], actor_user_id=actor)
-    assert retried == {"completed": 1, "pending": 0}
+    assert retried == {"completed": 1, "pending": 0, "deleted_files": 1}
     assert not path.exists()
 
 

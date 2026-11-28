@@ -37,8 +37,10 @@ export type TestEmployeeCleanupPreview = {
 export type TestEmployeeCleanupResult = {
   deletion_id: string;
   employee_id: number;
+  full_name: string;
   deleted_counts: Record<string, number>;
-  file_cleanup: { completed: number; pending: number };
+  retained_counts: Record<string, number>;
+  file_cleanup: { completed: number; pending: number; deleted_files: number };
 };
 
 async function testEmployeeCommand<T>(employeeId: number, suffix: string, method: "GET" | "POST", body?: object): Promise<T> {

@@ -60,6 +60,7 @@ export default function TestEmployeeCleanupDialog({
   const [confirmation, setConfirmation] = React.useState("");
   const [evidence, setEvidence] = React.useState("");
   const [confirmedName, setConfirmedName] = React.useState("");
+  const [stage, setStage] = React.useState<"mark" | "delete" | "blocked">(mode);
 
   React.useEffect(() => {
     let alive = true;
@@ -81,8 +82,11 @@ export default function TestEmployeeCleanupDialog({
     setSubmitting(true);
     setError(null);
     try {
-      if (mode === "mark") {
+      if (stage === "mark") {
         await markTestEmployee(employeeId, evidence, confirmedName);
+        const refreshed = await previewTestEmployeeCleanup(employeeId);
+        setPreview(refreshed);
+        setStage(refreshed.can_delete ? "delete" : "blocked");
         onMarked();
       } else {
         const result = await deleteTestEmployee(employeeId, preview.snapshot_hash);
@@ -95,7 +99,7 @@ export default function TestEmployeeCleanupDialog({
     }
   }
 
-  const title = mode === "mark" ? "Подтверждение тестового сотрудника" : "Полное удаление тестового сотрудника";
+  const title = stage === "mark" ? "Подтверждение тестового сотрудника" : "Полное удаление тестового сотрудника";
   const rows = Object.entries(preview?.counts ?? {}).filter(([, count]) => count > 0);
   const retainedRows = Object.entries(preview?.retained_counts ?? {}).filter(([, count]) => count > 0);
   const evidenceLength = evidence.trim().length;
@@ -144,14 +148,14 @@ export default function TestEmployeeCleanupDialog({
           </div>
         ) : null}
 
-        {mode === "mark" ? <div className="mt-4 space-y-3 text-sm">
+        {stage === "mark" ? <div className="mt-4 space-y-3 text-sm">
           <p>Подтвердите происхождение тестовой записи по независимому основанию. Одного имени недостаточно.</p>
           <label className="block">Основание подтверждения
             <textarea value={evidence} onChange={(event) => setEvidence(event.target.value)} rows={3} maxLength={1000}
               className="mt-1 w-full rounded-md border border-zinc-300 p-2 dark:border-zinc-700 dark:bg-zinc-950" />
           </label>
-          <p className={evidenceLength > 0 && evidenceLength < 20 ? "text-amber-700 dark:text-amber-300" : "text-zinc-600 dark:text-zinc-400"}>
-            Основание: от 20 до 1000 символов после удаления пробелов по краям. Сейчас: {evidenceLength}.
+          <p className={evidenceLength > 0 && evidenceLength < 12 ? "text-amber-700 dark:text-amber-300" : "text-zinc-600 dark:text-zinc-400"}>
+            Основание: от 12 до 1000 символов после удаления пробелов по краям. Сейчас: {evidenceLength}.
           </p>
           <label className="block">Введите точное ФИО
             <input value={confirmedName} onChange={(event) => setConfirmedName(event.target.value)}
@@ -159,6 +163,7 @@ export default function TestEmployeeCleanupDialog({
           </label>
           {confirmedName && !nameMatches ? <p className="text-amber-700 dark:text-amber-300">Введите ФИО точно как в карточке, включая пробелы.</p> : null}
         </div> : <div className="mt-4 space-y-3 text-sm">
+          {stage === "blocked" ? <p role="status" className="text-amber-700 dark:text-amber-300">Тестовое происхождение подтверждено. Удаление пока заблокировано указанными зависимостями.</p> : null}
           <p className="font-medium text-red-700 dark:text-red-400">Сотрудник и связанные с ним тестовые данные будут удалены без возможности восстановления через интерфейс системы.</p>
           <label className="block">Для подтверждения введите слово «УДАЛИТЬ»
             <input value={confirmation} onChange={(event) => setConfirmation(event.target.value)}
@@ -168,11 +173,11 @@ export default function TestEmployeeCleanupDialog({
         {error ? <p role="alert" className="mt-3 text-sm text-red-700 dark:text-red-400">{error}</p> : null}
         <div className="mt-5 flex justify-end gap-2">
           <button type="button" onClick={onClose} disabled={submitting} className="rounded-md border px-3 py-2 text-sm">Отмена</button>
-          <button type="button" onClick={() => void submit()}
-            disabled={submitting || !preview || (mode === "mark" ? evidenceLength < 20 || !nameMatches : !preview.can_delete || confirmation !== "УДАЛИТЬ")}
+          {stage !== "blocked" ? <button type="button" onClick={() => void submit()}
+            disabled={submitting || !preview || (stage === "mark" ? evidenceLength < 12 || !nameMatches : !preview.can_delete || confirmation !== "УДАЛИТЬ")}
             className="rounded-md bg-red-700 px-3 py-2 text-sm font-medium text-white disabled:opacity-50">
-            {submitting ? "Выполнение…" : mode === "mark" ? "Подтвердить тестовую запись" : "Удалить окончательно"}
-          </button>
+            {submitting ? "Выполнение…" : stage === "mark" ? "Подтвердить тестовую запись" : "Удалить окончательно"}
+          </button> : null}
         </div>
       </section>
     </div>

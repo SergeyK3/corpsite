@@ -17,6 +17,7 @@ import EmployeeStatusCorrectionDrawer, {
   type EmployeeStatusCorrectionFormValues,
 } from "../../personnel/_components/EmployeeStatusCorrectionDrawer";
 import TestEmployeeCleanupDialog from "../../personnel/_components/TestEmployeeCleanupDialog";
+import TestEmployeeCleanupResultDialog from "../../personnel/_components/TestEmployeeCleanupResultDialog";
 import { previewTestEmployeeCleanup, type TestEmployeeCleanupResult } from "../../personnel/_lib/personnelLkApi.client";
 import type { EmployeeCreateFormValues } from "./EmployeeCreateForm";
 
@@ -218,6 +219,7 @@ export default function EmployeesPageClient(props: Props) {
     employeeId: number; fullName: string; mode: "mark" | "delete";
   } | null>(null);
   const [cleanupMessage, setCleanupMessage] = React.useState<string | null>(null);
+  const [cleanupResult, setCleanupResult] = React.useState<TestEmployeeCleanupResult | null>(null);
   const [statusCorrectionEmployee, setStatusCorrectionEmployee] = React.useState<EmployeeListItem | null>(null);
   const [statusCorrectionSaving, setStatusCorrectionSaving] = React.useState(false);
   const [statusCorrectionError, setStatusCorrectionError] = React.useState<string | null>(null);
@@ -507,8 +509,7 @@ export default function EmployeesPageClient(props: Props) {
 
   function handleTestEmployeeDeleted(result: TestEmployeeCleanupResult) {
     setTestCleanupDialog(null);
-    const count = Object.values(result.deleted_counts).reduce((sum, value) => sum + value, 0);
-    setCleanupMessage(`Тестовый сотрудник и связанные с ним данные удалены · ${count} записей`);
+    setCleanupResult(result);
     void loadItems();
   }
 
@@ -606,7 +607,7 @@ export default function EmployeesPageClient(props: Props) {
                 <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Поиск по ФИО или табельному номеру"
+                  placeholder={showStaffAdminDelete ? "Поиск по ФИО или ID сотрудника" : "Поиск по ФИО или табельному номеру"}
                   className="h-9 min-w-0 flex-1 rounded-lg border border-zinc-200 dark:border-zinc-800 bg-zinc-100 dark:bg-zinc-900 px-3 text-[13px] text-zinc-900 dark:text-zinc-50 outline-none transition placeholder:text-zinc-600 focus:border-zinc-400"
                 />
                 <button
@@ -794,11 +795,11 @@ export default function EmployeesPageClient(props: Props) {
         mode={testCleanupDialog.mode}
         onClose={() => setTestCleanupDialog(null)}
         onMarked={() => {
-          setTestCleanupDialog(null);
-          setCleanupMessage("Тестовое происхождение сотрудника подтверждено. Нажмите «Удалить» для предварительного просмотра.");
+          void loadItems();
         }}
         onDeleted={handleTestEmployeeDeleted}
       /> : null}
+      {cleanupResult ? <TestEmployeeCleanupResultDialog result={cleanupResult} onClose={() => setCleanupResult(null)} /> : null}
 
       {!readOnly ? (
         <EmployeeCreateDrawer

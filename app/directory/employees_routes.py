@@ -453,6 +453,7 @@ def list_employees(
             org_unit_id=org_unit_id,
             include_children=include_children,
             include_applicants=include_applicants,
+            include_test_marks=(int(user.get("role_id") or 0) == 2 and not user.get("is_sysadmin_assistant")),
             limit=limit,
             offset=offset,
             sort=sort,
