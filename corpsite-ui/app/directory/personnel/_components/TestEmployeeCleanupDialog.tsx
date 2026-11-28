@@ -5,6 +5,7 @@ import { groupedCleanupCounts, TestCleanupConfirmationCheckbox, useTestCleanupCo
 import {
   deleteTestEmployee,
   markTestEmployee,
+  markTestPersonnelOrder,
   mapPersonnelLkApiError,
   previewTestEmployeeCleanup,
   type TestEmployeeCleanupPreview,
@@ -20,6 +21,8 @@ type Props = {
   onDeleted: (result: TestEmployeeCleanupResult) => void;
 };
 
+type CleanupOrder = NonNullable<TestEmployeeCleanupPreview["personnel_orders"]>[number];
+
 const tableLabels: Record<string, string> = {
   persons: "Физическое лицо",
   employees: "Сотрудник",
@@ -30,6 +33,7 @@ const tableLabels: Record<string, string> = {
   personnel_order_items: "Пункты приказов",
   personnel_applications: "Заявления",
   employee_documents: "Документы",
+  employee_identities: "Идентификационные записи сотрудников",
   personnel_file_sets: "Наборы файлов личного дела",
   personnel_file_versions: "Версии файлов личного дела",
   personnel_file_events: "События файлов личного дела",
@@ -55,8 +59,20 @@ const tableLabels: Record<string, string> = {
   tasks: "Задачи",
   user_linkage_execute_items: "Журнал привязки учётных записей",
   electronic_hire_approval_tasks: "Задачи согласования приёма",
+  employee_onboarding_notifications: "История уведомлений адаптации",
+  ppr_migration_section_status_projection: "Исторические срезы кадровой миграции",
   employee_onboarding_notification_recipients: "Получатели уведомлений адаптации",
   employee_onboarding_notification_deliveries: "Доставка уведомлений адаптации",
+};
+
+const historyActionLabels: Record<string, string> = {
+  CANCEL_PENDING_DELIVERIES: "Ожидающие доставки будут отменены с сохранением снимка",
+  ARCHIVE_COMPLETED_DELIVERIES: "Выполненные доставки тестовой учётной записи останутся в архиве",
+  KEEP_COMPLETED_DELIVERIES: "Выполненные доставки другим пользователям останутся в журнале",
+  KEEP_APPROVAL_DECISIONS: "Результаты согласования останутся в истории",
+  KEEP_PPR_COHORT: "Участники замороженных когорт PPR останутся в снимке",
+  KEEP_USER_LINKAGE: "Операции привязки учётной записи останутся в истории",
+  KEEP_TASK_ATTRIBUTION: "Исходное авторство общих задач останется в архиве",
 };
 
 function blockerLabel(detail: string): string {
@@ -76,6 +92,8 @@ export default function TestEmployeeCleanupDialog({
   const [evidence, setEvidence] = React.useState("");
   const [confirmedName, setConfirmedName] = React.useState("");
   const [stage, setStage] = React.useState<"mark" | "delete" | "blocked">(mode);
+  const [orderEvidence, setOrderEvidence] = React.useState<Record<number, string>>({});
+  const [orderConfirmations, setOrderConfirmations] = React.useState<Record<number, boolean>>({});
 
   React.useEffect(() => {
     let alive = true;
@@ -91,6 +109,10 @@ export default function TestEmployeeCleanupDialog({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose, submitting]);
+
+  React.useEffect(() => {
+    setOrderConfirmations({});
+  }, [preview?.snapshot_hash]);
 
   async function submit() {
     if (!preview || submitting || (stage === "delete" && (!confirmed || !preview.can_delete))) return;
@@ -112,6 +134,27 @@ export default function TestEmployeeCleanupDialog({
       if (stage === "delete") {
         try { setPreview(await previewTestEmployeeCleanup(employeeId)); } catch { /* Keep the original error. */ }
       }
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function confirmOrder(order: CleanupOrder) {
+    const orderId = order.order_id;
+    const documentedEvidence = (orderEvidence[orderId] ?? "").trim();
+    if (submitting || !orderConfirmations[orderId] || documentedEvidence.length < 20) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      await markTestPersonnelOrder(employeeId, orderId, documentedEvidence,
+        order.order_number ?? "", order.snapshot_hash);
+      const refreshed = await previewTestEmployeeCleanup(employeeId);
+      setPreview(refreshed);
+      setStage(refreshed.can_delete ? "delete" : "blocked");
+      setOrderEvidence({});
+      setOrderConfirmations({});
+    } catch (cause) {
+      setError(mapPersonnelLkApiError(cause, "Не удалось подтвердить происхождение приказа."));
     } finally {
       setSubmitting(false);
     }
@@ -160,6 +203,11 @@ export default function TestEmployeeCleanupDialog({
                 </React.Fragment>)}
               </dl> : <p>Связанных исторических записей нет.</p>}
               {retainedRows.length ? <p className="mt-2 text-zinc-600 dark:text-zinc-400">Исходная учётная запись будет указана в неизменяемой записи об удалении.</p> : null}
+              {preview.history_actions?.length ? <ul className="mt-2 list-disc space-y-1 pl-5">
+                {preview.history_actions.map((action) => <li key={action.code}>
+                  {historyActionLabels[action.code] ?? action.code}: {action.count}
+                </li>)}
+              </ul> : null}
               {retainedRows.length ? <details className="mt-2"><summary className="cursor-pointer">Подробности</summary>
                 <ul className="mt-1 list-disc pl-5">{retainedRows.map(([table, count]) => <li key={table}>{table}: {count}</li>)}</ul>
               </details> : null}
@@ -175,6 +223,37 @@ export default function TestEmployeeCleanupDialog({
               <details className="mt-2"><summary className="cursor-pointer">Подробности</summary>
                 <ul className="mt-1 list-disc pl-5">{preview.blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}</ul>
               </details>
+            </div> : null}
+            {preview.personnel_orders?.length ? <div className="rounded-lg border border-zinc-200 p-3 text-sm dark:border-zinc-700">
+              <p className="mb-2 font-medium">Кадровые приказы</p>
+              <ul className="space-y-3">
+                {preview.personnel_orders.map((order) => <li key={order.order_id} className="rounded border border-zinc-200 p-2 dark:border-zinc-700">
+                  <p className="font-medium">№ {order.order_number ?? "без номера"} · ID {order.order_id}</p>
+                  <p>Дата: {order.order_date ?? "—"} · Тип: {order.order_type_code} · Статус: {order.status} · Пунктов: {order.item_count}</p>
+                  <p>Сотрудники: {order.employees.map((person) => `${person.full_name ?? "—"} (ID ${person.employee_id ?? "—"})`).join(", ")}</p>
+                  <p>Подписанных копий: {order.signed_copy_count} · Вложений: {order.attachment_count} · Событий ознакомления: {order.acknowledgement_count}</p>
+                  <p className="mt-1">{order.is_test_marked ? "Тестовое происхождение приказа подтверждено" : "Тестовое происхождение приказа не подтверждено"}</p>
+                  {preview.is_test_marked && !order.is_test_marked ? <div className="mt-2 space-y-2">
+                    {order.marker_id ? <p className="text-amber-700 dark:text-amber-300">Приказ изменился после прежнего подтверждения. Укажите актуальное основание.</p> : null}
+                    <label className="block">Документированное основание тестового происхождения приказа
+                      <textarea value={orderEvidence[order.order_id] ?? ""}
+                        onChange={(event) => setOrderEvidence((current) => ({ ...current, [order.order_id]: event.target.value }))}
+                        rows={3} maxLength={2000} className="mt-1 w-full rounded border p-2 dark:bg-zinc-950" />
+                    </label>
+                    <p>Минимум 20 символов; одного номера или ФИО недостаточно.</p>
+                    <label className="flex items-center gap-2">
+                      <input type="checkbox" checked={Boolean(orderConfirmations[order.order_id])}
+                        onChange={(event) => setOrderConfirmations((current) => ({ ...current, [order.order_id]: event.target.checked }))} />
+                      Подтверждаю тестовое происхождение приказа
+                    </label>
+                    <button type="button"
+                      disabled={submitting || !orderConfirmations[order.order_id] || (orderEvidence[order.order_id] ?? "").trim().length < 20}
+                      onClick={() => void confirmOrder(order)} className="rounded bg-amber-700 px-3 py-2 text-white disabled:opacity-50">
+                      Подтвердить тестовый приказ
+                    </button>
+                  </div> : null}
+                </li>)}
+              </ul>
             </div> : null}
           </div>
         ) : null}

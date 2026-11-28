@@ -88,6 +88,13 @@ class TestEmployeeDeleteIn(BaseModel):
     expected_snapshot_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
 
 
+class TestPersonnelOrderMarkIn(BaseModel):
+    evidence: str | None = None
+    confirmed_number: str
+    expected_snapshot_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    confirmed_test_origin: Literal[True]
+
+
 def _require_sysadmin(user: dict[str, Any]) -> int:
     if (int(user.get("role_id") or 0) != employee_cleanup.SYSTEM_ADMIN_ROLE_ID
             or user.get("is_sysadmin_assistant")):
@@ -123,6 +130,23 @@ def mark_test_employee_route(
         return employee_cleanup.mark_employee(
             employee_id=employee_id, actor_user_id=actor,
             evidence=body.evidence, confirmed_name=body.confirmed_name,
+        )
+    except employee_cleanup.TestEmployeeCleanupError as exc:
+        raise _cleanup_error(exc) from None
+
+
+@router.post("/test-employees/{employee_id}/orders/{order_id}/mark")
+def mark_test_personnel_order_route(
+    employee_id: int, order_id: int, body: TestPersonnelOrderMarkIn,
+    user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+    actor = _require_sysadmin(user)
+    try:
+        return employee_cleanup.mark_personnel_order(
+            employee_id=employee_id, order_id=order_id, actor_user_id=actor,
+            evidence=body.evidence, confirmed_number=body.confirmed_number,
+            expected_snapshot_hash=body.expected_snapshot_hash,
+            confirmed_test_origin=body.confirmed_test_origin,
         )
     except employee_cleanup.TestEmployeeCleanupError as exc:
         raise _cleanup_error(exc) from None

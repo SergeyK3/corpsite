@@ -30,7 +30,6 @@ from app.personnel_intake.infrastructure.photo_storage import (
     delete_intake_photo, intake_photo_path, intake_photo_storage_root, normalize_intake_photo_file_id,
     resolve_path_within_root,
 )
-from app.services.technical_personnel_order_cleanup_service import classification, CONFIRMED_TECHNICAL
 
 logger = logging.getLogger(__name__)
 
@@ -58,9 +57,36 @@ RETAINED_HISTORY = {
     ("users", "security_audit_log", "target_user_id"),
     ("persons", "security_audit_log", "target_person_id"),
     ("employees", "security_audit_log", "target_employee_id"),
+    ("users", "tasks", "created_by_user_id"),
+    ("users", "tasks", "initiator_user_id"),
+    ("users", "tasks", "approver_user_id"),
+    ("users", "user_linkage_execute_items", "user_id"),
+    ("employees", "user_linkage_execute_items", "proposed_employee_id"),
+    ("users", "employee_onboarding_notifications", "actor_user_id"),
+    ("electronic_hire_applications", "electronic_hire_approval_tasks", "application_id"),
+    ("employee_onboardings", "employee_onboarding_notifications", "onboarding_id"),
+    ("employee_onboarding_checklist_items", "employee_onboarding_notifications", "item_id"),
+    ("employees", "ppr_stage0_cohort_participants", "employee_id"),
+    ("persons", "ppr_stage0_cohort_participants", "person_id"),
+    ("users", "employee_identities", "created_by"),
+    ("users", "person_contacts", "created_by_user_id"),
+    ("users", "person_contacts", "updated_by_user_id"),
+    ("users", "person_card_change_requests", "decided_by"),
+    ("users", "person_card_change_events", "actor_id"),
+    ("users", "person_relative_change_requests", "decided_by"),
+    ("users", "person_relative_change_events", "actor_id"),
 }
 HISTORY_KEYS = {"personnel_file_events": "event_id", "personnel_file_versions": "version_id",
-                "security_audit_log": "audit_id"}
+                "security_audit_log": "audit_id", "tasks": "task_id",
+                "user_linkage_execute_items": "item_id",
+                "employee_onboarding_notifications": "notification_id",
+                "electronic_hire_approval_tasks": "task_id",
+                "ppr_stage0_cohort_participants": "stage0_participant_id",
+                "employee_identities": "identity_id", "person_contacts": "person_id",
+                "person_card_change_requests": "request_id",
+                "person_card_change_events": "event_id",
+                "person_relative_change_requests": "request_id",
+                "person_relative_change_events": "event_id"}
 
 # Exact owner edges.  Shared reports, authorship, signatories, journal numbers,
 # and references from other employees are deliberately absent.
@@ -174,12 +200,10 @@ OWNED: dict[str, dict[str, set[str]]] = {
     "personnel_file_sets": {"personnel_file_versions": {"set_id"}},
     "employee_onboardings": {
         "employee_onboarding_checklist_items": {"onboarding_id"},
-        "employee_onboarding_notifications": {"onboarding_id"},
         "employee_onboarding_task_audit": {"onboarding_id"},
     },
     "employee_onboarding_checklist_items": {
         "employee_onboarding_checklist_attachments": {"item_id"},
-        "employee_onboarding_notifications": {"item_id"},
         "employee_onboarding_task_audit": {"item_id"},
     },
     "electronic_hire_applications": {
@@ -330,23 +354,115 @@ def _order_ids(conn: Connection, employee_id: int) -> list[int]:
         FROM public.personnel_order_items WHERE employee_id=:id ORDER BY order_id"""), {"id": employee_id}).scalars()]
 
 
-def _order_blockers(conn: Connection, order_ids: list[int], employee_id: int) -> list[str]:
+def _order_state(conn: Connection, order_id: int) -> tuple[dict[str, Any], list[dict[str, Any]]]:
+    order = dict(conn.execute(text("SELECT * FROM public.personnel_orders WHERE order_id=:id"),
+                              {"id": order_id}).mappings().one())
+    items = [dict(row) for row in conn.execute(text("""SELECT * FROM public.personnel_order_items
+        WHERE order_id=:id ORDER BY item_number,item_id"""), {"id": order_id}).mappings()]
+    return order, items
+
+
+def _order_digest(order: dict[str, Any], items: list[dict[str, Any]]) -> str:
+    return _hash({"order": order, "items": items})
+
+
+def mark_personnel_order(*, employee_id: int, order_id: int, actor_user_id: int,
+                         evidence: str | None, confirmed_number: str,
+                         expected_snapshot_hash: str, confirmed_test_origin: bool) -> dict[str, Any]:
+    if not confirmed_test_origin:
+        raise TestEmployeeCleanupError("ORDER_CONFIRMATION_REQUIRED",
+            "Подтвердите тестовое происхождение приказа.", 422)
+    with engine.begin() as conn:
+        _assert_sysadmin(conn, actor_user_id, lock=True)
+        employee = _employee(conn, employee_id, lock=True)
+        if conn.execute(text("SELECT 1 FROM public.users WHERE employee_id=:employee AND user_id=:actor"),
+                        {"employee": employee_id, "actor": actor_user_id}).first():
+            raise TestEmployeeCleanupError("OWN_ACCOUNT", "Свою учётную запись удалять нельзя.", 403)
+        if not conn.execute(text("SELECT 1 FROM public.test_employee_marks WHERE employee_id=:id"),
+                            {"id": employee_id}).first():
+            raise TestEmployeeCleanupError("EMPLOYEE_NOT_MARKED", "Сначала подтвердите тестовое происхождение сотрудника.")
+        order, items = _order_state(conn, order_id)
+        if not items or not any(item["employee_id"] == employee_id for item in items):
+            raise TestEmployeeCleanupError("ORDER_NOT_RELATED", "Приказ не относится к этому сотруднику.", 404)
+        if str(order.get("order_number") or "") != confirmed_number:
+            raise TestEmployeeCleanupError("ORDER_NUMBER_MISMATCH", "Номер приказа изменился. Обновите предварительный просмотр.")
+        digest = _order_digest(order, items)
+        if digest != expected_snapshot_hash:
+            raise TestEmployeeCleanupError("ORDER_SNAPSHOT_CHANGED",
+                "Приказ изменился. Обновите предварительный просмотр.", 409)
+        existing = conn.execute(text("""SELECT marker_id,order_snapshot_hash
+            FROM public.test_personnel_order_marks
+            WHERE order_id=:id ORDER BY marker_id DESC LIMIT 1"""),
+            {"id": order_id}).mappings().one_or_none()
+        if existing and existing["order_snapshot_hash"] == digest:
+            return {"order_id": order_id, "marker_id": int(existing["marker_id"])}
+        evidence = (evidence or "").strip()
+        if not 20 <= len(evidence) <= 2000:
+            raise TestEmployeeCleanupError("ORDER_EVIDENCE_REQUIRED",
+                "Укажите документированное основание тестового происхождения приказа (20–2000 символов).", 422)
+        if evidence.casefold() in {employee["full_name"].casefold(),
+                                   str(order.get("order_number") or "").casefold()}:
+            raise TestEmployeeCleanupError("ORDER_EVIDENCE_REQUIRED", "Одного ФИО или номера приказа недостаточно.", 422)
+        marker_id = conn.execute(text("""INSERT INTO public.test_personnel_order_marks
+            (order_id,order_number,order_snapshot_hash,evidence,marked_by_user_id)
+            VALUES (:order_id,:number,:digest,:evidence,:actor) RETURNING marker_id"""), {
+                "order_id": order_id, "number": order.get("order_number"),
+                "digest": digest, "evidence": evidence,
+                "actor": actor_user_id,
+            }).scalar_one()
+    return {"order_id": order_id, "marker_id": int(marker_id)}
+
+
+def _order_blockers(conn: Connection, order_ids: list[int], employee_id: int) -> tuple[list[str], list[dict[str, Any]]]:
     blockers: list[str] = []
+    details: list[dict[str, Any]] = []
     for order_id in order_ids:
-        order = conn.execute(text("SELECT * FROM public.personnel_orders WHERE order_id=:id"), {"id": order_id}).mappings().one()
-        others = conn.execute(text("""SELECT count(*) FROM public.personnel_order_items
-            WHERE order_id=:id AND employee_id IS DISTINCT FROM :employee"""), {"id": order_id, "employee": employee_id}).scalar_one()
-        if others:
-            blockers.append(f"Приказ №{order_id} содержит пункты других сотрудников")
-        if classification(order.get("storage_json"), order.get("order_number")) != CONFIRMED_TECHNICAL:
-            blockers.append(f"Приказ №{order_id} не имеет подтверждённого тестового происхождения")
-        if order.get("signed_by_employee_id") is not None:
-            blockers.append(f"Приказ №{order_id} подписан")
+        order, items = _order_state(conn, order_id)
+        mark = conn.execute(text("""SELECT * FROM public.test_personnel_order_marks
+            WHERE order_id=:id ORDER BY marker_id DESC LIMIT 1"""),
+                            {"id": order_id}).mappings().one_or_none()
+        others = [item for item in items if item["employee_id"] != employee_id]
+        people = [dict(row) for row in conn.execute(text("""SELECT DISTINCT i.employee_id,e.full_name
+            FROM public.personnel_order_items i LEFT JOIN public.employees e ON e.employee_id=i.employee_id
+            WHERE i.order_id=:id ORDER BY i.employee_id"""), {"id": order_id}).mappings()]
         signed = conn.execute(text("""SELECT count(*) FROM public.personnel_order_prints
             WHERE order_id=:id AND is_signed_copy=true"""), {"id": order_id}).scalar_one()
+        attachments = conn.execute(text("""SELECT count(*) FROM public.personnel_order_attachments
+            WHERE order_id=:id"""), {"id": order_id}).scalar_one()
+        acknowledged = conn.execute(text("""SELECT count(*) FROM public.personnel_order_acknowledgement_events
+            WHERE order_id=:id"""), {"id": order_id}).scalar_one()
+        event_others = conn.execute(text("""SELECT count(*) FROM public.employee_events
+            WHERE order_id=:id AND employee_id IS DISTINCT FROM :employee"""),
+            {"id": order_id, "employee": employee_id}).scalar_one()
+        details.append({"order_id": order_id, "order_number": order.get("order_number"),
+                        "order_date": str(order["order_date"]) if order.get("order_date") else None,
+                        "order_type_code": order["order_type_code"], "status": order["status"],
+                        "item_count": len(items), "employees": people,
+                        "signed_copy_count": signed, "attachment_count": attachments,
+                        "acknowledgement_count": acknowledged,
+                        "snapshot_hash": _order_digest(order, items),
+                        "is_test_marked": mark is not None and
+                            mark["order_snapshot_hash"] == _order_digest(order, items),
+                        "marker_id": int(mark["marker_id"]) if mark else None})
+        if others:
+            blockers.append(f"Приказ ID {order_id} содержит пункты других сотрудников")
+        if event_others:
+            blockers.append(f"Приказ ID {order_id} связан с кадровыми событиями других сотрудников")
+        if mark is None:
+            blockers.append(f"Подтвердите тестовое происхождение приказа ID {order_id} отдельно")
+        elif mark["order_snapshot_hash"] != _order_digest(order, items):
+            blockers.append(f"Приказ ID {order_id} изменился после подтверждения тестового происхождения")
+        if order.get("signed_by_employee_id") is not None:
+            blockers.append(f"Приказ ID {order_id} подписан")
         if signed:
-            blockers.append(f"Приказ №{order_id} содержит подписанную копию")
-    return blockers
+            blockers.append(f"Приказ ID {order_id} содержит подписанную копию")
+        if attachments:
+            blockers.append(f"Приказ ID {order_id} содержит вложения с неустановленным статусом подписи")
+        if acknowledged:
+            blockers.append(f"Приказ ID {order_id} содержит события ознакомления")
+        if order["status"] not in {"DRAFT", "READY_FOR_SIGNATURE", "REGISTERED"}:
+            blockers.append(f"Статус приказа ID {order_id} требует отдельного решения")
+    return blockers, details
 
 
 def _add(plan: dict[str, dict[str, dict[str, Any]]], table: str,
@@ -446,11 +562,19 @@ def _logical_blockers(conn: Connection, plan: dict[str, dict[str, dict[str, Any]
             "person_relative_change_events",
         }:
             continue
+        # These two item streams have independent local sequences.  Their
+        # identically named IDs are not a relationship; genuine FKs are
+        # inspected through the catalog above.
+        if column == "item_id" and table in {
+            "personnel_order_items", "employee_onboarding_checklist_items",
+        } and ({"personnel_order_items", "employee_onboarding_checklist_items"} - {table}) & plan.keys():
+            continue
         if row["data_type"] not in {"smallint", "integer", "bigint", "numeric", "uuid"}:
             continue
         if (table, column) in physical or table in {
             "test_employee_marks", "test_employee_deletion_audit", "test_employee_file_cleanup",
-            "test_employee_retained_history_refs",
+            "test_employee_retained_history_refs", "test_employee_history_snapshots",
+            "test_personnel_order_marks", "test_personnel_order_deletion_audit",
         }:
             continue
         values = [value for value in identities.get(column, [])
@@ -476,8 +600,8 @@ def _reviewed_card_blockers(plan: dict[str, dict[str, dict[str, Any]]],
                  plan.get("person_card_change_documents", {}).values()}
     relatives = {int(row["relative_id"]): row for row in
                  plan.get("person_relatives", {}).values()}
-    known_sections = {"contacts", "education", "training", "category",
-                      "employment_biography", "languages", "awards"}
+    known_sections = {"general", "contacts", "education", "training", "category",
+                      "employment_biography", "military", "languages", "awards"}
     for row in requests.values():
         if (row.get("person_id") != person_id
                 or row.get("employee_context_id") not in (None, employee_id)
@@ -505,6 +629,93 @@ def _reviewed_card_blockers(plan: dict[str, dict[str, dict[str, Any]]],
             relative_id = row.get(column)
             if relative_id is not None and relatives.get(int(relative_id), {}).get("person_id") != person_id:
                 blockers.append("Заявка на родственника ссылается на чужую запись")
+    return sorted(set(blockers))
+
+
+def _history_removals(conn: Connection, plan: dict[str, dict[str, dict[str, Any]]],
+                      user_ids: list[int]) -> list[dict[str, Any]]:
+    """Archive only known participant/delivery rows before severing their FK."""
+    result: dict[tuple[str, str], dict[str, Any]] = {}
+
+    def collect(table: str, key: str, where: str, params: dict[str, Any],
+                *, pending_only: bool = False) -> None:
+        for tid, state in _rows(conn, table, where, params):
+            if tid in plan.get(table, {}):
+                continue
+            source_key = ":".join(str(state[column]) for column in key.split(","))
+            disposition = ("CANCELLED" if state.get("status") == "PENDING"
+                           else "REMOVED")
+            if pending_only and disposition != "CANCELLED":
+                continue
+            result[(table, source_key)] = {"table": table, "key": source_key,
+                                           "tid": tid, "state": state,
+                                           "disposition": disposition}
+
+    if user_ids:
+        collect("task_event_recipients", "audit_id,user_id", "t.user_id=ANY(:ids)",
+                {"ids": user_ids})
+        collect("task_event_deliveries", "audit_id,user_id,channel", "t.user_id=ANY(:ids)",
+                {"ids": user_ids})
+        collect("employee_onboarding_notification_recipients", "notification_id,user_id",
+                "t.user_id=ANY(:ids)", {"ids": user_ids})
+        collect("employee_onboarding_notification_deliveries", "notification_id,user_id,channel",
+                "t.user_id=ANY(:ids)", {"ids": user_ids})
+    notification_ids = [state["notification_id"] for state in
+                        plan.get("employee_onboarding_notifications", {}).values()]
+    # Notifications are retained, so find them through the owned onboarding.
+    onboarding_ids = [state["onboarding_id"] for state in
+                      plan.get("employee_onboardings", {}).values()]
+    if onboarding_ids:
+        notification_ids = [int(value) for value in conn.execute(text("""SELECT notification_id
+            FROM public.employee_onboarding_notifications WHERE onboarding_id=ANY(:ids)"""),
+            {"ids": onboarding_ids}).scalars()]
+    if notification_ids:
+        collect("employee_onboarding_notification_deliveries", "notification_id,user_id,channel",
+                "t.notification_id=ANY(:ids)", {"ids": notification_ids}, pending_only=True)
+    return sorted(result.values(), key=lambda row: (row["table"], row["key"]))
+
+
+def _preserved_onboarding_history(conn: Connection,
+                                  plan: dict[str, dict[str, dict[str, Any]]],
+                                  removed: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    onboarding_ids = [state["onboarding_id"] for state in
+                      plan.get("employee_onboardings", {}).values()]
+    if not onboarding_ids:
+        return []
+    notification_ids = [int(value) for value in conn.execute(text("""SELECT notification_id
+        FROM public.employee_onboarding_notifications WHERE onboarding_id=ANY(:ids)"""),
+        {"ids": onboarding_ids}).scalars()]
+    if not notification_ids:
+        return []
+    removed_keys = {(row["table"], row["key"]) for row in removed}
+    preserved: list[dict[str, Any]] = []
+    for table, key in (("employee_onboarding_notification_recipients", "notification_id,user_id"),
+                       ("employee_onboarding_notification_deliveries", "notification_id,user_id,channel")):
+        for _, state in _rows(conn, table, "t.notification_id=ANY(:ids)",
+                              {"ids": notification_ids}):
+            source_key = ":".join(str(state[column]) for column in key.split(","))
+            if (table, source_key) not in removed_keys:
+                preserved.append({"table": table, "key": source_key, "state": state})
+    return sorted(preserved, key=lambda row: (row["table"], row["key"]))
+
+
+def _historical_safety_blockers(conn: Connection, retained: list[dict[str, Any]],
+                                plan: dict[str, dict[str, dict[str, Any]]]) -> list[str]:
+    blockers: list[str] = []
+    for ref in retained:
+        state, table = ref["state"], ref["table"]
+        if table == "user_linkage_execute_items" and (
+                state["status"] != "SKIPPED" or state["action"] != "SKIP_NOT_APPROVED"):
+            blockers.append("Операция привязки учётной записи была применена или имеет неоднозначный статус")
+        if table == "ppr_stage0_cohort_participants":
+            if state.get("retired_at") is not None:
+                blockers.append("Участник кадровой когорты уже архивирован")
+            cohort_id = state["stage0_cohort_run_id"]
+            for run_table in ("ppr_stage_runs", "ppr_stage1_general_runs"):
+                if conn.execute(text(f"SELECT 1 FROM public.{run_table} "
+                                       "WHERE stage0_cohort_run_id=:id LIMIT 1"),
+                                {"id": cohort_id}).first():
+                    blockers.append("По замороженной кадровой когорте уже запущен этап обработки")
     return sorted(set(blockers))
 
 
@@ -626,7 +837,8 @@ def _build_plan(conn: Connection, employee_id: int) -> dict[str, Any]:
                         {"pid": person_id}).first():
             blockers.append("На физическое лицо ссылается объединённая запись")
     order_ids = _order_ids(conn, employee_id)
-    blockers.extend(_order_blockers(conn, order_ids, employee_id))
+    order_blockers, order_details = _order_blockers(conn, order_ids, employee_id)
+    blockers.extend(order_blockers)
     edges = _fk_edges(conn)
     composite_edges = _composite_fk_edges(conn)
     by_parent: dict[str, list[Edge]] = defaultdict(list)
@@ -662,6 +874,11 @@ def _build_plan(conn: Connection, employee_id: int) -> dict[str, Any]:
             "t.target_type='ASSIGNMENT' AND t.target_id=ANY(:ids)",
             {"ids": assignment_ids}))
     blockers.extend(_reviewed_card_blockers(plan, employee_id, person_id))
+    archive_remove = _history_removals(conn, plan, user_ids)
+    preserved_history = _preserved_onboarding_history(conn, plan, archive_remove)
+    removal_tids: dict[str, set[str]] = defaultdict(set)
+    for row in archive_remove:
+        removal_tids[row["table"]].add(row["tid"])
     retained: list[dict[str, Any]] = []
     blocked_rows: dict[str, set[str]] = defaultdict(set)
     blocked_columns: dict[str, set[str]] = defaultdict(set)
@@ -670,7 +887,8 @@ def _build_plan(conn: Connection, employee_id: int) -> dict[str, Any]:
     for parent, parents in list(plan.items()):
         for edge in by_parent.get(parent, []):
             external = [(tid, state) for tid, state in _edge_rows(conn, edge, parents)
-                        if tid not in plan.get(edge.child, {})]
+                        if tid not in plan.get(edge.child, {})
+                        and tid not in removal_tids.get(edge.child, set())]
             if external and (edge.parent, edge.child, edge.child_column) in RETAINED_HISTORY:
                 key_column = HISTORY_KEYS[edge.child]
                 for _, state in external:
@@ -685,12 +903,14 @@ def _build_plan(conn: Connection, employee_id: int) -> dict[str, Any]:
             if edge.parent != parent:
                 continue
             external_composite = [tid for tid, _ in _composite_child_rows(conn, edge, parents)
-                                  if tid not in plan.get(edge.child, {})]
+                                  if tid not in plan.get(edge.child, {})
+                                  and tid not in removal_tids.get(edge.child, set())]
             unknown = len(external_composite)
             if unknown:
                 blockers.append(f"Составная внешняя зависимость {edge.child}.{edge.constraint}: {unknown}")
                 blocked_rows[edge.child].update(external_composite)
                 blocked_columns[edge.child].update(edge.child_columns)
+    blockers.extend(_historical_safety_blockers(conn, retained, plan))
     blockers.extend(_logical_blockers(conn, plan, employee_id, person_id, user_ids, edges))
     files, file_blockers = _file_plan(conn, plan)
     blockers.extend(file_blockers)
@@ -706,10 +926,34 @@ def _build_plan(conn: Connection, employee_id: int) -> dict[str, Any]:
     # The exact state digest is checked again under SERIALIZABLE locks at commit.
     state_hash = _hash({"delete": {table: sorted(rows.values(), key=lambda row: _hash(row))
                                    for table, rows in sorted(plan.items())},
-                        "retain": sorted(retained, key=lambda row: (row["table"], row["key"], row["column"]))})
+                        "retain": sorted(retained, key=lambda row: (row["table"], row["key"], row["column"])),
+                        "archive_remove": archive_remove, "preserved_history": preserved_history,
+                        "orders": order_details})
     counts = {table: len(rows) for table, rows in sorted(plan.items()) if rows}
     retained_counts = {table: len({row["key"] for row in retained if row["table"] == table})
                        for table in sorted({row["table"] for row in retained})}
+    for table in sorted({row["table"] for row in archive_remove}):
+        retained_counts[table] = retained_counts.get(table, 0) + sum(
+            row["table"] == table for row in archive_remove)
+    for table in sorted({row["table"] for row in preserved_history}):
+        retained_counts[table] = retained_counts.get(table, 0) + sum(
+            row["table"] == table for row in preserved_history)
+    retained_keys = lambda table: {row["key"] for row in retained if row["table"] == table}
+    history_actions = [
+        {"code": "CANCEL_PENDING_DELIVERIES", "count": sum(
+            row["disposition"] == "CANCELLED" for row in archive_remove)},
+        {"code": "ARCHIVE_COMPLETED_DELIVERIES", "count": sum(
+            row["table"] in {"task_event_deliveries", "employee_onboarding_notification_deliveries"}
+            and row["disposition"] == "REMOVED" for row in archive_remove)},
+        {"code": "KEEP_COMPLETED_DELIVERIES", "count": sum(
+            row["table"] == "employee_onboarding_notification_deliveries"
+            and row["state"].get("status") == "SENT" for row in preserved_history)},
+        {"code": "KEEP_APPROVAL_DECISIONS", "count": len(retained_keys("electronic_hire_approval_tasks"))},
+        {"code": "KEEP_PPR_COHORT", "count": len(retained_keys("ppr_stage0_cohort_participants"))},
+        {"code": "KEEP_USER_LINKAGE", "count": len(retained_keys("user_linkage_execute_items"))},
+        {"code": "KEEP_TASK_ATTRIBUTION", "count": len(retained_keys("tasks"))},
+    ]
+    history_actions = [row for row in history_actions if row["count"]]
     return {
         "employee_id": employee_id, "person_id": person_id,
         "full_name": employee["full_name"],
@@ -718,12 +962,15 @@ def _build_plan(conn: Connection, employee_id: int) -> dict[str, Any]:
         "is_test_marked": marker is not None, "counts": counts,
         "retained_counts": retained_counts,
         "files": files, "blockers": sorted(set(blockers)),
+        "personnel_orders": order_details,
+        "history_actions": history_actions,
         "blocker_groups": [{"table": table, "count": len(rows),
                             "columns": sorted(blocked_columns[table])}
                            for table, rows in sorted(blocked_rows.items())],
         "can_delete": marker is not None and not blockers,
         "snapshot_hash": state_hash, "_plan": plan, "_edges": edges,
         "_composite_edges": composite_edges, "_retained": retained,
+        "_archive_remove": archive_remove, "_preserved_history": preserved_history,
     }
 
 
@@ -858,6 +1105,37 @@ def retry_file_cleanup(*, deletion_id: str, actor_user_id: int) -> dict[str, int
     return _run_file_cleanup(deletion_id)
 
 
+def _archive_snapshot(conn: Connection, deletion_id: str, table: str, key: str,
+                      state: dict[str, Any], disposition: str) -> None:
+    conn.execute(text("""INSERT INTO public.test_employee_history_snapshots
+        (deletion_id,source_table,source_key,disposition,row_snapshot)
+        VALUES (CAST(:deletion AS uuid),:table,:key,:disposition,CAST(:snapshot AS jsonb))
+        ON CONFLICT (deletion_id,source_table,source_key) DO NOTHING"""), {
+            "deletion": deletion_id, "table": table, "key": key,
+            "disposition": disposition, "snapshot": json.dumps(state, default=str, ensure_ascii=False),
+        })
+
+
+def _archive_order(conn: Connection, deletion_id: str, order_id: int) -> None:
+    order, items = _order_state(conn, order_id)
+    marker = conn.execute(text("""SELECT marker_id,evidence FROM public.test_personnel_order_marks
+        WHERE order_id=:id ORDER BY marker_id DESC LIMIT 1"""), {"id": order_id}).mappings().one()
+    events = [dict(row) for row in conn.execute(text("""SELECT * FROM public.employee_events
+        WHERE order_id=:id ORDER BY event_id"""), {"id": order_id}).mappings()]
+    conn.execute(text("""INSERT INTO public.test_personnel_order_deletion_audit
+        (deletion_id,order_id,order_number,order_snapshot,item_snapshots,
+         employee_event_snapshots,marker_id,marker_evidence)
+        VALUES (CAST(:deletion AS uuid),:order_id,:number,CAST(:order AS jsonb),
+                CAST(:items AS jsonb),CAST(:events AS jsonb),:marker,:evidence)"""), {
+            "deletion": deletion_id, "order_id": order_id,
+            "number": order.get("order_number"),
+            "order": json.dumps(order, default=str, ensure_ascii=False),
+            "items": json.dumps(items, default=str, ensure_ascii=False),
+            "events": json.dumps(events, default=str, ensure_ascii=False),
+            "marker": marker["marker_id"], "evidence": marker["evidence"],
+        })
+
+
 def execute(*, employee_id: int, actor_user_id: int, confirmation: str,
             expected_snapshot_hash: str) -> dict[str, Any]:
     if confirmation != "УДАЛИТЬ":
@@ -880,7 +1158,28 @@ def execute(*, employee_id: int, actor_user_id: int, confirmation: str,
                 raise TestEmployeeCleanupError("SNAPSHOT_CHANGED", "Связанные данные изменились. Повторно откройте предварительный просмотр.", 409)
             conn.execute(text("SELECT set_config('corpsite.allow_personnel_order_physical_delete','on',true)"))
             conn.execute(text("SELECT set_config('corpsite.test_employee_cleanup','on',true)"))
+            conn.execute(text("SELECT set_config('corpsite.test_employee_cleanup_deletion_id',:id,true)"),
+                         {"id": deletion_id})
+            for order in plan["personnel_orders"]:
+                _archive_order(conn, deletion_id, order["order_id"])
+            for row in plan["_archive_remove"]:
+                _archive_snapshot(conn, deletion_id, row["table"], row["key"],
+                                  row["state"], row["disposition"])
+                deleted = conn.execute(text(f'DELETE FROM public."{row["table"]}" '
+                                            'WHERE ctid::text=:tid'), {"tid": row["tid"]})
+                if deleted.rowcount != 1:
+                    raise TestEmployeeCleanupError("HISTORY_CHANGED", "Историческая доставка изменилась.")
+            for row in plan["_preserved_history"]:
+                _archive_snapshot(conn, deletion_id, row["table"], row["key"],
+                                  row["state"], "RETAINED")
+            archived_refs: set[tuple[str, str]] = set()
+            retired_participants: dict[str, dict[str, Any]] = {}
             for ref in plan["_retained"]:
+                archive_key = (ref["table"], ref["key"])
+                if archive_key not in archived_refs:
+                    _archive_snapshot(conn, deletion_id, ref["table"], ref["key"],
+                                      ref["state"], "RETAINED")
+                    archived_refs.add(archive_key)
                 conn.execute(text("""INSERT INTO public.test_employee_retained_history_refs
                     (deletion_id,source_table,source_key,source_column,deleted_entity_kind,
                      deleted_entity_id,deleted_full_name,deleted_login)
@@ -889,7 +1188,15 @@ def execute(*, employee_id: int, actor_user_id: int, confirmation: str,
                     "column": ref["column"], "kind": ref["kind"], "entity_id": ref["id"],
                     "name": plan["full_name"], "login": plan["login"],
                 })
-                if ref["table"] in {"personnel_file_events", "personnel_file_versions"}:
+                if ref["table"] == "ppr_stage0_cohort_participants":
+                    retired_participants[ref["key"]] = ref["state"]
+                elif ref["table"] in {"employee_identities", "person_contacts",
+                                      "person_card_change_requests", "person_card_change_events",
+                                      "person_relative_change_requests", "person_relative_change_events",
+                                      "personnel_file_events", "personnel_file_versions",
+                                      "tasks", "user_linkage_execute_items",
+                                      "employee_onboarding_notifications",
+                                      "electronic_hire_approval_tasks"}:
                     key_column = HISTORY_KEYS[ref["table"]]
                     changed = conn.execute(text(f'UPDATE public."{ref["table"]}" '
                                                 f'SET "{ref["column"]}"=NULL '
@@ -897,6 +1204,30 @@ def execute(*, employee_id: int, actor_user_id: int, confirmation: str,
                                            {"key": ref["key"], "old": ref["id"]})
                     if changed.rowcount != 1:
                         raise TestEmployeeCleanupError("HISTORY_CHANGED", "Историческая ссылка изменилась во время удаления.")
+            for key, state in retired_participants.items():
+                changed = conn.execute(text("""UPDATE public.ppr_stage0_cohort_participants
+                    SET employee_id=NULL,person_id=NULL,retired_test_employee_id=:employee,
+                        retired_test_person_id=:person,retired_at=now(),
+                        retired_deletion_id=CAST(:deletion AS uuid)
+                    WHERE stage0_participant_id=:id AND employee_id=:employee AND person_id=:person
+                      AND retired_at IS NULL"""), {
+                    "id": int(key), "employee": state["employee_id"],
+                    "person": state["person_id"], "deletion": deletion_id,
+                })
+                if changed.rowcount != 1:
+                    raise TestEmployeeCleanupError("HISTORY_CHANGED", "Состав кадровой когорты изменился.")
+            historical_tables = {
+                "employee_onboarding_task_audit": "audit_id",
+                "personnel_order_lifecycle_audit": "id",
+                "employee_events": "event_id",
+                "ppr_migration_section_status_projection": None,
+                "personnel_application_lifecycle_audit": "audit_id",
+                "personnel_application_resolution_audit": "audit_id",
+            }
+            for table, key_column in historical_tables.items():
+                for state in plan["_plan"].get(table, {}).values():
+                    key = (str(state[key_column]) if key_column else _hash(state))
+                    _archive_snapshot(conn, deletion_id, table, key, state, "REMOVED")
             deleted_counts: dict[str, int] = {}
             for table in _delete_order(plan["_plan"], plan["_edges"], plan["_composite_edges"]):
                 tids = sorted(plan["_plan"][table])

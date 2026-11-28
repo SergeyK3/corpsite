@@ -55,7 +55,7 @@ def get_stage1_run(conn:Connection,*,run_id:int)->dict[str,Any]:
     return {'run':dict(run),'participants':rows,'counts':dict(Counter(x['status'] for x in rows))}
 
 def preview_stage1(conn:Connection,*,stage0_cohort_run_id:int,actor_user_id:int)->dict[str,Any]:
-    participants=[dict(x) for x in conn.execute(text('SELECT stage0_cohort_run_id,position,employee_id,person_id,source_row_id FROM public.ppr_stage0_cohort_participants WHERE stage0_cohort_run_id=:id ORDER BY position'),{'id':stage0_cohort_run_id}).mappings()]
+    participants=[dict(x) for x in conn.execute(text('SELECT stage0_cohort_run_id,position,employee_id,person_id,source_row_id FROM public.ppr_stage0_cohort_participants WHERE stage0_cohort_run_id=:id AND retired_at IS NULL ORDER BY position'),{'id':stage0_cohort_run_id}).mappings()]
     if not participants: raise Stage1ValidationError('STAGE1_COHORT_EMPTY_OR_NOT_FOUND')
     items=[{**p,**_derive(conn,p),'status':'PENDING'} for p in participants]
     fingerprint=_hash({'policy':POLICY_VERSION,'cohort':stage0_cohort_run_id,'items':[{'employee':x['employee_id'],'fingerprint':x['fingerprint']} for x in items]})

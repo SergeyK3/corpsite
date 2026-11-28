@@ -142,6 +142,10 @@ def test_route_rejects_other_role(sample):
             path = f"/directory/personnel/lk/test-employees/{sample['employee_id']}"
             assert client.get(f"{path}/preview").status_code == 403
             assert client.post(f"{path}/mark", json={"evidence": "A sufficiently long explanation", "confirmed_name": sample["name"]}).status_code == 403
+            assert client.post(f"{path}/orders/1/mark", json={
+                "evidence": "A sufficiently long explanation", "confirmed_number": "X",
+                "expected_snapshot_hash": "a"*64, "confirmed_test_origin": True,
+            }).status_code == 403
             assert client.post(f"{path}/delete", json={"confirmation": "УДАЛИТЬ", "expected_snapshot_hash": "a"*64}).status_code == 403
         finally:
             app.dependency_overrides.pop(get_current_user, None)
@@ -277,6 +281,23 @@ def test_user_and_single_test_order_are_physically_removed(sample):
             {"person": sample["person_id"], "actor": actor}).scalar_one()
     cleanup.mark_employee(employee_id=eid, actor_user_id=actor,
                           confirmed_name=sample["name"], evidence="Isolated synthetic employee from a test fixture")
+    order_preview = cleanup.preview(employee_id=eid, actor_user_id=actor)["personnel_orders"][0]
+    mark_args = dict(employee_id=eid, order_id=order_id, actor_user_id=actor,
+                     confirmed_number=order_preview["order_number"],
+                     expected_snapshot_hash=order_preview["snapshot_hash"])
+    with pytest.raises(cleanup.TestEmployeeCleanupError) as error:
+        cleanup.mark_personnel_order(**mark_args, confirmed_test_origin=False,
+            evidence="Isolated fixture order created only for the cleanup contract")
+    assert error.value.code == "ORDER_CONFIRMATION_REQUIRED"
+    with pytest.raises(cleanup.TestEmployeeCleanupError) as error:
+        cleanup.mark_personnel_order(**{**mark_args, "expected_snapshot_hash": "a"*64},
+            confirmed_test_origin=True,
+            evidence="Isolated fixture order created only for the cleanup contract")
+    assert error.value.code == "ORDER_SNAPSHOT_CHANGED"
+    marked = cleanup.mark_personnel_order(**mark_args, confirmed_test_origin=True,
+        evidence="Isolated fixture order created only for the cleanup contract")
+    assert cleanup.mark_personnel_order(**mark_args, confirmed_test_origin=True,
+        evidence=None) == marked
     plan = cleanup.preview(employee_id=eid, actor_user_id=actor)
     assert plan["can_delete"], plan["blockers"]
     assert plan["counts"]["person_assignments"] == 1
@@ -289,6 +310,87 @@ def test_user_and_single_test_order_are_physically_removed(sample):
         assert conn.execute(text("SELECT count(*) FROM personnel_orders WHERE order_id=:id"), {"id": order_id}).scalar_one() == 0
         assert conn.execute(text("SELECT count(*) FROM person_assignments WHERE assignment_id=:id"), {"id": assignment_id}).scalar_one() == 0
         assert conn.execute(text("SELECT count(*) FROM personnel_applications WHERE application_id=:id"), {"id": application_id}).scalar_one() == 0
+
+
+def test_reviewer_history_of_another_employee_is_preserved(sample):
+    with engine.begin() as conn:
+        if conn.scalar(text("SELECT to_regclass('public.person_relative_change_events')")) is None:
+            pytest.skip("Self-card review schema is not present in this isolated database")
+        employee_role_id = conn.scalar(text("SELECT role_id FROM roles WHERE code='EMPLOYEE'"))
+        assert employee_role_id is not None
+        target = sample["employee_id"]
+        reviewer = conn.scalar(text("""INSERT INTO users(full_name,role_id,is_active,login,employee_id)
+            VALUES (:name,:role,true,:login,:employee) RETURNING user_id"""),
+            {"name": sample["name"], "role": employee_role_id,
+             "login": f"reviewer_{uuid4().hex[:12]}", "employee": target})
+        other_person = conn.scalar(text("""INSERT INTO persons(full_name,match_key,person_status,source)
+            VALUES (:name,:key,'active','manual') RETURNING person_id"""),
+            {"name": f"Other owner {uuid4().hex[:8]}", "key": f"review-owner:{uuid4().hex}"})
+        other_employee = conn.scalar(text("""INSERT INTO employees(full_name,person_id,is_active,operational_status)
+            VALUES (:name,:person,true,'active') RETURNING employee_id"""),
+            {"name": f"Other owner {uuid4().hex[:8]}", "person": other_person})
+        owner = conn.scalar(text("""INSERT INTO users(full_name,role_id,is_active,login,employee_id)
+            VALUES (:name,:role,true,:login,:employee) RETURNING user_id"""),
+            {"name": "Other owner", "role": employee_role_id,
+             "login": f"owner_{uuid4().hex[:12]}", "employee": other_employee})
+        conn.execute(text("""INSERT INTO person_contacts
+            (person_id,source_kind,created_by_user_id,updated_by_user_id)
+            VALUES (:person,'HR_MANUAL',:reviewer,:reviewer)"""),
+            {"person": other_person, "reviewer": reviewer})
+        conn.execute(text("""INSERT INTO employee_identities
+            (employee_id,identity_type,identity_value,created_by)
+            VALUES (:employee,'TEST_REVIEW',:value,:reviewer)"""),
+            {"employee": other_employee, "value": uuid4().hex, "reviewer": reviewer})
+        card_request = uuid4()
+        relative_request = uuid4()
+        conn.execute(text("""INSERT INTO person_card_change_requests
+            (request_id,person_id,employee_context_id,section,request_kind,current,proposed,
+             status,revision,submitted_by,decided_by,reason)
+            VALUES (:id,:person,:employee,'contacts','addition','{}'::jsonb,'{}'::jsonb,
+                    'approved',1,:owner,:reviewer,'Approved by reviewer')"""),
+            {"id": card_request, "person": other_person, "employee": other_employee,
+             "owner": owner, "reviewer": reviewer})
+        conn.execute(text("""INSERT INTO person_card_change_events
+            (request_id,actor_id,action,detail) VALUES (:id,:reviewer,'approved','{}'::jsonb)"""),
+            {"id": card_request, "reviewer": reviewer})
+        conn.execute(text("""INSERT INTO person_relative_change_requests
+            (request_id,person_id,request_kind,proposed,status,revision,submitted_by,decided_by,reason)
+            VALUES (:id,:person,'addition','{}'::jsonb,'approved',1,:owner,:reviewer,'Approved by reviewer')"""),
+            {"id": relative_request, "person": other_person, "owner": owner, "reviewer": reviewer})
+        conn.execute(text("""INSERT INTO person_relative_change_events
+            (request_id,actor_id,action,detail) VALUES (:id,:reviewer,'approved','{}'::jsonb)"""),
+            {"id": relative_request, "reviewer": reviewer})
+    cleanup.mark_employee(employee_id=target, actor_user_id=sample["admin"]["user_id"],
+                          confirmed_name=sample["name"], evidence="Isolated reviewer with unrelated employee history")
+    plan = cleanup.preview(employee_id=target, actor_user_id=sample["admin"]["user_id"])
+    assert plan["can_delete"], plan["blockers"]
+    assert plan["retained_counts"]["person_contacts"] == 1
+    assert plan["retained_counts"]["person_card_change_events"] == 1
+    result = cleanup.execute(employee_id=target, actor_user_id=sample["admin"]["user_id"],
+                             confirmation="УДАЛИТЬ", expected_snapshot_hash=plan["snapshot_hash"])
+    with engine.connect() as conn:
+        assert conn.scalar(text("SELECT count(*) FROM employees WHERE employee_id=:id"), {"id": target}) == 0
+        assert conn.scalar(text("SELECT count(*) FROM employees WHERE employee_id=:id"), {"id": other_employee}) == 1
+        for table, request_id in (("person_card_change_requests", card_request),
+                                  ("person_relative_change_requests", relative_request)):
+            row = conn.execute(text(f"SELECT status,reason,submitted_by,decided_by FROM {table} WHERE request_id=:id"),
+                               {"id": request_id}).one()
+            assert row == ("approved", "Approved by reviewer", owner, None)
+        for table, request_id in (("person_card_change_events", card_request),
+                                  ("person_relative_change_events", relative_request)):
+            row = conn.execute(text(f"SELECT action,actor_id FROM {table} WHERE request_id=:id"),
+                               {"id": request_id}).one()
+            assert row == ("approved", None)
+        contact = conn.execute(text("""SELECT created_by_user_id,updated_by_user_id
+            FROM person_contacts WHERE person_id=:person"""), {"person": other_person}).one()
+        assert contact == (None, None)
+        assert conn.scalar(text("SELECT count(*) FROM employee_identities WHERE employee_id=:id AND created_by IS NULL"),
+                           {"id": other_employee}) == 1
+        assert conn.scalar(text("""SELECT count(*) FROM test_employee_history_snapshots
+            WHERE deletion_id=CAST(:id AS uuid) AND source_table IN
+              ('person_card_change_requests','person_card_change_events',
+               'person_relative_change_requests','person_relative_change_events',
+               'person_contacts','employee_identities')"""), {"id": result["deletion_id"]}) == 6
 
 
 def test_photo_file_is_removed_after_commit(sample, tmp_path, monkeypatch):
@@ -364,7 +466,8 @@ def test_personnel_files_and_historical_attribution(sample, tmp_path, monkeypatc
                 RETURNING event_id"""),
                 {"person": owner, "version": version, "actor": user_id, "request": str(uuid4())})
             if owner == person:
-                conn.execute(text("CREATE TABLE cleanup_unrelated_event_stream (event_id bigint PRIMARY KEY)"))
+                own_event_id = event_id
+                conn.execute(text("CREATE TABLE IF NOT EXISTS cleanup_unrelated_event_stream (event_id bigint PRIMARY KEY)"))
                 conn.execute(text("INSERT INTO cleanup_unrelated_event_stream(event_id) VALUES (:id)"),
                              {"id": event_id})
         security_id = conn.execute(text("""INSERT INTO security_audit_log
@@ -393,7 +496,8 @@ def test_personnel_files_and_historical_attribution(sample, tmp_path, monkeypatc
         assert conn.scalar(text("SELECT count(*) FROM personnel_file_sets WHERE person_id=:id"), {"id": person}) == 0
         assert conn.scalar(text("SELECT count(*) FROM employee_documents WHERE document_id=:id"), {"id": document_id}) == 0
         assert conn.scalar(text("SELECT count(*) FROM personnel_file_events WHERE person_id=:id"), {"id": person}) == 0
-        assert conn.scalar(text("SELECT count(*) FROM cleanup_unrelated_event_stream")) == 1
+        assert conn.scalar(text("SELECT count(*) FROM cleanup_unrelated_event_stream WHERE event_id=:id"),
+                           {"id": own_event_id}) == 1
         assert conn.scalar(text("SELECT actor_id FROM personnel_file_events WHERE person_id=:id"), {"id": other_person}) is None
         assert conn.scalar(text("SELECT uploaded_by FROM personnel_file_versions WHERE version_id=CAST(:id AS uuid)"), {"id": outside_version}) is None
         audit = conn.execute(text("SELECT actor_user_id,target_user_id FROM security_audit_log WHERE audit_id=:id"),
@@ -404,6 +508,8 @@ def test_personnel_files_and_historical_attribution(sample, tmp_path, monkeypatc
             {"id": result["deletion_id"]}).all()
         assert len(refs) == 4
         assert all(row.deleted_entity_id == user_id for row in refs)
+    with engine.begin() as conn:
+        conn.execute(text("DROP TABLE cleanup_unrelated_event_stream"))
 
 
 def test_failed_file_removal_is_queued_for_retry(sample, tmp_path, monkeypatch):
