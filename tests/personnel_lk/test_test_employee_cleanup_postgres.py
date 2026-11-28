@@ -175,6 +175,28 @@ def test_unknown_composite_fk_blocks_preview(sample):
             conn.execute(text("DROP TABLE public.cleanup_test_composite_fk"))
 
 
+def test_unrelated_uuid_document_id_does_not_break_preview(sample):
+    eid, actor = sample["employee_id"], sample["admin"]["user_id"]
+    with engine.begin() as conn:
+        document_type_id = conn.execute(text("SELECT document_type_id FROM document_types LIMIT 1")).scalar_one()
+        conn.execute(text("""INSERT INTO employee_documents
+            (employee_id,document_type_id,title,created_by)
+            VALUES (:employee,:type,'Cleanup fixture',:actor)"""),
+            {"employee": eid, "type": document_type_id, "actor": actor})
+        conn.execute(text("CREATE TABLE public.cleanup_test_uuid_document (document_id uuid PRIMARY KEY)"))
+        conn.execute(text("INSERT INTO public.cleanup_test_uuid_document(document_id) VALUES (CAST(:id AS uuid))"),
+                     {"id": str(uuid4())})
+    try:
+        cleanup.mark_employee(employee_id=eid, actor_user_id=actor,
+                              confirmed_name=sample["name"], evidence="Isolated synthetic employee from a test fixture")
+        plan = cleanup.preview(employee_id=eid, actor_user_id=actor)
+        assert plan["counts"]["employee_documents"] == 1
+        assert plan["can_delete"], plan["blockers"]
+    finally:
+        with engine.begin() as conn:
+            conn.execute(text("DROP TABLE public.cleanup_test_uuid_document"))
+
+
 def test_user_and_single_test_order_are_physically_removed(sample):
     eid, actor = sample["employee_id"], sample["admin"]["user_id"]
     with engine.begin() as conn:

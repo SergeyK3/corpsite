@@ -361,7 +361,7 @@ def _logical_blockers(conn: Connection, plan: dict[str, dict[str, dict[str, Any]
             continue
         values = [state.get(column) for state in plan[table].values()]
         identities.setdefault(column, []).extend(value for value in values if isinstance(value, int))
-    rows = conn.execute(text("""SELECT columns.table_name,columns.column_name
+    rows = conn.execute(text("""SELECT columns.table_name,columns.column_name,columns.data_type
         FROM information_schema.columns columns
         JOIN information_schema.tables tables
           ON tables.table_schema=columns.table_schema AND tables.table_name=columns.table_name
@@ -370,7 +370,7 @@ def _logical_blockers(conn: Connection, plan: dict[str, dict[str, dict[str, Any]
         ORDER BY columns.table_name,columns.column_name"""),
         {"column_names": sorted(identities)}).mappings()
     blockers: list[str] = []
-    if user_ids:
+    if user_ids and conn.execute(text("SELECT to_regclass('public.training_identity_links') IS NOT NULL")).scalar_one():
         linked_training_users = conn.execute(text("""SELECT count(*)
             FROM public.training_identity_links
             WHERE source_kind='local' AND source_user_id=ANY(:ids)"""),
@@ -379,6 +379,8 @@ def _logical_blockers(conn: Connection, plan: dict[str, dict[str, dict[str, Any]
             blockers.append(f"Учётная запись служит источником для учебных пользователей: {linked_training_users}")
     for row in rows:
         table, column = str(row["table_name"]), str(row["column_name"])
+        if row["data_type"] not in {"smallint", "integer", "bigint", "numeric"}:
+            continue
         if (table, column) in physical or table in {
             "test_employee_marks", "test_employee_deletion_audit", "test_employee_file_cleanup",
         }:
