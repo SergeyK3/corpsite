@@ -29,6 +29,10 @@ const tableLabels: Record<string, string> = {
   personnel_order_items: "Пункты приказов",
   personnel_applications: "Заявления",
   employee_documents: "Документы",
+  personnel_file_sets: "Наборы файлов личного дела",
+  personnel_file_versions: "Версии файлов личного дела",
+  personnel_file_events: "События файлов личного дела",
+  security_audit_log: "События журнала безопасности",
   person_photos: "Фотографии",
   person_relatives: "Родственники",
   person_education: "Образование",
@@ -39,6 +43,12 @@ const tableLabels: Record<string, string> = {
   notifications: "Уведомления",
   verification_tasks: "Индивидуальные задачи",
 };
+
+function blockerLabel(detail: string): string {
+  const match = detail.match(/^(?:Внешняя зависимость|Неописанная связь|Составная внешняя зависимость) ([a-z_]+)\.[a-z_]+: (\d+)$/);
+  if (!match) return detail;
+  return `${tableLabels[match[1]] ?? "Связанные данные"}: ${match[2]} — требуется отдельное решение`;
+}
 
 export default function TestEmployeeCleanupDialog({
   employeeId, fullName, mode, onClose, onMarked, onDeleted,
@@ -87,6 +97,9 @@ export default function TestEmployeeCleanupDialog({
 
   const title = mode === "mark" ? "Подтверждение тестового сотрудника" : "Полное удаление тестового сотрудника";
   const rows = Object.entries(preview?.counts ?? {}).filter(([, count]) => count > 0);
+  const retainedRows = Object.entries(preview?.retained_counts ?? {}).filter(([, count]) => count > 0);
+  const evidenceLength = evidence.trim().length;
+  const nameMatches = confirmedName === preview?.full_name;
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 p-4" data-testid="test-employee-dialog-backdrop">
       <section role="dialog" aria-modal="true" aria-label={title} className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-xl bg-white p-5 shadow-xl dark:bg-zinc-900">
@@ -98,17 +111,35 @@ export default function TestEmployeeCleanupDialog({
         {preview ? (
           <div className="mt-4 space-y-3">
             <div className="rounded-lg border border-zinc-200 p-3 text-sm dark:border-zinc-700">
-              <p className="mb-2 font-medium">Связанные записи по данным сервера</p>
+              <p className="mb-2 font-medium">Будут удалены</p>
               {rows.length ? <dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1">
                 {rows.map(([table, count]) => <React.Fragment key={table}>
-                  <dt>{tableLabels[table] ?? table}</dt><dd className="text-right font-medium">{count}</dd>
+                  <dt>{tableLabels[table] ?? "Другие персональные данные"}</dt><dd className="text-right font-medium">{count}</dd>
                 </React.Fragment>)}
               </dl> : <p>Связанных записей нет.</p>}
-              <p className="mt-2">Файлов для очистки: {preview.file_count}</p>
+              <p className="mt-2">Файловых объектов для очистки: {preview.file_count}</p>
+              <details className="mt-2"><summary className="cursor-pointer">Подробности</summary>
+                <ul className="mt-1 list-disc pl-5">{rows.map(([table, count]) => <li key={table}>{table}: {count}</li>)}</ul>
+              </details>
+            </div>
+            <div className="rounded-lg border border-zinc-200 p-3 text-sm dark:border-zinc-700">
+              <p className="mb-2 font-medium">Будут сохранены в истории</p>
+              {retainedRows.length ? <dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1">
+                {retainedRows.map(([table, count]) => <React.Fragment key={table}>
+                  <dt>{tableLabels[table] ?? "Исторические записи"}</dt><dd className="text-right font-medium">{count}</dd>
+                </React.Fragment>)}
+              </dl> : <p>Связанных исторических записей нет.</p>}
+              {retainedRows.length ? <p className="mt-2 text-zinc-600 dark:text-zinc-400">Исходная учётная запись будет указана в неизменяемой записи об удалении.</p> : null}
+              {retainedRows.length ? <details className="mt-2"><summary className="cursor-pointer">Подробности</summary>
+                <ul className="mt-1 list-disc pl-5">{retainedRows.map(([table, count]) => <li key={table}>{table}: {count}</li>)}</ul>
+              </details> : null}
             </div>
             {preview.blockers.length ? <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-100">
-              <p className="font-medium">Зависимости, препятствующие удалению</p>
-              <ul className="mt-1 list-disc pl-5">{preview.blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}</ul>
+              <p className="font-medium">Препятствуют удалению</p>
+              <ul className="mt-1 list-disc pl-5">{preview.blockers.map((blocker) => <li key={blocker}>{blockerLabel(blocker)}</li>)}</ul>
+              <details className="mt-2"><summary className="cursor-pointer">Подробности</summary>
+                <ul className="mt-1 list-disc pl-5">{preview.blockers.map((blocker) => <li key={blocker}>{blocker}</li>)}</ul>
+              </details>
             </div> : null}
           </div>
         ) : null}
@@ -119,10 +150,14 @@ export default function TestEmployeeCleanupDialog({
             <textarea value={evidence} onChange={(event) => setEvidence(event.target.value)} rows={3} maxLength={1000}
               className="mt-1 w-full rounded-md border border-zinc-300 p-2 dark:border-zinc-700 dark:bg-zinc-950" />
           </label>
+          <p className={evidenceLength > 0 && evidenceLength < 20 ? "text-amber-700 dark:text-amber-300" : "text-zinc-600 dark:text-zinc-400"}>
+            Основание: от 20 до 1000 символов после удаления пробелов по краям. Сейчас: {evidenceLength}.
+          </p>
           <label className="block">Введите точное ФИО
             <input value={confirmedName} onChange={(event) => setConfirmedName(event.target.value)}
               className="mt-1 w-full rounded-md border border-zinc-300 p-2 dark:border-zinc-700 dark:bg-zinc-950" />
           </label>
+          {confirmedName && !nameMatches ? <p className="text-amber-700 dark:text-amber-300">Введите ФИО точно как в карточке, включая пробелы.</p> : null}
         </div> : <div className="mt-4 space-y-3 text-sm">
           <p className="font-medium text-red-700 dark:text-red-400">Сотрудник и связанные с ним тестовые данные будут удалены без возможности восстановления через интерфейс системы.</p>
           <label className="block">Для подтверждения введите слово «УДАЛИТЬ»
@@ -134,7 +169,7 @@ export default function TestEmployeeCleanupDialog({
         <div className="mt-5 flex justify-end gap-2">
           <button type="button" onClick={onClose} disabled={submitting} className="rounded-md border px-3 py-2 text-sm">Отмена</button>
           <button type="button" onClick={() => void submit()}
-            disabled={submitting || !preview || (mode === "mark" ? evidence.trim().length < 20 || confirmedName !== preview.full_name : !preview.can_delete || confirmation !== "УДАЛИТЬ")}
+            disabled={submitting || !preview || (mode === "mark" ? evidenceLength < 20 || !nameMatches : !preview.can_delete || confirmation !== "УДАЛИТЬ")}
             className="rounded-md bg-red-700 px-3 py-2 text-sm font-medium text-white disabled:opacity-50">
             {submitting ? "Выполнение…" : mode === "mark" ? "Подтвердить тестовую запись" : "Удалить окончательно"}
           </button>

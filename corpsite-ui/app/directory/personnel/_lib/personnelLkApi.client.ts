@@ -27,6 +27,7 @@ export type TestEmployeeCleanupPreview = {
   login: string | null;
   is_test_marked: boolean;
   counts: Record<string, number>;
+  retained_counts: Record<string, number>;
   blockers: string[];
   can_delete: boolean;
   snapshot_hash: string;

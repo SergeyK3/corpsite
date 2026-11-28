@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
 import re
 from collections import defaultdict, deque
 from dataclasses import dataclass
@@ -44,6 +45,22 @@ class TestEmployeeCleanupError(RuntimeError):
 # primary role_id=2.  A matching role code or delegated grant alone is not enough.
 SYSTEM_ADMIN_ROLE_ID = 2
 SAFE_NAME = re.compile(r"^[a-z][a-z0-9_]*$")
+PERSONNEL_STORAGE_KEY = re.compile(r"^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$")
+PERSONNEL_BUNDLE_FILE = re.compile(r"^(?:original|page-(?:[1-9]|1[0-9]|20)\.png)$")
+
+# These exact FK references describe historical activity, not ownership.
+# The original identity is kept in an append-only sidecar before SET NULL.
+RETAINED_HISTORY = {
+    ("users", "personnel_file_events", "actor_id"),
+    ("users", "personnel_file_versions", "uploaded_by"),
+    ("users", "personnel_file_versions", "decided_by"),
+    ("users", "security_audit_log", "actor_user_id"),
+    ("users", "security_audit_log", "target_user_id"),
+    ("persons", "security_audit_log", "target_person_id"),
+    ("employees", "security_audit_log", "target_employee_id"),
+}
+HISTORY_KEYS = {"personnel_file_events": "event_id", "personnel_file_versions": "version_id",
+                "security_audit_log": "audit_id"}
 
 # Exact owner edges.  Shared reports, authorship, signatories, journal numbers,
 # and references from other employees are deliberately absent.
@@ -61,6 +78,8 @@ OWNED: dict[str, dict[str, set[str]]] = {
         "person_telegram_bindings": {"person_id"},
         "person_telegram_bot_activations": {"person_id"},
         "person_training": {"person_id"},
+        "personnel_file_sets": {"person_id"},
+        "personnel_file_events": {"person_id"},
         "personnel_applications": {"person_id"},
         "personnel_intake_reconciliation_decisions": {"person_id"},
         "personnel_migration_runs": {"person_id"},
@@ -103,6 +122,7 @@ OWNED: dict[str, dict[str, set[str]]] = {
         "org_unit_managers": {"user_id"},
         "personnel_visibility_assignments": {"target_user_id"},
         "personnel_event_visibility_assignments": {"target_user_id"},
+        "personnel_file_inbox": {"user_id"},
     },
     "person_assignments": {
         "employee_assignment_links": {"assignment_id"},
@@ -147,6 +167,7 @@ OWNED: dict[str, dict[str, set[str]]] = {
         "hr_import_document_candidates": {"document_id"},
         "hr_import_normalized_records": {"document_id"},
     },
+    "personnel_file_sets": {"personnel_file_versions": {"set_id"}},
     "employee_onboardings": {
         "employee_onboarding_checklist_items": {"onboarding_id"},
         "employee_onboarding_notifications": {"onboarding_id"},
@@ -334,7 +355,17 @@ def _edge_rows(conn: Connection, edge: Edge,
                      if state.get(edge.parent_column) is not None})
     if not values:
         return []
-    return _rows(conn, edge.child, f't."{edge.child_column}" = ANY(:values)', {"values": values})
+    # to_jsonb converts UUID keys to strings. PostgreSQL cannot compare a
+    # UUID column to a text[] bind, so use the catalog's parent column type.
+    parent_type = conn.execute(text("""SELECT a.atttypid::regtype::text FROM pg_attribute a
+        JOIN pg_class c ON c.oid=a.attrelid JOIN pg_namespace n ON n.oid=c.relnamespace
+        WHERE n.nspname='public' AND c.relname=:table AND a.attname=:column"""),
+        {"table": edge.parent, "column": edge.parent_column}).scalar_one()
+    if parent_type not in {"bigint", "integer", "smallint", "uuid", "text", "character varying"}:
+        raise TestEmployeeCleanupError("UNSAFE_CATALOG", "Неизвестный тип ключа связанной записи.")
+    return _rows(conn, edge.child,
+                 f't."{edge.child_column}" = ANY(CAST(:values AS {parent_type}[]))',
+                 {"values": values})
 
 
 def _logical_blockers(conn: Connection, plan: dict[str, dict[str, dict[str, Any]]],
@@ -343,7 +374,7 @@ def _logical_blockers(conn: Connection, plan: dict[str, dict[str, dict[str, Any]
     # Exact, unkeyed identity columns are checked as well as foreign keys.
     # This is intentionally conservative: new logical relations block execution.
     physical = {(edge.child, edge.child_column) for edge in edges}
-    identities: dict[str, list[int]] = {"employee_id": [employee_id],
+    identities: dict[str, list[Any]] = {"employee_id": [employee_id],
                                        "employee_context_id": [employee_id],
                                        "user_id": user_ids}
     if person_id is not None:
@@ -360,7 +391,9 @@ def _logical_blockers(conn: Connection, plan: dict[str, dict[str, dict[str, Any]
         if table not in plan or not column.endswith("_id"):
             continue
         values = [state.get(column) for state in plan[table].values()]
-        identities.setdefault(column, []).extend(value for value in values if isinstance(value, int))
+        identities.setdefault(column, []).extend(value for value in values
+                                               if isinstance(value, int) or
+                                               (isinstance(value, str) and PERSONNEL_STORAGE_KEY.fullmatch(value)))
     rows = conn.execute(text("""SELECT columns.table_name,columns.column_name,columns.data_type
         FROM information_schema.columns columns
         JOIN information_schema.tables tables
@@ -379,27 +412,64 @@ def _logical_blockers(conn: Connection, plan: dict[str, dict[str, dict[str, Any]
             blockers.append(f"Учётная запись служит источником для учебных пользователей: {linked_training_users}")
     for row in rows:
         table, column = str(row["table_name"]), str(row["column_name"])
-        if row["data_type"] not in {"smallint", "integer", "bigint", "numeric"}:
+        if row["data_type"] not in {"smallint", "integer", "bigint", "numeric", "uuid"}:
             continue
         if (table, column) in physical or table in {
             "test_employee_marks", "test_employee_deletion_audit", "test_employee_file_cleanup",
+            "test_employee_retained_history_refs",
         }:
             continue
-        values = identities.get(column, [])
+        values = [value for value in identities.get(column, [])
+                  if (isinstance(value, str) and PERSONNEL_STORAGE_KEY.fullmatch(value))
+                  == (row["data_type"] == "uuid")]
         if not values or not SAFE_NAME.fullmatch(table):
             continue
-        found = _rows(conn, table, f't."{column}" = ANY(:values)', {"values": values})
+        cast = "CAST(:values AS uuid[])" if row["data_type"] == "uuid" else ":values"
+        found = _rows(conn, table, f't."{column}" = ANY({cast})', {"values": values})
         unknown = sum(tid not in plan.get(table, {}) for tid, _ in found)
         if unknown:
             blockers.append(f"Неописанная связь {table}.{column}: {unknown}")
     return blockers
 
 
-def _file_plan(plan: dict[str, dict[str, dict[str, Any]]]) -> tuple[list[tuple[str, str]], list[str]]:
+def _personnel_bundle(key: str) -> Path:
+    if not PERSONNEL_STORAGE_KEY.fullmatch(key):
+        raise ValueError("Invalid personnel file storage key")
+    configured = os.environ.get("PERSONNEL_FILE_STORAGE_ROOT")
+    if not configured:
+        raise ValueError("Personnel file storage root is not configured")
+    root = Path(configured).resolve(strict=True)
+    bundle = root / key
+    if bundle.is_symlink() or not bundle.resolve().is_relative_to(root):
+        raise ValueError("Personnel file path escapes its storage root")
+    if bundle.exists():
+        if not bundle.is_dir():
+            raise ValueError("Personnel file bundle is not a directory")
+        for entry in bundle.iterdir():
+            if entry.is_symlink() or not entry.is_file() or not PERSONNEL_BUNDLE_FILE.fullmatch(entry.name):
+                raise ValueError("Personnel file bundle contains an unrecognized entry")
+    return bundle
+
+
+def _file_plan(conn: Connection, plan: dict[str, dict[str, dict[str, Any]]]) -> tuple[list[tuple[str, str]], list[str]]:
     files: list[tuple[str, str]] = []
     blockers: list[str] = []
     for table, rows in plan.items():
         for state in rows.values():
+            if table == "personnel_file_versions":
+                key = str(state["storage_key"])
+                try:
+                    _personnel_bundle(key)
+                except (ValueError, OSError) as exc:
+                    blockers.append(f"Недопустимое хранилище файла личного дела: {exc}")
+                else:
+                    shared_versions = _rows(conn, "personnel_file_versions", "t.storage_key=:key", {"key": key})
+                    shared_documents = _rows(conn, "employee_documents", "t.file_url LIKE :needle", {"needle": f"%{key}%"})
+                    if (any(tid not in plan.get("personnel_file_versions", {}) for tid, _ in shared_versions)
+                            or any(tid not in plan.get("employee_documents", {}) for tid, _ in shared_documents)):
+                        blockers.append("Файл личного дела используется другой записью")
+                    else:
+                        files.append(("PERSONNEL_FILE_BUNDLE", key))
             for column in ("storage_rel_path", "storage_path", "file_path", "file_url"):
                 value = state.get(column)
                 if not value:
@@ -500,14 +570,21 @@ def _build_plan(conn: Connection, employee_id: int) -> dict[str, Any]:
         _add(plan, "access_grants", _rows(conn, "access_grants",
             "t.target_type='ASSIGNMENT' AND t.target_id=ANY(:ids)",
             {"ids": assignment_ids}))
+    retained: list[dict[str, Any]] = []
     # A child reached through another owner edge is safe. Every remaining
     # reference, even ON DELETE CASCADE/SET NULL, must be resolved explicitly.
     for parent, parents in list(plan.items()):
         for edge in by_parent.get(parent, []):
-            unknown = sum(tid not in plan.get(edge.child, {})
-                          for tid, _ in _edge_rows(conn, edge, parents))
-            if unknown:
-                blockers.append(f"Внешняя зависимость {edge.child}.{edge.child_column}: {unknown}")
+            external = [(tid, state) for tid, state in _edge_rows(conn, edge, parents)
+                        if tid not in plan.get(edge.child, {})]
+            if external and (edge.parent, edge.child, edge.child_column) in RETAINED_HISTORY:
+                key_column = HISTORY_KEYS[edge.child]
+                for _, state in external:
+                    retained.append({"table": edge.child, "column": edge.child_column,
+                                     "key": str(state[key_column]), "kind": edge.parent,
+                                     "id": int(state[edge.child_column]), "state": state})
+            elif external:
+                blockers.append(f"Внешняя зависимость {edge.child}.{edge.child_column}: {len(external)}")
         for edge in composite_edges:
             if edge.parent != parent:
                 continue
@@ -516,7 +593,7 @@ def _build_plan(conn: Connection, employee_id: int) -> dict[str, Any]:
             if unknown:
                 blockers.append(f"Составная внешняя зависимость {edge.child}.{edge.constraint}: {unknown}")
     blockers.extend(_logical_blockers(conn, plan, employee_id, person_id, user_ids, edges))
-    files, file_blockers = _file_plan(plan)
+    files, file_blockers = _file_plan(conn, plan)
     blockers.extend(file_blockers)
     for kind, path in files:
         if kind == "CANONICAL_PHOTO":
@@ -528,19 +605,23 @@ def _build_plan(conn: Connection, employee_id: int) -> dict[str, Any]:
             if any(tid not in plan.get("electronic_hire_attachments", {}) for tid, _ in matching):
                 blockers.append("Подписанная копия используется другой записью")
     # The exact state digest is checked again under SERIALIZABLE locks at commit.
-    state_hash = _hash({table: sorted(rows.values(), key=lambda row: _hash(row))
-                        for table, rows in sorted(plan.items())})
+    state_hash = _hash({"delete": {table: sorted(rows.values(), key=lambda row: _hash(row))
+                                   for table, rows in sorted(plan.items())},
+                        "retain": sorted(retained, key=lambda row: (row["table"], row["key"], row["column"]))})
     counts = {table: len(rows) for table, rows in sorted(plan.items()) if rows}
+    retained_counts = {table: len({row["key"] for row in retained if row["table"] == table})
+                       for table in sorted({row["table"] for row in retained})}
     return {
         "employee_id": employee_id, "person_id": person_id,
         "full_name": employee["full_name"],
         "login": users[0]["login"] if len(users) == 1 else None,
         "user_ids": user_ids, "marker_id": int(marker["marker_id"]) if marker else None,
         "is_test_marked": marker is not None, "counts": counts,
+        "retained_counts": retained_counts,
         "files": files, "blockers": sorted(set(blockers)),
         "can_delete": marker is not None and not blockers,
         "snapshot_hash": state_hash, "_plan": plan, "_edges": edges,
-        "_composite_edges": composite_edges,
+        "_composite_edges": composite_edges, "_retained": retained,
     }
 
 
@@ -627,6 +708,19 @@ def _run_file_cleanup(deletion_id: str) -> dict[str, int]:
                 if not path.is_relative_to(root):
                     raise ValueError("Signed-copy path escapes the configured storage root")
                 path.unlink(missing_ok=True)
+            elif row["storage_kind"] == "PERSONNEL_FILE_BUNDLE":
+                key = str(row["storage_path"])
+                with engine.connect() as conn:
+                    if conn.execute(text("""SELECT EXISTS(
+                        SELECT 1 FROM public.personnel_file_versions WHERE storage_key=:key
+                        UNION ALL SELECT 1 FROM public.employee_documents WHERE file_url LIKE :needle
+                    )"""), {"key": key, "needle": f"%{key}%"}).scalar_one():
+                        raise ValueError("Personnel file has another database reference")
+                bundle = _personnel_bundle(key)
+                if bundle.exists():
+                    for entry in bundle.iterdir():
+                        entry.unlink()
+                    bundle.rmdir()
             else:
                 raise ValueError("Unsupported storage kind")
         except Exception as exc:
@@ -680,6 +774,23 @@ def execute(*, employee_id: int, actor_user_id: int, confirmation: str,
                 raise TestEmployeeCleanupError("SNAPSHOT_CHANGED", "Связанные данные изменились. Повторно откройте предварительный просмотр.", 409)
             conn.execute(text("SELECT set_config('corpsite.allow_personnel_order_physical_delete','on',true)"))
             conn.execute(text("SELECT set_config('corpsite.test_employee_cleanup','on',true)"))
+            for ref in plan["_retained"]:
+                conn.execute(text("""INSERT INTO public.test_employee_retained_history_refs
+                    (deletion_id,source_table,source_key,source_column,deleted_entity_kind,
+                     deleted_entity_id,deleted_full_name,deleted_login)
+                    VALUES (CAST(:deletion AS uuid),:table,:key,:column,:kind,:entity_id,:name,:login)"""), {
+                    "deletion": deletion_id, "table": ref["table"], "key": ref["key"],
+                    "column": ref["column"], "kind": ref["kind"], "entity_id": ref["id"],
+                    "name": plan["full_name"], "login": plan["login"],
+                })
+                if ref["table"] in {"personnel_file_events", "personnel_file_versions"}:
+                    key_column = HISTORY_KEYS[ref["table"]]
+                    changed = conn.execute(text(f'UPDATE public."{ref["table"]}" '
+                                                f'SET "{ref["column"]}"=NULL '
+                                                f'WHERE "{key_column}"=:key AND "{ref["column"]}"=:old'),
+                                           {"key": ref["key"], "old": ref["id"]})
+                    if changed.rowcount != 1:
+                        raise TestEmployeeCleanupError("HISTORY_CHANGED", "Историческая ссылка изменилась во время удаления.")
             deleted_counts: dict[str, int] = {}
             for table in _delete_order(plan["_plan"], plan["_edges"], plan["_composite_edges"]):
                 tids = sorted(plan["_plan"][table])

@@ -265,6 +265,86 @@ def test_photo_file_is_removed_after_commit(sample, tmp_path, monkeypatch):
     assert not path.exists()
 
 
+def test_personnel_files_and_historical_attribution(sample, tmp_path, monkeypatch):
+    monkeypatch.setenv("PERSONNEL_FILE_STORAGE_ROOT", str(tmp_path))
+    eid, person, actor = sample["employee_id"], sample["person_id"], sample["admin"]["user_id"]
+    own_key, outside_key = str(uuid4()), str(uuid4())
+    own_bundle = tmp_path / own_key
+    own_bundle.mkdir()
+    (own_bundle / "original").write_bytes(b"owned test document")
+    (own_bundle / "page-1.png").write_bytes(b"owned preview")
+    with engine.begin() as conn:
+        user_id = conn.execute(text("""INSERT INTO users(full_name,role_id,is_active,login,employee_id)
+            VALUES (:name,1,true,:login,:employee) RETURNING user_id"""),
+            {"name": sample["name"], "login": f"cleanup_user_{uuid4().hex[:12]}",
+             "employee": eid}).scalar_one()
+        other_person = conn.execute(text("""INSERT INTO persons(full_name,match_key,person_status,source)
+            VALUES ('Other person',:key,'active','manual') RETURNING person_id"""),
+            {"key": f"cleanup:{uuid4().hex}"}).scalar_one()
+        document_type_id = conn.execute(text("SELECT document_type_id FROM document_types LIMIT 1")).scalar_one()
+        document_id = conn.execute(text("""INSERT INTO employee_documents
+            (employee_id,document_type_id,title,created_by) VALUES (:employee,:type,'Owned document',:actor)
+            RETURNING document_id"""),
+            {"employee": eid, "type": document_type_id, "actor": actor}).scalar_one()
+        own_set, other_set = str(uuid4()), str(uuid4())
+        for set_id, owner in ((own_set, person), (other_set, other_person)):
+            conn.execute(text("""INSERT INTO personnel_file_sets(set_id,person_id,kind,title)
+                VALUES (CAST(:set AS uuid),:person,'photo','Test file')"""),
+                {"set": set_id, "person": owner})
+        own_version, outside_version = str(uuid4()), str(uuid4())
+        for version, set_id, key, linked_document in (
+            (own_version, own_set, own_key, document_id),
+            (outside_version, other_set, outside_key, None),
+        ):
+            conn.execute(text("""INSERT INTO personnel_file_versions
+                (version_id,set_id,version_no,state,storage_key,original_name,mime_type,
+                 byte_size,checksum_sha256,page_count,uploaded_by,preview_checksums,employee_document_id)
+                VALUES (CAST(:version AS uuid),CAST(:set AS uuid),1,'pending',:key,'scan.pdf',
+                        'application/pdf',12,:digest,1,:user,'[]'::jsonb,:document)"""),
+                {"version": version, "set": set_id, "key": key, "digest": "a"*64,
+                 "user": user_id, "document": linked_document})
+        for owner, version in ((person, own_version), (other_person, outside_version)):
+            conn.execute(text("""INSERT INTO personnel_file_events(person_id,version_id,actor_id,action,request_id)
+                VALUES (:person,CAST(:version AS uuid),:actor,'uploaded',CAST(:request AS uuid))"""),
+                {"person": owner, "version": version, "actor": user_id, "request": str(uuid4())})
+        security_id = conn.execute(text("""INSERT INTO security_audit_log
+            (event_type,actor_user_id,target_user_id,success)
+            VALUES ('LOGIN_SUCCESS',:user,:user,true) RETURNING audit_id"""),
+            {"user": user_id}).scalar_one()
+    before_mark = cleanup.preview(employee_id=eid, actor_user_id=actor)
+    assert not before_mark["can_delete"]
+    cleanup.mark_employee(employee_id=eid, actor_user_id=actor,
+                          confirmed_name=sample["name"],
+                          evidence="Isolated synthetic personnel files and security history")
+    plan = cleanup.preview(employee_id=eid, actor_user_id=actor)
+    assert plan["can_delete"], plan["blockers"]
+    assert plan["counts"]["personnel_file_sets"] == 1
+    assert plan["counts"]["personnel_file_versions"] == 1
+    assert plan["counts"]["personnel_file_events"] == 1
+    assert plan["retained_counts"]["personnel_file_events"] == 1
+    assert plan["retained_counts"]["personnel_file_versions"] == 1
+    assert plan["retained_counts"]["security_audit_log"] == 1
+    assert plan["file_count"] == 1
+    result = cleanup.execute(employee_id=eid, actor_user_id=actor, confirmation="УДАЛИТЬ",
+                             expected_snapshot_hash=plan["snapshot_hash"])
+    assert result["file_cleanup"] == {"completed": 1, "pending": 0}
+    assert not own_bundle.exists()
+    with engine.connect() as conn:
+        assert conn.scalar(text("SELECT count(*) FROM personnel_file_sets WHERE person_id=:id"), {"id": person}) == 0
+        assert conn.scalar(text("SELECT count(*) FROM employee_documents WHERE document_id=:id"), {"id": document_id}) == 0
+        assert conn.scalar(text("SELECT count(*) FROM personnel_file_events WHERE person_id=:id"), {"id": person}) == 0
+        assert conn.scalar(text("SELECT actor_id FROM personnel_file_events WHERE person_id=:id"), {"id": other_person}) is None
+        assert conn.scalar(text("SELECT uploaded_by FROM personnel_file_versions WHERE version_id=CAST(:id AS uuid)"), {"id": outside_version}) is None
+        audit = conn.execute(text("SELECT actor_user_id,target_user_id FROM security_audit_log WHERE audit_id=:id"),
+                             {"id": security_id}).one()
+        assert audit == (None, None)
+        refs = conn.execute(text("""SELECT source_table,source_column,deleted_entity_id
+            FROM test_employee_retained_history_refs WHERE deletion_id=CAST(:id AS uuid)"""),
+            {"id": result["deletion_id"]}).all()
+        assert len(refs) == 4
+        assert all(row.deleted_entity_id == user_id for row in refs)
+
+
 def test_failed_file_removal_is_queued_for_retry(sample, tmp_path, monkeypatch):
     monkeypatch.setenv("PERSONNEL_PHOTO_STORAGE_ROOT", str(tmp_path))
     eid, person, actor = sample["employee_id"], sample["person_id"], sample["admin"]["user_id"]
