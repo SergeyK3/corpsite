@@ -68,13 +68,25 @@ RETAINED_HISTORY = {
     ("employee_onboarding_checklist_items", "employee_onboarding_notifications", "item_id"),
     ("employees", "ppr_stage0_cohort_participants", "employee_id"),
     ("persons", "ppr_stage0_cohort_participants", "person_id"),
+    ("users", "employee_identities", "created_by"),
+    ("users", "person_contacts", "created_by_user_id"),
+    ("users", "person_contacts", "updated_by_user_id"),
+    ("users", "person_card_change_requests", "decided_by"),
+    ("users", "person_card_change_events", "actor_id"),
+    ("users", "person_relative_change_requests", "decided_by"),
+    ("users", "person_relative_change_events", "actor_id"),
 }
 HISTORY_KEYS = {"personnel_file_events": "event_id", "personnel_file_versions": "version_id",
                 "security_audit_log": "audit_id", "tasks": "task_id",
                 "user_linkage_execute_items": "item_id",
                 "employee_onboarding_notifications": "notification_id",
                 "electronic_hire_approval_tasks": "task_id",
-                "ppr_stage0_cohort_participants": "stage0_participant_id"}
+                "ppr_stage0_cohort_participants": "stage0_participant_id",
+                "employee_identities": "identity_id", "person_contacts": "person_id",
+                "person_card_change_requests": "request_id",
+                "person_card_change_events": "event_id",
+                "person_relative_change_requests": "request_id",
+                "person_relative_change_events": "event_id"}
 
 # Exact owner edges.  Shared reports, authorship, signatories, journal numbers,
 # and references from other employees are deliberately absent.
@@ -588,8 +600,8 @@ def _reviewed_card_blockers(plan: dict[str, dict[str, dict[str, Any]]],
                  plan.get("person_card_change_documents", {}).values()}
     relatives = {int(row["relative_id"]): row for row in
                  plan.get("person_relatives", {}).values()}
-    known_sections = {"contacts", "education", "training", "category",
-                      "employment_biography", "languages", "awards"}
+    known_sections = {"general", "contacts", "education", "training", "category",
+                      "employment_biography", "military", "languages", "awards"}
     for row in requests.values():
         if (row.get("person_id") != person_id
                 or row.get("employee_context_id") not in (None, employee_id)
@@ -1146,6 +1158,8 @@ def execute(*, employee_id: int, actor_user_id: int, confirmation: str,
                 raise TestEmployeeCleanupError("SNAPSHOT_CHANGED", "Связанные данные изменились. Повторно откройте предварительный просмотр.", 409)
             conn.execute(text("SELECT set_config('corpsite.allow_personnel_order_physical_delete','on',true)"))
             conn.execute(text("SELECT set_config('corpsite.test_employee_cleanup','on',true)"))
+            conn.execute(text("SELECT set_config('corpsite.test_employee_cleanup_deletion_id',:id,true)"),
+                         {"id": deletion_id})
             for order in plan["personnel_orders"]:
                 _archive_order(conn, deletion_id, order["order_id"])
             for row in plan["_archive_remove"]:
@@ -1176,7 +1190,10 @@ def execute(*, employee_id: int, actor_user_id: int, confirmation: str,
                 })
                 if ref["table"] == "ppr_stage0_cohort_participants":
                     retired_participants[ref["key"]] = ref["state"]
-                elif ref["table"] in {"personnel_file_events", "personnel_file_versions",
+                elif ref["table"] in {"employee_identities", "person_contacts",
+                                      "person_card_change_requests", "person_card_change_events",
+                                      "person_relative_change_requests", "person_relative_change_events",
+                                      "personnel_file_events", "personnel_file_versions",
                                       "tasks", "user_linkage_execute_items",
                                       "employee_onboarding_notifications",
                                       "electronic_hire_approval_tasks"}:

@@ -33,6 +33,7 @@ const tableLabels: Record<string, string> = {
   personnel_order_items: "Пункты приказов",
   personnel_applications: "Заявления",
   employee_documents: "Документы",
+  employee_identities: "Идентификационные записи сотрудников",
   personnel_file_sets: "Наборы файлов личного дела",
   personnel_file_versions: "Версии файлов личного дела",
   personnel_file_events: "События файлов личного дела",
